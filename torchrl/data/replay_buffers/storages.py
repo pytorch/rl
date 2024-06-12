@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
 from __future__ import annotations
 
 import abc
@@ -9,12 +10,14 @@ import os
 import textwrap
 import warnings
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor, wait
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from typing import Any, Dict, List, Sequence, Union
 
 import numpy as np
 import tensordict
+
 import torch
 from tensordict import (
     is_tensor_collection,
@@ -648,8 +651,6 @@ class TensorStorage(Storage):
                     f"for per-item addition."
                 )
 
-        self._get_new_len(data, cursor)
-
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
                 if is_tensor_collection(data):
@@ -662,6 +663,9 @@ class TensorStorage(Storage):
             self._storage[cursor] = data
         else:
             self._set_tree_map(cursor, data, self._storage)
+
+        # Write new len at the end
+        self._get_new_len(data, cursor)
 
     @implement_for("torch", None, "2.0")
     def set(  # noqa: F811
@@ -686,8 +690,6 @@ class TensorStorage(Storage):
                     f"consider using a tuple instead, as lists are used within `extend` "
                     f"for per-item addition."
                 )
-
-        self._get_new_len(data, cursor)
 
         if not is_tensor_collection(data) and not isinstance(data, torch.Tensor):
             raise NotImplementedError(
@@ -714,6 +716,9 @@ class TensorStorage(Storage):
                     "batch size provided."
                 )
         self._storage[cursor] = data
+
+        # write new len at the end
+        self._get_new_len(data, cursor)
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         _storage = self._storage
@@ -1221,6 +1226,128 @@ class StorageEnsemble(Storage):
         storages = textwrap.indent(f"storages={self._storages}", " " * 4)
         transforms = textwrap.indent(f"transforms={self._transforms}", " " * 4)
         return f"StorageEnsemble(\n{storages}, \n{transforms})"
+
+
+class SharedLazyMemmap(LazyMemmapStorage):
+    _storage: LazyStackedTensorDict
+
+    def __init__(self, max_size, scratch_dir):
+        super().__init__(max_size=max_size, scratch_dir=scratch_dir)
+        self.scratch_dir = Path(scratch_dir)
+        self.lock = mp.RLock()
+
+    def set(
+        self,
+        cursor,
+        data,
+    ):
+        with self.lock:
+            if isinstance(data, list):
+                # flip list
+                try:
+                    data = _flip_list(data)
+                except Exception:
+                    raise RuntimeError(
+                        "Stacking the elements of the list resulted in "
+                        "an error. "
+                        f"Storages of type {type(self)} expect all elements of the list "
+                        f"to have the same tree structure. If the list is compact (each "
+                        f"leaf is itself a batch with the appropriate number of elements) "
+                        f"consider using a tuple instead, as lists are used within `extend` "
+                        f"for per-item addition."
+                    )
+
+            if not self.initialized:
+                if not isinstance(cursor, INT_CLASSES):
+                    if is_tensor_collection(data):
+                        self._init(data[0])
+                    else:
+                        self._init(tree_map(lambda x: x[0], data))
+                else:
+                    self._init(data)
+            if _is_int(cursor):
+                if cursor < len(self._storage.tensordicts):
+                    self._storage.tensordicts[cursor] = data.memmap(
+                        self.scratch_dir / f"{int(cursor)}"
+                    ).unlock_()
+                else:
+                    # Shortcutting lazy memmap append which checks the lock status
+                    self._storage.tensordicts.append(data)
+            else:
+                with ThreadPoolExecutor(max_workers=32) as executor:
+                    futures = []
+                    for c, _data in zip(cursor, data):
+                        futures.append(
+                            executor.submit(
+                                lambda dt, idx, path: dt.memmap(
+                                    path / f"{int(idx)}"
+                                ).unlock_(),
+                                _data,
+                                c,
+                                self.scratch_dir,
+                            )
+                        )
+                    for c, _data in zip(cursor, futures):
+                        _data = _data.result()
+                        if c < len(self._storage.tensordicts):
+                            self._storage.tensordicts[c] = _data
+                        else:
+                            # Shortcutting lazy memmap append which checks the lock status
+                            self._storage.tensordicts.append(_data)
+            self._get_new_len(data, cursor)
+
+    def _init(self, data) -> None:
+        if self.device == "auto":
+            self.device = data.device
+        if self.device.type != "cpu":
+            raise RuntimeError(f"Unsupported device: {self.device}")
+
+        def max_size_along_dim0(data_shape):
+            if self.ndim > 1:
+                return (
+                    -(self.max_size // -data_shape[: self.ndim - 1].numel()),
+                    *data_shape,
+                )
+            return (self.max_size, *data_shape)
+
+        if is_tensor_collection(data):
+            data = data.clone().to(self.device).memmap(self.scratch_dir / "0").unlock_()
+            out = LazyStackedTensorDict(data, stack_dim=0)
+            print("out.is_locked", out.is_locked)
+        else:
+            raise RuntimeError("Unsupported data type.")
+        self._storage = out
+        self.initialized = True
+
+    def get(self, index):
+        with self.lock:
+            if _is_int(index):
+                return TensorDict.load_memmap(self.scratch_dir / f"{int(index)}")
+            else:
+                with ThreadPoolExecutor(max_workers=32) as executor:
+                    futures = []
+                    for c in index:
+                        futures.append(
+                            executor.submit(
+                                lambda idx, path: TensorDict.load_memmap(
+                                    path / f"{int(idx)}"
+                                ),
+                                c,
+                                self.scratch_dir,
+                            )
+                        )
+                    wait(futures)
+                    return LazyStackedTensorDict(
+                        *[future.result() for future in futures], stack_dim=0
+                    )
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        if get_spawning_popen() is None:
+            len = self._len
+            del state["_len_value"]
+            state["len__context"] = len
+        return state
 
 
 # Utils
