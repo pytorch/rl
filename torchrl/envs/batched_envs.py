@@ -503,7 +503,7 @@ class BatchedEnvBase(EnvBase):
                 if share_individual_td and self.share_individual_td is False:
                     raise ValueError(
                         "share_individual_td=False was provided but share_individual_td must "
-                        "be True to accomodate non-stackable tensors."
+                        "be True to accommodate non-stackable tensors."
                     )
                 self.share_individual_td = share_individual_td
             _use_buffers = all(

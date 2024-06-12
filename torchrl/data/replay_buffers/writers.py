@@ -159,7 +159,7 @@ class RoundRobinWriter(Writer):
         )
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
-        self._storage[_cursor] = data
+        self._storage.set(_cursor, data)
         index = self._replicate_index(index)
         for ent in self._storage._attached_entities:
             ent.mark_update(index)
@@ -187,7 +187,7 @@ class RoundRobinWriter(Writer):
         self._cursor = (batch_size + cur_size) % max_size_along0
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
-        self._storage[index] = data
+        self._storage.set(index, data)
         index = self._replicate_index(index)
         for ent in self._storage._attached_entities:
             ent.mark_update(index)
@@ -250,7 +250,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
                     torch.as_tensor(index, device=data.device, dtype=torch.long), data
                 ),
             )
-        self._storage[index] = data
+        self._storage.set(index, data)
         index = self._replicate_index(index)
         for ent in self._storage._attached_entities:
             ent.mark_update(index)
@@ -279,7 +279,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
             )
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
-        self._storage[index] = data
+        self._storage.set(index, data)
         index = self._replicate_index(index)
         for ent in self._storage._attached_entities:
             ent.mark_update(index)
@@ -465,7 +465,7 @@ class TensorDictMaxValueWriter(Writer):
             data.set("index", index)
             # Replicate index requires the shape of the storage to be known
             # Other than that, a "flat" (1d) index is ok to write the data
-            self._storage[index] = data
+            self._storage.set(index, data)
             index = self._replicate_index(index)
             for ent in self._storage._attached_entities:
                 ent.mark_update(index)

@@ -383,6 +383,30 @@ class ReplayBuffer:
 
         return data
 
+    def __setitem__(self, index, value) -> None:
+        if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
+            self[:][index] = value
+            return
+        if isinstance(index, tuple):
+            if len(index) == 1:
+                self[index[0]] = value
+            else:
+                self[:][index] = value
+            return
+        index = _to_numpy(index)
+
+        if self._transform is not None and len(self._transform):
+            value = self._transform.inv(value)
+
+        if self.dim_extend > 0:
+            index = (slice(None),) * self.dim_extend + (index,)
+            with self._replay_lock:
+                self._storage[index] = self._transpose(value)
+        else:
+            with self._replay_lock:
+                self._storage[index] = value
+        return
+
     def state_dict(self) -> Dict[str, Any]:
         return {
             "_storage": self._storage.state_dict(),
