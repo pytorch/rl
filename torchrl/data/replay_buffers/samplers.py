@@ -1862,12 +1862,14 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             )
 
         # force to not sample index at the end of a trajectory
+        vals = torch.tensor(self._sum_tree[preceding_stop_idx.cpu().numpy()])
         self._sum_tree[preceding_stop_idx.cpu().numpy()] = 0.0
         # and no need to update self._min_tree
 
         starts, info = PrioritizedSampler.sample(
             self, storage=storage, batch_size=batch_size // seq_length
         )
+        self._sum_tree[preceding_stop_idx.cpu().numpy()] = vals
         # We must truncate the seq_length if (1) not strict length or (2) span[1]
         if self.span[1] or not self.strict_length:
             if not isinstance(starts, torch.Tensor):
