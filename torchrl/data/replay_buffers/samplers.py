@@ -1806,6 +1806,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         )
 
     def _preceding_stop_idx(self, storage, lengths, seq_length):
+        print('lengths', lengths)
         preceding_stop_idx = self._cache.get("preceding_stop_idx")
         if preceding_stop_idx is not None:
             return preceding_stop_idx
@@ -1841,6 +1842,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
 
         preceding_stop_idx = self._preceding_stop_idx(storage, lengths, seq_length)
+        preceding_stop_idx = (preceding_stop_idx + start_idx[0, 0]) % storage._len_along_dim0
         if storage.ndim > 1:
             # we need to convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
             # This is because the lengths come as they would for a permuted storage
