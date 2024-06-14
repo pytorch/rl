@@ -1805,8 +1805,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             .flip(0)
         )
 
-    def _preceding_stop_idx(self, storage, lengths, seq_length):
-        print('lengths', lengths)
+    def _preceding_stop_idx(self, storage, lengths, seq_length, start_idx):
         preceding_stop_idx = self._cache.get("preceding_stop_idx")
         if preceding_stop_idx is not None:
             return preceding_stop_idx
@@ -1831,6 +1830,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             # Mask the rightmost values of that padded tensor
             preceding_stop_idx = pad[:, -seq_length + 1 + span_right :]
         preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
+        if storage._is_full:
+            preceding_stop_idx = (
+                preceding_stop_idx
+                + np.ravel_multi_index(
+                    tuple(start_idx[0].tolist()), storage._total_shape
+                )
+            ) % storage._total_shape.numel()
         if self.cache_values:
             self._cache["preceding_stop_idx"] = preceding_stop_idx
         return preceding_stop_idx
@@ -1841,8 +1847,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
 
-        preceding_stop_idx = self._preceding_stop_idx(storage, lengths, seq_length)
-        preceding_stop_idx = (preceding_stop_idx + start_idx[0, 0]) % storage._len_along_dim0
+        preceding_stop_idx = self._preceding_stop_idx(
+            storage, lengths, seq_length, start_idx
+        )
         if storage.ndim > 1:
             # we need to convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
             # This is because the lengths come as they would for a permuted storage
@@ -1870,7 +1877,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             # Find the stop that comes after the start index
             # say start_tensor has shape [N, X] and stop_idx has shape [M, X]
             # diff will have shape [M, N, X]
-            diff = stop_idx.unsqueeze(1) - starts_tensor.unsqueeze(0)
+            stop_idx_corr = stop_idx.clone()
+            stop_idx_corr[:, 0] = torch.where(
+                stop_idx[:, 0] < start_idx[:, 0],
+                stop_idx[:, 0] + storage._len_along_dim0,
+                stop_idx[:, 0],
+            )
+            diff = stop_idx_corr.unsqueeze(1) - starts_tensor.unsqueeze(0)
             # filter out all items that don't belong to the same dim in the storage
             mask = (diff[:, :, 1:] != 0).any(-1)
             diff = diff[:, :, 0]
@@ -1880,7 +1893,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             diff[diff < 0] = diff.max() + 1
             # Take the arg min along dim 0 (thereby reducing dim M)
             idx = diff.argmin(dim=0)
-            stops = stop_idx[idx, 0]
+            stops = stop_idx_corr[idx, 0]
             # TODO: here things may not work bc we could have spanning trajs,
             #  though I cannot show that it breaks in the tests
             if starts_tensor.ndim > 1:
