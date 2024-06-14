@@ -2230,12 +2230,12 @@ class TestSamplers:
     def test_slice_sampler_at_capacity(self, sampler):
         torch.manual_seed(0)
 
-        trajectory0 = torch.tensor([3, 3, 0, 1, 1, 1, 2, 2, 2, 3])
-        trajectory1 = torch.arange(2).repeat_interleave(5)
+        trajectory0 = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3])
+        trajectory1 = torch.arange(2).repeat_interleave(6)
         trajectory = torch.stack([trajectory0, trajectory1], 0)
 
         td = TensorDict(
-            {"trajectory": trajectory, "steps": torch.arange(10).expand(2, 10)}, [2, 10]
+            {"trajectory": trajectory, "steps": torch.arange(12).expand(2, 12)}, [2, 12]
         )
 
         rb = ReplayBuffer(
@@ -2469,7 +2469,8 @@ class TestSamplers:
     @pytest.mark.parametrize("ndim", [1, 2])
     @pytest.mark.parametrize("strict_length", [True, False])
     @pytest.mark.parametrize("circ", [False, True])
-    def test_slice_sampler_prioritized(self, ndim, strict_length, circ):
+    @pytest.mark.parametrize("at_capacity", [False, True])
+    def test_slice_sampler_prioritized(self, ndim, strict_length, circ, at_capacity):
         torch.manual_seed(0)
         out = []
         for t in range(5):
@@ -2491,9 +2492,9 @@ class TestSamplers:
         if ndim == 2:
             data = torch.stack([data, data])
         rb = TensorDictReplayBuffer(
-            storage=LazyTensorStorage(data.numel(), ndim=ndim),
+            storage=LazyTensorStorage(data.numel() - at_capacity, ndim=ndim),
             sampler=PrioritizedSliceSampler(
-                max_capacity=data.numel(),
+                max_capacity=data.numel() - at_capacity,
                 alpha=1.0,
                 beta=1.0,
                 end_key="done",
@@ -2530,8 +2531,8 @@ class TestSamplers:
             assert (samples["traj"] == 0).any()
             # Check that all samples of the first traj contain all elements (since it's too short to fullfill 10 elts)
             sc = samples[samples["traj"] == 0]["step_count"]
-            assert (sc == 0).sum() == (sc == 1).sum()
-            assert (sc == 0).sum() == (sc == 4).sum()
+            assert (sc == 1).sum() == (sc == 2).sum()
+            assert (sc == 1).sum() == (sc == 4).sum()
         assert rb._sampler._cache
         rb.extend(data)
         assert not rb._sampler._cache
