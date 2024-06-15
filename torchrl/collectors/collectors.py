@@ -424,7 +424,7 @@ class SyncDataCollector(DataCollectorBase):
                 TensorDictModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
-        ],
+        ] = None,
         *,
         frames_per_batch: int,
         total_frames: int = -1,
@@ -449,7 +449,6 @@ class SyncDataCollector(DataCollectorBase):
         from torchrl.envs.batched_envs import BatchedEnvBase
 
         self.closed = True
-
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
         )
@@ -466,6 +465,11 @@ class SyncDataCollector(DataCollectorBase):
                         f"on environment of type {type(create_env_fn)}."
                     )
                 env.update_kwargs(create_env_kwargs)
+
+        if policy is None:
+            from torchrl.collectors import RandomPolicy
+
+            policy = RandomPolicy(env.action_spec)
 
         ##########################
         # Setting devices:
@@ -1093,7 +1097,6 @@ class SyncDataCollector(DataCollectorBase):
                             self._final_rollout.ndim - 1,
                             out=self._final_rollout,
                         )
-                        assert result.names[-1] == "time"
 
                     except RuntimeError:
                         with self._final_rollout.unlock_():
@@ -1102,7 +1105,6 @@ class SyncDataCollector(DataCollectorBase):
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
-                            assert result.names[-1] == "time"
                 else:
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
