@@ -18,3 +18,4 @@ from .trainers import (
     TrainerHookBase,
     UpdateWeights,
 )
+from .lightning import RLTrainingLoop

@@ -15,7 +15,7 @@ from torchrl.envs import EnvBase, GymEnv
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives.value import GAE
 from torchrl.objectives import ClipPPOLoss
-from torchrl.lightning import RLTrainingLoop
+from torchrl.trainers import RLTrainingLoop
 
 
 def make_env(env_name: str = "InvertedDoublePendulum-v4", **kwargs: ty.Any) -> EnvBase:
