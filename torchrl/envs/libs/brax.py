@@ -241,7 +241,7 @@ class BraxWrapper(_EnvWrapper):
         key = jax.random.PRNGKey(0)
         state = env.reset(key)
         state_dict = _object_to_tensordict(state, self.device, batch_size=())
-        state_spec = _extract_spec(state_dict).expand(self.batch_size)
+        state_spec = _extract_spec(state_dict).expand(self.batch_size).clone()
         return state_spec
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
