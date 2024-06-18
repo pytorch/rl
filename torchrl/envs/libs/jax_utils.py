@@ -110,6 +110,7 @@ def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
 def _tensordict_to_object(tensordict: TensorDictBase, object_example):
     """Converts a TensorDict to a namedtuple or a dataclass."""
     from jax import dlpack as jax_dlpack
+    from jax import numpy as jnp
 
     t = {}
     _fields = _get_object_fields(object_example)
@@ -128,9 +129,22 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
             shape = value.shape
             # We need to flatten to fix https://github.com/pytorch/rl/issues/2184
             value = value.contiguous()
-            value = jax_dlpack.from_dlpack(value.detach().flatten())
-            value = value.reshape(shape)
-            t[name] = value.reshape(example.shape).view(example.dtype)
+            value = value.detach()
+            if value.ndim:
+                value = value.flatten().clone()
+            else:
+                value = value.clone()
+            value = jax_dlpack.from_dlpack(value)
+            if shape.numel() == 1 and not value.shape:
+                while value.shape != shape:
+                    value = jnp.expand_dims(value, 0)
+                if value.dtype != example.dtype:
+                    t[name] = value.view(example.dtype)
+                else:
+                    t[name] = value
+            else:
+                value = jnp.reshape(value, tuple(shape))
+                t[name] = value.view(example.dtype).reshape(example.shape)
     return type(object_example)(**t)
 
 
