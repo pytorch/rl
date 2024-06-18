@@ -663,10 +663,12 @@ class _BraxEnvStep(torch.autograd.Function):
 
         # call vjp to get gradients
         grad_state, grad_action = ctx.vjp_fn(grad_next_state_flat)
+        # assert grad_action.device == ctx.env.device
 
         # reshape batch size
         grad_state = _tree_reshape(grad_state, ctx.env.batch_size)
         grad_action = _tree_reshape(grad_action, ctx.env.batch_size)
+        # assert grad_action.device == ctx.env.device
 
         # convert ndarrays to tensors
         grad_state_qp = _object_to_tensordict(
@@ -674,7 +676,9 @@ class _BraxEnvStep(torch.autograd.Function):
             device=ctx.env.device,
             batch_size=ctx.env.batch_size,
         )
-        grad_action = _ndarray_to_tensor(grad_action)
+        grad_action_np = _ndarray_to_tensor(grad_action)
+        assert grad_action.device == ctx.env.device, grad_action
+        grad_action = grad_action_np
         grad_state_qp = {
             key: val if key not in none_keys else None
             for key, val in grad_state_qp.items()
