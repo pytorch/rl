@@ -109,8 +109,7 @@ def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
 
 def _tensordict_to_object(tensordict: TensorDictBase, object_example):
     """Converts a TensorDict to a namedtuple or a dataclass."""
-    from jax import dlpack as jax_dlpack
-    from jax import numpy as jnp
+    from jax import dlpack as jax_dlpack, numpy as jnp
 
     t = {}
     _fields = _get_object_fields(object_example)
@@ -167,4 +166,3 @@ def _extract_spec(data: Union[torch.Tensor, TensorDictBase], key=None) -> Tensor
         )
     else:
         raise TypeError(f"Unsupported data type {type(data)}")
-
