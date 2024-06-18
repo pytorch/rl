@@ -125,7 +125,11 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
         else:
             if value.dtype is torch.bool:
                 value = value.to(torch.uint8)
-            value = jax_dlpack.from_dlpack(torch_dlpack.to_dlpack(value.contiguous()))
+            shape = value.shape
+            # We need to flatten to fix https://github.com/pytorch/rl/issues/2184
+            value = value.contiguous()
+            value = jax_dlpack.from_dlpack(value.detach().flatten())
+            value = value.reshape(shape)
             t[name] = value.reshape(example.shape).view(example.dtype)
     return type(object_example)(**t)
 
@@ -149,3 +153,4 @@ def _extract_spec(data: Union[torch.Tensor, TensorDictBase], key=None) -> Tensor
         )
     else:
         raise TypeError(f"Unsupported data type {type(data)}")
+
