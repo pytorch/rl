@@ -680,5 +680,5 @@ class _BraxEnvStep(torch.autograd.Function):
             for key, val in grad_state_qp.items()
         }
         grads = (grad_action, *grad_state_qp.values())
-        assert all(grad.device == env.device for grad in grads)
+        assert all(grad.device == ctx.env.device for grad in grads)
         return (None, None, *grad)
