@@ -682,4 +682,4 @@ class _BraxEnvStep(torch.autograd.Function):
             for key, val in grad_state_qp.items()
         }
         grads = (grad_action, *grad_state_qp.values())
-        return (None, None, *grad)
+        return (None, None, *grads)
