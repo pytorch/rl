@@ -2812,15 +2812,18 @@ def _minari_selected_datasets():
     torch.manual_seed(0)
 
     keys = list(minari.list_remote_datasets())
-    indices = torch.randperm(len(keys))[:10]
+    indices = torch.randperm(len(keys))[:20]
     keys = [keys[idx] for idx in indices]
     keys = [
         key
         for key in keys
         if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
     ]
-    assert len(keys) > 5
+    assert len(keys) > 5, keys
     _MINARI_DATASETS += keys
+
+
+_minari_selected_datasets()
 
 
 @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
@@ -2829,10 +2832,6 @@ class TestMinari:
     @pytest.mark.parametrize("split", [False, True])
     @pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
     def test_load(self, selected_dataset, split):
-        global _MINARI_DATASETS
-        if not _MINARI_DATASETS:
-            _minari_selected_datasets()
-
         torchrl_logger.info(f"dataset {selected_dataset}")
         data = MinariExperienceReplay(
             selected_dataset, batch_size=32, split_trajs=split

@@ -81,7 +81,7 @@ from torchrl.envs import (
 from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
+from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.transforms.transforms import AutoResetEnv, AutoResetTransform
 from torchrl.envs.utils import (
@@ -203,6 +203,12 @@ def test_env_seed(env_name, frame_skip, seed=0):
 @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_rollout(env_name, frame_skip, seed=0):
+    if env_name is PONG_VERSIONED and version.parse(
+        gym_backend().__version__
+    ) < version.parse("0.19"):
+        # Then 100 steps in pong are not sufficient to detect a difference
+        pytest.skip("can't detect difference in gym rollout with this gym version.")
+
     env_name = env_name()
     env = GymEnv(env_name, frame_skip=frame_skip)
 

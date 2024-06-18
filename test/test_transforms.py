@@ -956,7 +956,7 @@ class TestCatFrames(TransformBase):
         td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
         if dim > 0:
             with pytest.raises(
-                ValueError, match="dim must be < 0 to accomodate for tensordict"
+                ValueError, match="dim must be < 0 to accommodate for tensordict"
             ):
                 cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
             return

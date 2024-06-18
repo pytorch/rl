@@ -32,6 +32,8 @@ from tensordict import (
 )
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
+
+from torchrl._utils import _replace_last
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -64,6 +66,7 @@ from torchrl.data.replay_buffers.storages import (
     StorageEnsemble,
     TensorStorage,
 )
+from torchrl.data.replay_buffers.utils import tree_iter
 from torchrl.data.replay_buffers.writers import (
     RoundRobinWriter,
     TensorDictMaxValueWriter,
@@ -90,6 +93,7 @@ from torchrl.envs.transforms.transforms import (
     RewardClipping,
     RewardScaling,
     SqueezeTransform,
+    StepCounter,
     ToTensorImage,
     UnsqueezeTransform,
     VecNorm,
@@ -787,6 +791,136 @@ class TestStorages:
         assert len(rb) == 1
         assert rb[:].shape == torch.Size([1, 2])
 
+    @pytest.mark.parametrize(
+        "storage_type,collate_fn",
+        [
+            (LazyTensorStorage, None),
+            (LazyMemmapStorage, None),
+            (ListStorage, torch.stack),
+        ],
+    )
+    def test_storage_inplace_writing(self, storage_type, collate_fn):
+        rb = ReplayBuffer(storage=storage_type(102), collate_fn=collate_fn)
+        data = TensorDict(
+            {"a": torch.arange(100), ("b", "c"): torch.arange(100)}, [100]
+        )
+        rb.extend(data)
+        assert len(rb) == 100
+        rb[3:4] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
+        )
+        assert (rb[3:4] == 0).all()
+        assert len(rb) == 100
+        assert rb._writer._cursor == 100
+        rb[10:20] = TensorDict(
+            {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
+        )
+        assert (rb[10:20] == 0).all()
+        assert len(rb) == 100
+        assert rb._writer._cursor == 100
+        rb[torch.arange(30, 40)] = TensorDict(
+            {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
+        )
+        assert (rb[30:40] == 0).all()
+        assert len(rb) == 100
+
+    @pytest.mark.parametrize(
+        "storage_type,collate_fn",
+        [
+            (LazyTensorStorage, None),
+            (LazyMemmapStorage, None),
+            (ListStorage, torch.stack),
+        ],
+    )
+    def test_storage_inplace_writing_transform(self, storage_type, collate_fn):
+        rb = ReplayBuffer(storage=storage_type(102), collate_fn=collate_fn)
+        rb.append_transform(lambda x: x + 1, invert=True)
+        rb.append_transform(lambda x: x + 1)
+        data = TensorDict(
+            {"a": torch.arange(100), ("b", "c"): torch.arange(100)}, [100]
+        )
+        rb.extend(data)
+        assert len(rb) == 100
+        rb[3:4] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
+        )
+        assert (rb[3:4] == 2).all(), rb[3:4]["a"]
+        assert len(rb) == 100
+        assert rb._writer._cursor == 100
+        rb[10:20] = TensorDict(
+            {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
+        )
+        assert (rb[10:20] == 2).all()
+        assert len(rb) == 100
+        assert rb._writer._cursor == 100
+        rb[torch.arange(30, 40)] = TensorDict(
+            {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
+        )
+        assert (rb[30:40] == 2).all()
+        assert len(rb) == 100
+
+    @pytest.mark.parametrize(
+        "storage_type,collate_fn",
+        [
+            (LazyTensorStorage, None),
+            # (LazyMemmapStorage, None),
+            (ListStorage, TensorDict.maybe_dense_stack),
+        ],
+    )
+    def test_storage_inplace_writing_newkey(self, storage_type, collate_fn):
+        rb = ReplayBuffer(storage=storage_type(102), collate_fn=collate_fn)
+        data = TensorDict(
+            {"a": torch.arange(100), ("b", "c"): torch.arange(100)}, [100]
+        )
+        rb.extend(data)
+        assert len(rb) == 100
+        rb[3:4] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0]), "d": torch.ones(1)},
+            [1],
+        )
+        assert "d" in rb[3]
+        assert "d" in rb[3:4]
+        if storage_type is not ListStorage:
+            assert "d" in rb[3:5]
+        else:
+            # a lazy stack doesn't show exclusive fields
+            assert "d" not in rb[3:5]
+
+    @pytest.mark.parametrize("storage_type", [LazyTensorStorage, LazyMemmapStorage])
+    def test_storage_inplace_writing_ndim(self, storage_type):
+        rb = ReplayBuffer(storage=storage_type(102, ndim=2))
+        data = TensorDict(
+            {
+                "a": torch.arange(50).expand(2, 50),
+                ("b", "c"): torch.arange(50).expand(2, 50),
+            },
+            [2, 50],
+        )
+        rb.extend(data)
+        assert len(rb) == 100
+        rb[0, 3:4] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
+        )
+        assert (rb[0, 3:4] == 0).all()
+        assert (rb[1, 3:4] != 0).all()
+        assert rb._writer._cursor == 50
+        rb[1, 5:6] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
+        )
+        assert (rb[1, 5:6] == 0).all()
+        assert rb._writer._cursor == 50
+        rb[:, 7:8] = TensorDict(
+            {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
+        ).expand(2, 1)
+        assert (rb[:, 7:8] == 0).all()
+        assert rb._writer._cursor == 50
+        # test broadcasting
+        rb[:, 10:20] = TensorDict(
+            {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
+        )
+        assert (rb[:, 10:20] == 0).all()
+        assert len(rb) == 100
+
 
 @pytest.mark.parametrize("max_size", [1000])
 @pytest.mark.parametrize("shape", [[3, 4]])
@@ -878,7 +1012,7 @@ class TestLazyStorages:
         assert len(memory) == 10
         assert len(memory._storage) == 10
         sample = memory.sample(10)
-        for leaf in torch.utils._pytree.tree_leaves(sample):
+        for leaf in tree_iter(sample):
             assert (leaf.unique(sorted=True) == torch.arange(10)).all()
         memory = ReplayBuffer(
             storage=storage(max_size=max_size),
@@ -1923,6 +2057,29 @@ class TestSamplers:
         s = new_replay_buffer.sample(batch_size=1)
         assert (s.exclude("index") == 0).all()
 
+    @pytest.mark.parametrize("drop_last", [False, True])
+    def test_sampler_without_replacement_cap_prefetch(self, drop_last):
+        torch.manual_seed(0)
+        data = TensorDict({"a": torch.arange(11)}, batch_size=[11])
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(11),
+            sampler=SamplerWithoutReplacement(drop_last=drop_last),
+            batch_size=2,
+            prefetch=3,
+        )
+        rb.extend(data)
+
+        for _ in range(100):
+            s = set()
+            for i, d in enumerate(rb):
+                assert i <= (4 + int(not drop_last)), i
+                s = s.union(set(d["a"].tolist()))
+            assert i == (4 + int(not drop_last)), i
+            if drop_last:
+                assert s != set(range(11))
+            else:
+                assert s == set(range(11))
+
     @pytest.mark.parametrize(
         "batch_size,num_slices,slice_len,prioritized",
         [
@@ -1974,7 +2131,7 @@ class TestSamplers:
                 "count": torch.arange(100),
                 "other": torch.randn((20, 50)).expand(100, 20, 50),
                 done_key: done,
-                "terminated": done,
+                _replace_last(done_key, "terminated"): done,
             },
             [100],
             device=device,
@@ -1997,9 +2154,11 @@ class TestSamplers:
                 end_key=done_key,
                 slice_len=slice_len,
                 strict_length=strict_length,
+                truncated_key=_replace_last(done_key, "truncated"),
             )
             index = torch.arange(0, num_steps, 1)
             sampler.extend(index)
+            sampler.update_priority(index, 1)
         else:
             sampler = SliceSampler(
                 num_slices=num_slices,
@@ -2007,22 +2166,27 @@ class TestSamplers:
                 end_key=done_key,
                 slice_len=slice_len,
                 strict_length=strict_length,
+                truncated_key=_replace_last(done_key, "truncated"),
             )
         if slice_len is not None:
             num_slices = batch_size // slice_len
         trajs_unique_id = set()
         too_short = False
         count_unique = set()
-        for _ in range(30):
+        for _ in range(50):
             index, info = sampler.sample(storage, batch_size=batch_size)
             samples = storage._storage[index]
             if strict_length:
                 # check that trajs are ok
                 samples = samples.view(num_slices, -1)
 
-                assert samples["another_episode"].unique(
-                    dim=1
-                ).squeeze().shape == torch.Size([num_slices])
+                unique_another_episode = (
+                    samples["another_episode"].unique(dim=1).squeeze()
+                )
+                assert unique_another_episode.shape == torch.Size([num_slices]), (
+                    num_slices,
+                    samples,
+                )
                 assert (
                     samples["steps"][..., 1:] - 1 == samples["steps"][..., :-1]
                 ).all()
@@ -2037,11 +2201,14 @@ class TestSamplers:
             )
             count_unique = count_unique.union(samples.get("count").view(-1).tolist())
 
-            truncated = info[("next", "truncated")]
-            terminated = info[("next", "terminated")]
+            truncated = info[_replace_last(done_key, "truncated")]
+            terminated = info[_replace_last(done_key, "terminated")]
             assert (truncated | terminated).view(num_slices, -1)[:, -1].all()
-            assert (terminated == samples["terminated"].view_as(terminated)).all()
-            done = info[("next", "done")]
+            assert (
+                terminated
+                == samples[_replace_last(done_key, "terminated")].view_as(terminated)
+            ).all()
+            done = info[done_key]
             assert done.view(num_slices, -1)[:, -1].all()
 
             if len(count_unique) == 100:
@@ -2063,12 +2230,12 @@ class TestSamplers:
     def test_slice_sampler_at_capacity(self, sampler):
         torch.manual_seed(0)
 
-        trajectory0 = torch.tensor([3, 3, 0, 1, 1, 1, 2, 2, 2, 3])
-        trajectory1 = torch.arange(2).repeat_interleave(5)
+        trajectory0 = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3])
+        trajectory1 = torch.arange(2).repeat_interleave(6)
         trajectory = torch.stack([trajectory0, trajectory1], 0)
 
         td = TensorDict(
-            {"trajectory": trajectory, "steps": torch.arange(10).expand(2, 10)}, [2, 10]
+            {"trajectory": trajectory, "steps": torch.arange(12).expand(2, 12)}, [2, 12]
         )
 
         rb = ReplayBuffer(
@@ -2197,10 +2364,10 @@ class TestSamplers:
             trajs_unique_id = trajs_unique_id.union(
                 cur_episodes,
             )
-        done = info[("next", "done")]
-        assert done.view(num_slices, -1)[:, -1].all()
         done_recon = info[("next", "truncated")] | info[("next", "terminated")]
         assert done_recon.view(num_slices, -1)[:, -1].all()
+        done = info[("next", "done")]
+        assert done.view(num_slices, -1)[:, -1].all()
 
     def test_slice_sampler_left_right(self):
         torch.manual_seed(0)
@@ -2255,7 +2422,7 @@ class TestSamplers:
                     curr_eps = curr_eps[curr_eps != 0]
                     assert curr_eps.unique().numel() == 1
 
-    def test_slicesampler_strictlength(self):
+    def test_slice_sampler_strictlength(self):
 
         torch.manual_seed(0)
 
@@ -2298,6 +2465,184 @@ class TestSamplers:
                 assert (sample["traj"] != 0).any()
             else:
                 assert len(sample["traj"].unique()) == 1
+
+    @pytest.mark.parametrize("ndim", [1, 2])
+    @pytest.mark.parametrize("strict_length", [True, False])
+    @pytest.mark.parametrize("circ", [False, True])
+    @pytest.mark.parametrize("at_capacity", [False, True])
+    def test_slice_sampler_prioritized(self, ndim, strict_length, circ, at_capacity):
+        torch.manual_seed(0)
+        out = []
+        for t in range(5):
+            length = (t + 1) * 5
+            done = torch.zeros(length, 1, dtype=torch.bool)
+            done[-1] = 1
+            priority = 10 if t == 0 else 1
+            traj = TensorDict(
+                {
+                    "traj": torch.full((length,), t),
+                    "step_count": torch.arange(length),
+                    "done": done,
+                    "priority": torch.full((length,), priority),
+                },
+                batch_size=length,
+            )
+            out.append(traj)
+        data = torch.cat(out)
+        if ndim == 2:
+            data = torch.stack([data, data])
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel() - at_capacity, ndim=ndim),
+            sampler=PrioritizedSliceSampler(
+                max_capacity=data.numel() - at_capacity,
+                alpha=1.0,
+                beta=1.0,
+                end_key="done",
+                slice_len=10,
+                strict_length=strict_length,
+                cache_values=True,
+            ),
+            batch_size=50,
+        )
+        if not circ:
+            # Simplest case: the buffer is full but no overlap
+            index = rb.extend(data)
+        else:
+            # The buffer is 2/3 -> 1/3 overlapping
+            rb.extend(data[..., : data.shape[-1] // 3])
+            index = rb.extend(data)
+        rb.update_priority(index, data["priority"])
+        samples = []
+        found_shorter_batch = False
+        for _ in range(100):
+            samples.append(rb.sample())
+            if samples[-1].numel() < 50:
+                found_shorter_batch = True
+        samples = torch.cat(samples)
+        if strict_length:
+            assert not found_shorter_batch
+        else:
+            assert found_shorter_batch
+        # the first trajectory has a very high priority, but should only appear
+        # if strict_length=False.
+        if strict_length:
+            assert (samples["traj"] != 0).all(), samples["traj"].unique()
+        else:
+            assert (samples["traj"] == 0).any()
+            # Check that all samples of the first traj contain all elements (since it's too short to fullfill 10 elts)
+            sc = samples[samples["traj"] == 0]["step_count"]
+            assert (sc == 1).sum() == (sc == 2).sum()
+            assert (sc == 1).sum() == (sc == 4).sum()
+        assert rb._sampler._cache
+        rb.extend(data)
+        assert not rb._sampler._cache
+
+    @pytest.mark.parametrize("ndim", [1, 2])
+    @pytest.mark.parametrize("strict_length", [True, False])
+    @pytest.mark.parametrize("circ", [False, True])
+    @pytest.mark.parametrize(
+        "span", [False, [False, False], [False, True], 3, [False, 3]]
+    )
+    def test_slice_sampler_prioritized_span(self, ndim, strict_length, circ, span):
+        torch.manual_seed(0)
+        out = []
+        # 5 trajs of length 3, 6, 9, 12 and 15
+        for t in range(5):
+            length = (t + 1) * 3
+            done = torch.zeros(length, 1, dtype=torch.bool)
+            done[-1] = 1
+            priority = 1
+            traj = TensorDict(
+                {
+                    "traj": torch.full((length,), t),
+                    "step_count": torch.arange(length),
+                    "done": done,
+                    "priority": torch.full((length,), priority),
+                },
+                batch_size=length,
+            )
+            out.append(traj)
+        data = torch.cat(out)
+        if ndim == 2:
+            data = torch.stack([data, data])
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel(), ndim=ndim),
+            sampler=PrioritizedSliceSampler(
+                max_capacity=data.numel(),
+                alpha=1.0,
+                beta=1.0,
+                end_key="done",
+                slice_len=5,
+                strict_length=strict_length,
+                cache_values=True,
+                span=span,
+            ),
+            batch_size=5,
+        )
+        if not circ:
+            # Simplest case: the buffer is full but no overlap
+            index = rb.extend(data)
+        else:
+            # The buffer is 2/3 -> 1/3 overlapping
+            rb.extend(data[..., : data.shape[-1] // 3])
+            index = rb.extend(data)
+        rb.update_priority(index, data["priority"])
+        found_traj_0 = False
+        found_traj_4_truncated_left = False
+        found_traj_4_truncated_right = False
+        for i, s in enumerate(rb):
+            t = s["traj"].unique().tolist()
+            assert len(t) == 1
+            t = t[0]
+            if t == 0:
+                found_traj_0 = True
+            if t == 4 and s.numel() < 5:
+                if s["step_count"][0] > 10:
+                    found_traj_4_truncated_right = True
+                if s["step_count"][0] == 0:
+                    found_traj_4_truncated_left = True
+            if i == 1000:
+                break
+        assert not rb._sampler.span[0]
+        # if rb._sampler.span[0]:
+        #     assert found_traj_4_truncated_left
+        if rb._sampler.span[1]:
+            assert found_traj_4_truncated_right
+        else:
+            assert not found_traj_4_truncated_right
+        if strict_length and not rb._sampler.span[1]:
+            assert not found_traj_0
+        else:
+            assert found_traj_0
+
+    @pytest.mark.parametrize("max_priority_within_buffer", [True, False])
+    def test_prb_update_max_priority(self, max_priority_within_buffer):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(11),
+            sampler=PrioritizedSampler(
+                max_capacity=11,
+                alpha=1.0,
+                beta=1.0,
+                max_priority_within_buffer=max_priority_within_buffer,
+            ),
+        )
+        for data in torch.arange(20):
+            idx = rb.add(data)
+            rb.update_priority(idx, 21 - data)
+            if data <= 10 or not max_priority_within_buffer:
+                assert rb._sampler._max_priority[0] == 21
+                assert rb._sampler._max_priority[1] == 0
+            else:
+                assert rb._sampler._max_priority[0] == 10
+                assert rb._sampler._max_priority[1] == 0
+        idx = rb.extend(torch.arange(10))
+        rb.update_priority(idx, 12)
+        if max_priority_within_buffer:
+            assert rb._sampler._max_priority[0] == 12
+            assert rb._sampler._max_priority[1] == 0
+        else:
+            assert rb._sampler._max_priority[0] == 21
+            assert rb._sampler._max_priority[1] == 0
 
 
 def test_prioritized_slice_sampler_doc_example():
@@ -2772,7 +3117,7 @@ class TestRBMultidim:
             assert (s.exclude("index") == 1).all()
             assert s.numel() == 4
         else:
-            for leaf in torch.utils._pytree.tree_leaves(s):
+            for leaf in tree_iter(s):
                 assert leaf.shape[0] == 4
                 assert (leaf == 1).all()
 
@@ -2924,15 +3269,26 @@ class TestCheckpointers:
         "checkpointer",
         [FlatStorageCheckpointer, H5StorageCheckpointer, NestedStorageCheckpointer],
     )
-    def test_simple_env(self, storage_type, checkpointer, tmpdir):
+    @pytest.mark.parametrize("frames_per_batch", [22, 122])
+    def test_simple_env(self, storage_type, checkpointer, tmpdir, frames_per_batch):
         env = GymEnv(CARTPOLE_VERSIONED(), device=None)
         env.set_seed(0)
         torch.manual_seed(0)
         collector = SyncDataCollector(
-            env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+            env,
+            policy=env.rand_step,
+            total_frames=200,
+            frames_per_batch=frames_per_batch,
         )
         rb = ReplayBuffer(storage=storage_type(100))
         rb_test = ReplayBuffer(storage=storage_type(100))
+        if torch.__version__ < "2.4.0.dev" and checkpointer in (
+            H5StorageCheckpointer,
+            NestedStorageCheckpointer,
+        ):
+            with pytest.raises(ValueError, match="Unsupported torch version"):
+                checkpointer()
+            return
         rb.storage.checkpointer = checkpointer()
         rb_test.storage.checkpointer = checkpointer()
         for data in collector:
@@ -2940,29 +3296,54 @@ class TestCheckpointers:
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
+            assert rb._writer._cursor == rb_test._writer._cursor
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    @pytest.mark.parametrize("frames_per_batch", [22, 122])
     @pytest.mark.parametrize(
         "checkpointer",
         [FlatStorageCheckpointer, NestedStorageCheckpointer, H5StorageCheckpointer],
     )
-    def test_multi_env(self, storage_type, checkpointer, tmpdir):
-        env = SerialEnv(3, lambda: GymEnv(CARTPOLE_VERSIONED(), device=None))
+    def test_multi_env(self, storage_type, checkpointer, tmpdir, frames_per_batch):
+        env = SerialEnv(
+            3,
+            lambda: GymEnv(CARTPOLE_VERSIONED(), device=None).append_transform(
+                StepCounter()
+            ),
+        )
         env.set_seed(0)
         torch.manual_seed(0)
         collector = SyncDataCollector(
-            env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+            env,
+            policy=env.rand_step,
+            total_frames=200,
+            frames_per_batch=frames_per_batch,
         )
         rb = ReplayBuffer(storage=storage_type(100, ndim=2))
         rb_test = ReplayBuffer(storage=storage_type(100, ndim=2))
+        if torch.__version__ < "2.4.0.dev" and checkpointer in (
+            H5StorageCheckpointer,
+            NestedStorageCheckpointer,
+        ):
+            with pytest.raises(ValueError, match="Unsupported torch version"):
+                checkpointer()
+            return
         rb.storage.checkpointer = checkpointer()
         rb_test.storage.checkpointer = checkpointer()
         for data in collector:
             rb.extend(data)
             assert rb._storage.max_size == 102
+            if frames_per_batch > 100:
+                assert rb._storage._is_full
+                assert len(rb) == 102
+                # Checks that when writing to the buffer with a batch greater than the total
+                # size, we get the last step written properly.
+                assert (rb[:]["next", "step_count"][:, -1] != 0).any()
+            rb.dumps(tmpdir)
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
+            assert rb._writer._cursor == rb_test._writer._cursor
 
 
 if __name__ == "__main__":

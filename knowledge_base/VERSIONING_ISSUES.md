@@ -1,7 +1,7 @@
 # Versioning Issues
 
 ## Pytorch version
-This issue is related to https://github.com/pytorch/rl/issues/689. Using PyTorch versions <1.13 and installing stable package leads to undefined symbol errors. For example:
+This issue is related to https://github.com/pytorch/rl/issues/689. Using PyTorch versions <2.0 and installing stable package leads to undefined symbol errors. For example:
 ```
 ImportError: /usr/local/lib/python3.7/dist-packages/torchrl/_torchrl.so: undefined symbol: _ZN8pybind116detail11type_casterIN2at6TensorEvE4loadENS_6handleEb
 ```
