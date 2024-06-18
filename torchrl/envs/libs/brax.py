@@ -676,9 +676,7 @@ class _BraxEnvStep(torch.autograd.Function):
             device=ctx.env.device,
             batch_size=ctx.env.batch_size,
         )
-        grad_action_np = _ndarray_to_tensor(grad_action).to(ctx.env.device)
-        assert grad_action_np.device == ctx.env.device, (grad_action, grad_action_np, grad_action.__dlpack_device__())
-        grad_action = grad_action_np
+        grad_action = _ndarray_to_tensor(grad_action).to(ctx.env.device)
         grad_state_qp = {
             key: val if key not in none_keys else None
             for key, val in grad_state_qp.items()
