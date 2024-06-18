@@ -1081,7 +1081,7 @@ class SyncDataCollector(DataCollectorBase):
                                     out=self._final_rollout[..., : t + 1],
                                 )
                     else:
-                        result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
+                        result = LazyStackedTensorDict.maybe_dense_stack(tensordicts, dim=-1)
                         assert result.names[-1] == "time"
                     break
             else:
@@ -1104,7 +1104,7 @@ class SyncDataCollector(DataCollectorBase):
                             )
                             assert result.names[-1] == "time"
                 else:
-                    result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
+                    result = LazyStackedTensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
 
         return self._maybe_set_truncated(result)
@@ -2208,7 +2208,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if cat_results == "stack":
                 stack = (
-                    torch.stack if self._use_buffers else TensorDict.maybe_dense_stack
+                    torch.stack if self._use_buffers else LazyStackedTensorDict.maybe_dense_stack
                 )
                 if same_device:
                     self.out_buffer = stack(list(buffers.values()), 0)
