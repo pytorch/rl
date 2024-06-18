@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib.util
+import warnings
 
 from typing import Dict, Optional, Union
 
@@ -202,6 +203,11 @@ class BraxWrapper(_EnvWrapper):
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
         super().__init__(**kwargs)
+        if not self.device:
+            warnings.warn(
+                f"No device is set for env {self}. "
+                f"Setting a device in Brax wrapped environments is strongly recommended."
+            )
 
     def _check_kwargs(self, kwargs: Dict):
         brax = self.lib
@@ -673,4 +679,6 @@ class _BraxEnvStep(torch.autograd.Function):
             key: val if key not in none_keys else None
             for key, val in grad_state_qp.items()
         }
-        return (None, None, grad_action, *grad_state_qp.values())
+        grads = (grad_action, *grad_state_qp.values())
+        assert all(grad.device == env.device for grad in grads)
+        return (None, None, *grad)

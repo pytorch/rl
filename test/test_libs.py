@@ -2046,7 +2046,9 @@ class TestBrax:
             _tree_flatten,
         )
 
-        env = BraxEnv(envname, batch_size=batch_size, requires_grad=requires_grad, device=device)
+        env = BraxEnv(
+            envname, batch_size=batch_size, requires_grad=requires_grad, device=device
+        )
         env.set_seed(1)
         rollout = env.rollout(10)
 
@@ -2084,7 +2086,9 @@ class TestBrax:
         self, envname, batch_size, parallel, maybe_fork_ParallelEnv, device, n=1
     ):
         def make_brax():
-            env = BraxEnv(envname, batch_size=batch_size, requires_grad=False, device=device)
+            env = BraxEnv(
+                envname, batch_size=batch_size, requires_grad=False, device=device
+            )
             env.set_seed(1)
             return env
 
