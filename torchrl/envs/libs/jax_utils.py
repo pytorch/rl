@@ -132,6 +132,8 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
             if value.ndim > 1:
                 value = value.flatten().clone()
             else:
+                # Need this because otherwise an exception is raised
+                #  ValueError: INTERNAL: Address of buffer 1 must be a multiple of 10, but was 0x7efccec00824
                 value = value.clone()
             value = jax_dlpack.from_dlpack(value)
             if shape.numel() == 1 and not value.shape:
