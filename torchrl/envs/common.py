@@ -31,7 +31,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import DEVICE_TYPING
+from torchrl.data.utils import _make_ordinal_device, DEVICE_TYPING
 from torchrl.envs.utils import (
     _make_compatible_policy,
     _repr_by_depth,
@@ -154,7 +154,7 @@ class EnvMetaData:
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
         if device is not None:
-            device = torch.device(device)
+            device = _make_ordinal_device(torch.device(device))
             device_map = {key: device for key in self.device_map}
         tensordict = self.tensordict.contiguous().to(device)
         specs = self.specs.to(device)
@@ -348,7 +348,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     ):
         self.__dict__.setdefault("_batch_size", None)
         if device is not None:
-            self.__dict__["_device"] = torch.device(device)
+            self.__dict__["_device"] = _make_ordinal_device(torch.device(device))
             output_spec = self.__dict__.get("_output_spec")
             if output_spec is not None:
                 self.__dict__["_output_spec"] = (
@@ -2947,7 +2947,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 pass
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
         if device == self.device:
             return self
         self.__dict__["_input_spec"] = self.input_spec.to(device).lock_()

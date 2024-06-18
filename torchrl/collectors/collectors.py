@@ -50,7 +50,7 @@ from torchrl._utils import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import TensorSpec
-from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
+from torchrl.data.utils import _make_ordinal_device, CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
@@ -820,10 +820,16 @@ class SyncDataCollector(DataCollectorBase):
         env_device: torch.device,
         device: torch.device,
     ):
-        device = torch.device(device) if device else device
-        storing_device = torch.device(storing_device) if storing_device else device
-        policy_device = torch.device(policy_device) if policy_device else device
-        env_device = torch.device(env_device) if env_device else device
+        device = _make_ordinal_device(torch.device(device) if device else device)
+        storing_device = _make_ordinal_device(
+            torch.device(storing_device) if storing_device else device
+        )
+        policy_device = _make_ordinal_device(
+            torch.device(policy_device) if policy_device else device
+        )
+        env_device = _make_ordinal_device(
+            torch.device(env_device) if env_device else device
+        )
         if storing_device is None and (env_device == policy_device):
             storing_device = env_device
         return storing_device, policy_device, env_device

@@ -29,7 +29,11 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
+from torchrl.data.utils import (
+    _make_ordinal_device,
+    check_no_exclusive_keys,
+    consolidate_spec,
+)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
@@ -3687,6 +3691,50 @@ class TestNonTensorSpec:
         assert nts.one((2,)).shape == (2, 3, 4)
         assert nts.rand((2,)).shape == (2, 3, 4)
         assert nts.zero((2,)).shape == (2, 3, 4)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="not cuda device")
+def test_device_ordinal():
+    device = torch.device("cpu")
+    assert _make_ordinal_device(device) == torch.device("cpu")
+    device = torch.device("cuda")
+    assert _make_ordinal_device(device) == torch.device("cuda:0")
+    device = torch.device("cuda:0")
+    assert _make_ordinal_device(device) == torch.device("cuda:0")
+    device = None
+    assert _make_ordinal_device(device) is None
+
+    device = torch.device("cuda")
+    unb = UnboundedContinuousTensorSpec((-1, 1, 2), device=device)
+    assert unb.device == torch.device("cuda:0")
+    unbd = UnboundedDiscreteTensorSpec((-1, 1, 2), device=device)
+    assert unbd.device == torch.device("cuda:0")
+    bound = BoundedTensorSpec(shape=(-1, 1, 2), low=-1, high=1, device=device)
+    assert bound.device == torch.device("cuda:0")
+    oneh = OneHotDiscreteTensorSpec(shape=(-1, 1, 2, 4), n=4, device=device)
+    assert oneh.device == torch.device("cuda:0")
+    disc = DiscreteTensorSpec(shape=(-1, 1, 2), n=4, device=device)
+    assert disc.device == torch.device("cuda:0")
+    moneh = MultiOneHotDiscreteTensorSpec(
+        shape=(-1, 1, 2, 7), nvec=[3, 4], device=device
+    )
+    assert moneh.device == torch.device("cuda:0")
+    mdisc = MultiDiscreteTensorSpec(shape=(-1, 1, 2, 2), nvec=[3, 4], device=device)
+    assert mdisc.device == torch.device("cuda:0")
+    mdisc = NonTensorSpec(shape=(-1, 1, 2, 2), device=device)
+    assert mdisc.device == torch.device("cuda:0")
+
+    spec = CompositeSpec(
+        unb=unb,
+        unbd=unbd,
+        bound=bound,
+        oneh=oneh,
+        disc=disc,
+        moneh=moneh,
+        mdisc=mdisc,
+        shape=(-1, 1, 2),
+    )
+    assert spec.device == torch.device("cuda:0")
 
 
 if __name__ == "__main__":

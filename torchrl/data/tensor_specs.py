@@ -39,8 +39,8 @@ from tensordict import (
     unravel_key,
 )
 from tensordict.utils import _getitem_batch_size, NestedKey
-
 from torchrl._utils import get_binary_env_var
+from torchrl.data.utils import _make_ordinal_device
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
@@ -91,7 +91,7 @@ def _default_dtype_and_device(
     if dtype is None:
         dtype = torch.get_default_dtype()
     if device is not None:
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
     elif not allow_none_device:
         device = torch.zeros(()).device
     return dtype, device
@@ -535,6 +535,14 @@ class TensorSpec:
             return func
 
         return decorator
+
+    @property
+    def device(self) -> torch.device:
+        return self._device
+
+    @device.setter
+    def device(self, device: torch.device | None) -> None:
+        self._device = _make_ordinal_device(device)
 
     def clear_device_(self):
         """A no-op for all leaf specs (which must have a device)."""
@@ -3802,7 +3810,9 @@ class CompositeSpec(TensorSpec):
         for key, value in kwargs.items():
             self.set(key, value)
 
-        _device = torch.device(device) if device is not None else device
+        _device = (
+            _make_ordinal_device(torch.device(device)) if device is not None else device
+        )
         if len(kwargs):
             for key, item in self.items():
                 if item is None:
@@ -3845,7 +3855,7 @@ class CompositeSpec(TensorSpec):
             raise RuntimeError(
                 "To erase the device of a composite spec, call " "spec.clear_device_()."
             )
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
         self.to(device)
 
     def clear_device_(self):
