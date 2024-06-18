@@ -30,7 +30,7 @@ from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 
-from torchrl._utils import accept_remote_rref_udf_invocation
+from torchrl._utils import _make_ordinal_device, accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -58,7 +58,7 @@ from torchrl.data.replay_buffers.writers import (
     Writer,
     WriterEnsemble,
 )
-from torchrl.data.utils import _make_ordinal_device, DEVICE_TYPING
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms.transforms import _InvertTransform
 
 

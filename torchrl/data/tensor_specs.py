@@ -39,8 +39,7 @@ from tensordict import (
     unravel_key,
 )
 from tensordict.utils import _getitem_batch_size, NestedKey
-from torchrl._utils import get_binary_env_var
-from torchrl.data.utils import _make_ordinal_device
+from torchrl._utils import _make_ordinal_device, get_binary_env_var
 
 DEVICE_TYPING = Union[torch.device, str, int]
 

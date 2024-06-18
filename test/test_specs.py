@@ -13,7 +13,7 @@ from _utils_internal import get_available_devices, get_default_devices, set_glob
 from scipy.stats import chisquare
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.utils import _unravel_key_to_tuple
-
+from torchrl._utils import _make_ordinal_device
 from torchrl.data.tensor_specs import (
     _keys_to_empty_composite_spec,
     BinaryDiscreteTensorSpec,
@@ -29,11 +29,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.utils import (
-    _make_ordinal_device,
-    check_no_exclusive_keys,
-    consolidate_spec,
-)
+from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])

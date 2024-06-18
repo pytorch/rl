@@ -50,7 +50,7 @@ from torchrl._utils import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import TensorSpec
-from torchrl.data.utils import _make_ordinal_device, CloudpickleWrapper, DEVICE_TYPING
+from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (

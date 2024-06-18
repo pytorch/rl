@@ -31,17 +31,13 @@ from tensordict._tensordict import unravel_key
 from torch import multiprocessing as mp
 from torchrl._utils import (
     _check_for_faulty_process,
+    _make_ordinal_device,
     _ProcessNoWarn,
     logger as torchrl_logger,
     VERBOSE,
 )
 from torchrl.data.tensor_specs import CompositeSpec
-from torchrl.data.utils import (
-    _make_ordinal_device,
-    CloudpickleWrapper,
-    contains_lazy_spec,
-    DEVICE_TYPING,
-)
+from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 from torchrl.envs.env_creator import get_env_metadata
 

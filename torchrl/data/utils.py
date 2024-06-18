@@ -324,11 +324,3 @@ def _find_action_space(action_space):
             f"action_space was not specified/not compatible and could not be retrieved from the value network. Got action_space={action_space}."
         )
     return action_space
-
-
-def _make_ordinal_device(device: torch.device):
-    if device is None:
-        return device
-    if device.type == "cuda" and device.index is None:
-        return torch.device("cuda", index=torch.cuda.current_device())
-    return device

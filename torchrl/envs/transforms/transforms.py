@@ -44,7 +44,7 @@ from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import _append_last, _ends_with, _replace_last
+from torchrl._utils import _append_last, _ends_with, _make_ordinal_device, _replace_last
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -58,7 +58,6 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import _make_ordinal_device
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import (

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import torch
+from torchrl._utils import _make_ordinal_device
 
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
@@ -13,7 +14,7 @@ from torchrl.data.replay_buffers.replay_buffers import (
 )
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.data.utils import _make_ordinal_device, DEVICE_TYPING
+from torchrl.data.utils import DEVICE_TYPING
 
 
 def make_replay_buffer(
