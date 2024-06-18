@@ -129,7 +129,7 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
             # We need to flatten to fix https://github.com/pytorch/rl/issues/2184
             value = value.contiguous()
             value = value.detach()
-            if value.ndim:
+            if value.ndim > 1:
                 value = value.flatten().clone()
             else:
                 value = value.clone()
