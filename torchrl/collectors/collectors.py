@@ -40,6 +40,7 @@ from torch.utils.data import IterableDataset
 from torchrl._utils import (
     _check_for_faulty_process,
     _ends_with,
+    _make_ordinal_device,
     _ProcessNoWarn,
     _replace_last,
     accept_remote_rref_udf_invocation,
