@@ -227,6 +227,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
     collector.shutdown()
+    eval_env.close()
+    train_env.close()
 
 
 if __name__ == "__main__":
