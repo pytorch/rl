@@ -6,7 +6,6 @@ import warnings
 
 import torch
 from packaging import version
-from tensordict import LazyStackedTensorDict
 from tensordict.nn import (
     NormalParamExtractor,
     TensorDictModule,

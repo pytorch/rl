@@ -47,7 +47,8 @@ from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
     NonTensorData,
-    TensorDict, TensorDictBase,
+    TensorDict,
+    TensorDictBase,
 )
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
@@ -65,7 +66,8 @@ from torchrl.data import (
     LazyTensorStorage,
     NonTensorSpec,
     ReplayBuffer,
-    UnboundedContinuousTensorSpec, TensorSpec,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
     EnvBase,

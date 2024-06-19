@@ -1355,7 +1355,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 self._workers.append(process)
 
         for parent_pipe in self.parent_channels:
-            msg = parent_pipe.recv()
+            # use msg as sync point
+            parent_pipe.recv()
 
         # send shared tensordict to workers
         for channel in self.parent_channels:
