@@ -31,6 +31,7 @@ from tensordict._tensordict import unravel_key
 from torch import multiprocessing as mp
 from torchrl._utils import (
     _check_for_faulty_process,
+    _make_ordinal_device,
     _ProcessNoWarn,
     logger as torchrl_logger,
     VERBOSE,
@@ -346,7 +347,9 @@ class BatchedEnvBase(EnvBase):
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self._device = torch.device(device) if device is not None else device
+        self._device = (
+            _make_ordinal_device(torch.device(device)) if device is not None else device
+        )
         self._dummy_env_str = None
         self._seeds = None
         self.__dict__["_input_spec"] = None
@@ -859,7 +862,7 @@ class BatchedEnvBase(EnvBase):
 
     def to(self, device: DEVICE_TYPING):
         self._non_blocking = None
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
         if device == self.device:
             return self
         self._device = device
@@ -1152,7 +1155,7 @@ class SerialEnv(BatchedEnvBase):
                 )
 
     def to(self, device: DEVICE_TYPING):
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
         if device == self.device:
             return self
         super().to(device)
@@ -1885,7 +1888,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 )
 
     def to(self, device: DEVICE_TYPING):
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
         if device == self.device:
             return self
         super().to(device)

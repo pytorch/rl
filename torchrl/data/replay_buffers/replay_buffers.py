@@ -30,7 +30,7 @@ from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 
-from torchrl._utils import accept_remote_rref_udf_invocation
+from torchrl._utils import _make_ordinal_device, accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -1457,7 +1457,7 @@ class InPlaceSampler:
         self.out = None
         if device is None:
             device = "cpu"
-        self.device = torch.device(device)
+        self.device = _make_ordinal_device(torch.device(device))
 
     def __call__(self, list_of_tds):
         if self.out is None:

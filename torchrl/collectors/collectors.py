@@ -40,6 +40,7 @@ from torch.utils.data import IterableDataset
 from torchrl._utils import (
     _check_for_faulty_process,
     _ends_with,
+    _make_ordinal_device,
     _ProcessNoWarn,
     _replace_last,
     accept_remote_rref_udf_invocation,
@@ -822,10 +823,16 @@ class SyncDataCollector(DataCollectorBase):
         env_device: torch.device,
         device: torch.device,
     ):
-        device = torch.device(device) if device else device
-        storing_device = torch.device(storing_device) if storing_device else device
-        policy_device = torch.device(policy_device) if policy_device else device
-        env_device = torch.device(env_device) if env_device else device
+        device = _make_ordinal_device(torch.device(device) if device else device)
+        storing_device = _make_ordinal_device(
+            torch.device(storing_device) if storing_device else device
+        )
+        policy_device = _make_ordinal_device(
+            torch.device(policy_device) if policy_device else device
+        )
+        env_device = _make_ordinal_device(
+            torch.device(env_device) if env_device else device
+        )
         if storing_device is None and (env_device == policy_device):
             storing_device = env_device
         return storing_device, policy_device, env_device
