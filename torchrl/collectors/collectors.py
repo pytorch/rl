@@ -1239,7 +1239,7 @@ class _MultiDataCollector(DataCollectorBase):
             instance of :class:`~torchrl.envs.EnvBase`.
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
-            If ``None`` is provided, the policy used will be a
+            If ``None`` is provided (default), the policy used will be a
             :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
             Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.
@@ -1384,7 +1384,7 @@ class _MultiDataCollector(DataCollectorBase):
                 TensorDictModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
-        ],
+        ] = None,
         *,
         frames_per_batch: int,
         total_frames: Optional[int] = -1,
@@ -1455,13 +1455,18 @@ class _MultiDataCollector(DataCollectorBase):
         _policy_weights_dict = {}
         _get_weights_fn_dict = {}
 
-        policy = _NonParametricPolicyWrapper(policy)
-        policy_weights = TensorDict.from_module(policy, as_module=True)
+        if policy is not None:
+            policy = _NonParametricPolicyWrapper(policy)
+            policy_weights = TensorDict.from_module(policy, as_module=True)
 
-        # store a stateless policy
+            # store a stateless policy
+            with policy_weights.apply(_make_meta_params).to_module(policy):
+                # TODO:
+                self.policy = deepcopy(policy)
 
-        with policy_weights.apply(_make_meta_params).to_module(policy):
-            self.policy = deepcopy(policy)
+        else:
+            policy_weights = TensorDict()
+            self.policy = None
 
         for policy_device in policy_devices:
             # if we have already mapped onto that device, get that value
@@ -1696,7 +1701,9 @@ class _MultiDataCollector(DataCollectorBase):
             storing_device = self.storing_device[i]
             env_device = self.env_device[i]
             policy = self.policy
-            with self._policy_weights_dict[policy_device].to_module(policy):
+            with self._policy_weights_dict[policy_device].to_module(
+                policy
+            ) if policy is not None else contextlib.nullcontext():
                 kwargs = {
                     "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,

@@ -2782,10 +2782,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if tensordict.device != self.device:
             tensordict = tensordict.to(self.device)
         tensordict = self.step(tensordict)
+        assert tensordict["next", "nt"] != "reset!"
         # done and truncated are in done_keys
         # We read if any key is done.
         tensordict_ = self._step_mdp(tensordict)
+        assert tensordict["next", "nt"] != "reset!"
         tensordict_ = self.maybe_reset(tensordict_)
+        assert tensordict["next", "nt"] != "reset!"
         return tensordict, tensordict_
 
     @property
