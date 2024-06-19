@@ -503,7 +503,7 @@ class BatchedEnvBase(EnvBase):
                 if share_individual_td and self.share_individual_td is False:
                     raise ValueError(
                         "share_individual_td=False was provided but share_individual_td must "
-                        "be True to accomodate non-stackable tensors."
+                        "be True to accommodate non-stackable tensors."
                     )
                 self.share_individual_td = share_individual_td
             _use_buffers = all(
@@ -1394,8 +1394,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 self._workers.append(process)
 
         for parent_pipe in self.parent_channels:
-            msg = parent_pipe.recv()
-            assert msg == "started"
+            # use msg as sync point
+            parent_pipe.recv()
 
         # send shared tensordict to workers
         for channel in self.parent_channels:

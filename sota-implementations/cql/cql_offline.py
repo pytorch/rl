@@ -162,6 +162,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     pbar.close()
     torchrl_logger.info(f"Training time: {time.time() - start_time}")
+    eval_env.close()
 
 
 if __name__ == "__main__":

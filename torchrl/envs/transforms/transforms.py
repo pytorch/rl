@@ -2004,12 +2004,12 @@ class FlattenObservation(ObservationTransform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if not allow_positive_dim and first_dim >= 0:
             raise ValueError(
-                "first_dim should be smaller than 0 to accomodate for "
+                "first_dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes."
             )
         if not allow_positive_dim and last_dim >= 0:
             raise ValueError(
-                "last_dim should be smaller than 0 to accomodate for "
+                "last_dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes."
             )
         self._first_dim = first_dim
@@ -2108,8 +2108,8 @@ class UnsqueezeTransform(Transform):
         self.allow_positive_dim = allow_positive_dim
         if unsqueeze_dim >= 0 and not allow_positive_dim:
             raise RuntimeError(
-                "unsqueeze_dim should be smaller than 0 to accomodate for "
-                "envs of different batch_sizes. Turn allow_positive_dim to accomodate "
+                "unsqueeze_dim should be smaller than 0 to accommodate for "
+                "envs of different batch_sizes. Turn allow_positive_dim to accommodate "
                 "for positive unsqueeze_dim."
             )
         self._unsqueeze_dim = unsqueeze_dim
@@ -2802,7 +2802,7 @@ class CatFrames(ObservationTransform):
 
     inplace = False
     _CAT_DIM_ERR = (
-        "dim must be < 0 to accomodate for tensordict of "
+        "dim must be < 0 to accommodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "constant", "zeros"}
@@ -3048,7 +3048,7 @@ class CatFrames(ObservationTransform):
             reset_unfold_list = [torch.zeros_like(reset_unfold_slice)]
             for r in reversed(reset_unfold.unbind(-1)):
                 reset_unfold_list.append(r | reset_unfold_list[-1])
-                reset_unfold_slice = reset_unfold_list[-1]
+                # reset_unfold_slice = reset_unfold_list[-1]
             reset_unfold = torch.stack(list(reversed(reset_unfold_list))[1:], -1)
             reset = reset[prefix + (slice(self.N - 1, None),)]
             reset[prefix + (0,)] = 1

@@ -926,7 +926,9 @@ class SliceSampler(Sampler):
         )
 
     @classmethod
-    def _find_start_stop_traj(cls, *, trajectory=None, end=None, at_capacity: bool):
+    def _find_start_stop_traj(
+        cls, *, trajectory=None, end=None, at_capacity: bool, cursor=None
+    ):
         if trajectory is not None:
             # slower
             # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
@@ -954,12 +956,28 @@ class SliceSampler(Sampler):
                 dim=0,
                 value=1,
             )
-        elif not end.any(0).all():
-            # we must have at least one end by traj to delimitate trajectories
+        else:
+            # we must have at least one end by traj to individuate trajectories
             # so if no end can be found we set it manually
-            mask = ~end.any(0, True)
-            mask = torch.cat([torch.zeros_like(end[:-1]), mask])
-            end = torch.masked_fill(mask, end, 1)
+            if cursor is not None:
+                if isinstance(cursor, torch.Tensor):
+                    cursor = cursor[-1].item()
+                elif isinstance(cursor, range):
+                    cursor = cursor[-1]
+                if not _is_int(cursor):
+                    raise RuntimeError(
+                        "cursor should be an integer or a 1d tensor or a range."
+                    )
+                end = torch.index_fill(
+                    end,
+                    index=torch.tensor(cursor, device=end.device, dtype=torch.long),
+                    dim=0,
+                    value=1,
+                )
+            if not end.any(0).all():
+                mask = ~end.any(0, True)
+                mask = torch.cat([torch.zeros_like(end[:-1]), mask])
+                end = torch.masked_fill(mask, end, 1)
         ndim = end.ndim
         if ndim == 0:
             raise RuntimeError(
@@ -994,7 +1012,7 @@ class SliceSampler(Sampler):
             # In this case we have only one start and stop has already been set
             pass
         lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
-        lengths[lengths < 0] = lengths[lengths < 0] + length
+        lengths[lengths <= 0] = lengths[lengths <= 0] + length
         return start_idx, stop_idx, lengths
 
     def _start_to_end(self, st: torch.Tensor, length: int):
@@ -1050,7 +1068,9 @@ class SliceSampler(Sampler):
                             "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                         )
                 vals = self._find_start_stop_traj(
-                    trajectory=trajectory, at_capacity=storage._is_full
+                    trajectory=trajectory,
+                    at_capacity=storage._is_full,
+                    cursor=getattr(storage, "_last_cursor", None),
                 )
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
@@ -1072,7 +1092,9 @@ class SliceSampler(Sampler):
                         "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                     )
                 vals = self._find_start_stop_traj(
-                    end=done.squeeze()[: len(storage)], at_capacity=storage._is_full
+                    end=done.squeeze()[: len(storage)],
+                    at_capacity=storage._is_full,
+                    cursor=getattr(storage, "_last_cursor", None),
                 )
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
@@ -1270,7 +1292,6 @@ class SliceSampler(Sampler):
             ],
             1,
         )
-
         index = self._tensor_slices_from_startend(seq_length, starts, storage_length)
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
@@ -1784,7 +1805,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             .flip(0)
         )
 
-    def _preceding_stop_idx(self, storage, lengths, seq_length):
+    def _preceding_stop_idx(self, storage, lengths, seq_length, start_idx):
         preceding_stop_idx = self._cache.get("preceding_stop_idx")
         if preceding_stop_idx is not None:
             return preceding_stop_idx
@@ -1809,6 +1830,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             # Mask the rightmost values of that padded tensor
             preceding_stop_idx = pad[:, -seq_length + 1 + span_right :]
         preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
+        if storage._is_full:
+            preceding_stop_idx = (
+                preceding_stop_idx
+                + np.ravel_multi_index(
+                    tuple(start_idx[0].tolist()), storage._total_shape
+                )
+            ) % storage._total_shape.numel()
         if self.cache_values:
             self._cache["preceding_stop_idx"] = preceding_stop_idx
         return preceding_stop_idx
@@ -1819,7 +1847,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
 
-        preceding_stop_idx = self._preceding_stop_idx(storage, lengths, seq_length)
+        preceding_stop_idx = self._preceding_stop_idx(
+            storage, lengths, seq_length, start_idx
+        )
         if storage.ndim > 1:
             # we need to convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
             # This is because the lengths come as they would for a permuted storage
@@ -1832,12 +1862,14 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             )
 
         # force to not sample index at the end of a trajectory
+        vals = torch.tensor(self._sum_tree[preceding_stop_idx.cpu().numpy()])
         self._sum_tree[preceding_stop_idx.cpu().numpy()] = 0.0
         # and no need to update self._min_tree
 
         starts, info = PrioritizedSampler.sample(
             self, storage=storage, batch_size=batch_size // seq_length
         )
+        self._sum_tree[preceding_stop_idx.cpu().numpy()] = vals
         # We must truncate the seq_length if (1) not strict length or (2) span[1]
         if self.span[1] or not self.strict_length:
             if not isinstance(starts, torch.Tensor):
@@ -1847,7 +1879,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             # Find the stop that comes after the start index
             # say start_tensor has shape [N, X] and stop_idx has shape [M, X]
             # diff will have shape [M, N, X]
-            diff = stop_idx.unsqueeze(1) - starts_tensor.unsqueeze(0)
+            stop_idx_corr = stop_idx.clone()
+            stop_idx_corr[:, 0] = torch.where(
+                stop_idx[:, 0] < start_idx[:, 0],
+                stop_idx[:, 0] + storage._len_along_dim0,
+                stop_idx[:, 0],
+            )
+            diff = stop_idx_corr.unsqueeze(1) - starts_tensor.unsqueeze(0)
             # filter out all items that don't belong to the same dim in the storage
             mask = (diff[:, :, 1:] != 0).any(-1)
             diff = diff[:, :, 0]
@@ -1857,7 +1895,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             diff[diff < 0] = diff.max() + 1
             # Take the arg min along dim 0 (thereby reducing dim M)
             idx = diff.argmin(dim=0)
-            stops = stop_idx[idx, 0]
+            stops = stop_idx_corr[idx, 0]
             # TODO: here things may not work bc we could have spanning trajs,
             #  though I cannot show that it breaks in the tests
             if starts_tensor.ndim > 1:
