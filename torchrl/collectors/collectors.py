@@ -800,8 +800,6 @@ class SyncDataCollector(DataCollectorBase):
         )
         self._final_rollout.refine_names(..., "time")
 
-        assert self._final_rollout.names[-1] == "time"
-
     def _set_truncated_keys(self):
         self._truncated_keys = []
         if self.set_truncated:
@@ -1086,7 +1084,6 @@ class SyncDataCollector(DataCollectorBase):
                                 )
                     else:
                         result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
-                        assert result.names[-1] == "time"
                     break
             else:
                 if self._use_buffers:
@@ -2873,7 +2870,6 @@ def _main_async_collector(
                             else x
                         )
                 data = (collected_tensordict, idx)
-                assert collected_tensordict.names[-1] == "time"
             else:
                 if next_data is not collected_tensordict:
                     raise RuntimeError(

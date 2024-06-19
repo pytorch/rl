@@ -1356,7 +1356,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for parent_pipe in self.parent_channels:
             msg = parent_pipe.recv()
-            assert msg == "started"
 
         # send shared tensordict to workers
         for channel in self.parent_channels:
