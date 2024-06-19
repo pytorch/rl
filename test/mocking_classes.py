@@ -16,6 +16,7 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
+    NonTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -1823,6 +1824,39 @@ class MultiKeyCountingEnv(EnvBase):
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
+
+
+class EnvWithMetadata(EnvBase):
+    def __init__(self):
+        super().__init__()
+        self.observation_spec = CompositeSpec(
+            tensor=UnboundedContinuousTensorSpec(3),
+            non_tensor=NonTensorSpec(shape=()),
+        )
+        self.state_spec = CompositeSpec(
+            non_tensor=NonTensorSpec(shape=()),
+        )
+        self.reward_spec = UnboundedContinuousTensorSpec(1)
+        self.action_spec = UnboundedContinuousTensorSpec(1)
+
+    def _reset(self, tensordict):
+        data = self.observation_spec.zero()
+        data.set_non_tensor("non_tensor", 0)
+        data.update(self.full_done_spec.zero())
+        return data
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        data = self.observation_spec.zero()
+        data.set_non_tensor("non_tensor", tensordict["non_tensor"] + 1)
+        data.update(self.full_done_spec.zero())
+        data.update(self.full_reward_spec.zero())
+        return data
+
+    def _set_seed(self, seed: Optional[int]):
+        return seed
 
 
 class AutoResettingCountingEnv(CountingEnv):

@@ -16,12 +16,15 @@ import warnings
 from enum import Enum
 from typing import Any, Dict, List, Union
 
-import tensordict
+import tensordict.base
+
 import torch
 
 from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
     TensorDict,
     TensorDictBase,
     unravel_key,
@@ -268,7 +271,7 @@ class _StepMDP:
                 cls._exclude(nested_key_dict, td, td_out)
             return out
         has_set = False
-        for key, value in data_in.items(is_leaf=tensordict.base._is_leaf_nontensor):
+        for key, value in data_in.items(is_leaf=_is_leaf_nontensor):
             subdict = nested_key_dict.get(key, NO_DEFAULT)
             if subdict is NO_DEFAULT:
                 value = value.copy() if is_tensor_collection(value) else value
@@ -562,7 +565,9 @@ def _set(source, dest, key, total_key, excluded):
     if unravel_key(total_key) not in excluded:
         try:
             val = source.get(key)
-            if is_tensor_collection(val):
+            if is_tensor_collection(val) and not isinstance(
+                val, (NonTensorData, NonTensorStack)
+            ):
                 # if val is a tensordict we need to copy the structure
                 new_val = dest.get(key, None)
                 if new_val is None:
@@ -748,11 +753,19 @@ def check_env_specs(
             [fake_tensordict.clone() for _ in range(3)], -1
         )
     # eliminate empty containers
-    fake_tensordict_select = fake_tensordict.select(*fake_tensordict.keys(True, True))
-    real_tensordict_select = real_tensordict.select(*real_tensordict.keys(True, True))
+    fake_tensordict_select = fake_tensordict.select(
+        *fake_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+    )
+    real_tensordict_select = real_tensordict.select(
+        *real_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+    )
     # check keys
-    fake_tensordict_keys = set(fake_tensordict.keys(True, True))
-    real_tensordict_keys = set(real_tensordict.keys(True, True))
+    fake_tensordict_keys = set(
+        fake_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+    )
+    real_tensordict_keys = set(
+        real_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+    )
     if fake_tensordict_keys != real_tensordict_keys:
         raise AssertionError(
             f"""The keys of the specs and data do not match:

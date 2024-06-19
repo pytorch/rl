@@ -643,7 +643,7 @@ class TensorSpec:
             indexed tensor
 
         """
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def expand(self, *shape):
@@ -656,7 +656,7 @@ class TensorSpec:
                 from it if the current dimension is a singleton.
 
         """
-        raise NotImplementedError
+        ...
 
     def squeeze(self, dim: int | None = None):
         """Returns a new Spec with all the dimensions of size ``1`` removed.
@@ -740,7 +740,7 @@ class TensorSpec:
             boolean indicating if values belongs to the TensorSpec box
 
         """
-        raise NotImplementedError
+        ...
 
     def contains(self, item):
         """Returns whether a sample is contained within the space defined by the TensorSpec.
@@ -2120,7 +2120,9 @@ class NonTensorSpec(TensorSpec):
         return (
             isinstance(val, NonTensorData)
             and val.shape == shape
-            and val.device == self.device
+            # We relax constrains on device as they're hard to enforce for non-tensor
+            #  tensordicts and pointless
+            # and val.device == self.device
             and val.dtype == self.dtype
         )
 
