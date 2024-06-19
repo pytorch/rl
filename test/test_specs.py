@@ -3729,6 +3729,7 @@ def test_device_ordinal():
         moneh=moneh,
         mdisc=mdisc,
         shape=(-1, 1, 2),
+        device=device,
     )
     assert spec.device == torch.device("cuda:0")
 
