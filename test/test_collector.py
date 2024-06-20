@@ -53,7 +53,13 @@ from tensordict import (
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
 from torch import nn
-from torchrl._utils import _replace_last, logger as torchrl_logger, prod, seed_generator
+from torchrl._utils import (
+    _make_ordinal_device,
+    _replace_last,
+    logger as torchrl_logger,
+    prod,
+    seed_generator,
+)
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
     _Interruptor,
@@ -285,7 +291,9 @@ class TestCollectorDevices:
             self.action_spec = UnboundedContinuousTensorSpec(
                 (), device=self.default_device
             )
-            assert self.device == torch.device(self.default_device)
+            assert self.device == _make_ordinal_device(
+                torch.device(self.default_device)
+            )
             assert self.full_observation_spec is not None
             assert self.full_done_spec is not None
             assert self.full_state_spec is not None
@@ -293,7 +301,9 @@ class TestCollectorDevices:
             assert self.full_reward_spec is not None
 
         def _step(self, tensordict):
-            assert tensordict.device == torch.device(self.default_device)
+            assert tensordict.device == _make_ordinal_device(
+                torch.device(self.default_device)
+            )
             with torch.device(self.default_device):
                 return TensorDict(
                     {
@@ -339,7 +349,9 @@ class TestCollectorDevices:
         default_device = "cuda:0" if torch.cuda.device_count() else "cpu"
 
         def forward(self, tensordict):
-            assert tensordict.device == torch.device(self.default_device)
+            assert tensordict.device == _make_ordinal_device(
+                torch.device(self.default_device)
+            )
             return tensordict.set("action", torch.zeros((), device=self.default_device))
 
     @pytest.mark.parametrize("main_device", get_default_devices())
@@ -1436,7 +1448,7 @@ def test_collector_device_combinations(device, storing_device):
     )
     assert collector._use_buffers
     batch = next(collector.iterator())
-    assert batch.device == torch.device(storing_device)
+    assert batch.device == _make_ordinal_device(torch.device(storing_device))
     collector.shutdown()
 
     collector = MultiSyncDataCollector(
@@ -1459,7 +1471,7 @@ def test_collector_device_combinations(device, storing_device):
         cat_results="stack",
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(storing_device)
+    assert batch.device == _make_ordinal_device(torch.device(storing_device))
     collector.shutdown()
 
     collector = MultiaSyncDataCollector(
@@ -1481,7 +1493,7 @@ def test_collector_device_combinations(device, storing_device):
         ],
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(storing_device)
+    assert batch.device == _make_ordinal_device(torch.device(storing_device))
     collector.shutdown()
     del collector
 
