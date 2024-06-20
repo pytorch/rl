@@ -156,10 +156,12 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             method. Default is ``False``.
         default_interaction_type (str, optional): keyword-only argument.
             Default method to be used to retrieve
-            the output value. Should be one of: 'InteractionType.MODE',
+            the output value. Should be one of: 'InteractionType.MODE', 'InteractionType.DETERMINISTIC',
             'InteractionType.MEDIAN', 'InteractionType.MEAN' or
             'InteractionType.RANDOM' (in which case the value is sampled
-            randomly from the distribution). Defaults to is 'InteractionType.MODE'.
+            randomly from the distribution).
+            TorchRL's ``ExplorationType`` class is a proxy to ``InteractionType``.
+            Defaults to is 'InteractionType.DETERMINISTIC'.
 
             .. note:: When a sample is drawn, the :class:`ProbabilisticActor` instance will
               first look for the interaction mode dictated by the

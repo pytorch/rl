@@ -335,9 +335,9 @@ class SyncDataCollector(DataCollectorBase):
             information.
             Defaults to ``False``.
         exploration_type (ExplorationType, optional): interaction mode to be used when
-            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
-            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
-            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
+            ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
+            or ``torchrl.envs.utils.ExplorationType.MEAN``.
         return_same_td (bool, optional): if ``True``, the same TensorDict
             will be returned at each iteration, with its values
             updated. This feature should be used cautiously: if the same
@@ -1336,9 +1336,9 @@ class _MultiDataCollector(DataCollectorBase):
             information.
             Defaults to ``False``.
         exploration_type (ExplorationType, optional): interaction mode to be used when
-            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
-            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
-            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
+            ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
+            or ``torchrl.envs.utils.ExplorationType.MEAN``.
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
@@ -2635,9 +2635,9 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             information.
             Defaults to ``False``.
         exploration_type (ExplorationType, optional): interaction mode to be used when
-            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
-            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
-            Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
+            ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
+            or ``torchrl.envs.utils.ExplorationType.MEAN``.
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.

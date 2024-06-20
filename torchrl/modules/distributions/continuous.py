@@ -90,6 +90,10 @@ class IndependentNormal(D.Independent):
     def mode(self):
         return self.base_dist.mean
 
+    @property
+    def deterministic(self):
+        return self.mean
+
 
 class SafeTanhTransform(D.TanhTransform):
     """TanhTransform subclass that ensured that the transformation is numerically invertible."""
@@ -289,6 +293,10 @@ class TruncatedNormal(D.Independent):
         m = torch.min(torch.stack([m, b], -1), dim=-1)[0]
         return torch.max(torch.stack([m, a], -1), dim=-1)[0]
 
+    @property
+    def deterministic(self):
+        return self.mean
+
     def log_prob(self, value, **kwargs):
         above_or_below = (self.low > value) | (self.high < value)
         a = self.base_dist._non_std_a + self.base_dist._dtype_min_gt_0
@@ -477,6 +485,10 @@ class TanhNormal(FasterTransformedDistribution):
             "This implementation will be removed in v0.6.",
             category=DeprecationWarning,
         )
+        return self.deterministic
+
+    @property
+    def deterministic(self):
         m = self.root_dist.mean
         for t in self.transforms:
             m = t(m)
@@ -511,8 +523,7 @@ class TanhNormal(FasterTransformedDistribution):
                 m.data = torch.where(nans, mc, m.data)
             if (m - mc).norm() < 1e-3:
                 break
-        # return m.detach() + (self.loc - self.loc.detach())
-        return m.detach()  #  + (self.loc - self.loc.detach())
+        return m.detach()
 
     @property
     def mean(self):
@@ -606,6 +617,10 @@ class Delta(D.Distribution):
     @property
     def mode(self) -> torch.Tensor:
         return self.param
+
+    @property
+    def deterministic(self):
+        return self.mean
 
     @property
     def mean(self) -> torch.Tensor:
@@ -731,6 +746,10 @@ class TanhDelta(FasterTransformedDistribution):
         for t in self.transforms:
             mode = t(mode)
         return mode
+
+    @property
+    def deterministic(self):
+        return self.mode
 
     @property
     def mean(self) -> torch.Tensor:
