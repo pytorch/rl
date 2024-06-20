@@ -30,7 +30,7 @@ from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 
-from torchrl._utils import accept_remote_rref_udf_invocation
+from torchrl._utils import _make_ordinal_device, accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -383,6 +383,30 @@ class ReplayBuffer:
 
         return data
 
+    def __setitem__(self, index, value) -> None:
+        if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
+            self[:][index] = value
+            return
+        if isinstance(index, tuple):
+            if len(index) == 1:
+                self[index[0]] = value
+            else:
+                self[:][index] = value
+            return
+        index = _to_numpy(index)
+
+        if self._transform is not None and len(self._transform):
+            value = self._transform.inv(value)
+
+        if self.dim_extend > 0:
+            index = (slice(None),) * self.dim_extend + (index,)
+            with self._replay_lock:
+                self._storage[index] = self._transpose(value)
+        else:
+            with self._replay_lock:
+                self._storage[index] = value
+        return
+
     def state_dict(self) -> Dict[str, Any]:
         return {
             "_storage": self._storage.state_dict(),
@@ -634,7 +658,11 @@ class ReplayBuffer:
             ret = self._sample(batch_size)
         else:
             with self._futures_lock:
-                while len(self._prefetch_queue) < self._prefetch_cap:
+                while (
+                    len(self._prefetch_queue)
+                    < min(self._sampler._remaining_batches, self._prefetch_cap)
+                    and not self._sampler.ran_out
+                ) or not len(self._prefetch_queue):
                     fut = self._prefetch_executor.submit(self._sample, batch_size)
                     self._prefetch_queue.append(fut)
                 ret = self._prefetch_queue.popleft().result()
@@ -715,7 +743,9 @@ class ReplayBuffer:
                 "Cannot iterate over the replay buffer. "
                 "Batch_size was not specified during construction of the replay buffer."
             )
-        while not self._sampler.ran_out:
+        while not self._sampler.ran_out or (
+            self._prefetch and len(self._prefetch_queue)
+        ):
             yield self.sample()
 
     def __getstate__(self) -> Dict[str, Any]:
@@ -1427,7 +1457,7 @@ class InPlaceSampler:
         self.out = None
         if device is None:
             device = "cpu"
-        self.device = torch.device(device)
+        self.device = _make_ordinal_device(torch.device(device))
 
     def __call__(self, list_of_tds):
         if self.out is None:

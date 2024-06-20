@@ -24,7 +24,7 @@ from torchrl._extension import EXTENSION_WARNING
 
 from torchrl._utils import _replace_last, implement_for, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
-from torchrl.data.replay_buffers.utils import _is_int
+from torchrl.data.replay_buffers.utils import _is_int, unravel_index
 
 try:
     from torchrl._torchrl import (
@@ -41,6 +41,10 @@ _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
 class Sampler(ABC):
     """A generic sampler base class for composable Replay Buffers."""
+
+    # Some samplers - mainly those without replacement -
+    # need to keep track of the number of remaining batches
+    _remaining_batches = int(torch.iinfo(torch.int64).max)
 
     @abstractmethod
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
@@ -174,7 +178,7 @@ class SamplerWithoutReplacement(Sampler):
             metadata = json.load(file)
         self.load_state_dict(metadata)
 
-    def _get_sample_list(self, storage: Storage, len_storage: int):
+    def _get_sample_list(self, storage: Storage, len_storage: int, batch_size: int):
         if storage is None:
             device = self._sample_list.device
         else:
@@ -185,10 +189,18 @@ class SamplerWithoutReplacement(Sampler):
         else:
             _sample_list = torch.arange(len_storage, device=device)
         self._sample_list = _sample_list
+        if self.drop_last:
+            self._remaining_batches = self._sample_list.numel() // batch_size
+        else:
+            self._remaining_batches = -(self._sample_list.numel() // -batch_size)
 
     def _single_sample(self, len_storage, batch_size):
         index = self._sample_list[:batch_size]
         self._sample_list = self._sample_list[batch_size:]
+        if self.drop_last:
+            self._remaining_batches = self._sample_list.numel() // batch_size
+        else:
+            self._remaining_batches = -(self._sample_list.numel() // -batch_size)
 
         # check if we have enough elements for one more batch, assuming same batch size
         # will be used each time sample is called
@@ -196,7 +208,9 @@ class SamplerWithoutReplacement(Sampler):
             self.drop_last and len(self._sample_list) < batch_size
         ):
             self.ran_out = True
-            self._get_sample_list(storage=None, len_storage=len_storage)
+            self._get_sample_list(
+                storage=None, len_storage=len_storage, batch_size=batch_size
+            )
         else:
             self.ran_out = False
         return index
@@ -204,14 +218,16 @@ class SamplerWithoutReplacement(Sampler):
     def _storage_len(self, storage):
         return len(storage)
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
+    def sample(
+        self, storage: Storage, batch_size: int
+    ) -> Tuple[Any, dict]:  # noqa: F811
         len_storage = self._storage_len(storage)
         if len_storage == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
         if not len_storage:
             raise RuntimeError("An empty storage was passed")
         if self.len_storage != len_storage or self._sample_list is None:
-            self._get_sample_list(storage, len_storage)
+            self._get_sample_list(storage, len_storage, batch_size=batch_size)
         if len_storage < batch_size and self.drop_last:
             raise ValueError(
                 f"The batch size ({batch_size}) is greater than the storage capacity ({len_storage}). "
@@ -221,7 +237,7 @@ class SamplerWithoutReplacement(Sampler):
         self.len_storage = len_storage
         index = self._single_sample(len_storage, batch_size)
         if storage.ndim > 1:
-            index = torch.unravel_index(index, storage.shape)
+            index = unravel_index(index, storage.shape)
         # we 'always' return the indices. The 'drop_last' just instructs the
         # sampler to turn to `ran_out = True` whenever the next sample
         # will be too short. This will be read by the replay buffer
@@ -278,6 +294,9 @@ class PrioritizedSampler(Sampler):
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectory). Can be one of "max", "min",
             "median" or "mean".
+        max_priority_within_buffer (bool, optional): if ``True``, the max-priority
+            is tracked within the buffer. When ``False``, the max-priority tracks
+            the maximum value since the instantiation of the sampler.
 
     Examples:
         >>> from torchrl.data.replay_buffers import ReplayBuffer, LazyTensorStorage, PrioritizedSampler
@@ -334,6 +353,7 @@ class PrioritizedSampler(Sampler):
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
         reduction: str = "max",
+        max_priority_within_buffer: bool = False,
     ) -> None:
         if alpha < 0:
             raise ValueError(
@@ -348,6 +368,7 @@ class PrioritizedSampler(Sampler):
         self._eps = eps
         self.reduction = reduction
         self.dtype = dtype
+        self._max_priority_within_buffer = max_priority_within_buffer
         self._init()
 
     def __repr__(self):
@@ -376,14 +397,62 @@ class PrioritizedSampler(Sampler):
             raise NotImplementedError(
                 f"dtype {self.dtype} not supported by PrioritizedSampler"
             )
-        self._max_priority = 1.0
+        self._max_priority = None
 
     def _empty(self):
         self._init()
 
     @property
+    def _max_priority(self):
+        max_priority_index = self.__dict__.get("_max_priority")
+        if max_priority_index is None:
+            return (None, None)
+        return max_priority_index
+
+    @_max_priority.setter
+    def _max_priority(self, value):
+        self.__dict__["_max_priority"] = value
+
+    def _maybe_erase_max_priority(self, index):
+        if not self._max_priority_within_buffer:
+            return
+        max_priority_index = self._max_priority[1]
+        if max_priority_index is None:
+            return
+
+        def check_index(index=index, max_priority_index=max_priority_index):
+            if isinstance(index, torch.Tensor):
+                # index can be 1d or 2d
+                if index.ndim == 1:
+                    is_overwritten = (index == max_priority_index).any()
+                else:
+                    is_overwritten = (index == max_priority_index).all(-1).any()
+            elif isinstance(index, int):
+                is_overwritten = index == max_priority_index
+            elif isinstance(index, slice):
+                # This won't work if called recursively
+                is_overwritten = max_priority_index in range(
+                    index.indices(self._max_capacity)
+                )
+            elif isinstance(index, tuple):
+                is_overwritten = isinstance(max_priority_index, tuple)
+                if is_overwritten:
+                    for idx, mpi in zip(index, max_priority_index):
+                        is_overwritten &= check_index(idx, mpi)
+            else:
+                raise TypeError(f"index of type {type(index)} is not recognized.")
+            return is_overwritten
+
+        is_overwritten = check_index()
+        if is_overwritten:
+            self._max_priority = None
+
+    @property
     def default_priority(self) -> float:
-        return (self._max_priority + self._eps) ** self._alpha
+        mp = self._max_priority[0]
+        if mp is None:
+            mp = 1
+        return (mp + self._eps) ** self._alpha
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
         if len(storage) == 0:
@@ -406,6 +475,15 @@ class PrioritizedSampler(Sampler):
             index = index.unsqueeze(0)
         index.clamp_max_(len(storage) - 1)
         weight = torch.as_tensor(self._sum_tree[index])
+        # get indices where weight is 0
+        zero_weight = weight == 0
+        index = index
+        while zero_weight.any():
+            index = torch.where(zero_weight, index - 1, index)
+            if (index < 0).any():
+                raise RuntimeError("Failed to find a suitable index")
+            zero_weight = torch.as_tensor(self._sum_tree[index])
+            zero_weight = weight == 0
 
         # Importance sampling weight formula:
         #   w_i = (p_i / sum(p) * N) ^ (-beta)
@@ -417,16 +495,18 @@ class PrioritizedSampler(Sampler):
         # weight = np.power(weight / (p_min + self._eps), -self._beta)
         weight = torch.pow(weight / p_min, -self._beta)
         if storage.ndim > 1:
-            index = torch.unravel_index(index, storage.shape)
+            index = unravel_index(index, storage.shape)
         return index, {"_weight": weight}
 
         return index, {"_weight": weight}
 
-    def add(self, index: int) -> None:
+    def add(self, index: torch.Tensor | int) -> None:
         super().add(index)
+        self._maybe_erase_max_priority(index)
 
-    def extend(self, index: torch.Tensor) -> None:
+    def extend(self, index: torch.Tensor | tuple) -> None:
         super().extend(index)
+        self._maybe_erase_max_priority(index)
 
     @torch.no_grad()
     def update_priority(
@@ -494,7 +574,10 @@ class PrioritizedSampler(Sampler):
                 if priority.ndim:
                     priority = priority[valid_index]
 
-        self._max_priority = priority.max().clamp_min(self._max_priority).item()
+        max_p, max_p_idx = priority.max(dim=0)
+        max_priority = self._max_priority[0]
+        if max_priority is None or max_p > max_priority:
+            self._max_priority = (max_p, max_p_idx)
         priority = torch.pow(priority + self._eps, self._alpha)
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
@@ -852,7 +935,9 @@ class SliceSampler(Sampler):
         )
 
     @classmethod
-    def _find_start_stop_traj(cls, *, trajectory=None, end=None, at_capacity: bool):
+    def _find_start_stop_traj(
+        cls, *, trajectory=None, end=None, at_capacity: bool, cursor=None
+    ):
         if trajectory is not None:
             # slower
             # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
@@ -880,12 +965,28 @@ class SliceSampler(Sampler):
                 dim=0,
                 value=1,
             )
-        elif not end.any(0).all():
-            # we must have at least one end by traj to delimitate trajectories
+        else:
+            # we must have at least one end by traj to individuate trajectories
             # so if no end can be found we set it manually
-            mask = ~end.any(0, True)
-            mask = torch.cat([torch.zeros_like(end[:-1]), mask])
-            end = torch.masked_fill(mask, end, 1)
+            if cursor is not None:
+                if isinstance(cursor, torch.Tensor):
+                    cursor = cursor[-1].item()
+                elif isinstance(cursor, range):
+                    cursor = cursor[-1]
+                if not _is_int(cursor):
+                    raise RuntimeError(
+                        "cursor should be an integer or a 1d tensor or a range."
+                    )
+                end = torch.index_fill(
+                    end,
+                    index=torch.tensor(cursor, device=end.device, dtype=torch.long),
+                    dim=0,
+                    value=1,
+                )
+            if not end.any(0).all():
+                mask = ~end.any(0, True)
+                mask = torch.cat([torch.zeros_like(end[:-1]), mask])
+                end = torch.masked_fill(mask, end, 1)
         ndim = end.ndim
         if ndim == 0:
             raise RuntimeError(
@@ -920,7 +1021,7 @@ class SliceSampler(Sampler):
             # In this case we have only one start and stop has already been set
             pass
         lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
-        lengths[lengths < 0] = lengths[lengths < 0] + length
+        lengths[lengths <= 0] = lengths[lengths <= 0] + length
         return start_idx, stop_idx, lengths
 
     def _start_to_end(self, st: torch.Tensor, length: int):
@@ -976,7 +1077,9 @@ class SliceSampler(Sampler):
                             "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                         )
                 vals = self._find_start_stop_traj(
-                    trajectory=trajectory, at_capacity=storage._is_full
+                    trajectory=trajectory,
+                    at_capacity=storage._is_full,
+                    cursor=getattr(storage, "_last_cursor", None),
                 )
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
@@ -998,7 +1101,9 @@ class SliceSampler(Sampler):
                         "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                     )
                 vals = self._find_start_stop_traj(
-                    end=done.squeeze()[: len(storage)], at_capacity=storage._is_full
+                    end=done.squeeze()[: len(storage)],
+                    at_capacity=storage._is_full,
+                    cursor=getattr(storage, "_last_cursor", None),
                 )
                 if self.cache_values:
                     self._cache["stop-and-length"] = vals
@@ -1196,7 +1301,6 @@ class SliceSampler(Sampler):
             ],
             1,
         )
-
         index = self._tensor_slices_from_startend(seq_length, starts, storage_length)
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
@@ -1563,6 +1667,10 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             that at least `slice_len - i` samples will be gathered for each sampled trajectory.
             Using tuples allows a fine grained control over the span on the left (beginning
             of the stored trajectory) and on the right (end of the stored trajectory).
+        max_priority_within_buffer (bool, optional): if ``True``, the max-priority
+            is tracked within the buffer. When ``False``, the max-priority tracks
+            the maximum value since the instantiation of the sampler.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1621,6 +1729,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         strict_length: bool = True,
         compile: bool | dict = False,
         span: bool | int | Tuple[bool | int, bool | int] = False,
+        max_priority_within_buffer: bool = False,
     ):
         SliceSampler.__init__(
             self,
@@ -1644,6 +1753,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             eps=eps,
             dtype=dtype,
             reduction=reduction,
+            max_priority_within_buffer=max_priority_within_buffer,
         )
         if self.span[0]:
             # Span left is hard to achieve because we need to sample 'negative' starts, but to sample
@@ -1704,7 +1814,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             .flip(0)
         )
 
-    def _preceding_stop_idx(self, storage, lengths, seq_length):
+    def _preceding_stop_idx(self, storage, lengths, seq_length, start_idx):
         preceding_stop_idx = self._cache.get("preceding_stop_idx")
         if preceding_stop_idx is not None:
             return preceding_stop_idx
@@ -1729,6 +1839,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             # Mask the rightmost values of that padded tensor
             preceding_stop_idx = pad[:, -seq_length + 1 + span_right :]
         preceding_stop_idx = preceding_stop_idx[preceding_stop_idx >= 0]
+        if storage._is_full:
+            preceding_stop_idx = (
+                preceding_stop_idx
+                + np.ravel_multi_index(
+                    tuple(start_idx[0].tolist()), storage._total_shape
+                )
+            ) % storage._total_shape.numel()
         if self.cache_values:
             self._cache["preceding_stop_idx"] = preceding_stop_idx
         return preceding_stop_idx
@@ -1739,11 +1856,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
 
-        preceding_stop_idx = self._preceding_stop_idx(storage, lengths, seq_length)
+        preceding_stop_idx = self._preceding_stop_idx(
+            storage, lengths, seq_length, start_idx
+        )
         if storage.ndim > 1:
             # we need to convert indices of the permuted, flatten storage to indices in a flatten storage (not permuted)
             # This is because the lengths come as they would for a permuted storage
-            preceding_stop_idx = torch.unravel_index(
+            preceding_stop_idx = unravel_index(
                 preceding_stop_idx, (storage.shape[-1], *storage.shape[:-1])
             )
             preceding_stop_idx = (preceding_stop_idx[-1], *preceding_stop_idx[:-1])
@@ -1752,12 +1871,14 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             )
 
         # force to not sample index at the end of a trajectory
+        vals = torch.tensor(self._sum_tree[preceding_stop_idx.cpu().numpy()])
         self._sum_tree[preceding_stop_idx.cpu().numpy()] = 0.0
         # and no need to update self._min_tree
 
         starts, info = PrioritizedSampler.sample(
             self, storage=storage, batch_size=batch_size // seq_length
         )
+        self._sum_tree[preceding_stop_idx.cpu().numpy()] = vals
         # We must truncate the seq_length if (1) not strict length or (2) span[1]
         if self.span[1] or not self.strict_length:
             if not isinstance(starts, torch.Tensor):
@@ -1767,7 +1888,13 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             # Find the stop that comes after the start index
             # say start_tensor has shape [N, X] and stop_idx has shape [M, X]
             # diff will have shape [M, N, X]
-            diff = stop_idx.unsqueeze(1) - starts_tensor.unsqueeze(0)
+            stop_idx_corr = stop_idx.clone()
+            stop_idx_corr[:, 0] = torch.where(
+                stop_idx[:, 0] < start_idx[:, 0],
+                stop_idx[:, 0] + storage._len_along_dim0,
+                stop_idx[:, 0],
+            )
+            diff = stop_idx_corr.unsqueeze(1) - starts_tensor.unsqueeze(0)
             # filter out all items that don't belong to the same dim in the storage
             mask = (diff[:, :, 1:] != 0).any(-1)
             diff = diff[:, :, 0]
@@ -1777,7 +1904,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             diff[diff < 0] = diff.max() + 1
             # Take the arg min along dim 0 (thereby reducing dim M)
             idx = diff.argmin(dim=0)
-            stops = stop_idx[idx, 0]
+            stops = stop_idx_corr[idx, 0]
             # TODO: here things may not work bc we could have spanning trajs,
             #  though I cannot show that it breaks in the tests
             if starts_tensor.ndim > 1:

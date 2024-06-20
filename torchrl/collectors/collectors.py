@@ -40,6 +40,7 @@ from torch.utils.data import IterableDataset
 from torchrl._utils import (
     _check_for_faulty_process,
     _ends_with,
+    _make_ordinal_device,
     _ProcessNoWarn,
     _replace_last,
     accept_remote_rref_udf_invocation,
@@ -424,7 +425,7 @@ class SyncDataCollector(DataCollectorBase):
                 TensorDictModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
-        ],
+        ] = None,
         *,
         frames_per_batch: int,
         total_frames: int = -1,
@@ -449,7 +450,6 @@ class SyncDataCollector(DataCollectorBase):
         from torchrl.envs.batched_envs import BatchedEnvBase
 
         self.closed = True
-
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
         )
@@ -466,6 +466,11 @@ class SyncDataCollector(DataCollectorBase):
                         f"on environment of type {type(create_env_fn)}."
                     )
                 env.update_kwargs(create_env_kwargs)
+
+        if policy is None:
+            from torchrl.collectors import RandomPolicy
+
+            policy = RandomPolicy(env.action_spec)
 
         ##########################
         # Setting devices:
@@ -796,8 +801,6 @@ class SyncDataCollector(DataCollectorBase):
         )
         self._final_rollout.refine_names(..., "time")
 
-        assert self._final_rollout.names[-1] == "time"
-
     def _set_truncated_keys(self):
         self._truncated_keys = []
         if self.set_truncated:
@@ -820,10 +823,16 @@ class SyncDataCollector(DataCollectorBase):
         env_device: torch.device,
         device: torch.device,
     ):
-        device = torch.device(device) if device else device
-        storing_device = torch.device(storing_device) if storing_device else device
-        policy_device = torch.device(policy_device) if policy_device else device
-        env_device = torch.device(env_device) if env_device else device
+        device = _make_ordinal_device(torch.device(device) if device else device)
+        storing_device = _make_ordinal_device(
+            torch.device(storing_device) if storing_device else device
+        )
+        policy_device = _make_ordinal_device(
+            torch.device(policy_device) if policy_device else device
+        )
+        env_device = _make_ordinal_device(
+            torch.device(env_device) if env_device else device
+        )
         if storing_device is None and (env_device == policy_device):
             storing_device = env_device
         return storing_device, policy_device, env_device
@@ -1082,7 +1091,6 @@ class SyncDataCollector(DataCollectorBase):
                                 )
                     else:
                         result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
-                        assert result.names[-1] == "time"
                     break
             else:
                 if self._use_buffers:
@@ -1093,7 +1101,6 @@ class SyncDataCollector(DataCollectorBase):
                             self._final_rollout.ndim - 1,
                             out=self._final_rollout,
                         )
-                        assert result.names[-1] == "time"
 
                     except RuntimeError:
                         with self._final_rollout.unlock_():
@@ -1102,7 +1109,6 @@ class SyncDataCollector(DataCollectorBase):
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
-                            assert result.names[-1] == "time"
                 else:
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
@@ -1237,7 +1243,7 @@ class _MultiDataCollector(DataCollectorBase):
             instance of :class:`~torchrl.envs.EnvBase`.
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
-            If ``None`` is provided, the policy used will be a
+            If ``None`` is provided (default), the policy used will be a
             :class:`~torchrl.collectors.RandomPolicy` instance with the environment
             ``action_spec``.
             Accepted policies are usually subclasses of :class:`~tensordict.nn.TensorDictModuleBase`.
@@ -1382,7 +1388,7 @@ class _MultiDataCollector(DataCollectorBase):
                 TensorDictModule,
                 Callable[[TensorDictBase], TensorDictBase],
             ]
-        ],
+        ] = None,
         *,
         frames_per_batch: int,
         total_frames: Optional[int] = -1,
@@ -1453,13 +1459,18 @@ class _MultiDataCollector(DataCollectorBase):
         _policy_weights_dict = {}
         _get_weights_fn_dict = {}
 
-        policy = _NonParametricPolicyWrapper(policy)
-        policy_weights = TensorDict.from_module(policy, as_module=True)
+        if policy is not None:
+            policy = _NonParametricPolicyWrapper(policy)
+            policy_weights = TensorDict.from_module(policy, as_module=True)
 
-        # store a stateless policy
+            # store a stateless policy
+            with policy_weights.apply(_make_meta_params).to_module(policy):
+                # TODO:
+                self.policy = deepcopy(policy)
 
-        with policy_weights.apply(_make_meta_params).to_module(policy):
-            self.policy = deepcopy(policy)
+        else:
+            policy_weights = TensorDict()
+            self.policy = None
 
         for policy_device in policy_devices:
             # if we have already mapped onto that device, get that value
@@ -1694,7 +1705,9 @@ class _MultiDataCollector(DataCollectorBase):
             storing_device = self.storing_device[i]
             env_device = self.env_device[i]
             policy = self.policy
-            with self._policy_weights_dict[policy_device].to_module(policy):
+            with self._policy_weights_dict[policy_device].to_module(
+                policy
+            ) if policy is not None else contextlib.nullcontext():
                 kwargs = {
                     "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,
@@ -2864,7 +2877,6 @@ def _main_async_collector(
                             else x
                         )
                 data = (collected_tensordict, idx)
-                assert collected_tensordict.names[-1] == "time"
             else:
                 if next_data is not collected_tensordict:
                     raise RuntimeError(

@@ -56,6 +56,12 @@ Here are a few examples, starting with the generic :class:`~torchrl.data.replay_
     >>> rb.add("a string!") # first element will be a string
     >>> rb.extend([30, None])  # element [1] is an int, [2] is None
 
+The main entry points to write onto a buffer are :meth:`~torchrl.data.ReplayBuffer.add` and
+:meth:`~torchrl.data.ReplayBuffer.extend`.
+One can also use :meth:`~torchrl.data.ReplayBuffer.__setitem__`, in which case the data is written
+where indicated without updating the length or cursor of the buffer. This can be useful when sampling
+items from the buffer and them updating their values in-place afterwards.
+
 Using a :class:`~torchrl.data.replay_buffers.TensorStorage` we tell our RB that
 we want the storage to be contiguous, which is by far more efficient but also
 more restrictive:
@@ -896,6 +902,7 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     UnboundedDiscreteTensorSpec
     LazyStackedTensorSpec
     LazyStackedCompositeSpec
+    NonTensorSpec
 
 Reinforcement Learning From Human Feedback (RLHF)
 -------------------------------------------------

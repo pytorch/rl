@@ -25,15 +25,19 @@ from tensordict import (
 from tensordict.memmap import MemoryMappedTensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
-
-from torchrl._utils import implement_for, logger as torchrl_logger
+from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
     ListStorageCheckpointer,
     StorageCheckpointerBase,
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
-from torchrl.data.replay_buffers.utils import _init_pytree, _is_int, INT_CLASSES
+from torchrl.data.replay_buffers.utils import (
+    _init_pytree,
+    _is_int,
+    INT_CLASSES,
+    tree_iter,
+)
 
 
 class Storage:
@@ -49,7 +53,7 @@ class Storage:
 
     ndim = 1
     max_size: int
-    _default_checkpointer: StorageCheckpointerBase
+    _default_checkpointer: StorageCheckpointerBase = StorageCheckpointerBase
 
     def __init__(
         self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
@@ -82,7 +86,7 @@ class Storage:
         return _attached_entities
 
     @abc.abstractmethod
-    def set(self, cursor: int, data: Any):
+    def set(self, cursor: int, data: Any, *, set_cursor: bool = True):
         ...
 
     @abc.abstractmethod
@@ -112,7 +116,8 @@ class Storage:
         return self.get(item)
 
     def __setitem__(self, index, value):
-        return self.set(index, value)
+        """Sets values in the storage without updating the cursor or length."""
+        return self.set(index, value, set_cursor=False)
 
     def __iter__(self):
         for i in range(len(self)):
@@ -199,12 +204,18 @@ class ListStorage(Storage):
         super().__init__(max_size)
         self._storage = []
 
-    def set(self, cursor: Union[int, Sequence[int], slice], data: Any):
+    def set(
+        self,
+        cursor: Union[int, Sequence[int], slice],
+        data: Any,
+        *,
+        set_cursor: bool = True,
+    ):
         if not isinstance(cursor, INT_CLASSES):
             if (isinstance(cursor, torch.Tensor) and cursor.numel() <= 1) or (
                 isinstance(cursor, np.ndarray) and cursor.size <= 1
             ):
-                self.set(int(cursor), data)
+                self.set(int(cursor), data, set_cursor=set_cursor)
                 return
             if isinstance(cursor, slice):
                 self._storage[cursor] = data
@@ -223,7 +234,7 @@ class ListStorage(Storage):
                 ),
             ):
                 for _cursor, _data in zip(cursor, data):
-                    self.set(_cursor, _data)
+                    self.set(_cursor, _data, set_cursor=set_cursor)
             else:
                 raise TypeError(
                     f"Cannot extend a {type(self)} with data of type {type(data)}. "
@@ -394,7 +405,7 @@ class TensorStorage(Storage):
         else:
             self._len = 0
         self.device = (
-            torch.device(device)
+            _make_ordinal_device(torch.device(device))
             if device != "auto"
             else storage.device
             if storage is not None
@@ -425,9 +436,10 @@ class TensorStorage(Storage):
             if is_tensor_collection(self._storage):
                 _total_shape = self._storage.shape[: self.ndim]
             else:
-                leaf, *_ = torch.utils._pytree.tree_leaves(self._storage)
+                leaf = next(tree_iter(self._storage))
                 _total_shape = leaf.shape[: self.ndim]
             self.__dict__["_total_shape_value"] = _total_shape
+            self._len = torch.Size([self._len_along_dim0, *_total_shape[1:]]).numel()
         return _total_shape
 
     @property
@@ -439,10 +451,10 @@ class TensorStorage(Storage):
     def _len_along_dim0(self):
         # returns the length of the buffer along dim0
         len_along_dim = len(self)
-        if self.ndim:
+        if self.ndim > 1:
             _total_shape = self._total_shape
             if _total_shape is not None:
-                len_along_dim = len_along_dim // _total_shape[1:].numel()
+                len_along_dim = -(len_along_dim // -_total_shape[1:].numel())
             else:
                 return None
         return len_along_dim
@@ -450,7 +462,7 @@ class TensorStorage(Storage):
     def _max_size_along_dim0(self, *, single_data=None, batched_data=None):
         # returns the max_size of the buffer along dim0
         max_size = self.max_size
-        if self.ndim:
+        if self.ndim > 1:
             shape = self.shape
             if shape is None:
                 if single_data is not None:
@@ -462,19 +474,19 @@ class TensorStorage(Storage):
                 if is_tensor_collection(data):
                     datashape = data.shape[: self.ndim]
                 else:
-                    for leaf in torch.utils._pytree.tree_leaves(data):
+                    for leaf in tree_iter(data):
                         datashape = leaf.shape[: self.ndim]
                         break
                 if batched_data is not None:
                     datashape = datashape[1:]
-                max_size = max_size // datashape.numel()
+                max_size = -(max_size // -datashape.numel())
             else:
-                max_size = max_size // self._total_shape[1:].numel()
+                max_size = -(max_size // -self._total_shape[1:].numel())
         return max_size
 
     @property
     def shape(self):
-        # Shape, turncated where needed to accomodate for the length of the storage
+        # Shape, truncated where needed to accommodate for the length of the storage
         if self._is_full:
             return self._total_shape
         _total_shape = self._total_shape
@@ -615,8 +627,7 @@ class TensorStorage(Storage):
         if is_tensor_collection(data) or isinstance(data, torch.Tensor):
             numel = data.shape[:ndim].numel()
         else:
-            # unfortunately tree_flatten isn't an iterator so we will have to flatten it all
-            leaf, *_ = torch.utils._pytree.tree_leaves(data)
+            leaf = next(tree_iter(data))
             numel = leaf.shape[:ndim].numel()
         self._len = min(self._len + numel, self.max_size)
 
@@ -625,9 +636,11 @@ class TensorStorage(Storage):
         self,
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
+        *,
+        set_cursor: bool = True,
     ):
-
-        self._last_cursor = cursor
+        if set_cursor:
+            self._last_cursor = cursor
 
         if isinstance(data, list):
             # flip list
@@ -644,7 +657,8 @@ class TensorStorage(Storage):
                     f"for per-item addition."
                 )
 
-        self._get_new_len(data, cursor)
+        if set_cursor:
+            self._get_new_len(data, cursor)
 
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
@@ -664,9 +678,12 @@ class TensorStorage(Storage):
         self,
         cursor: Union[int, Sequence[int], slice],
         data: Union[TensorDictBase, torch.Tensor],
+        *,
+        set_cursor: bool = True,
     ):
 
-        self._last_cursor = cursor
+        if set_cursor:
+            self._last_cursor = cursor
 
         if isinstance(data, list):
             # flip list
@@ -682,8 +699,8 @@ class TensorStorage(Storage):
                     f"consider using a tuple instead, as lists are used within `extend` "
                     f"for per-item addition."
                 )
-
-        self._get_new_len(data, cursor)
+        if set_cursor:
+            self._get_new_len(data, cursor)
 
         if not is_tensor_collection(data) and not isinstance(data, torch.Tensor):
             raise NotImplementedError(
@@ -703,7 +720,7 @@ class TensorStorage(Storage):
             if len(cursor) > self._len_along_dim0:
                 warnings.warn(
                     "A cursor of length superior to the storage capacity was provided. "
-                    "To accomodate for this, the cursor will be truncated to its last "
+                    "To accommodate for this, the cursor will be truncated to its last "
                     "element such that its length matched the length of the storage. "
                     "This may **not** be the optimal behaviour for your application! "
                     "Make sure that the storage capacity is big enough to support the "
@@ -966,7 +983,11 @@ class LazyMemmapStorage(LazyTensorStorage):
             self.scratch_dir = str(scratch_dir)
             if self.scratch_dir[-1] != "/":
                 self.scratch_dir += "/"
-        self.device = torch.device(device) if device != "auto" else torch.device("cpu")
+        self.device = (
+            _make_ordinal_device(torch.device(device))
+            if device != "auto"
+            else torch.device("cpu")
+        )
         if self.device.type != "cpu":
             raise ValueError(
                 "Memory map device other than CPU isn't supported. To cast your data to the desired device, "

@@ -109,7 +109,7 @@ def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
 
 def _tensordict_to_object(tensordict: TensorDictBase, object_example):
     """Converts a TensorDict to a namedtuple or a dataclass."""
-    from jax import dlpack as jax_dlpack
+    from jax import dlpack as jax_dlpack, numpy as jnp
 
     t = {}
     _fields = _get_object_fields(object_example)
@@ -125,8 +125,27 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
         else:
             if value.dtype is torch.bool:
                 value = value.to(torch.uint8)
-            value = jax_dlpack.from_dlpack(torch_dlpack.to_dlpack(value.contiguous()))
-            t[name] = value.reshape(example.shape).view(example.dtype)
+            shape = value.shape
+            # We need to flatten to fix https://github.com/pytorch/rl/issues/2184
+            value = value.contiguous()
+            value = value.detach()
+            if value.ndim > 1:
+                value = value.flatten().clone()
+            else:
+                # Need this because otherwise an exception is raised
+                #  ValueError: INTERNAL: Address of buffer 1 must be a multiple of 10, but was 0x7efccec00824
+                value = value.clone()
+            value = jax_dlpack.from_dlpack(value)
+            if shape.numel() == 1 and not value.shape:
+                while value.shape != shape:
+                    value = jnp.expand_dims(value, 0)
+                if value.dtype != example.dtype:
+                    t[name] = value.view(example.dtype)
+                else:
+                    t[name] = value
+            else:
+                value = jnp.reshape(value, tuple(shape))
+                t[name] = value.view(example.dtype).reshape(example.shape)
     return type(object_example)(**t)
 
 

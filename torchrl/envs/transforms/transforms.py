@@ -44,7 +44,7 @@ from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import _append_last, _ends_with, _replace_last
+from torchrl._utils import _append_last, _ends_with, _make_ordinal_device, _replace_last
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -2004,12 +2004,12 @@ class FlattenObservation(ObservationTransform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if not allow_positive_dim and first_dim >= 0:
             raise ValueError(
-                "first_dim should be smaller than 0 to accomodate for "
+                "first_dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes."
             )
         if not allow_positive_dim and last_dim >= 0:
             raise ValueError(
-                "last_dim should be smaller than 0 to accomodate for "
+                "last_dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes."
             )
         self._first_dim = first_dim
@@ -2084,13 +2084,21 @@ class UnsqueezeTransform(Transform):
 
     def __init__(
         self,
-        unsqueeze_dim: int,
+        dim: int = None,
         allow_positive_dim: bool = False,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
+        **kwargs,
     ):
+        if "unsqueeze_dim" in kwargs:
+            warnings.warn(
+                "The `unsqueeze_dim` kwarg will be removed in v0.6. Please use `dim` instead."
+            )
+            dim = kwargs["unsqueeze_dim"]
+        elif dim is None:
+            raise TypeError("dim must be provided.")
         if in_keys is None:
             in_keys = []  # default
         if out_keys is None:
@@ -2106,19 +2114,19 @@ class UnsqueezeTransform(Transform):
             out_keys_inv=out_keys_inv,
         )
         self.allow_positive_dim = allow_positive_dim
-        if unsqueeze_dim >= 0 and not allow_positive_dim:
+        if dim >= 0 and not allow_positive_dim:
             raise RuntimeError(
-                "unsqueeze_dim should be smaller than 0 to accomodate for "
-                "envs of different batch_sizes. Turn allow_positive_dim to accomodate "
+                "dim should be smaller than 0 to accommodate for "
+                "envs of different batch_sizes. Turn allow_positive_dim to accommodate "
                 "for positive unsqueeze_dim."
             )
-        self._unsqueeze_dim = unsqueeze_dim
+        self._dim = dim
 
     @property
     def unsqueeze_dim(self):
-        if self._unsqueeze_dim >= 0 and self.parent is not None:
-            return len(self.parent.batch_size) + self._unsqueeze_dim
-        return self._unsqueeze_dim
+        if self._dim >= 0 and self.parent is not None:
+            return len(self.parent.batch_size) + self._dim
+        return self._dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.unsqueeze(self.unsqueeze_dim)
@@ -2802,7 +2810,7 @@ class CatFrames(ObservationTransform):
 
     inplace = False
     _CAT_DIM_ERR = (
-        "dim must be < 0 to accomodate for tensordict of "
+        "dim must be < 0 to accommodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "constant", "zeros"}
@@ -3048,7 +3056,7 @@ class CatFrames(ObservationTransform):
             reset_unfold_list = [torch.zeros_like(reset_unfold_slice)]
             for r in reversed(reset_unfold.unbind(-1)):
                 reset_unfold_list.append(r | reset_unfold_list[-1])
-                reset_unfold_slice = reset_unfold_list[-1]
+                # reset_unfold_slice = reset_unfold_list[-1]
             reset_unfold = torch.stack(list(reversed(reset_unfold_list))[1:], -1)
             reset = reset[prefix + (slice(self.N - 1, None),)]
             reset[prefix + (0,)] = 1
@@ -3808,7 +3816,7 @@ class DeviceCastTransform(Transform):
         in_keys_inv=None,
         out_keys_inv=None,
     ):
-        device = self.device = torch.device(device)
+        device = self.device = _make_ordinal_device(torch.device(device))
         self.orig_device = (
             torch.device(orig_device) if orig_device is not None else orig_device
         )

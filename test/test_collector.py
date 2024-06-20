@@ -15,6 +15,7 @@ import pytest
 import torch
 
 from _utils_internal import (
+    CARTPOLE_VERSIONED,
     check_rollout_consistency_multikey_env,
     decorate_thread_sub_func,
     generate_seeds,
@@ -42,11 +43,23 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
-from tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
+from tensordict import (
+    assert_allclose_td,
+    LazyStackedTensorDict,
+    NonTensorData,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
 from torch import nn
-from torchrl._utils import _replace_last, logger as torchrl_logger, prod, seed_generator
+from torchrl._utils import (
+    _make_ordinal_device,
+    _replace_last,
+    logger as torchrl_logger,
+    prod,
+    seed_generator,
+)
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
     _Interruptor,
@@ -57,7 +70,9 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     CompositeSpec,
     LazyTensorStorage,
+    NonTensorSpec,
     ReplayBuffer,
+    TensorSpec,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
@@ -67,6 +82,7 @@ from torchrl.envs import (
     ParallelEnv,
     SerialEnv,
     StepCounter,
+    Transform,
 )
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
@@ -275,7 +291,9 @@ class TestCollectorDevices:
             self.action_spec = UnboundedContinuousTensorSpec(
                 (), device=self.default_device
             )
-            assert self.device == torch.device(self.default_device)
+            assert self.device == _make_ordinal_device(
+                torch.device(self.default_device)
+            )
             assert self.full_observation_spec is not None
             assert self.full_done_spec is not None
             assert self.full_state_spec is not None
@@ -283,7 +301,9 @@ class TestCollectorDevices:
             assert self.full_reward_spec is not None
 
         def _step(self, tensordict):
-            assert tensordict.device == torch.device(self.default_device)
+            assert tensordict.device == _make_ordinal_device(
+                torch.device(self.default_device)
+            )
             with torch.device(self.default_device):
                 return TensorDict(
                     {
@@ -329,7 +349,9 @@ class TestCollectorDevices:
         default_device = "cuda:0" if torch.cuda.device_count() else "cpu"
 
         def forward(self, tensordict):
-            assert tensordict.device == torch.device(self.default_device)
+            assert tensordict.device == _make_ordinal_device(
+                torch.device(self.default_device)
+            )
             return tensordict.set("action", torch.zeros((), device=self.default_device))
 
     @pytest.mark.parametrize("main_device", get_default_devices())
@@ -1426,7 +1448,7 @@ def test_collector_device_combinations(device, storing_device):
     )
     assert collector._use_buffers
     batch = next(collector.iterator())
-    assert batch.device == torch.device(storing_device)
+    assert batch.device == _make_ordinal_device(torch.device(storing_device))
     collector.shutdown()
 
     collector = MultiSyncDataCollector(
@@ -1449,7 +1471,7 @@ def test_collector_device_combinations(device, storing_device):
         cat_results="stack",
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(storing_device)
+    assert batch.device == _make_ordinal_device(torch.device(storing_device))
     collector.shutdown()
 
     collector = MultiaSyncDataCollector(
@@ -1471,7 +1493,7 @@ def test_collector_device_combinations(device, storing_device):
         ],
     )
     batch = next(collector.iterator())
-    assert batch.device == torch.device(storing_device)
+    assert batch.device == _make_ordinal_device(torch.device(storing_device))
     collector.shutdown()
     del collector
 
@@ -2520,7 +2542,7 @@ class TestLibThreading:
             torch.set_num_threads(num_threads)
 
     @pytest.mark.skipif(
-        IS_OSX,
+        IS_OSX or IS_WINDOWS,
         reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_auto_num_threads(self):
@@ -2639,6 +2661,111 @@ class TestDynamicEnvs:
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
             assert data.names[-1] == "time"
+
+
+@pytest.mark.skipif(not _has_gym, reason="gym required for this test")
+class TestCollectorsNonTensor:
+    class AddNontTensorData(Transform):
+        def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+            tensordict["nt"] = f"a string! - {tensordict.get('step_count').item()}"
+            return tensordict
+
+        def _reset(
+            self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+        ) -> TensorDictBase:
+            return tensordict_reset.set("nt", NonTensorData("reset!"))
+
+        def transform_observation_spec(
+            self, observation_spec: TensorSpec
+        ) -> TensorSpec:
+            observation_spec["nt"] = NonTensorSpec(shape=())
+            return observation_spec
+
+    @classmethod
+    def make_env(cls):
+        return (
+            GymEnv(CARTPOLE_VERSIONED())
+            .append_transform(StepCounter())
+            .append_transform(cls.AddNontTensorData())
+        )
+
+    def test_simple(self):
+        torch.manual_seed(0)
+        env = self.make_env()
+        env.set_seed(0)
+        collector = SyncDataCollector(env, frames_per_batch=10, total_frames=200)
+        result = []
+        for data in collector:
+            result.append(data)
+        result = torch.cat(result)
+        for i, val in enumerate(result["nt"][1:]):
+            if val == "a string! - 1":
+                assert result["nt"][i] == "reset!"
+            elif val.startswith("a string!"):
+                assert result["next", "nt"][i] == val
+                int1 = int(val.split(" - ")[-1])
+                int0 = int(result["nt"][i].split(" - ")[-1])
+                assert int0 + 1 == int1
+            elif val == "reset!":
+                assert result["next", "nt"][i + 1] == "a string! - 1", i
+
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_sync(self, use_buffers):
+        torch.manual_seed(0)
+        collector = MultiSyncDataCollector(
+            [self.make_env, self.make_env],
+            frames_per_batch=10,
+            total_frames=200,
+            cat_results="stack",
+            use_buffers=use_buffers,
+        )
+        try:
+            result = []
+            for data in collector:
+                result.append(data)
+            results = torch.cat(result)
+            for result in results.unbind(0):
+                for i, val in enumerate(result["nt"][1:]):
+                    if val == "a string! - 1":
+                        assert result["nt"][i] == "reset!"
+                    elif val.startswith("a string!"):
+                        assert result["next", "nt"][i] == val
+                        int1 = int(val.split(" - ")[-1])
+                        int0 = int(result["nt"][i].split(" - ")[-1])
+                        assert int0 + 1 == int1
+                    elif val == "reset!":
+                        assert result["next", "nt"][i + 1] == "a string! - 1", i
+        finally:
+            collector.shutdown()
+            del collector
+
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_async(self, use_buffers):
+        torch.manual_seed(0)
+        collector = MultiaSyncDataCollector(
+            [self.make_env, self.make_env],
+            frames_per_batch=10,
+            total_frames=200,
+            use_buffers=use_buffers,
+        )
+        try:
+            results = []
+            for data in collector:
+                results.append(data)
+            for result in results:
+                for i, val in enumerate(result["nt"][1:]):
+                    if val == "a string! - 1":
+                        assert result["nt"][i] == "reset!"
+                    elif val.startswith("a string!"):
+                        assert result["next", "nt"][i] == val
+                        int1 = int(val.split(" - ")[-1])
+                        int0 = int(result["nt"][i].split(" - ")[-1])
+                        assert int0 + 1 == int1
+                    elif val == "reset!":
+                        assert result["next", "nt"][i + 1] == "a string! - 1", i
+        finally:
+            collector.shutdown()
+            del collector
 
 
 if __name__ == "__main__":
