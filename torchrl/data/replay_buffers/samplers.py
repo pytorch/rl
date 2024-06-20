@@ -482,7 +482,7 @@ class PrioritizedSampler(Sampler):
             index = torch.where(zero_weight, index - 1, index)
             if (index < 0).any():
                 raise RuntimeError("Failed to find a suitable index")
-            zero_weight = torch.as_tensor(self._sum_tree[index])
+            weight = torch.as_tensor(self._sum_tree[index])
             zero_weight = weight == 0
 
         # Importance sampling weight formula:
