@@ -13,8 +13,8 @@ from tensordict.nn.distributions import NormalParamExtractor  # type: ignore
 
 from torchrl.envs import EnvBase, GymEnv
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives.value import GAE
 from torchrl.objectives import ClipPPOLoss, CQLLoss, SoftUpdate
+from torchrl.objectives.value import GAE
 
 from .loops import RLTrainingLoop
 

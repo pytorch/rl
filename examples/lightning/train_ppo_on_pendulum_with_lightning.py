@@ -4,17 +4,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import typing as ty
+
 import lightning.pytorch as pl
-from lightning.pytorch.loggers import CSVLogger
 import torch
+from lightning.pytorch.loggers import CSVLogger
 
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torchrl.envs import EnvBase, GymEnv
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives.value import GAE
 from torchrl.objectives import ClipPPOLoss
+from torchrl.objectives.value import GAE
 from torchrl.trainers import RLTrainingLoop
 
 
@@ -111,7 +112,6 @@ def make_loss_module(
 
 
 class PPOPendulum(RLTrainingLoop):
-
     def make_env(self) -> EnvBase:
         """You have to implement this method, which has to take no inputs and return
         your environment."""

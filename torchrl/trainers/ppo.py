@@ -13,11 +13,11 @@ from tensordict import TensorDict  # type: ignore
 from torchrl.envs import (
     Compose,
     DoubleToFloat,
+    EnvBase,
     ObservationNorm,
     StepCounter,
     TransformedEnv,
 )
-from torchrl.envs import EnvBase
 from torchrl.modules import MLP
 
 from ._base import BaseRL

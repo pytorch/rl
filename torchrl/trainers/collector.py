@@ -8,8 +8,8 @@
 import typing as ty
 
 import torch
-from tensordict.nn import TensorDictModule  # type: ignore
 from tensordict import TensorDict  # type: ignore
+from tensordict.nn import TensorDictModule  # type: ignore
 
 from torch.utils.data import IterableDataset
 from torchrl.collectors import SyncDataCollector
@@ -28,7 +28,7 @@ class CollectorDataset(IterableDataset):
     def __init__(
         self,
         collector: SyncDataCollector | None = None,
-        env: EnvBase  | None = None,
+        env: EnvBase | None = None,
         policy_module: TensorDictModule = None,
         frames_per_batch: int = 1,
         total_frames: int = 1000,
@@ -67,7 +67,7 @@ class CollectorDataset(IterableDataset):
             batch_size=self.batch_size,
         )
         # States
-        self.length: int  | None = None
+        self.length: int | None = None
 
     def __iter__(self) -> ty.Iterator[TensorDict]:
         """Yield experiences from `SyncDataCollector` and store them in `ReplayBuffer`."""

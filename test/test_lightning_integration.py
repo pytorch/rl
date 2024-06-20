@@ -1,17 +1,16 @@
 """Tests for Lightning integration."""
 
-import pytest
-
 import lightning.pytorch as pl
+import pytest
 from lightning.pytorch.loggers import CSVLogger
 
-from torchrl.lightning.ppo import PPOPendulum
+from torchrl.trainers.ppo import PPOPendulum
 
 
 def test_example_ppo_pl() -> None:
     """Tray to run the example from here,
     to make sure it is tested."""
-    import sys, os
+    import os, sys
 
     sys.path.append(os.path.join("examples", "lightning"))
     from train_ppo_on_pendulum_with_lightning import main

@@ -12,24 +12,24 @@ import typing as ty
 try:
     import lightning.pytorch as pl
     import lightning.pytorch.callbacks as cb
-    from lightning.pytorch.utilities.types import (
-        OptimizerLRSchedulerConfig,
-        LRSchedulerConfigType,
-    )
-    from lightning.pytorch.core.optimizer import LightningOptimizer
     from lightning.fabric.utilities.types import LRScheduler
+    from lightning.pytorch.core.optimizer import LightningOptimizer
+    from lightning.pytorch.utilities.types import (
+        LRSchedulerConfigType,
+        OptimizerLRSchedulerConfig,
+    )
 
     HAS_PL = True
 except ImportError:
     HAS_PL = False
 
 import torch
-from torch import Tensor
 from tensordict import TensorDict  # type: ignore
 from tensordict.nn import TensorDictModule  # type: ignore
+from torch import Tensor
 
 from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.envs import ParallelEnv, EnvBase, EnvCreator
+from torchrl.envs import EnvBase, EnvCreator, ParallelEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import SoftUpdate
 
