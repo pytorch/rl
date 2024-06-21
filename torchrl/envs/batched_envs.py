@@ -1392,8 +1392,15 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
 
-        for i, _data in enumerate(tensordict.consolidate().unbind(0)):
-            self.parent_channels[i].send(("step_and_maybe_reset", _data))
+        td = tensordict.consolidate(
+                share_memory=True, inplace=True, num_threads=1
+            )
+        for i in range(td.shape[0]):
+            # We send the same td multiple times as it is in shared mem and we just need to index it
+            # in each process.
+            # If we don't do this, we need to unbind it but then the custom pickler will require
+            # some extra metadata to be collected.
+            self.parent_channels[i].send(("step_and_maybe_reset", (td, i)))
 
         results = [None] * self.num_workers
 
@@ -1489,7 +1496,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     def _step_no_buffers(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
-        for i, data in enumerate(tensordict.consolidate().unbind(0)):
+        for i, data in enumerate(
+            tensordict.consolidate(
+                share_memory=True, inplace=True, num_threads=1
+            ).unbind(0)
+        ):
             self.parent_channels[i].send(("step", data))
         out_tds = []
         for i, channel in enumerate(self.parent_channels):
@@ -1576,7 +1587,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         needs_resetting,
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         tdunbound = (
-            tensordict.consolidate().unbind(0)
+            tensordict.consolidate(share_memory=True, num_threads=1).unbind(0)
             if is_tensor_collection(tensordict)
             else [None] * self.num_workers
         )
@@ -2131,7 +2142,9 @@ def _run_worker_pipe_direct(
                 event.record()
                 event.synchronize()
             mp_event.set()
-            child_pipe.send(cur_td.consolidate())
+            child_pipe.send(
+                cur_td.consolidate(share_memory=True, inplace=True, num_threads=1)
+            )
             del cur_td
 
         elif cmd == "step":
@@ -2143,13 +2156,17 @@ def _run_worker_pipe_direct(
                 event.record()
                 event.synchronize()
             mp_event.set()
-            child_pipe.send(next_td.consolidate())
+            child_pipe.send(
+                next_td.consolidate(share_memory=True, inplace=True, num_threads=1)
+            )
             del next_td
 
         elif cmd == "step_and_maybe_reset":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
+            data, idx = data
+            data = data[idx]
             data._fast_apply(
                 lambda x: x.clone() if x.device.type == "cuda" else x, out=data
             )
