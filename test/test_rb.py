@@ -2629,12 +2629,21 @@ class TestSamplers:
         for data in torch.arange(20):
             idx = rb.add(data)
             rb.update_priority(idx, 21 - data)
-            if data <= 10 or not max_priority_within_buffer:
+            if data <= 10:
+                # The max is always going to be the first value
+                assert rb._sampler._max_priority[0] == 21
+                assert rb._sampler._max_priority[1] == 0
+            elif not max_priority_within_buffer:
+                # The max is the historical max, which was at idx 0
                 assert rb._sampler._max_priority[0] == 21
                 assert rb._sampler._max_priority[1] == 0
             else:
-                assert rb._sampler._max_priority[0] == 10
-                assert rb._sampler._max_priority[1] == 0
+                # the max is the current max. Find it and compare
+                sumtree = torch.as_tensor(
+                    [rb._sampler._sum_tree[i] for i in range(rb._sampler._max_capacity)]
+                )
+                assert rb._sampler._max_priority[0] == sumtree.max()
+                assert rb._sampler._max_priority[1] == sumtree.argmax()
         idx = rb.extend(torch.arange(10))
         rb.update_priority(idx, 12)
         if max_priority_within_buffer:
