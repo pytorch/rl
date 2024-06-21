@@ -107,7 +107,7 @@ class OneHotCategorical(D.Categorical):
             return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
 
     @property
-    def deterministic(self):
+    def deterministic_sample(self):
         return self.mode
 
     @_one_hot_wrapper(D.Categorical)

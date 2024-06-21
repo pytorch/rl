@@ -91,7 +91,7 @@ class IndependentNormal(D.Independent):
         return self.base_dist.mean
 
     @property
-    def deterministic(self):
+    def deterministic_sample(self):
         return self.mean
 
 
@@ -294,7 +294,7 @@ class TruncatedNormal(D.Independent):
         return torch.max(torch.stack([m, a], -1), dim=-1)[0]
 
     @property
-    def deterministic(self):
+    def deterministic_sample(self):
         return self.mean
 
     def log_prob(self, value, **kwargs):
@@ -488,7 +488,7 @@ class TanhNormal(FasterTransformedDistribution):
         return self.deterministic
 
     @property
-    def deterministic(self):
+    def deterministic_sample(self):
         m = self.root_dist.mean
         for t in self.transforms:
             m = t(m)
@@ -619,7 +619,7 @@ class Delta(D.Distribution):
         return self.param
 
     @property
-    def deterministic(self):
+    def deterministic_sample(self):
         return self.mean
 
     @property
@@ -748,7 +748,7 @@ class TanhDelta(FasterTransformedDistribution):
         return mode
 
     @property
-    def deterministic(self):
+    def deterministic_sample(self):
         return self.mode
 
     @property
