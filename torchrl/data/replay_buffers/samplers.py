@@ -575,12 +575,24 @@ class PrioritizedSampler(Sampler):
                     priority = priority[valid_index]
 
         max_p, max_p_idx = priority.max(dim=0)
-        max_priority = self._max_priority[0]
-        if max_priority is None or max_p > max_priority:
-            self._max_priority = (max_p, max_p_idx)
+        cur_max_priority, cur_max_priority_index = self._max_priority
+        if cur_max_priority is None or max_p > cur_max_priority:
+            cur_max_priority, cur_max_priority_index = self._max_priority = (
+                max_p,
+                index[max_p_idx] if index.ndim else index,
+            )
         priority = torch.pow(priority + self._eps, self._alpha)
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
+        if (
+            self._max_priority_within_buffer
+            and cur_max_priority_index is not None
+            and (index == cur_max_priority_index).any()
+        ):
+            maxval, maxidx = torch.tensor(
+                [self._sum_tree[i] for i in range(self._max_capacity)]
+            ).max(0)
+            self._max_priority = (maxval, maxidx)
 
     def mark_update(
         self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
