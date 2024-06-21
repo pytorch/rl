@@ -485,7 +485,7 @@ class TanhNormal(FasterTransformedDistribution):
             "This implementation will be removed in v0.6.",
             category=DeprecationWarning,
         )
-        return self.deterministic
+        return self.deterministic_sample
 
     @property
     def deterministic_sample(self):
