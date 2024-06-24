@@ -73,7 +73,6 @@ do
   pip3 install wheel==0.38.4
   pip3 install 'gym[atari]'==$GYM_VERSION
   pip3 install ale-py==0.7
-  pip3 install pip -U
   $DIR/run_test.sh
 
   # delete the conda copy
@@ -90,6 +89,7 @@ do
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[atari]'==$GYM_VERSION
+  pip3 install pip -U
   $DIR/run_test.sh
 
   # delete the conda copy
