@@ -71,6 +71,7 @@ do
 
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install wheel==0.38.4
+  pip3 install "pip<24.1"
   pip3 install 'gym[atari]'==$GYM_VERSION
   pip3 install ale-py==0.7
   $DIR/run_test.sh
