@@ -13519,17 +13519,36 @@ class TestBuffer:
 
 def test_loss_exploration():
     class DummyLoss(LossModule):
-        def forward(self, td):
-            assert exploration_type() == InteractionType.MODE
+        def forward(self, td, mode):
+            if mode is None:
+                mode = self.deterministic_sampling_mode
+            assert exploration_type() == mode
             with set_exploration_type(ExplorationType.RANDOM):
                 assert exploration_type() == ExplorationType.RANDOM
-            assert exploration_type() == ExplorationType.MODE
+            assert exploration_type() == mode
             return td
 
     loss_fn = DummyLoss()
     with set_exploration_type(ExplorationType.RANDOM):
         assert exploration_type() == ExplorationType.RANDOM
-        loss_fn(None)
+        loss_fn(None, None)
+        assert exploration_type() == ExplorationType.RANDOM
+
+    with set_exploration_type(ExplorationType.RANDOM):
+        assert exploration_type() == ExplorationType.RANDOM
+        loss_fn(None, ExplorationType.DETERMINISTIC)
+        assert exploration_type() == ExplorationType.RANDOM
+
+    loss_fn.deterministic_sampling_mode = ExplorationType.MODE
+    with set_exploration_type(ExplorationType.RANDOM):
+        assert exploration_type() == ExplorationType.RANDOM
+        loss_fn(None, ExplorationType.MODE)
+        assert exploration_type() == ExplorationType.RANDOM
+
+    loss_fn.deterministic_sampling_mode = ExplorationType.MEAN
+    with set_exploration_type(ExplorationType.RANDOM):
+        assert exploration_type() == ExplorationType.RANDOM
+        loss_fn(None, ExplorationType.MEAN)
         assert exploration_type() == ExplorationType.RANDOM
 
 

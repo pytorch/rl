@@ -1146,12 +1146,12 @@ class Recorder(TrainerHookBase):
             Given that this instance is supposed to both explore and render
             the performance of the policy, it should be possible to turn off
             the explorative behaviour by calling the
-            `set_exploration_type(ExplorationType.MODE)` context manager.
+            `set_exploration_type(ExplorationType.DETERMINISTIC)` context manager.
         environment (EnvBase): An environment instance to be used
             for testing.
         exploration_type (ExplorationType, optional): exploration mode to use for the
             policy. By default, no exploration is used and the value used is
-            ExplorationType.MODE. Set to ExplorationType.RANDOM to enable exploration
+            ``ExplorationType.DETERMINISTIC``. Set to ``ExplorationType.RANDOM`` to enable exploration
         log_keys (sequence of str or tuples or str, optional): keys to read in the tensordict
             for logging. Defaults to ``[("next", "reward")]``.
         out_keys (Dict[str, str], optional): a dictionary mapping the ``log_keys``
