@@ -408,6 +408,10 @@ class TanhNormal(FasterTransformedDistribution):
             m = t(m)
         return m
 
+    @property
+    def deterministic_sample(self):
+        return self.mode
+
 
 def uniform_sample_tanhnormal(dist: TanhNormal, size=None) -> torch.Tensor:
     """Defines what uniform sampling looks like for a TanhNormal distribution.
