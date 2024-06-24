@@ -19,7 +19,7 @@ from torchrl.envs.utils import exploration_type, ExplorationType, set_exploratio
 
 from torchrl.objectives.value.functional import reward2go
 
-from .mcts_node import MCTSNode
+from torchrl.data import MCTSNode, MCTSChildren
 
 
 @dataclass
@@ -64,17 +64,17 @@ class ActionExplorationModule:
 
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
             tensordict[self.action_key] = self.explore_action(node)
-        elif exploration_type() == ExplorationType.MODE:
+        elif exploration_type() in (ExplorationType.MODE, ExplorationType.DETERMINISTIC, ExplorationType.MEAN):
             tensordict[self.action_key] = self.get_greedy_action(node)
 
         return tensordict
 
     def get_greedy_action(self, node: MCTSNode) -> torch.Tensor:
-        action = torch.argmax(node.children_visits)
+        action = torch.argmax(node.children.visits)
         return action
 
     def explore_action(self, node: MCTSNode) -> torch.Tensor:
-        action_scores = node.scores
+        action_scores = node.score
 
         max_value = torch.max(action_scores)
         action = torch.argmax(
@@ -156,9 +156,6 @@ class ExpansionStrategy:
     This policy will use to initialize a node when it gets expanded at the first time.
     """
 
-    def __init__(self):
-        super().__init__()
-
     def forward(self, node: MCTSNode) -> MCTSNode:
         """The node to be expanded.
 
@@ -179,7 +176,7 @@ class ExpansionStrategy:
 
     @abstractmethod
     def expand(self, node: MCTSNode) -> None:
-        pass
+        ...
 
     def set_node(self, node: MCTSNode) -> None:
         self.node = node
@@ -189,7 +186,7 @@ class BatchedRootExpansionStrategy(ExpansionStrategy):
     def __init__(
         self,
         policy_module: TensorDictModule,
-        module_action_value_key: str = "action_value",
+        module_action_value_key: NestedKey = "action_value",
     ):
         super().__init__()
         assert module_action_value_key in policy_module.out_keys
@@ -200,9 +197,7 @@ class BatchedRootExpansionStrategy(ExpansionStrategy):
         policy_netword_td = node.state.select(*self.policy_module.in_keys)
         policy_netword_td = self.policy_module(policy_netword_td)
         p_sa = policy_netword_td[self.action_value_key]
-        node.children_priors = p_sa  # prior_action_value
-        node.children_values = torch.zeros_like(p_sa)  # action_value
-        node.children_visits = torch.zeros_like(p_sa)  # action_count
+        node.children = MCTSChildren.init_from_prob(p_sa)
         # setattr(node, "truncated", torch.ones(1, dtype=torch.bool))
 
 
@@ -210,7 +205,7 @@ class AlphaZeroExpansionStrategy(ExpansionStrategy):
     def __init__(
         self,
         policy_module: TensorDictModule,
-        module_action_value_key: str = "action_value",
+        module_action_value_key: NestedKey = "action_value",
     ):
         super().__init__()
         assert module_action_value_key in policy_module.out_keys
@@ -221,9 +216,9 @@ class AlphaZeroExpansionStrategy(ExpansionStrategy):
         policy_netword_td = node.state.select(*self.policy_module.in_keys)
         policy_netword_td = self.policy_module(policy_netword_td)
         p_sa = policy_netword_td[self.action_value_key]
-        node.children_priors = p_sa  # prior_action_value
-        node.children_values = torch.zeros_like(p_sa)  # action_value
-        node.children_visits = torch.zeros_like(p_sa)  # action_count
+        node.children.priors = p_sa  # prior_action_value
+        node.children.vals = torch.zeros_like(p_sa)  # action_value
+        node.children.visits = torch.zeros_like(p_sa)  # action_count
         # setattr(node, "truncated", torch.ones(1, dtype=torch.bool))
 
 
@@ -244,15 +239,15 @@ class PUCTSelectionPolicy:
         self.node: MCTSNode
 
     def forward(self, node: MCTSNode) -> MCTSNode:
-        n = torch.sum(node.children_visits, dim=-1) + 1
+        n = torch.sum(node.children.visits, dim=-1) + 1
         u_sa = (
             self.cpuct
-            * node.children_priors
+            * node.children.priors
             * torch.sqrt(n)
-            / (1 + node.children_visits)
+            / (1 + node.children.visits)
         )
 
-        optimism_estimation = node.children_values + u_sa
+        optimism_estimation = node.children.vals + u_sa
         node.scores = optimism_estimation
 
         return node
@@ -270,17 +265,17 @@ class DirichletNoiseModule:
         self.epsilon = epsilon
 
     def forward(self, node: MCTSNode) -> MCTSNode:
-        if node.children_priors.device.type == "mps":
-            device = node.children_priors.device
+        if node.children.priors.device.type == "mps":
+            device = node.children.priors.device
             noise = _Dirichlet.apply(
-                self.alpha * torch.ones_like(node.children_priors).cpu()
+                self.alpha * torch.ones_like(node.children.priors).cpu()
             )
             noise = noise.to(device)  # type: ignore
         else:
-            noise = _Dirichlet.apply(self.alpha * torch.ones_like(node.children_priors))
+            noise = _Dirichlet.apply(self.alpha * torch.ones_like(node.children.priors))
 
-        noisy_priors = (1 - self.epsilon) * node.children_priors + self.epsilon * noise  # type: ignore
-        node.children_priors = noisy_priors
+        noisy_priors = (1 - self.epsilon) * node.children.priors + self.epsilon * noise  # type: ignore
+        node.children.priors = noisy_priors
         return node
 
 
@@ -292,6 +287,8 @@ class MCTSPolicy(TensorDictModuleBase):
         selection_strategy: a policy to select action in each state
         exploration_strategy: a policy to exploration vs exploitation
     """
+
+    node: MCTSNode
 
     def __init__(
         self,
@@ -313,10 +310,11 @@ class MCTSPolicy(TensorDictModuleBase):
         self.expansion_strategy = expansion_strategy
         self.selection_strategy = selection_strategy
         self.exploration_strategy = exploration_strategy
-        self.node: MCTSNode
         self.batch_size = batch_size
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if not hasattr(self, "node"):
+            raise RuntimeError("the MCTS policy has not been initialized. Please provide a node through policy.set_node().")
         if not self.node.expanded:
             self.node.state = tensordict  # type: ignore
         self.expansion_strategy.forward(self.node)

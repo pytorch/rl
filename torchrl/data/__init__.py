@@ -74,3 +74,4 @@ from .tensor_specs import (
     UnboundedDiscreteTensorSpec,
 )
 from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec
+from .mcts import MCTSNode, MCTSChildren
