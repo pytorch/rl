@@ -585,9 +585,12 @@ class ReplayBuffer:
 
     def update_priority(
         self,
-        index: Union[int, torch.Tensor],
+        index: Union[int, torch.Tensor, Tuple[torch.Tensor]],
         priority: Union[int, torch.Tensor],
     ) -> None:
+        if isinstance(index, tuple):
+            index = torch.stack(index, -1)
+        priority = torch.as_tensor(priority)
         if self.dim_extend > 0 and priority.ndim > 1:
             priority = self._transpose(priority).flatten()
             # priority = priority.flatten()
@@ -1095,7 +1098,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 dtype=torch.float,
                 device=tensordict.device,
             ).expand(tensordict.shape[0])
-        if self._storage.ndim > 1:
+        if self._storage.ndim > 1 and priority.ndim >= self._storage.ndim:
             # We have to flatten the priority otherwise we'll be aggregating
             # the priority across batches
             priority = priority.flatten(0, self._storage.ndim - 1)
@@ -1172,9 +1175,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
         else:
             priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")
-        while index.shape != priority.shape:
-            # reduce index
-            index = index[..., 0]
+        if self._storage.ndim > 1 and index.ndim == 2:
+            index = index.unbind(-1)
+        else:
+            while index.shape != priority.shape:
+                # reduce index
+                index = index[..., 0]
         return self.update_priority(index, priority)
 
     def sample(
