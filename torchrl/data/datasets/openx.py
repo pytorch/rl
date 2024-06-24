@@ -486,6 +486,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
                 streaming=False,
                 split="train",
                 cache_dir=cache_dir,
+                trust_remote_code=True,
             )
             # iterate over the dataset a first time to count elements
             total_frames = 0
