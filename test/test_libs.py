@@ -2817,7 +2817,7 @@ def _minari_selected_datasets():
     torch.manual_seed(0)
 
     # We rely on sorting the keys as v0 < v1 but if the version is greater than 9 this won't work
-    total_keys = sorted(list(minari.list_remote_datasets()))
+    total_keys = sorted(minari.list_remote_datasets())
     assert not any(
         key[-2:] == "10" for key in total_keys
     ), "You should adapt the Minari test scripts as some dataset have a version >= 10 and sorting will fail."
