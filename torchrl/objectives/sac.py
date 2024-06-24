@@ -647,7 +647,7 @@ class SACLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         target_params = self._cached_target_params_actor_value
-        with set_exploration_type(ExplorationType.MODE):
+        with set_exploration_type(self.deterministic_sampling_mode):
             target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params
             ).squeeze(-1)

@@ -370,7 +370,7 @@ class gSDEModule(nn.Module):
             _err_msg = f"noise and state are expected to have matching batch size, got shapes {_eps_gSDE.shape} and {state.shape}"
             raise RuntimeError(_err_msg)
 
-        if _eps_gSDE is None and exploration_type() == ExplorationType.MODE:
+        if _eps_gSDE is None and exploration_type() != ExplorationType.RANDOM:
             # noise is irrelevant in with no exploration
             _eps_gSDE = torch.zeros(
                 *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
@@ -391,7 +391,11 @@ class gSDEModule(nn.Module):
 
         if exploration_type() in (ExplorationType.RANDOM,):
             action = mu + eps
-        elif exploration_type() in (ExplorationType.MODE,):
+        elif exploration_type() in (
+            ExplorationType.MODE,
+            ExplorationType.MEAN,
+            ExplorationType.DETERMINISTIC,
+        ):
             action = mu
         else:
             raise RuntimeError(_err_explo)
