@@ -52,6 +52,7 @@ do
   echo "Testing gym version: ${GYM_VERSION}"
   # handling https://github.com/openai/gym/issues/3202
   pip3 install wheel==0.38.4
+  pip3 install "pip<24.1"
   pip3 install gym==$GYM_VERSION
   $DIR/run_test.sh
 
@@ -72,6 +73,7 @@ do
   pip3 install wheel==0.38.4
   pip3 install 'gym[atari]'==$GYM_VERSION
   pip3 install ale-py==0.7
+  pip3 install pip -U
   $DIR/run_test.sh
 
   # delete the conda copy
