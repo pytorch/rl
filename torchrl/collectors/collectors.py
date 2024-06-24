@@ -470,7 +470,7 @@ class SyncDataCollector(DataCollectorBase):
         if policy is None:
             from torchrl.collectors import RandomPolicy
 
-            policy = RandomPolicy(env.action_spec)
+            policy = RandomPolicy(env.full_action_spec)
 
         ##########################
         # Setting devices:
