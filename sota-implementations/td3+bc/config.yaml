@@ -1,0 +1,43 @@
+# task and env
+env:
+  name: HalfCheetah-v4  # Use v4 to get rid of mujoco-py dependency
+  task: ""
+  library: gym
+  seed: 42
+  max_episode_steps: 1000
+
+# replay buffer
+replay_buffer:
+  dataset: halfcheetah-medium-v2
+  batch_size: 256
+
+# optim
+optim:
+  gradient_steps: 100000
+  gamma: 0.99
+  loss_function: l2
+  lr: 3.0e-4
+  weight_decay: 0.0
+  adam_eps: 1e-4
+  batch_size: 256
+  target_update_polyak: 0.995
+  policy_update_delay: 2
+  policy_noise: 0.2
+  noise_clip: 0.5
+  alpha: 2.5
+
+# network
+network:
+  hidden_sizes: [256, 256]
+  activation: relu
+  device: null
+
+# logging
+logger:
+  backend: wandb
+  project_name: td3+bc_${replay_buffer.dataset}
+  group_name: null
+  exp_name: TD3+BC_${replay_buffer.dataset}
+  mode: online
+  eval_iter: 5000
+  video: False

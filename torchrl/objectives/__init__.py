@@ -17,6 +17,7 @@ from .redq import REDQLoss
 from .reinforce import ReinforceLoss
 from .sac import DiscreteSACLoss, SACLoss
 from .td3 import TD3Loss
+from .td3_bc import TD3BCLoss
 from .utils import (
     default_value_kwargs,
     distance_loss,
