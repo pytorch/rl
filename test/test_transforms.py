@@ -11059,8 +11059,10 @@ class TestActionDiscretizer(TransformBase):
         ],
     )
     def test_transform_env(self, envname, interval_as_tensor, categorical, sampling):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         base_env = GymEnv(
-            HALFCHEETAH_VERSIONED() if envname == "cheetah" else PENDULUM_VERSIONED()
+            HALFCHEETAH_VERSIONED() if envname == "cheetah" else PENDULUM_VERSIONED(),
+            device=device,
         )
         if interval_as_tensor:
             num_intervals = torch.arange(5, 11 if envname == "cheetah" else 6)

@@ -8283,7 +8283,10 @@ class ActionDiscretizer(Transform):
         super().__init__(in_keys_inv=[action_key], out_keys_inv=[out_action_key])
         self.action_key = action_key
         self.out_action_key = out_action_key
-        self.num_intervals = num_intervals
+        if not isinstance(num_intervals, torch.Tensor):
+            self.num_intervals = num_intervals
+        else:
+            self.register_buffer("num_intervals", num_intervals)
         if sampling is None:
             sampling = self.SamplingStrategy.MEDIAN
         self.sampling = sampling
@@ -8397,7 +8400,7 @@ class ActionDiscretizer(Transform):
                 del input_spec["full_action_spec", self.in_keys_inv[0]]
             return input_spec
         except Exception as err:
-            print("here!")
+            # To avoid silent AttributeErrors
             raise RuntimeError(str(err))
 
     def _init(self):
