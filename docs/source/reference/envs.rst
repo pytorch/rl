@@ -768,6 +768,7 @@ to be able to create this other composition:
 
     Transform
     TransformedEnv
+    ActionDiscretizer
     ActionMask
     AutoResetEnv
     AutoResetTransform
@@ -779,17 +780,16 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    DTypeCastTransform
     DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
-    DTypeCastTransform
     EndOfLifeTransform
     ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation
     FrameSkipTransform
     GrayScale
-    gSDENoise
     InitTracker
     KLRewardTransform
     NoopResetEnv
@@ -799,13 +799,13 @@ to be able to create this other composition:
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
+    RemoveEmptySpecs
     RenameTransform
     Resize
+    Reward2GoTransform
     RewardClipping
     RewardScaling
     RewardSum
-    Reward2GoTransform
-    RemoveEmptySpecs
     SelectTransform
     SignTransform
     SqueezeTransform
@@ -815,11 +815,12 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
-    VecGymEnvTransform
-    VecNorm
     VC1Transform
     VIPRewardTransform
     VIPTransform
+    VecGymEnvTransform
+    VecNorm
+    gSDENoise
 
 Environments with masked actions
 --------------------------------

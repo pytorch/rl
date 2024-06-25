@@ -10,6 +10,7 @@ import importlib.util
 import multiprocessing as mp
 import warnings
 from copy import copy
+from enum import IntEnum
 from functools import wraps
 from textwrap import indent
 from typing import (
@@ -341,7 +342,7 @@ class Transform(nn.Module):
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
         def clone(data):
             try:
-                # we priviledge speed for tensordicts
+                # we privilege speed for tensordicts
                 return data.clone(recurse=False)
             except AttributeError:
                 return tree_map(lambda x: x, data)
@@ -8174,3 +8175,278 @@ class AutoResetTransform(Transform):
                                 _dest.set(key, val_set_reg)
         delattr(self, "_saved_td_autorest")
         return tensordict_reset
+
+
+class ActionDiscretizer(Transform):
+    """A transform to discretize a continuous action space.
+
+    This transform makes it possible to use an algorithm designed for discrete
+    action spaces such as DQN over environments with a continuous action space.
+
+    Args:
+        num_intervals (int or torch.Tensor): the number of discrete values
+            for each element of the action space. If a single integer is provided,
+            all action items are sliced with the same number of elements.
+            If a tensor is provided, it must have the same number of elements
+            as the action space (ie, the length of the ``num_intervals`` tensor
+            must match the last dimension of the action space).
+        action_key (NestedKey, optional): the action key to use. Points to
+            the action of the parent env (the floating point action).
+            Defaults to ``"action"``.
+        out_action_key (NestedKey, optional): the key where the discrete
+            action should be written. If ``None`` is provided, it defaults to
+            the value of ``action_key``. If both keys do not match, the
+            continuous action_spec is moved from the ``full_action_spec``
+            environment attribute to the ``full_state_spec`` container,
+            as only the discrete action should be sampled for an action to
+            be taken. Providing ``out_action_key`` can ensure that the
+            floating point action is available to be recorded.
+        sampling (ActionDiscretizer.SamplingStrategy, optinoal): an element
+            of the ``ActionDiscretizer.SamplingStrategy`` ``IntEnum`` object
+            (``MEDIAN``, ``LOW``, ``HIGH`` or ``RANDOM``). Indicates how the
+            continuous action should be sampled in the provided interval.
+        categorical (bool, optional): if ``False``, one-hot encoding is used.
+            Defaults to ``True``.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv, check_env_specs
+        >>> import torch
+        >>> base_env = GymEnv("HalfCheetah-v4")
+        >>> num_intervals = torch.arange(5, 11)
+        >>> categorical = True
+        >>> sampling = ActionDiscretizer.SamplingStrategy.MEDIAN
+        >>> t = ActionDiscretizer(
+        ...     num_intervals=num_intervals,
+        ...     categorical=categorical,
+        ...     sampling=sampling,
+        ...     out_action_key="action_disc",
+        ... )
+        >>> env = base_env.append_transform(t)
+        TransformedEnv(
+            env=GymEnv(env=HalfCheetah-v4, batch_size=torch.Size([]), device=cpu),
+            transform=ActionDiscretizer(
+                num_intervals=tensor([ 5,  6,  7,  8,  9, 10]),
+                action_key=action,
+                out_action_key=action_disc,,
+                sampling=0,
+                categorical=True))
+        >>> check_env_specs(env)
+        >>> # Produce a rollout
+        >>> r = env.rollout(4)
+        >>> print(r)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([4, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                action_disc: Tensor(shape=torch.Size([4, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([4, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([4, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([4]),
+            device=cpu,
+            is_shared=False)
+        >>> assert r["action"].dtype == torch.float
+        >>> assert r["action_disc"].dtype == torch.int64
+        >>> assert (r["action"] < base_env.action_spec.high).all()
+        >>> assert (r["action"] > base_env.action_spec.low).all()
+
+    """
+
+    class SamplingStrategy(IntEnum):
+        """The sampling strategies for ActionDiscretizer."""
+
+        MEDIAN = 0
+        LOW = 1
+        HIGH = 2
+        RANDOM = 3
+
+    def __init__(
+        self,
+        num_intervals: int | torch.Tensor,
+        action_key: NestedKey = "action",
+        out_action_key: NestedKey = None,
+        sampling=None,
+        categorical: bool = True,
+    ):
+        if out_action_key is None:
+            out_action_key = action_key
+        super().__init__(in_keys_inv=[action_key], out_keys_inv=[out_action_key])
+        self.action_key = action_key
+        self.out_action_key = out_action_key
+        self.num_intervals = num_intervals
+        if sampling is None:
+            sampling = self.SamplingStrategy.MEDIAN
+        self.sampling = sampling
+        self.categorical = categorical
+
+    def __repr__(self):
+        def _indent(s):
+            return indent(s, 4 * " ")
+
+        num_intervals = f"num_intervals={self.num_intervals}"
+        action_key = f"action_key={self.action_key}"
+        out_action_key = f"out_action_key={self.out_action_key}"
+        sampling = f"sampling={self.sampling}"
+        categorical = f"categorical={self.categorical}"
+        return (
+            f"{type(self).__name__}(\n{_indent(num_intervals)},\n{_indent(action_key)},"
+            f"\n{_indent(out_action_key)},\n{_indent(sampling)},\n{_indent(categorical)})"
+        )
+
+    def transform_input_spec(self, input_spec):
+        try:
+            action_spec = input_spec["full_action_spec", self.in_keys_inv[0]]
+            if not isinstance(action_spec, BoundedTensorSpec):
+                raise TypeError(
+                    f"action spec type {type(action_spec)} is not supported."
+                )
+
+            n_act = action_spec.shape
+            if not n_act:
+                n_act = 1
+            else:
+                n_act = n_act[-1]
+            self.n_act = n_act
+
+            self.dtype = action_spec.dtype
+            interval = (action_spec.high - action_spec.low).unsqueeze(-1)
+
+            num_intervals = self.num_intervals
+
+            def custom_arange(nint):
+                result = torch.arange(
+                    start=0.0,
+                    end=1.0,
+                    step=1 / nint,
+                    dtype=self.dtype,
+                    device=action_spec.device,
+                )
+                result_ = result
+                if self.sampling in (
+                    self.SamplingStrategy.HIGH,
+                    self.SamplingStrategy.MEDIAN,
+                ):
+                    result_ = (1 - result).flip(0)
+                if self.sampling == self.SamplingStrategy.MEDIAN:
+                    result = (result + result_) / 2
+                else:
+                    result = result_
+                return result
+
+            if isinstance(num_intervals, int):
+                arange = (
+                    custom_arange(num_intervals).expand(n_act, num_intervals) * interval
+                )
+                self.register_buffer(
+                    "intervals", action_spec.low.unsqueeze(-1) + arange
+                )
+            else:
+                arange = [
+                    custom_arange(_num_intervals) * interval
+                    for _num_intervals, interval in zip(
+                        num_intervals.tolist(), interval.unbind(-2)
+                    )
+                ]
+                self.intervals = [
+                    low + arange
+                    for low, arange in zip(
+                        action_spec.low.unsqueeze(-1).unbind(-2), arange
+                    )
+                ]
+
+            cls = (
+                functools.partial(MultiDiscreteTensorSpec, remove_singleton=False)
+                if self.categorical
+                else MultiOneHotDiscreteTensorSpec
+            )
+
+            if not isinstance(num_intervals, torch.Tensor):
+                nvec = torch.as_tensor(num_intervals)
+            else:
+                nvec = num_intervals
+            if nvec.ndim > 1:
+                raise RuntimeError(f"Cannot use num_intervals with shape {nvec.shape}")
+            if nvec.ndim == 0 or nvec.numel() == 1:
+                nvec = nvec.expand(action_spec.shape[-1])
+            self.register_buffer("nvec", nvec)
+            if self.sampling == self.SamplingStrategy.RANDOM:
+                # compute jitters
+                self.jitters = interval.squeeze(-1) / nvec
+            shape = (
+                action_spec.shape
+                if self.categorical
+                else (*action_spec.shape[:-1], nvec.sum())
+            )
+            action_spec = cls(nvec=nvec, shape=shape, device=action_spec.device)
+            input_spec["full_action_spec", self.out_keys_inv[0]] = action_spec
+
+            if self.out_keys_inv[0] != self.in_keys_inv[0]:
+                input_spec["full_state_spec", self.in_keys_inv[0]] = input_spec[
+                    "full_action_spec", self.in_keys_inv[0]
+                ].clone()
+                del input_spec["full_action_spec", self.in_keys_inv[0]]
+            return input_spec
+        except Exception as err:
+            print("here!")
+            raise RuntimeError(str(err))
+
+    def _init(self):
+        # We just need to access the action spec for everything to be initialized
+        try:
+            _ = self.container.full_action_spec
+        except AttributeError:
+            raise RuntimeError(
+                f"Cannot execute transform {type(self).__name__} without a parent env."
+            )
+
+    def inv(self, tensordict):
+        if self.out_keys_inv[0] == self.in_keys_inv[0]:
+            return super().inv(tensordict)
+        # We re-write this because we don't want to clone the TD here
+        return self._inv_call(tensordict)
+
+    def _inv_call(self, tensordict):
+        # action is categorical, map it to desired dtype
+        intervals = getattr(self, "intervals", None)
+        if intervals is None:
+            self._init()
+            return self._inv_call(tensordict)
+        action = tensordict.get(self.out_keys_inv[0])
+        if self.categorical:
+            action = action.unsqueeze(-1)
+            if isinstance(intervals, torch.Tensor):
+                action = intervals.gather(index=action, dim=-1).squeeze(-1)
+            else:
+                action = torch.stack(
+                    [
+                        interval.gather(index=action, dim=-1).squeeze(-1)
+                        for interval, action in zip(intervals, action.unbind(-2))
+                    ],
+                    -1,
+                )
+        else:
+            nvec = self.nvec.tolist()
+            action = action.split(nvec, dim=-1)
+            if isinstance(intervals, torch.Tensor):
+                intervals = intervals.unbind(-2)
+            action = torch.stack(
+                [
+                    intervals[action].view(action.shape[:-1])
+                    for (intervals, action) in zip(intervals, action)
+                ],
+                -1,
+            )
+
+        if self.sampling == self.SamplingStrategy.RANDOM:
+            action = action + self.jitters * torch.rand_like(self.jitters)
+        return tensordict.set(self.in_keys_inv[0], action)
