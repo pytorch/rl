@@ -8374,7 +8374,7 @@ class ActionDiscretizer(Transform):
             )
 
             if not isinstance(num_intervals, torch.Tensor):
-                nvec = torch.as_tensor(num_intervals)
+                nvec = torch.as_tensor(num_intervals, device=action_spec.device)
             else:
                 nvec = num_intervals
             if nvec.ndim > 1:
@@ -8399,7 +8399,7 @@ class ActionDiscretizer(Transform):
                 ].clone()
                 del input_spec["full_action_spec", self.in_keys_inv[0]]
             return input_spec
-        except Exception as err:
+        except AttributeError as err:
             # To avoid silent AttributeErrors
             raise RuntimeError(str(err))
 
