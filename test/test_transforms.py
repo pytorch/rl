@@ -119,6 +119,7 @@ from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.rlhf import KLRewardTransform
 from torchrl.envs.transforms.transforms import (
     _has_tv,
+    ActionDiscretizer,
     BatchSizeTransform,
     FORWARD_NOT_IMPLEMENTED,
     Transform,
@@ -10983,6 +10984,125 @@ class TestBatchSizeTransform(TransformBase):
     def test_transform_inverse(self):
         # Tested in single_env
         return
+
+
+class TestActionDiscretizer(TransformBase):
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_single_trans_env_check(self, categorical):
+        base_env = ContinuousActionVecMockEnv()
+        env = base_env.append_transform(
+            ActionDiscretizer(num_intervals=5, categorical=categorical)
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_serial_trans_env_check(self, categorical):
+        def make_env():
+            base_env = ContinuousActionVecMockEnv()
+            return base_env.append_transform(
+                ActionDiscretizer(num_intervals=5, categorical=categorical)
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_parallel_trans_env_check(self, categorical):
+        def make_env():
+            base_env = ContinuousActionVecMockEnv()
+            env = base_env.append_transform(
+                ActionDiscretizer(num_intervals=5, categorical=categorical)
+            )
+            return env
+
+        env = ParallelEnv(2, make_env, mp_start_method="fork")
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_trans_serial_env_check(self, categorical):
+        env = SerialEnv(2, ContinuousActionVecMockEnv).append_transform(
+            ActionDiscretizer(num_intervals=5, categorical=categorical)
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_trans_parallel_env_check(self, categorical):
+        env = ParallelEnv(
+            2, ContinuousActionVecMockEnv, mp_start_method="fork"
+        ).append_transform(ActionDiscretizer(num_intervals=5, categorical=categorical))
+        check_env_specs(env)
+
+    def test_transform_no_env(self):
+        categorical = True
+        with pytest.raises(RuntimeError, match="Cannot execute transform"):
+            ActionDiscretizer(num_intervals=5, categorical=categorical)._init()
+
+    def test_transform_compose(self):
+        categorical = True
+        env = SerialEnv(2, ContinuousActionVecMockEnv).append_transform(
+            Compose(ActionDiscretizer(num_intervals=5, categorical=categorical))
+        )
+        check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
+    @pytest.mark.parametrize("envname", ["cheetah", "pendulum"])
+    @pytest.mark.parametrize("interval_as_tensor", [False, True])
+    @pytest.mark.parametrize("categorical", [True, False])
+    @pytest.mark.parametrize(
+        "sampling",
+        [
+            None,
+            ActionDiscretizer.SamplingStrategy.MEDIAN,
+            ActionDiscretizer.SamplingStrategy.LOW,
+            ActionDiscretizer.SamplingStrategy.HIGH,
+            ActionDiscretizer.SamplingStrategy.RANDOM,
+        ],
+    )
+    def test_transform_env(self, envname, interval_as_tensor, categorical, sampling):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        base_env = GymEnv(
+            HALFCHEETAH_VERSIONED() if envname == "cheetah" else PENDULUM_VERSIONED(),
+            device=device,
+        )
+        if interval_as_tensor:
+            num_intervals = torch.arange(5, 11 if envname == "cheetah" else 6)
+        else:
+            num_intervals = 5
+        t = ActionDiscretizer(
+            num_intervals=num_intervals,
+            categorical=categorical,
+            sampling=sampling,
+            out_action_key="action_disc",
+        )
+        env = base_env.append_transform(t)
+        check_env_specs(env)
+        r = env.rollout(4)
+        assert r["action"].dtype == torch.float
+        if categorical:
+            assert r["action_disc"].dtype == torch.int64
+        else:
+            assert r["action_disc"].dtype == torch.bool
+        if t.sampling in (
+            t.SamplingStrategy.LOW,
+            t.SamplingStrategy.MEDIAN,
+            t.SamplingStrategy.RANDOM,
+        ):
+            assert (r["action"] < base_env.action_spec.high).all()
+        if t.sampling in (
+            t.SamplingStrategy.HIGH,
+            t.SamplingStrategy.MEDIAN,
+            t.SamplingStrategy.RANDOM,
+        ):
+            assert (r["action"] > base_env.action_spec.low).all()
+
+    def test_transform_model(self):
+        pytest.skip("Tested elsewhere")
+
+    def test_transform_rb(self):
+        pytest.skip("Tested elsewhere")
+
+    def test_transform_inverse(self):
+        pytest.skip("Tested elsewhere")
 
 
 if __name__ == "__main__":
