@@ -2454,6 +2454,9 @@ class ObservationNorm(ObservationTransform):
 
             as it is done for standardization. Default is `False`.
 
+        eps (float, optional): epsilon increment for the scale in the ``standard_normal`` case.
+            Defaults to ``1e-6`` if not recoverable directly from the scale dtype.
+
     Examples:
         >>> torch.set_default_tensor_type(torch.DoubleTensor)
         >>> r = torch.randn(100, 3)*torch.randn(3) + torch.randn(3)
@@ -2495,6 +2498,7 @@ class ObservationNorm(ObservationTransform):
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
         standard_normal: bool = False,
+        eps: float | None = None,
     ):
         if in_keys is None:
             raise RuntimeError(
@@ -2517,7 +2521,13 @@ class ObservationNorm(ObservationTransform):
         if not isinstance(standard_normal, torch.Tensor):
             standard_normal = torch.as_tensor(standard_normal)
         self.register_buffer("standard_normal", standard_normal)
-        self.eps = 1e-6
+        self.eps = (
+            eps
+            if eps is not None
+            else torch.finfo(scale.dtype).eps
+            if isinstance(scale, torch.Tensor) and scale.dtype.is_floating_point
+            else 1e-6
+        )
 
         if loc is not None and not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc, dtype=torch.get_default_dtype())
@@ -2659,7 +2669,7 @@ class ObservationNorm(ObservationTransform):
         if self.standard_normal:
             loc = self.loc
             scale = self.scale
-            return (obs - loc) / (scale + torch.finfo(scale.dtype).eps)
+            return (obs - loc) / scale
         else:
             scale = self.scale
             loc = self.loc
