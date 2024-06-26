@@ -51,7 +51,7 @@ class CrossQLoss(LossModule):
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
-
+    Keyword Args:
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
@@ -212,8 +212,8 @@ class CrossQLoss(LossModule):
                 Defaults to ``"advantage"``.
             state_action_value (NestedKey): The input tensordict key where the
                 state action value is expected.  Defaults to ``"state_action_value"``.
-            log_prob (NestedKey): The input tensordict key where the log probability is expected.
-                Defaults to ``"_log_prob"``.
+            # log_prob (NestedKey): The input tensordict key where the log probability is expected.
+            #     Defaults to ``"_log_prob"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
@@ -228,7 +228,7 @@ class CrossQLoss(LossModule):
 
         action: NestedKey = "action"
         state_action_value: NestedKey = "state_action_value"
-        log_prob: NestedKey = "_log_prob"
+        # log_prob: NestedKey = "_log_prob"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
@@ -478,9 +478,9 @@ class CrossQLoss(LossModule):
         else:
             tensordict_reshape = tensordict
 
-        loss_qvalue, value_metadata = self._qvalue_loss(tensordict_reshape)
-        loss_actor, metadata_actor = self._actor_loss(tensordict_reshape)
-        loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
+        loss_qvalue, value_metadata = self.qvalue_loss(tensordict_reshape)
+        loss_actor, metadata_actor = self.actor_loss(tensordict_reshape)
+        loss_alpha = self.alpha_loss(log_prob=metadata_actor["log_prob"])
         tensordict_reshape.set(self.tensor_keys.priority, value_metadata["td_error"])
         if loss_actor.shape != loss_qvalue.shape:
             raise RuntimeError(
@@ -512,7 +512,7 @@ class CrossQLoss(LossModule):
     def _cached_detached_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
-    def _actor_loss(
+    def actor_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         with set_exploration_type(
@@ -539,7 +539,7 @@ class CrossQLoss(LossModule):
 
         return self._alpha * log_prob - min_q_logprob, {"log_prob": log_prob.detach()}
 
-    def _qvalue_loss(
+    def qvalue_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
 
@@ -604,7 +604,7 @@ class CrossQLoss(LossModule):
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 
-    def _alpha_loss(self, log_prob: Tensor) -> Tensor:
+    def alpha_loss(self, log_prob: Tensor) -> Tensor:
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
             alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)

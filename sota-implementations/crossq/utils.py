@@ -142,7 +142,7 @@ def make_replay_buffer(
 # -----
 
 
-def make_crossQ_agent(cfg, train_env, eval_env, device):
+def make_crossQ_agent(cfg, train_env, device):
     """Make CrossQ agent."""
     # Define Actor Network
     in_keys = ["observation"]
@@ -221,14 +221,13 @@ def make_crossQ_agent(cfg, train_env, eval_env, device):
 
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = eval_env.reset()
+        td = train_env.fake_tensordict()
         td = td.to(device)
         for net in model:
             net.eval()
             net(td)
             net.train()
     del td
-    eval_env.close()
 
     return model, model[0]
 
