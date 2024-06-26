@@ -4818,6 +4818,7 @@ class VecNorm(Transform):
     observations, one should substitute this layer by :meth:`~.to_observation_norm`.
     This will provide a static version of `VecNorm` which will not be updated
     when the source transform is updated.
+    To get a frozen copy of the VecNorm layer, see :meth:`~.frozen_copy`.
 
     Args:
         in_keys (sequence of NestedKey, optional): keys to be updated.
@@ -5095,7 +5096,7 @@ class VecNorm(Transform):
     def _get_loc_scale(self, loc_only=False, scale_only=False):
         loc = {}
         scale = {}
-        for key, key_out in zip(self.in_keys, self.out_keys):
+        for key in self.in_keys:
             _sum = self._td.get(_append_last(key, "_sum"))
             _ssq = self._td.get(_append_last(key, "_ssq"))
             _count = self._td.get(_append_last(key, "_count"))
