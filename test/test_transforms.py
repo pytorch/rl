@@ -8005,6 +8005,35 @@ class TestVecNorm:
         td1 = transform0[0].to_observation_norm()._step(td, td.clone())
         assert_allclose_td(td0, td1)
 
+        loc = transform0[0].loc
+        scale = transform0[0].scale
+        keys = list(transform0[0].in_keys)
+        td2 = (td.select(*keys) - loc) / (scale + torch.finfo(scale.dtype).eps)
+        td2.rename_key_("a", "a_avg")
+        td2.rename_key_(("b", "c"), ("b", "c_avg"))
+        assert_allclose_td(td0.select(*td2.keys(True, True)), td2)
+
+    def test_frozen(self):
+        transform0 = VecNorm(
+            in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")]
+        )
+        with pytest.raises(
+            RuntimeError, match="Make sure the VecNorm has been initialized"
+        ):
+            transform0.frozen_copy()
+        td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
+        td0 = transform0._step(td, td.clone())
+        transform1 = transform0.frozen_copy()
+        td1 = transform1._step(td, td.clone())
+        assert_allclose_td(td0, td1)
+
+        td += 1
+        td2 = transform0._step(td, td.clone())
+        td3 = transform1._step(td, td.clone())
+        assert_allclose_td(td2, td3)
+        with pytest.raises(AssertionError):
+            assert_allclose_td(td0, td2)
+
 
 def test_added_transforms_are_in_eval_mode_trivial():
     base_env = ContinuousActionVecMockEnv()
