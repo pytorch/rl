@@ -9,6 +9,7 @@ import importlib
 import warnings
 from typing import Dict, List, Tuple, Union
 
+import packaging
 import torch
 from tensordict import TensorDictBase
 
@@ -90,12 +91,12 @@ class PettingZooWrapper(_EnvWrapper):
     If the number of agents during the task varies, please set ``use_mask=True``.
     ``"mask"`` will be provided
     as an output in each group and should be used to mask out dead agents.
-    The environment will be reset as soon as one agent is done.
+    The environment will be reset as soon as one agent is done (unless ``done_on_any`` is ``False``).
 
     In wrapped ``pettingzoo.AECEnv``, at each step only one agent will act.
     For this reason, it is compulsory to set ``use_mask=True`` for this type of environment.
     ``"mask"`` will be provided as an output for each group and can be used to mask out non-acting agents.
-    The environment will be reset only when all agents are done.
+    The environment will be reset only when all agents are done (unless ``done_on_any`` is ``True``).
 
     If there are any unavailable actions for an agent,
     the environment will also automatically update the mask of its ``action_spec`` and output an ``"action_mask"``
@@ -156,6 +157,9 @@ class PettingZooWrapper(_EnvWrapper):
         categorical_actions (bool, optional): if the enviornments actions are discrete, whether to transform
             them to categorical or one-hot.
         seed (int, optional): the seed. Defaults to ``None``.
+        done_on_any (bool, optional): whether the environment's done keys are set by aggregating the agent keys
+            using ``any()`` (when ``True``) or ``all()`` (when ``False``). Default (``None``) is to use ``any()`` for
+            parallel environments and ``all()`` for AEC ones.
 
     Examples:
         >>> # Parallel env
@@ -204,6 +208,7 @@ class PettingZooWrapper(_EnvWrapper):
         use_mask: bool = False,
         categorical_actions: bool = True,
         seed: int | None = None,
+        done_on_any: bool | None = None,
         **kwargs,
     ):
         if env is not None:
@@ -214,6 +219,7 @@ class PettingZooWrapper(_EnvWrapper):
         self.seed = seed
         self.use_mask = use_mask
         self.categorical_actions = categorical_actions
+        self.done_on_any = done_on_any
 
         super().__init__(**kwargs, allow_done_after_reset=True)
 
@@ -265,6 +271,13 @@ class PettingZooWrapper(_EnvWrapper):
     ):
         import pettingzoo
 
+        if packaging.version.parse(pettingzoo.__version__).base_version != "1.24.3":
+            warnings.warn(
+                "PettingZoo in TorchRL is tested using version == 1.24.3 , "
+                "If you are using a different version and are experiencing compatibility issues,"
+                "please raise an issue in the TorchRL github."
+            )
+
         self.parallel = isinstance(env, pettingzoo.utils.env.ParallelEnv)
         if not self.parallel and not self.use_mask:
             raise ValueError("For AEC environments you need to set use_mask=True")
@@ -283,6 +296,9 @@ class PettingZooWrapper(_EnvWrapper):
             "pettingzoo.utils.env.AECEnv",  # noqa: F821
         ],
     ) -> None:
+        # Set default for done on any or all
+        if self.done_on_any is None:
+            self.done_on_any = self.parallel
 
         # Create and check group map
         if self.group_map is None:
@@ -582,7 +598,6 @@ class PettingZooWrapper(_EnvWrapper):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-
         if self.parallel:
             (
                 observation_dict,
@@ -651,16 +666,33 @@ class PettingZooWrapper(_EnvWrapper):
                                 value, device=self.device
                             )
 
-                elif not self.use_action_mask:
+                elif self.use_mask:
+                    if agent in self.agents:
+                        raise ValueError(
+                            f"Dead agent {agent} not found in step observation but still available in {self.agents}"
+                        )
+                    # Dead agent
+                    terminated = (
+                        terminations_dict[agent] if agent in terminations_dict else True
+                    )
+                    truncated = (
+                        truncations_dict[agent] if agent in truncations_dict else True
+                    )
+                    done = terminated or truncated
+                    group_done[index] = done
+                    group_terminated[index] = terminated
+                    group_truncated[index] = truncated
+
+                else:
                     # Dead agent, if we are not masking it out, this is not allowed
                     raise ValueError(
                         "Dead agents found in the environment,"
-                        " you need to set use_action_mask=True to allow this."
+                        " you need to set use_mask=True to allow this."
                     )
 
         # set done values
         done, terminated, truncated = self._aggregate_done(
-            tensordict_out, use_any=self.parallel
+            tensordict_out, use_any=self.done_on_any
         )
 
         tensordict_out.set("done", done)
@@ -673,7 +705,7 @@ class PettingZooWrapper(_EnvWrapper):
         truncated = False if use_any else True
         terminated = False if use_any else True
         for key in self.done_keys:
-            if isinstance(key, tuple):
+            if isinstance(key, tuple):  # Only look at group keys
                 if use_any:
                     if key[-1] == "done":
                         done = done | tensordict_out.get(key).any()
@@ -719,7 +751,6 @@ class PettingZooWrapper(_EnvWrapper):
         self,
         tensordict: TensorDictBase,
     ) -> Tuple[Dict, Dict, Dict, Dict, Dict]:
-
         for group, agents in self.group_map.items():
             if self.agent_selection in agents:
                 agent_index = agents.index(self._env.agent_selection)
@@ -747,7 +778,6 @@ class PettingZooWrapper(_EnvWrapper):
         )
 
     def _update_action_mask(self, td, observation_dict, info_dict):
-
         # Since we remove the action_mask keys we need to copy the data
         observation_dict = copy.deepcopy(observation_dict)
         info_dict = copy.deepcopy(info_dict)
@@ -821,7 +851,7 @@ class PettingZooEnv(PettingZooWrapper):
     If the number of agents during the task varies, please set ``use_mask=True``.
     ``"mask"`` will be provided
     as an output in each group and should be used to mask out dead agents.
-    The environment will be reset as soon as one agent is done.
+    The environment will be reset as soon as one agent is done (unless ``done_on_any`` is ``False``).
 
     For wrapping ``pettingzoo.AECEnv`` provide the name of your petting zoo task (in the ``task`` argument)
     and specify ``parallel=False``. This will construct the ``pettingzoo.AECEnv`` version of that task
@@ -829,7 +859,7 @@ class PettingZooEnv(PettingZooWrapper):
     In wrapped ``pettingzoo.AECEnv``, at each step only one agent will act.
     For this reason, it is compulsory to set ``use_mask=True`` for this type of environment.
     ``"mask"`` will be provided as an output for each group and can be used to mask out non-acting agents.
-    The environment will be reset only when all agents are done.
+    The environment will be reset only when all agents are done (unless ``done_on_any`` is ``True``).
 
     If there are any unavailable actions for an agent,
     the environment will also automatically update the mask of its ``action_spec`` and output an ``"action_mask"``
@@ -892,6 +922,9 @@ class PettingZooEnv(PettingZooWrapper):
         categorical_actions (bool, optional): if the enviornments actions are discrete, whether to transform
             them to categorical or one-hot.
         seed (int, optional): the seed.  Defaults to ``None``.
+        done_on_any (bool, optional): whether the environment's done keys are set by aggregating the agent keys
+            using ``any()`` (when ``True``) or ``all()`` (when ``False``). Default (``None``) is to use ``any()`` for
+            parallel environments and ``all()`` for AEC ones.
 
     Examples:
         >>> # Parallel env
@@ -930,6 +963,7 @@ class PettingZooEnv(PettingZooWrapper):
         use_mask: bool = False,
         categorical_actions: bool = True,
         seed: int | None = None,
+        done_on_any: bool | None = None,
         **kwargs,
     ):
         if not _has_pettingzoo:
@@ -944,6 +978,7 @@ class PettingZooEnv(PettingZooWrapper):
         kwargs["use_mask"] = use_mask
         kwargs["categorical_actions"] = categorical_actions
         kwargs["seed"] = seed
+        kwargs["done_on_any"] = done_on_any
 
         super().__init__(**kwargs)
 

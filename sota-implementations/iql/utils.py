@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import functools
+
 import torch.nn
 import torch.optim
 from tensordict.nn import InteractionType, TensorDictModule
@@ -39,6 +41,7 @@ from torchrl.modules import (
     ValueOperator,
 )
 from torchrl.objectives import DiscreteIQLLoss, HardUpdate, IQLLoss, SoftUpdate
+from torchrl.record import VideoRecorder
 
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
@@ -48,16 +51,17 @@ from torchrl.trainers.helpers.models import ACTIVATIONS
 # -----------------
 
 
-def env_maker(cfg, device="cpu"):
+def env_maker(cfg, device="cpu", from_pixels=False):
     lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
         with set_gym_backend(lib):
             return GymEnv(
-                cfg.env.name,
-                device=device,
+                cfg.env.name, device=device, from_pixels=from_pixels, pixels_only=False
             )
     elif lib == "dm_control":
-        env = DMControlEnv(cfg.env.name, cfg.env.task)
+        env = DMControlEnv(
+            cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
+        )
         return TransformedEnv(
             env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
         )
@@ -79,25 +83,31 @@ def apply_env_transforms(
     return transformed_env
 
 
-def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
+def make_environment(cfg, train_num_envs=1, eval_num_envs=1, logger=None):
     """Make environments for training and evaluation."""
+    maker = functools.partial(env_maker, cfg)
     parallel_env = ParallelEnv(
         train_num_envs,
-        EnvCreator(lambda: env_maker(cfg)),
+        EnvCreator(maker),
         serial_for_single=True,
     )
     parallel_env.set_seed(cfg.env.seed)
 
     train_env = apply_env_transforms(parallel_env)
 
+    maker = functools.partial(env_maker, cfg, from_pixels=cfg.logger.video)
     eval_env = TransformedEnv(
         ParallelEnv(
             eval_num_envs,
-            EnvCreator(lambda: env_maker(cfg)),
+            EnvCreator(maker),
             serial_for_single=True,
         ),
         train_env.transform.clone(),
     )
+    if cfg.logger.video:
+        eval_env.insert_transform(
+            0, VideoRecorder(logger, tag="rendered", in_keys=["pixels"])
+        )
     return train_env, eval_env
 
 
@@ -417,3 +427,8 @@ def log_metrics(logger, metrics, step):
     if logger is not None:
         for metric_name, metric_value in metrics.items():
             logger.log_scalar(metric_name, metric_value, step)
+
+
+def dump_video(module):
+    if isinstance(module, VideoRecorder):
+        module.dump()

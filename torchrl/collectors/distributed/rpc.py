@@ -187,8 +187,9 @@ class RPCDataCollector(DataCollectorBase):
             information.
             Defaults to ``False``.
         exploration_type (ExplorationType, optional): interaction mode to be used when
-            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.RANDOM``,
-            ``torchrl.envs.utils.ExplorationType.MODE`` or ``torchrl.envs.utils.ExplorationType.MEAN``.
+            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
+            ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
+            or ``torchrl.envs.utils.ExplorationType.MEAN``.
             Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
         collector_class (type or str, optional): a collector class for the remote node. Can be
             :class:`~torchrl.collectors.SyncDataCollector`,

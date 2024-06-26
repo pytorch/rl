@@ -4,4 +4,4 @@
 # LICENSE file in the root directory of this source tree.
 
 from .loggers import CSVLogger, MLFlowLogger, TensorboardLogger, WandbLogger
-from .recorder import TensorDictRecorder, VideoRecorder
+from .recorder import PixelRenderTransform, TensorDictRecorder, VideoRecorder

@@ -6,13 +6,21 @@ import warnings
 
 import torch
 from packaging import version
-from tensordict.nn import TensorDictModule, TensorDictModuleBase
+from tensordict.nn import (
+    NormalParamExtractor,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictSequential,
+)
 from torch import nn
 
-from torchrl.envs.utils import step_mdp
-from torchrl.modules.distributions import NormalParamWrapper
+# from torchrl.modules.tensordict_module.rnn import GRUCell
+from torch.nn import GRUCell
+from torchrl._utils import timeit
+
 from torchrl.modules.models.models import MLP
-from torchrl.modules.tensordict_module.sequence import SafeSequential
+
+UNSQUEEZE_RNN_INPUT = version.parse(torch.__version__) < version.parse("1.11")
 
 
 class DreamerActor(nn.Module):
@@ -49,14 +57,17 @@ class DreamerActor(nn.Module):
         std_min_val=1e-4,
     ):
         super().__init__()
-        self.backbone = NormalParamWrapper(
-            MLP(
-                out_features=2 * out_features,
-                depth=depth,
-                num_cells=num_cells,
-                activation_class=activation_class,
+        self.backbone = MLP(
+            out_features=2 * out_features,
+            depth=depth,
+            num_cells=num_cells,
+            activation_class=activation_class,
+        )
+        self.backbone.append(
+            NormalParamExtractor(
+                scale_mapping=f"biased_softplus_{std_bias}_{std_min_val}",
+                # scale_mapping="relu",
             ),
-            scale_mapping=f"biased_softplus_{std_bias}_{std_min_val}",
         )
 
     def forward(self, state, belief):
@@ -67,7 +78,7 @@ class DreamerActor(nn.Module):
 class ObsEncoder(nn.Module):
     """Observation encoder network.
 
-    Takes an pixel observation and encodes it into a latent space.
+    Takes a pixel observation and encodes it into a latent space.
 
     Reference: https://arxiv.org/abs/1803.10122
 
@@ -205,7 +216,7 @@ class RSSMRollout(TensorDictModuleBase):
 
     def __init__(self, rssm_prior: TensorDictModule, rssm_posterior: TensorDictModule):
         super().__init__()
-        _module = SafeSequential(rssm_prior, rssm_posterior)
+        _module = TensorDictSequential(rssm_prior, rssm_posterior)
         self.in_keys = _module.in_keys
         self.out_keys = _module.out_keys
         self.rssm_prior = rssm_prior
@@ -231,26 +242,27 @@ class RSSMRollout(TensorDictModuleBase):
         """
         tensordict_out = []
         *batch, time_steps = tensordict.shape
-        _tensordict = tensordict[..., 0]
 
-        update_values = tensordict.exclude(*self.out_keys)
+        update_values = tensordict.exclude(*self.out_keys).unbind(-1)
+        _tensordict = update_values[0]
         for t in range(time_steps):
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
-            self.rssm_prior(_tensordict)
+            with timeit("rssm_rollout/time-rssm_prior"):
+                self.rssm_prior(_tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
             # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
-            self.rssm_posterior(_tensordict)
+            with timeit("rssm_rollout/time-rssm_posterior"):
+                self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)
             if t < time_steps - 1:
-                _tensordict = step_mdp(
-                    _tensordict.select(*self.out_keys, strict=False), keep_other=False
-                )
-                _tensordict = update_values[..., t + 1].update(_tensordict)
+                _tensordict = _tensordict.select(*self.in_keys, strict=False)
+                _tensordict = update_values[t + 1].update(_tensordict)
 
-        return torch.stack(tensordict_out, tensordict.ndimension() - 1).contiguous()
+        out = torch.stack(tensordict_out, tensordict.ndim - 1)
+        return out
 
 
 class RSSMPrior(nn.Module):
@@ -287,30 +299,27 @@ class RSSMPrior(nn.Module):
         super().__init__()
 
         # Prior
-        self.rnn = nn.GRUCell(hidden_dim, rnn_hidden_dim)
+        self.rnn = GRUCell(hidden_dim, rnn_hidden_dim)
         self.action_state_projector = nn.Sequential(nn.LazyLinear(hidden_dim), nn.ELU())
-        self.rnn_to_prior_projector = NormalParamWrapper(
-            nn.Sequential(
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.ELU(),
-                nn.Linear(hidden_dim, 2 * state_dim),
+        self.rnn_to_prior_projector = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, 2 * state_dim),
+            NormalParamExtractor(
+                scale_lb=scale_lb,
+                scale_mapping="softplus",
             ),
-            scale_lb=scale_lb,
-            scale_mapping="softplus",
         )
 
         self.state_dim = state_dim
         self.rnn_hidden_dim = rnn_hidden_dim
         self.action_shape = action_spec.shape
-        self._unsqueeze_rnn_input = version.parse(torch.__version__) < version.parse(
-            "1.11"
-        )
 
     def forward(self, state, belief, action):
         projector_input = torch.cat([state, action], dim=-1)
         action_state = self.action_state_projector(projector_input)
         unsqueeze = False
-        if self._unsqueeze_rnn_input and action_state.ndimension() == 1:
+        if UNSQUEEZE_RNN_INPUT and action_state.ndimension() == 1:
             if belief is not None:
                 belief = belief.unsqueeze(0)
             action_state = action_state.unsqueeze(0)
@@ -344,14 +353,14 @@ class RSSMPosterior(nn.Module):
 
     def __init__(self, hidden_dim=200, state_dim=30, scale_lb=0.1):
         super().__init__()
-        self.obs_rnn_to_post_projector = NormalParamWrapper(
-            nn.Sequential(
-                nn.LazyLinear(hidden_dim),
-                nn.ELU(),
-                nn.Linear(hidden_dim, 2 * state_dim),
+        self.obs_rnn_to_post_projector = nn.Sequential(
+            nn.LazyLinear(hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, 2 * state_dim),
+            NormalParamExtractor(
+                scale_lb=scale_lb,
+                scale_mapping="softplus",
             ),
-            scale_lb=scale_lb,
-            scale_mapping="softplus",
         )
         self.hidden_dim = hidden_dim
 

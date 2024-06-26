@@ -3,16 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import itertools
-import warnings
 from dataclasses import dataclass
-from typing import Optional, Sequence
 
 import torch
-
 from tensordict import set_lazy_legacy
 from tensordict.nn import InteractionType
-from torch import distributions as d, nn
-
+from torch import nn
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -25,7 +21,6 @@ from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     NoisyLinear,
-    NormalParamWrapper,
     SafeModule,
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
@@ -37,8 +32,6 @@ from torchrl.modules.distributions import (
     TanhDelta,
     TanhNormal,
 )
-from torchrl.modules.distributions.continuous import SafeTanhTransform
-from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -47,19 +40,12 @@ from torchrl.modules.models.model_based import (
     RSSMPrior,
     RSSMRollout,
 )
-from torchrl.modules.models.models import (
-    DdpgCnnActor,
-    DdpgCnnQNet,
-    DuelingCnnDQNet,
-    DuelingMlpDQNet,
-    MLP,
-)
+from torchrl.modules.models.models import DuelingCnnDQNet, DuelingMlpDQNet, MLP
 from torchrl.modules.tensordict_module import (
     Actor,
     DistributionalQValueActor,
     QValueActor,
 )
-from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
 from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from torchrl.trainers.helpers import transformed_env_constructor
 
@@ -207,248 +193,6 @@ def make_dqn_actor(
         td = proof_environment.fake_tensordict()
         td = td.unsqueeze(-1)
         model(td.to(device))
-    return model
-
-
-def make_redq_model(
-    proof_environment: EnvBase,
-    cfg: "DictConfig",  # noqa: F821
-    device: DEVICE_TYPING = "cpu",
-    in_keys: Optional[Sequence[str]] = None,
-    actor_net_kwargs=None,
-    qvalue_net_kwargs=None,
-    observation_key=None,
-    **kwargs,
-) -> nn.ModuleList:
-    """Actor and Q-value model constructor helper function for REDQ.
-
-    Follows default parameters proposed in REDQ original paper: https://openreview.net/pdf?id=AY8zfZm0tDd.
-    Other configurations can easily be implemented by modifying this function at will.
-    A single instance of the Q-value model is returned. It will be multiplicated by the loss function.
-
-    Args:
-        proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec
-        cfg (DictConfig): contains arguments of the REDQ script
-        device (torch.device, optional): device on which the model must be cast. Default is "cpu".
-        in_keys (iterable of strings, optional): observation key to be read by the actor, usually one of
-            `'observation_vector'` or `'pixels'`. If none is provided, one of these two keys is chosen
-             based on the `cfg.from_pixels` argument.
-        actor_net_kwargs (dict, optional): kwargs of the actor MLP.
-        qvalue_net_kwargs (dict, optional): kwargs of the qvalue MLP.
-
-    Returns:
-         A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
-
-    Examples:
-        >>> from torchrl.trainers.helpers.envs import parser_env_args
-        >>> from torchrl.trainers.helpers.models import make_redq_model, parser_model_args_continuous
-        >>> from torchrl.envs.libs.gym import GymEnv
-        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
-        >>> import hydra
-        >>> from hydra.core.config_store import ConfigStore
-        >>> import dataclasses
-        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v4"), Compose(DoubleToFloat(["observation"]),
-        ...    CatTensors(["observation"], "observation_vector")))
-        >>> device = torch.device("cpu")
-        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
-        ...                    (RedqModelConfig, EnvConfig)
-        ...                   for config_field in dataclasses.fields(config_cls)]
-        >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-        >>> cs = ConfigStore.instance()
-        >>> cs.store(name="config", node=Config)
-        >>> with initialize(config_path=None):
-        >>>     cfg = compose(config_name="config")
-        >>> model = make_redq_model(
-        ...     proof_environment,
-        ...     device=device,
-        ...     cfg=cfg,
-        ...     )
-        >>> actor, qvalue = model
-        >>> td = proof_environment.reset()
-        >>> print(actor(td))
-        TensorDict(
-            fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
-                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
-                loc: Tensor(torch.Size([6]), dtype=torch.float32),
-                scale: Tensor(torch.Size([6]), dtype=torch.float32),
-                action: Tensor(torch.Size([6]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
-            batch_size=torch.Size([]),
-            device=cpu,
-            is_shared=False)
-        >>> print(qvalue(td.clone()))
-        TensorDict(
-            fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
-                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
-                loc: Tensor(torch.Size([6]), dtype=torch.float32),
-                scale: Tensor(torch.Size([6]), dtype=torch.float32),
-                action: Tensor(torch.Size([6]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([1]), dtype=torch.float32),
-                state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
-            batch_size=torch.Size([]),
-            device=cpu,
-            is_shared=False)
-
-    """
-    warnings.warn(
-        "This helper function will be deprecated in v0.4. Consider using the local helper in the REDQ example.",
-        category=DeprecationWarning,
-    )
-    tanh_loc = cfg.tanh_loc
-    default_policy_scale = cfg.default_policy_scale
-    gSDE = cfg.gSDE
-
-    action_spec = proof_environment.action_spec
-    # obs_spec = proof_environment.observation_spec
-    # if observation_key is not None:
-    #     obs_spec = obs_spec[observation_key]
-    # else:
-    #     obs_spec_values = list(obs_spec.values())
-    #     if len(obs_spec_values) > 1:
-    #         raise RuntimeError(
-    #             "There is more than one observation in the spec, REDQ helper "
-    #             "cannot infer automatically which to pick. "
-    #             "Please indicate which key to read via the `observation_key` "
-    #             "keyword in this helper."
-    #         )
-    #     else:
-    #         obs_spec = obs_spec_values[0]
-
-    if actor_net_kwargs is None:
-        actor_net_kwargs = {}
-    if qvalue_net_kwargs is None:
-        qvalue_net_kwargs = {}
-
-    linear_layer_class = torch.nn.Linear if not cfg.noisy else NoisyLinear
-
-    out_features_actor = (2 - gSDE) * action_spec.shape[-1]
-    if cfg.from_pixels:
-        if in_keys is None:
-            in_keys_actor = ["pixels"]
-        else:
-            in_keys_actor = in_keys
-        actor_net_kwargs_default = {
-            "mlp_net_kwargs": {
-                "layer_class": linear_layer_class,
-                "activation_class": ACTIVATIONS[cfg.activation],
-            },
-            "conv_net_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
-        }
-        actor_net_kwargs_default.update(actor_net_kwargs)
-        actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
-        gSDE_state_key = "hidden"
-        out_keys_actor = ["param", "hidden"]
-
-        value_net_default_kwargs = {
-            "mlp_net_kwargs": {
-                "layer_class": linear_layer_class,
-                "activation_class": ACTIVATIONS[cfg.activation],
-            },
-            "conv_net_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
-        }
-        value_net_default_kwargs.update(qvalue_net_kwargs)
-
-        in_keys_qvalue = ["pixels", "action"]
-        qvalue_net = DdpgCnnQNet(**value_net_default_kwargs)
-    else:
-        if in_keys is None:
-            in_keys_actor = ["observation_vector"]
-        else:
-            in_keys_actor = in_keys
-
-        actor_net_kwargs_default = {
-            "num_cells": [cfg.actor_cells, cfg.actor_cells],
-            "out_features": out_features_actor,
-            "activation_class": ACTIVATIONS[cfg.activation],
-        }
-        actor_net_kwargs_default.update(actor_net_kwargs)
-        actor_net = MLP(**actor_net_kwargs_default)
-        out_keys_actor = ["param"]
-        gSDE_state_key = in_keys_actor[0]
-
-        qvalue_net_kwargs_default = {
-            "num_cells": [cfg.qvalue_cells, cfg.qvalue_cells],
-            "out_features": 1,
-            "activation_class": ACTIVATIONS[cfg.activation],
-        }
-        qvalue_net_kwargs_default.update(qvalue_net_kwargs)
-        qvalue_net = MLP(
-            **qvalue_net_kwargs_default,
-        )
-        in_keys_qvalue = in_keys_actor + ["action"]
-
-    dist_class = TanhNormal
-    dist_kwargs = {
-        "min": action_spec.space.low,
-        "max": action_spec.space.high,
-        "tanh_loc": tanh_loc,
-    }
-
-    if not gSDE:
-        actor_net = NormalParamWrapper(
-            actor_net,
-            scale_mapping=f"biased_softplus_{default_policy_scale}",
-            scale_lb=cfg.scale_lb,
-        )
-        actor_module = SafeModule(
-            actor_net,
-            in_keys=in_keys_actor,
-            out_keys=["loc", "scale"] + out_keys_actor[1:],
-        )
-
-    else:
-        actor_module = SafeModule(
-            actor_net,
-            in_keys=in_keys_actor,
-            out_keys=["action"] + out_keys_actor[1:],  # will be overwritten
-        )
-
-        if action_spec.domain == "continuous":
-            min = action_spec.space.low
-            max = action_spec.space.high
-            transform = SafeTanhTransform()
-            if (min != -1).any() or (max != 1).any():
-                transform = d.ComposeTransform(
-                    transform,
-                    d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
-                )
-        else:
-            raise RuntimeError("cannot use gSDE with discrete actions")
-
-        actor_module = SafeSequential(
-            actor_module,
-            SafeModule(
-                LazygSDEModule(transform=transform),
-                in_keys=["action", gSDE_state_key, "_eps_gSDE"],
-                out_keys=["loc", "scale", "action", "_eps_gSDE"],
-            ),
-        )
-
-    actor = ProbabilisticActor(
-        spec=action_spec,
-        in_keys=["loc", "scale"],
-        module=actor_module,
-        distribution_class=dist_class,
-        distribution_kwargs=dist_kwargs,
-        default_interaction_type=InteractionType.RANDOM,
-        return_log_prob=True,
-    )
-    qvalue = ValueOperator(
-        in_keys=in_keys_qvalue,
-        module=qvalue_net,
-    )
-    model = nn.ModuleList([actor, qvalue]).to(device)
-
-    # init nets
-    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = proof_environment.fake_tensordict()
-        td = td.unsqueeze(-1)
-        td = td.to(device)
-        for net in model:
-            net(td)
-    del td
     return model
 
 
@@ -706,7 +450,7 @@ def _dreamer_make_actor_real(
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys=[action_key],
-                default_interaction_type=InteractionType.MODE,
+                default_interaction_type=InteractionType.DETERMINISTIC,
                 distribution_class=TanhNormal,
                 distribution_kwargs={"tanh_loc": True},
                 spec=CompositeSpec(

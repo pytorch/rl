@@ -86,6 +86,10 @@ class TruncatedStandardNormal(Distribution):
         return self._mean
 
     @property
+    def deterministic_sample(self):
+        return self.mean
+
+    @property
     def variance(self):
         return self._variance
 

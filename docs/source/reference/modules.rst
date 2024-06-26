@@ -315,7 +315,6 @@ Regular modules
     MLP
     ConvNet
     Conv3dNet
-    LSTMNet
     SqueezeLayer
     Squeeze2dLayer
 
@@ -428,6 +427,7 @@ Utils
     mappings
     inv_softplus
     biased_softplus
+    get_primers_from_module
 
 .. currentmodule:: torchrl.modules
 

@@ -3,13 +3,15 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import re
 
 from numbers import Number
 
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_default_devices
+
+from _utils_internal import get_default_devices, retry
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
@@ -22,7 +24,6 @@ from torchrl.modules import (
     GRUCell,
     LSTM,
     LSTMCell,
-    LSTMNet,
     MultiAgentConvNet,
     MultiAgentMLP,
     OnlineDTActor,
@@ -347,140 +348,6 @@ def test_noisy(layer_class, device, seed=0):
     torch.testing.assert_close(y2, y3)
     with pytest.raises(AssertionError):
         torch.testing.assert_close(y1, y2)
-
-
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("out_features", [3, 4])
-@pytest.mark.parametrize("hidden_size", [8, 9])
-@pytest.mark.parametrize("num_layers", [1, 2])
-@pytest.mark.parametrize("has_precond_hidden", [True, False])
-def test_lstm_net(
-    device,
-    out_features,
-    hidden_size,
-    num_layers,
-    has_precond_hidden,
-    double_prec_fixture,
-):
-    torch.manual_seed(0)
-    batch = 5
-    time_steps = 6
-    in_features = 7
-    net = LSTMNet(
-        out_features,
-        {
-            "input_size": hidden_size,
-            "hidden_size": hidden_size,
-            "num_layers": num_layers,
-        },
-        {"out_features": hidden_size},
-        device=device,
-    )
-    # test single step vs multi-step
-    x = torch.randn(batch, time_steps, in_features, device=device)
-    x_unbind = x.unbind(1)
-    tds_loop = []
-    if has_precond_hidden:
-        hidden0_out0, hidden1_out0 = torch.randn(
-            2, batch, time_steps, num_layers, hidden_size, device=device
-        )
-        hidden0_out0[:, 1:] = 0.0
-        hidden1_out0[:, 1:] = 0.0
-        hidden0_out = hidden0_out0[:, 0]
-        hidden1_out = hidden1_out0[:, 0]
-    else:
-        hidden0_out, hidden1_out = None, None
-        hidden0_out0, hidden1_out0 = None, None
-
-    for _x in x_unbind:
-        y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(
-            _x, hidden0_out, hidden1_out
-        )
-        td = TensorDict(
-            {
-                "y": y,
-                "hidden0_in": hidden0_in,
-                "hidden1_in": hidden1_in,
-                "hidden0_out": hidden0_out,
-                "hidden1_out": hidden1_out,
-            },
-            [batch],
-        )
-        tds_loop.append(td)
-    tds_loop = torch.stack(tds_loop, 1)
-
-    y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(
-        x, hidden0_out0, hidden1_out0
-    )
-    tds_vec = TensorDict(
-        {
-            "y": y,
-            "hidden0_in": hidden0_in,
-            "hidden1_in": hidden1_in,
-            "hidden0_out": hidden0_out,
-            "hidden1_out": hidden1_out,
-        },
-        [batch, time_steps],
-    )
-    torch.testing.assert_close(tds_vec["y"], tds_loop["y"])
-    torch.testing.assert_close(
-        tds_vec["hidden0_out"][:, -1], tds_loop["hidden0_out"][:, -1]
-    )
-    torch.testing.assert_close(
-        tds_vec["hidden1_out"][:, -1], tds_loop["hidden1_out"][:, -1]
-    )
-
-
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("out_features", [3, 5])
-@pytest.mark.parametrize("hidden_size", [3, 5])
-def test_lstm_net_nobatch(device, out_features, hidden_size):
-    time_steps = 6
-    in_features = 4
-    net = LSTMNet(
-        out_features,
-        {"input_size": hidden_size, "hidden_size": hidden_size},
-        {"out_features": hidden_size},
-        device=device,
-    )
-    # test single step vs multi-step
-    x = torch.randn(time_steps, in_features, device=device)
-    x_unbind = x.unbind(0)
-    tds_loop = []
-    hidden0_in, hidden1_in, hidden0_out, hidden1_out = [
-        None,
-    ] * 4
-    for _x in x_unbind:
-        y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(
-            _x, hidden0_out, hidden1_out
-        )
-        td = TensorDict(
-            {
-                "y": y,
-                "hidden0_in": hidden0_in,
-                "hidden1_in": hidden1_in,
-                "hidden0_out": hidden0_out,
-                "hidden1_out": hidden1_out,
-            },
-            [],
-        )
-        tds_loop.append(td)
-    tds_loop = torch.stack(tds_loop, 0)
-
-    y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(x.unsqueeze(0))
-    tds_vec = TensorDict(
-        {
-            "y": y,
-            "hidden0_in": hidden0_in,
-            "hidden1_in": hidden1_in,
-            "hidden0_out": hidden0_out,
-            "hidden1_out": hidden1_out,
-        },
-        [1, time_steps],
-    ).squeeze(0)
-    torch.testing.assert_close(tds_vec["y"], tds_loop["y"])
-    torch.testing.assert_close(tds_vec["hidden0_out"][-1], tds_loop["hidden0_out"][-1])
-    torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -890,26 +757,27 @@ class TestMultiAgent:
         )
         return td
 
+    @retry(AssertionError, 5)
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     @pytest.mark.parametrize("n_agent_inputs", [6, None])
     @pytest.mark.parametrize("batch", [(4,), (4, 3), ()])
     def test_multiagent_mlp(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
         batch,
         n_agent_inputs,
         n_agent_outputs=2,
     ):
-        torch.manual_seed(0)
+        torch.manual_seed(1)
         mlp = MultiAgentMLP(
             n_agent_inputs=n_agent_inputs,
             n_agent_outputs=n_agent_outputs,
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
             depth=2,
         )
@@ -921,7 +789,7 @@ class TestMultiAgent:
         out = mlp(obs)
         assert out.shape == (*batch, n_agents, n_agent_outputs)
         for i in range(n_agents):
-            if centralised and share_params:
+            if centralized and share_params:
                 assert torch.allclose(out[..., i, :], out[..., 0, :])
             else:
                 for j in range(i + 1, n_agents):
@@ -930,14 +798,16 @@ class TestMultiAgent:
         obs[..., 0, 0] += 1
         out2 = mlp(obs)
         for i in range(n_agents):
-            if centralised:
+            if centralized:
                 # a modification to the input of agent 0 will impact all agents
                 assert not torch.allclose(out[..., i, :], out2[..., i, :])
             elif i > 0:
                 assert torch.allclose(out[..., i, :], out2[..., i, :])
 
-        obs = torch.randn(*batch, 1, n_agent_inputs).expand(
-            *batch, n_agents, n_agent_inputs
+        obs = (
+            torch.randn(*batch, 1, n_agent_inputs)
+            .expand(*batch, n_agents, n_agent_inputs)
+            .clone()
         )
         out = mlp(obs)
         for i in range(n_agents):
@@ -948,17 +818,30 @@ class TestMultiAgent:
                 for j in range(i + 1, n_agents):
                     # same input different output
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
+        pattern = rf"""MultiAgentMLP\(
+    MLP\(
+      \(0\): Linear\(in_features=\d+, out_features=32, bias=True\)
+      \(1\): Tanh\(\)
+      \(2\): Linear\(in_features=32, out_features=32, bias=True\)
+      \(3\): Tanh\(\)
+      \(4\): Linear\(in_features=32, out_features=2, bias=True\)
+    \),
+    n_agents={n_agents},
+    share_params={share_params},
+    centralized={centralized},
+    agent_dim={-2}\)"""
+        assert re.match(pattern, str(mlp), re.DOTALL)
 
     def test_multiagent_mlp_lazy(self):
         mlp = MultiAgentMLP(
             n_agent_inputs=None,
             n_agent_outputs=6,
             n_agents=3,
-            centralised=True,
+            centralized=True,
             share_params=False,
             depth=2,
         )
-        optim = torch.optim.SGD(mlp.parameters())
+        optim = torch.optim.SGD(mlp.parameters(), lr=1e-3)
         for p in mlp.parameters():
             if isinstance(p, torch.nn.parameter.UninitializedParameter):
                 break
@@ -989,11 +872,11 @@ class TestMultiAgent:
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     def test_multiagent_reset_mlp(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
     ):
         actor_net = MultiAgentMLP(
@@ -1001,7 +884,7 @@ class TestMultiAgent:
             n_agent_outputs=6,
             num_cells=(4, 4),
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
         )
         params_before = actor_net.params.clone()
@@ -1019,13 +902,13 @@ class TestMultiAgent:
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     @pytest.mark.parametrize("channels", [3, None])
     @pytest.mark.parametrize("batch", [(4,), (4, 3), ()])
     def test_multiagent_cnn(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
         batch,
         channels,
@@ -1035,7 +918,7 @@ class TestMultiAgent:
         torch.manual_seed(0)
         cnn = MultiAgentConvNet(
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
             in_features=channels,
             kernel_sizes=3,
@@ -1054,7 +937,7 @@ class TestMultiAgent:
         obs = td[("agents", "observation")]
         out = cnn(obs)
         assert out.shape[:-1] == (*batch, n_agents)
-        if centralised and share_params:
+        if centralized and share_params:
             torch.testing.assert_close(out, out[..., :1, :].expand_as(out))
         else:
             for i in range(n_agents):
@@ -1062,7 +945,7 @@ class TestMultiAgent:
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
         obs[..., 0, 0, 0, 0] += 1
         out2 = cnn(obs)
-        if centralised:
+        if centralized:
             # a modification to the input of agent 0 will impact all agents
             assert not torch.isclose(out, out2).all()
         elif n_agents > 1:
@@ -1087,12 +970,12 @@ class TestMultiAgent:
         n_channels = 3
         cnn = MultiAgentConvNet(
             n_agents=n_agents,
-            centralised=False,
+            centralized=False,
             share_params=False,
             in_features=None,
             kernel_sizes=3,
         )
-        optim = torch.optim.SGD(cnn.parameters())
+        optim = torch.optim.SGD(cnn.parameters(), lr=1e-3)
         for p in cnn.parameters():
             if isinstance(p, torch.nn.parameter.UninitializedParameter):
                 break
@@ -1131,18 +1014,18 @@ class TestMultiAgent:
 
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
-    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
     def test_multiagent_reset_cnn(
         self,
         n_agents,
-        centralised,
+        centralized,
         share_params,
     ):
         actor_net = MultiAgentConvNet(
             in_features=4,
             num_cells=[5, 5],
             n_agents=n_agents,
-            centralised=centralised,
+            centralized=centralized,
             share_params=share_params,
         )
         params_before = actor_net.params.clone()

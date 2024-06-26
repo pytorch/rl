@@ -9,6 +9,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Optional, Sequence, Union
 
+import tensordict.utils
 import torch
 
 from tensordict import MemoryMappedTensor
@@ -40,8 +41,11 @@ class CSVExperiment:
         value = float(value)
         self.scalars[name].append((global_step, value))
         filepath = os.path.join(self.log_dir, "scalars", "".join([name, ".csv"]))
+        if not os.path.isfile(filepath):
+            os.makedirs(Path(filepath).parent, exist_ok=True)
         if filepath not in self.files:
-            self.files[filepath] = open(filepath, "a")
+            os.makedirs(Path(filepath).parent, exist_ok=True)
+            self.files[filepath] = open(filepath, "a+")
         fd = self.files[filepath]
         fd.write(",".join([str(global_step), str(value)]) + "\n")
         fd.flush()
@@ -95,6 +99,8 @@ class CSVExperiment:
         filepath = os.path.join(
             self.log_dir, "texts", "".join([tag, str(global_step)]) + ".txt"
         )
+        if not os.path.isfile(filepath):
+            os.makedirs(Path(filepath).parent, exist_ok=True)
         if filepath not in self.files:
             self.files[filepath] = open(filepath, "w+")
         fd = self.files[filepath]
@@ -191,3 +197,7 @@ class CSVLogger(Logger):
 
     def log_histogram(self, name: str, data: Sequence, **kwargs):
         raise NotImplementedError("Logging histograms in cvs is not permitted.")
+
+    def print_log_dir(self):
+        """Prints the log directory content."""
+        tensordict.utils.print_directory_tree(self.log_dir)

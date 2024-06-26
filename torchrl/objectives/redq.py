@@ -10,7 +10,7 @@ from numbers import Number
 from typing import Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
 from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
 from tensordict.utils import NestedKey
@@ -239,6 +239,13 @@ class REDQLoss(LossModule):
         "next.state_value",
         "target_value",
     ]
+
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
 
     def __init__(
         self,

@@ -23,6 +23,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 from utils import (
+    dump_video,
     log_metrics,
     make_collector,
     make_continuous_cql_optimizer,
@@ -54,13 +55,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Set seeds
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
-    device = torch.device(cfg.optim.device)
+    device = cfg.optim.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+    device = torch.device(device)
 
     # Create env
     train_env, eval_env = make_environment(
         cfg,
         cfg.env.train_num_envs,
         cfg.env.eval_num_envs,
+        logger=logger,
     )
 
     # Create replay buffer
@@ -99,12 +107,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         * cfg.optim.utd_ratio
     )
     prb = cfg.replay_buffer.prb
-    eval_iter = cfg.logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
-    eval_rollout_steps = cfg.collector.max_frames_per_traj
+    evaluation_interval = cfg.logger.log_interval
+    eval_rollout_steps = cfg.logger.eval_steps
 
     sampling_start = time.time()
-    for tensordict in collector:
+    for i, tensordict in enumerate(collector):
         sampling_time = time.time() - sampling_start
         pbar.update(tensordict.numel())
         # update weights of the inference policy
@@ -191,7 +199,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch:
+
+        prev_test_frame = ((i - 1) * frames_per_batch) // evaluation_interval
+        cur_test_frame = (i * frames_per_batch) // evaluation_interval
+        final = current_frames >= collector.total_frames
+        if (i >= 1 and (prev_test_frame < cur_test_frame)) or final:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(
@@ -202,6 +214,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 eval_time = time.time() - eval_start
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                eval_env.apply(dump_video)
                 metrics_to_log["eval/reward"] = eval_reward
                 metrics_to_log["eval/time"] = eval_time
 
@@ -214,6 +227,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
     collector.shutdown()
+    if not eval_env.is_closed:
+        eval_env.close()
+    if not train_env.is_closed:
+        train_env.close()
 
 
 if __name__ == "__main__":

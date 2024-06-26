@@ -6,7 +6,7 @@ import functools
 import importlib.util
 
 import torch
-
+from torchrl._utils import _make_ordinal_device
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
@@ -118,7 +118,7 @@ class HabitatEnv(GymEnv):
         return super()._build_gym_env(env, pixels_only)
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
         if device.type != "cuda":
             raise ValueError("The device must be of type cuda for Habitat.")
         device_num = device.index

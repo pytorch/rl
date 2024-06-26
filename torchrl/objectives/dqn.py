@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import dispatch
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import nn
 from torchrl.data.tensor_specs import TensorSpec
@@ -168,28 +168,22 @@ class DQNLoss(LossModule):
     default_value_estimator = ValueEstimators.TD0
     out_keys = ["loss"]
 
+    value_network: TensorDictModule
+    value_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams
+
     def __init__(
         self,
         value_network: Union[QValueActor, nn.Module],
         *,
         loss_function: Optional[str] = "l2",
-        delay_value: bool = None,
+        delay_value: bool = True,
         double_dqn: bool = False,
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
         priority_key: str = None,
         reduction: str = None,
     ) -> None:
-        if delay_value is None:
-            warnings.warn(
-                f"You did not provide a delay_value argument for {type(self)}. "
-                "Currently (v0.3) the default for delay_value is `False` but as of "
-                "v0.4 it will be `True`. Make sure to adapt your code depending "
-                "on your preferred configuration. "
-                "To remove this warning, indicate the value of delay_value in your "
-                "script."
-            )
-            delay_value = False
         if reduction is None:
             reduction = "mean"
         super().__init__()
@@ -444,25 +438,19 @@ class DistributionalDQNLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
 
+    value_network: TensorDictModule
+    value_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams
+
     def __init__(
         self,
         value_network: Union[DistributionalQValueActor, nn.Module],
         *,
         gamma: float,
-        delay_value: bool = None,
+        delay_value: bool = True,
         priority_key: str = None,
         reduction: str = None,
     ):
-        if delay_value is None:
-            warnings.warn(
-                f"You did not provide a delay_value argument for {type(self)}. "
-                "Currently (v0.3) the default for delay_value is `False` but as of "
-                "v0.4 it will be `True`. Make sure to adapt your code depending "
-                "on your preferred configuration. "
-                "To remove this warning, indicate the value of delay_value in your "
-                "script."
-            )
-            delay_value = False
         if reduction is None:
             reduction = "mean"
         super().__init__()
