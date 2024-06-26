@@ -32,16 +32,17 @@ optim:
   weight_decay: 0.0
   batch_size: 256
   alpha_init: 1.0
-  # Adam β1 = 0.5
   adam_eps: 1.0e-8
+  beta1: 0.5
+  beta2: 0.999
 
 # network
 network:
   batch_norm_momentum: 0.01
-  # warmup_steps: 100000 # 10^5
+  warmup_steps: 100000 # 10^5
   critic_hidden_sizes: [2048, 2048]
   actor_hidden_sizes: [256, 256]
-  critic_activation: tanh
+  critic_activation: relu
   actor_activation: relu
   default_policy_scale: 1.0
   scale_lb: 0.1
