@@ -2454,6 +2454,9 @@ class ObservationNorm(ObservationTransform):
 
             as it is done for standardization. Default is `False`.
 
+        eps (float, optional): epsilon increment for the scale in the ``standard_normal`` case.
+            Defaults to ``1e-6`` if not recoverable directly from the scale dtype.
+
     Examples:
         >>> torch.set_default_tensor_type(torch.DoubleTensor)
         >>> r = torch.randn(100, 3)*torch.randn(3) + torch.randn(3)
@@ -2495,6 +2498,7 @@ class ObservationNorm(ObservationTransform):
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
         standard_normal: bool = False,
+        eps: float | None = None,
     ):
         if in_keys is None:
             raise RuntimeError(
@@ -2517,7 +2521,13 @@ class ObservationNorm(ObservationTransform):
         if not isinstance(standard_normal, torch.Tensor):
             standard_normal = torch.as_tensor(standard_normal)
         self.register_buffer("standard_normal", standard_normal)
-        self.eps = 1e-6
+        self.eps = (
+            eps
+            if eps is not None
+            else torch.finfo(scale.dtype).eps
+            if isinstance(scale, torch.Tensor) and scale.dtype.is_floating_point
+            else 1e-6
+        )
 
         if loc is not None and not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc, dtype=torch.get_default_dtype())
@@ -4815,7 +4825,10 @@ class VecNorm(Transform):
     processes that share the same reference.
 
     To use VecNorm at inference time and avoid updating the values with the new
-    observations, one should substitute this layer by `vecnorm.to_observation_norm()`.
+    observations, one should substitute this layer by :meth:`~.to_observation_norm`.
+    This will provide a static version of `VecNorm` which will not be updated
+    when the source transform is updated.
+    To get a frozen copy of the VecNorm layer, see :meth:`~.frozen_copy`.
 
     Args:
         in_keys (sequence of NestedKey, optional): keys to be updated.
@@ -4897,6 +4910,35 @@ class VecNorm(Transform):
         self.decay = decay
         self.shapes = shapes
         self.eps = eps
+        self.frozen = False
+
+    def freeze(self) -> VecNorm:
+        """Freezes the VecNorm, avoiding the stats to be updated when called.
+
+        See :meth:`~.unfreeze`.
+        """
+        self.frozen = True
+        return self
+
+    def unfreeze(self) -> VecNorm:
+        """Unfreezes the VecNorm.
+
+        See :meth:`~.freeze`.
+        """
+        self.frozen = False
+        return self
+
+    def frozen_copy(self):
+        """Returns a copy of the Transform that keeps track of the stats but does not update them."""
+        if self._td is None:
+            raise RuntimeError(
+                "Make sure the VecNorm has been initialized before creating a frozen copy."
+            )
+        clone = self.clone()
+        # replace values
+        clone._td = self._td.copy()
+        # freeze
+        return clone.freeze()
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
@@ -4980,52 +5022,78 @@ class VecNorm(Transform):
             pass
 
     def _update(self, key, value, N) -> torch.Tensor:
+        # TODO: we should revert this and have _td be like: TensorDict{"sum": ..., "ssq": ..., "count"...})
+        #  to facilitate the computation of the stats using TD internals.
+        #  Moreover, _td can be locked so these ops will be very fast on CUDA.
         _sum = self._td.get(_append_last(key, "_sum"))
         _ssq = self._td.get(_append_last(key, "_ssq"))
         _count = self._td.get(_append_last(key, "_count"))
 
         value_sum = _sum_left(value, _sum)
-        _sum *= self.decay
-        _sum += value_sum
-        self._td.set_(
-            _append_last(key, "_sum"),
-            _sum,
-        )
+
+        if not self.frozen:
+            _sum *= self.decay
+            _sum += value_sum
+            self._td.set_(
+                _append_last(key, "_sum"),
+                _sum,
+            )
 
         _ssq = self._td.get(_append_last(key, "_ssq"))
         value_ssq = _sum_left(value.pow(2), _ssq)
-        _ssq *= self.decay
-        _ssq += value_ssq
-        self._td.set_(
-            _append_last(key, "_ssq"),
-            _ssq,
-        )
+        if not self.frozen:
+            _ssq *= self.decay
+            _ssq += value_ssq
+            self._td.set_(
+                _append_last(key, "_ssq"),
+                _ssq,
+            )
 
         _count = self._td.get(_append_last(key, "_count"))
-        _count *= self.decay
-        _count += N
-        self._td.set_(
-            _append_last(key, "_count"),
-            _count,
-        )
+        if not self.frozen:
+            _count *= self.decay
+            _count += N
+            self._td.set_(
+                _append_last(key, "_count"),
+                _count,
+            )
 
         mean = _sum / _count
         std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
         return (value - mean) / std.clamp_min(self.eps)
 
     def to_observation_norm(self) -> Union[Compose, ObservationNorm]:
-        """Converts VecNorm into an ObservationNorm class that can be used at inference time."""
-        out = []
-        for key, key_out in zip(self.in_keys, self.out_keys):
-            _sum = self._td.get(_append_last(key, "_sum"))
-            _ssq = self._td.get(_append_last(key, "_ssq"))
-            _count = self._td.get(_append_last(key, "_count"))
-            mean = _sum / _count
-            std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
+        """Converts VecNorm into an ObservationNorm class that can be used at inference time.
 
+        The :class:`~torchrl.envs.ObservationNorm` layer can be updated using the :meth:`~torch.nn.Module.state_dict`
+        API.
+
+        Examples:
+            >>> from torchrl.envs import GymEnv, VecNorm
+            >>> vecnorm = VecNorm(in_keys=["observation"])
+            >>> train_env = GymEnv("CartPole-v1", device=None).append_transform(
+            ...     vecnorm)
+            >>>
+            >>> r = train_env.rollout(4)
+            >>>
+            >>> eval_env = GymEnv("CartPole-v1").append_transform(
+            ...     vecnorm.to_observation_norm())
+            >>> print(eval_env.transform.loc, eval_env.transform.scale)
+            >>>
+            >>> r = train_env.rollout(4)
+            >>> # Update entries with state_dict
+            >>> eval_env.transform.load_state_dict(
+            ...     vecnorm.to_observation_norm().state_dict())
+            >>> print(eval_env.transform.loc, eval_env.transform.scale)
+
+        """
+        out = []
+        loc = self.loc
+        scale = self.scale
+        for key, key_out in zip(self.in_keys, self.out_keys):
             _out = ObservationNorm(
-                loc=mean,
-                scale=std,
+                loc=loc.get(key),
+                scale=scale.get(key),
                 standard_normal=True,
                 in_keys=key,
                 out_keys=key_out,
@@ -5034,6 +5102,49 @@ class VecNorm(Transform):
         if len(self.in_keys) > 1:
             return Compose(*out)
         return _out
+
+    def _get_loc_scale(self, loc_only=False, scale_only=False):
+        loc = {}
+        scale = {}
+        for key in self.in_keys:
+            _sum = self._td.get(_append_last(key, "_sum"))
+            _ssq = self._td.get(_append_last(key, "_ssq"))
+            _count = self._td.get(_append_last(key, "_count"))
+            loc[key] = _sum / _count
+            scale[key] = (_ssq / _count - loc[key].pow(2)).clamp_min(self.eps).sqrt()
+        if not scale_only:
+            loc = TensorDict(loc)
+        else:
+            loc = None
+        if not loc_only:
+            scale = TensorDict(scale)
+        else:
+            scale = None
+        return loc, scale
+
+    @property
+    def standard_normal(self):
+        """Whether the affine transform given by `loc` and `scale` follows the standard normal equation.
+
+        Similar to :class:`~torchrl.envs.ObservationNorm` standard_normal attribute.
+
+        Always returns ``True``.
+        """
+        return True
+
+    @property
+    def loc(self):
+        """Returns a TensorDict with the loc to be used for an affine transform."""
+        # We can't cache that value bc the summary stats could be updated by a different process
+        loc, _ = self._get_loc_scale(loc_only=True)
+        return loc
+
+    @property
+    def scale(self):
+        """Returns a TensorDict with the scale to be used for an affine transform."""
+        # We can't cache that value bc the summary stats could be updated by a different process
+        _, scale = self._get_loc_scale(scale_only=True)
+        return scale
 
     @staticmethod
     def build_td_for_shared_vecnorm(
