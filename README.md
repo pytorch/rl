@@ -501,6 +501,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
 - [IQL](https://github.com/pytorch/rl/blob/main/sota-implementations/iql/iql_offline.py)
 - [CQL](https://github.com/pytorch/rl/blob/main/sota-implementations/cql/cql_offline.py)
 - [TD3](https://github.com/pytorch/rl/blob/main/sota-implementations/td3/td3.py)
+- [TD3+BC](https://github.com/pytorch/rl/blob/main/sota-implementations/td3+bc/td3+bc.py)
 - [A2C](https://github.com/pytorch/rl/blob/main/examples/a2c_old/a2c.py)
 - [PPO](https://github.com/pytorch/rl/blob/main/sota-implementations/ppo/ppo.py)
 - [SAC](https://github.com/pytorch/rl/blob/main/sota-implementations/sac/sac.py)
