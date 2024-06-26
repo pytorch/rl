@@ -154,12 +154,12 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cr
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=2 \
-  collector.device=cuda:0 \
+  collector.device= \
   optim.batch_size=10 \
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
-  network.device=cuda:0 \
+  network.device= \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
   collector.total_frames=200 \
