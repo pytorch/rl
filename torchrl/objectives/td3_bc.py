@@ -84,7 +84,7 @@ class TD3BCLoss(LossModule):
         >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import Actor, ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
-        >>> from torchrl.objectives.td3 import TD3Loss
+        >>> from torchrl.objectives.td3_bc import TD3BCLoss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
@@ -102,7 +102,7 @@ class TD3BCLoss(LossModule):
         >>> qvalue = ValueOperator(
         ...     module=module,
         ...     in_keys=['observation', 'action'])
-        >>> loss = TD3Loss(actor, qvalue, action_spec=actor.spec)
+        >>> loss = TD3BCLoss(actor, qvalue, action_spec=actor.spec)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
         >>> data = TensorDict({
@@ -116,12 +116,14 @@ class TD3BCLoss(LossModule):
         >>> loss(data)
         TensorDict(
             fields={
+                bc_loss: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                lmbd: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                next_state_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                pred_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                state_action_value_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                next_state_value: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
+                pred_value: Tensor(shape=torch.Size([2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_action_value_actor: Tensor(shape=torch.Size([2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                target_value: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -131,14 +133,14 @@ class TD3BCLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network
     The return value is a tuple of tensors in the following order:
-    ``["loss_actor", "loss_qvalue", "pred_value", "state_action_value_actor", "next_state_value", "target_value",]``.
+    ``["loss_actor", "loss_qvalue", "bc_loss, "lmbd", "pred_value", "state_action_value_actor", "next_state_value", "target_value",]``.
 
     Examples:
         >>> import torch
         >>> from torch import nn
         >>> from torchrl.data import BoundedTensorSpec
         >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
-        >>> from torchrl.objectives.td3 import TD3Loss
+        >>> from torchrl.objectives.td3_bc import TD3BCLoss
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> module = nn.Linear(n_obs, n_act)
@@ -155,7 +157,7 @@ class TD3BCLoss(LossModule):
         >>> qvalue = ValueOperator(
         ...     module=module,
         ...     in_keys=['observation', 'action'])
-        >>> loss = TD3Loss(actor, qvalue, action_spec=actor.spec)
+        >>> loss = TD3BCLoss(actor, qvalue, action_spec=actor.spec)
         >>> _ = loss.select_out_keys("loss_actor", "loss_qvalue")
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
@@ -206,6 +208,8 @@ class TD3BCLoss(LossModule):
     out_keys = [
         "loss_actor",
         "loss_qvalue",
+        "bc_loss",
+        "lmbd",
         "pred_value",
         "state_action_value_actor",
         "next_state_value",
@@ -275,6 +279,7 @@ class TD3BCLoss(LossModule):
         self.loss_function = loss_function
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
+        self.alpha = alpha
         if not ((action_spec is not None) ^ (bounds is not None)):
             raise ValueError(
                 "One of 'bounds' and 'action_spec' must be provided, "

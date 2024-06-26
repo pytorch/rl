@@ -40,4 +40,6 @@ logger:
   exp_name: TD3+BC_${replay_buffer.dataset}
   mode: online
   eval_iter: 5000
+  eval_steps: 1000
+  eval_envs: 1
   video: False

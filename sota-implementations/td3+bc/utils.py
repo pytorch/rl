@@ -80,7 +80,7 @@ def make_environment(cfg, logger=None):
     """Make environments for training and evaluation."""
     partial = functools.partial(env_maker, cfg=cfg)
     parallel_env = ParallelEnv(
-        cfg.collector.env_per_collector,
+        cfg.logger.eval_envs,
         EnvCreator(partial),
         serial_for_single=True,
     )
@@ -88,21 +88,21 @@ def make_environment(cfg, logger=None):
 
     train_env = apply_env_transforms(parallel_env, cfg.env.max_episode_steps)
 
-    partial = functools.partial(env_maker, cfg=cfg, from_pixels=cfg.logger.video)
-    trsf_clone = train_env.transform.clone()
-    if cfg.logger.video:
-        trsf_clone.insert(
-            0, VideoRecorder(logger, tag="rendering/test", in_keys=["pixels"])
-        )
-    eval_env = TransformedEnv(
-        ParallelEnv(
-            cfg.collector.env_per_collector,
-            EnvCreator(partial),
-            serial_for_single=True,
-        ),
-        trsf_clone,
-    )
-    return train_env, eval_env
+    # partial = functools.partial(env_maker, cfg=cfg, from_pixels=cfg.logger.video)
+    # trsf_clone = train_env.transform.clone()
+    # if cfg.logger.video:
+    #     trsf_clone.insert(
+    #         0, VideoRecorder(logger, tag="rendering/test", in_keys=["pixels"])
+    #     )
+    # eval_env = TransformedEnv(
+    #     ParallelEnv(
+    #         cfg.logger.eval_envs,
+    #         EnvCreator(partial),
+    #         serial_for_single=True,
+    #     ),
+    #     trsf_clone,
+    # )
+    return train_env
 
 
 # ====================================================================
@@ -130,7 +130,7 @@ def make_offline_replay_buffer(rb_cfg):
 # -----
 
 
-def make_td3_agent(cfg, train_env, eval_env, device):
+def make_td3_agent(cfg, train_env, device):
     """Make TD3 agent."""
     # Define Actor Network
     in_keys = ["observation"]
@@ -182,12 +182,11 @@ def make_td3_agent(cfg, train_env, eval_env, device):
 
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = eval_env.reset()
+        td = train_env.reset()
         td = td.to(device)
         for net in model:
             net(td)
     del td
-    eval_env.close()
 
     # Exploration wrappers:
     actor_model_explore = AdditiveGaussianWrapper(
@@ -213,18 +212,18 @@ def make_loss_module(cfg, model):
         actor_network=model[0],
         qvalue_network=model[1],
         num_qvalue_nets=2,
-        loss_function=cfg.optim.loss_function,
+        loss_function=cfg.loss_function,
         delay_actor=True,
         delay_qvalue=True,
         action_spec=model[0][1].spec,
-        policy_noise=cfg.optim.policy_noise,
-        noise_clip=cfg.optim.noise_clip,
-        alpha=cfg.optim.alpha,
+        policy_noise=cfg.policy_noise,
+        noise_clip=cfg.noise_clip,
+        alpha=cfg.alpha,
     )
-    loss_module.make_value_estimator(gamma=cfg.optim.gamma)
+    loss_module.make_value_estimator(gamma=cfg.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, eps=cfg.optim.target_update_polyak)
+    target_net_updater = SoftUpdate(loss_module, eps=cfg.target_update_polyak)
     return loss_module, target_net_updater
 
 
@@ -234,15 +233,15 @@ def make_optimizer(cfg, loss_module):
 
     optimizer_actor = optim.Adam(
         actor_params,
-        lr=cfg.optim.lr,
-        weight_decay=cfg.optim.weight_decay,
-        eps=cfg.optim.adam_eps,
+        lr=cfg.lr,
+        weight_decay=cfg.weight_decay,
+        eps=cfg.adam_eps,
     )
     optimizer_critic = optim.Adam(
         critic_params,
-        lr=cfg.optim.lr,
-        weight_decay=cfg.optim.weight_decay,
-        eps=cfg.optim.adam_eps,
+        lr=cfg.lr,
+        weight_decay=cfg.weight_decay,
+        eps=cfg.adam_eps,
     )
     return optimizer_actor, optimizer_critic
 

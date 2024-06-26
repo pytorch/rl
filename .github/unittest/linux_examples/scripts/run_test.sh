@@ -51,7 +51,9 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/cql_offline.py \
   optim.gradient_steps=55 \
   logger.backend=
-
+python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3+bc/td3_bc.py \
+  optim.gradient_steps=55 \
+  logger.backend=
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
 

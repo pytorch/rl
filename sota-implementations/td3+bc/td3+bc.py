@@ -2,9 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""IQL Example.
+"""TD3+BC Example.
 
-This is a self-contained example of an offline IQL training script.
+This is a self-contained example of an offline RL TD3+BC training script.
 
 The helper functions are coded in the utils.py associated with this script.
 
@@ -32,9 +32,9 @@ from utils import (
 )
 
 
-@hydra.main(config_path="", config_name="offline_config")
+@hydra.main(config_path="", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    set_gym_backend(cfg.env.backend).set()
+    set_gym_backend(cfg.env.library).set()
 
     # Create logger
     exp_name = generate_exp_name("TD3BC-offline", cfg.logger.exp_name)
@@ -55,7 +55,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Set seeds
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
-    device = cfg.optim.device
+    device = cfg.network.device
     if device in ("", None):
         if torch.cuda.is_available():
             device = "cuda:0"
@@ -64,9 +64,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(device)
 
     # Creante env
-    train_env, eval_env = make_environment(
+    eval_env = make_environment(
         cfg,
-        cfg.logger.eval_envs,
         logger=logger,
     )
 
@@ -74,10 +73,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
 
     # Create agent
-    model, actor_model_explore = make_td3_agent(cfg, train_env, eval_env, device)
+    model, _ = make_td3_agent(cfg, eval_env, device)
 
     # Create loss
-    loss_module, target_net_updater = make_loss_module(cfg.loss, model)
+    loss_module, target_net_updater = make_loss_module(cfg.optim, model)
 
     # Create optimizer
     optimizer_actor, optimizer_critic = make_optimizer(cfg.optim, loss_module)
@@ -113,6 +112,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         optimizer_critic.step()
         q_loss.item()
 
+        to_log = {"q_loss": q_loss.item()}
+
         # Update actor
         if update_actor:
             actor_loss, actorloss_metadata = loss_module.actor_loss(sampled_tensordict)
@@ -123,13 +124,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             # Update target params
             target_net_updater.step()
 
-        # log metrics
-        to_log = {
-            "loss_actor": actor_loss.item(),
-            "loss_qvalue": q_loss.item(),
-            "bc_loss": actorloss_metadata.bc_loss.item(),
-            "lambda": actorloss_metadata.actor_loss.item(),
-        }
+            to_log["actor_loss"] = actor_loss.item()
+            to_log.update(actorloss_metadata)
 
         # evaluation
         if i % evaluation_interval == 0:
