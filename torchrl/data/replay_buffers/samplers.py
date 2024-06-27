@@ -57,7 +57,11 @@ class Sampler(ABC):
         return
 
     def update_priority(
-        self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
+        self,
+        index: Union[int, torch.Tensor],
+        priority: Union[float, torch.Tensor],
+        *,
+        storage: Storage | None = None,
     ) -> dict | None:
         return
 
