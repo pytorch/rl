@@ -167,7 +167,7 @@ def make_td3_agent(cfg, train_env, device):
 
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = train_env.reset()
+        td = train_env.fake_tensordict()
         td = td.to(device)
         for net in model:
             net(td)
@@ -213,8 +213,8 @@ def make_loss_module(cfg, model):
 
 
 def make_optimizer(cfg, loss_module):
-    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
-    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
+    critic_params = list(loss_module.qvalue_network_params.values(True, True))
+    actor_params = list(loss_module.actor_network_params.values(True, True))
 
     optimizer_actor = optim.Adam(
         actor_params,
