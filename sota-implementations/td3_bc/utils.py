@@ -87,21 +87,6 @@ def make_environment(cfg, logger=None):
     parallel_env.set_seed(cfg.env.seed)
 
     train_env = apply_env_transforms(parallel_env, cfg.env.max_episode_steps)
-
-    # partial = functools.partial(env_maker, cfg=cfg, from_pixels=cfg.logger.video)
-    # trsf_clone = train_env.transform.clone()
-    # if cfg.logger.video:
-    #     trsf_clone.insert(
-    #         0, VideoRecorder(logger, tag="rendering/test", in_keys=["pixels"])
-    #     )
-    # eval_env = TransformedEnv(
-    #     ParallelEnv(
-    #         cfg.logger.eval_envs,
-    #         EnvCreator(partial),
-    #         serial_for_single=True,
-    #     ),
-    #     trsf_clone,
-    # )
     return train_env
 
 
