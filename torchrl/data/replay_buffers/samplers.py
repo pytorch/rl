@@ -63,6 +63,9 @@ class Sampler(ABC):
         *,
         storage: Storage | None = None,
     ) -> dict | None:
+        warnings.warn(
+            f"Calling update_priority() on a sampler {type(self).__name__} that is not prioritized. Make sure this is the indented behaviour."
+        )
         return
 
     def mark_update(
