@@ -81,16 +81,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create optimizer
     optimizer_actor, optimizer_critic = make_optimizer(cfg.optim, loss_module)
 
-    pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
-
     gradient_steps = cfg.optim.gradient_steps
     evaluation_interval = cfg.logger.eval_iter
     eval_steps = cfg.logger.eval_steps
     delayed_updates = cfg.optim.policy_update_delay
     update_counter = 0
+    pbar = tqdm.tqdm(range(gradient_steps))
     # Training loop
     start_time = time.time()
-    for i in range(gradient_steps):
+    for i in pbar:
         pbar.update(1)
         # Update actor every delayed_updates
         update_counter += 1
