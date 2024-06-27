@@ -42,17 +42,18 @@ class TD3BCLoss(LossModule):
 
     Keyword Args:
         bounds (tuple of float, optional): the bounds of the action space.
-            Exclusive with action_spec. Either this or ``action_spec`` must
+             Exclusive with ``action_spec``. Either this or ``action_spec`` must
             be provided.
         action_spec (TensorSpec, optional): the action spec.
-            Exclusive with bounds. Either this or ``bounds`` must be provided.
+            Exclusive with ``bounds``. Either this or ``bounds`` must be provided.
         num_qvalue_nets (int, optional): Number of Q-value networks to be
-            trained. Default is ``10``.
+            trained. Default is ``2``.
         policy_noise (float, optional): Standard deviation for the target
             policy action noise. Default is ``0.2``.
         noise_clip (float, optional): Clipping range value for the sampled
             target policy action noise. Default is ``0.5``.
         alpha (float, optional): Weight for the behavioral cloning loss.
+            Defaults to ``2.5``.
         priority_key (str, optional): Key where to write the priority value
             for prioritized replay buffers. Default is
             `"td_error"`.
