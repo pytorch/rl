@@ -25,11 +25,11 @@ class BatchRenorm(nn.Module):
     def __init__(
         self,
         num_features,
-        eps=1e-5,
-        momentum=0.01,
+        eps=0.01,
+        momentum=0.99,
         r_max=3.0,
         d_max=5.0,
-        warmup_steps=5000,
+        warmup_steps=100000,
     ):
 
         super(BatchRenorm, self).__init__()
