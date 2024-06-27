@@ -38,7 +38,7 @@ optim:
 
 # network
 network:
-  batch_norm_momentum: 0.99
+  batch_norm_momentum: 0.01
   warmup_steps: 100000 
   critic_hidden_sizes: [2048, 2048]
   actor_hidden_sizes: [256, 256]
