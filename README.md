@@ -550,21 +550,21 @@ including `pip3` or other special installation instructions.
 **Torchrl**
 
 You can install the **latest stable release** by using
-```
+```bash
 pip3 install torchrl
 ```
 This should work on linux, Windows 10 and OsX (Intel or Silicon chips).
 On certain Windows machines (Windows 11), one should install the library locally (see below).
 
 The **nightly build** can be installed via
-```
-pip install torchrl-nightly
+```bash
+pip3install torchrl-nightly
 ```
 which we currently only ship for Linux and OsX (Intel) machines.
 Importantly, the nightly builds require the nightly builds of PyTorch too.
 
 To install extra dependencies, call
-```
+```bash
 pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl,checkpointing]"
 ```
 or a subset of these.
@@ -572,23 +572,37 @@ or a subset of these.
 One may also desire to install the library locally. Three main reasons can motivate this:
 - the nightly/stable release isn't available for one's platform (eg, Windows 11, nightlies for Apple Silicon etc.);
 - contributing to the code;
-- install torchrl with a previous version of PyTorch (note that this should also be doable via a regular install followed
-  by a downgrade to a previous pytorch version -- but the C++ binaries will not be available.)
+- install torchrl with a previous version of PyTorch (any version >= 2.0) (note that this should also be doable via a regular install followed
+  by a downgrade to a previous pytorch version -- but the C++ binaries will not be available so some feature will not work,  
+  such as prioritized replay buffers and the like.)
 
 To install the library locally, start by cloning the repo:
-```
+```bash
 git clone https://github.com/pytorch/rl
+```
+and don't forget to check out the branch or tag you want to use for the build:
+```bash
+git checkout v0.4.0
 ```
 
 Go to the directory where you have cloned the torchrl repo and install it (after
 installing `ninja`)
-```
+```bash
 cd /path/to/torchrl/
-pip install ninja -U
+pip3install ninja -U
 python setup.py develop
 ```
 
-(unfortunately, `pip install -e .` will not work).
+One can also build the wheels to distribute to co-workers using
+```bash
+python setup.py bdist_wheel
+```
+Your wheels will be stored there `./dist/torchrl<name>.whl` and installable via
+```bash
+pip install torchrl<name>.whl
+```
+
+**Warning**: Unfortunately, `pip3 install -e .` does not currently work. Contributions to help fix this are welcome!
 
 On M1 machines, this should work out-of-the-box with the nightly build of PyTorch.
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
