@@ -24,6 +24,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 from utils import (
+    dump_video,
     log_metrics,
     make_collector,
     make_discrete_iql_model,
@@ -57,13 +58,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Set seeds
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
-    device = torch.device(cfg.optim.device)
+    device = cfg.optim.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+    device = torch.device(device)
 
     # Create environments
     train_env, eval_env = make_environment(
         cfg,
         cfg.env.train_num_envs,
         cfg.env.eval_num_envs,
+        logger=logger,
     )
 
     # Create replay buffer
@@ -186,6 +194,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
+                eval_env.apply(dump_video)
                 eval_time = time.time() - eval_start
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward

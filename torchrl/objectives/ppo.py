@@ -7,13 +7,12 @@ from __future__ import annotations
 import contextlib
 
 import math
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import (
     dispatch,
     ProbabilisticTensorDictModule,
@@ -281,6 +280,13 @@ class PPOLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential | None = None,
@@ -383,51 +389,6 @@ class PPOLoss(LossModule):
     def functional(self):
         return self._functional
 
-    @property
-    def actor(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.actor is deprecated, use {self.__class__.__name__}.actor_network instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.actor_network
-
-    @property
-    def critic(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.critic is deprecated, use {self.__class__.__name__}.critic_network instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.critic_network
-
-    @property
-    def actor_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.actor_params is deprecated, use {self.__class__.__name__}.actor_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.actor_network_params
-
-    @property
-    def critic_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.critic_params is deprecated, use {self.__class__.__name__}.critic_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.critic_network_params
-
-    @property
-    def target_critic_params(self):
-        warnings.warn(
-            f"{self.__class__.__name__}.target_critic_params is deprecated, use {self.__class__.__name__}.target_critic_network_params instead. This "
-            "link will be removed in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self.target_critic_network_params
-
     def _set_in_keys(self):
         keys = [
             self.tensor_keys.action,
@@ -512,7 +473,9 @@ class PPOLoss(LossModule):
             raise RuntimeError("tensordict prev_log_prob requires grad.")
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
-        return log_weight, dist
+        kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
+
+        return log_weight, dist, kl_approx
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         # TODO: if the advantage is gathered by forward, this introduces an
@@ -595,12 +558,13 @@ class PPOLoss(LossModule):
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
-        log_weight, dist = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
@@ -763,6 +727,13 @@ class ClipPPOLoss(PPOLoss):
 
     """
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential | None = None,
@@ -774,7 +745,7 @@ class ClipPPOLoss(PPOLoss):
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
-        normalize_advantage: bool = True,
+        normalize_advantage: bool = False,
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -843,7 +814,7 @@ class ClipPPOLoss(PPOLoss):
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
 
-        log_weight, dist = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(tensordict)
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
@@ -867,6 +838,7 @@ class ClipPPOLoss(PPOLoss):
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
@@ -992,6 +964,13 @@ class KLPENPPOLoss(PPOLoss):
 
     """
 
+    actor_network: TensorDictModule
+    critic_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    critic_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_critic_network_params: TensorDictParams
+
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential | None = None,
@@ -1007,7 +986,7 @@ class KLPENPPOLoss(PPOLoss):
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
-        normalize_advantage: bool = True,
+        normalize_advantage: bool = False,
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -1114,7 +1093,7 @@ class KLPENPPOLoss(PPOLoss):
             loc = advantage.mean()
             scale = advantage.std().clamp_min(1e-6)
             advantage = (advantage - loc) / scale
-        log_weight, dist = self._log_weight(tensordict_copy)
+        log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
 
         with self.actor_network_params.to_module(
@@ -1143,6 +1122,7 @@ class KLPENPPOLoss(PPOLoss):
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)

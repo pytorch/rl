@@ -20,6 +20,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 from utils import (
+    dump_video,
     log_metrics,
     make_continuous_cql_optimizer,
     make_continuous_loss,
@@ -49,16 +50,25 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Set seeds
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
-    device = torch.device(cfg.optim.device)
+    device = cfg.optim.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+    device = torch.device(device)
 
     # Create env
-    train_env, eval_env = make_environment(cfg, cfg.logger.eval_envs)
+    train_env, eval_env = make_environment(
+        cfg, train_num_envs=1, eval_num_envs=cfg.logger.eval_envs, logger=logger
+    )
 
     # Create replay buffer
     replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
 
     # Create agent
     model = make_cql_model(cfg, train_env, eval_env, device)
+    del train_env
 
     # Create loss
     loss_module, target_net_updater = make_continuous_loss(cfg.loss, model)
@@ -144,6 +154,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_td = eval_env.rollout(
                     max_steps=eval_steps, policy=model[0], auto_cast_to_device=True
                 )
+                eval_env.apply(dump_video)
             eval_reward = eval_td["next", "reward"].sum(1).mean().item()
             to_log["evaluation_reward"] = eval_reward
 
@@ -151,6 +162,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     pbar.close()
     torchrl_logger.info(f"Training time: {time.time() - start_time}")
+    if not eval_env.is_closed:
+        eval_env.close()
 
 
 if __name__ == "__main__":

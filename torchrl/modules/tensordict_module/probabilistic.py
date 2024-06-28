@@ -105,7 +105,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
         default_interaction_mode: str = None,
-        default_interaction_type: str = InteractionType.MODE,
+        default_interaction_type: str = InteractionType.DETERMINISTIC,
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
         return_log_prob: bool = False,

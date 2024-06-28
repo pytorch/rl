@@ -16,15 +16,20 @@ import warnings
 from enum import Enum
 from typing import Any, Dict, List, Union
 
+import tensordict.base
+
 import torch
 
 from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
     TensorDict,
     TensorDictBase,
     unravel_key,
 )
+from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
@@ -109,13 +114,15 @@ class _StepMDP:
         state_keys = env.full_state_spec.keys(True, True)
         self.action_keys = [unravel_key(key) for key in action_keys]
         self.done_keys = [unravel_key(key) for key in done_keys]
+        self.observation_keys = list(observation_keys)
+        self.state_keys = list(state_keys)
         self.reward_keys = [unravel_key(key) for key in reward_keys]
-        self.observation_keys = [unravel_key(key) for key in observation_keys]
-        self.state_keys = [unravel_key(key) for key in state_keys]
+        self.reward_keys_filt = list(set(self.reward_keys) - set(self.state_keys))
 
         excluded = set()
         if exclude_reward:
-            excluded = excluded.union(self.reward_keys)
+            # If a reward is also a state, it must be in the input
+            excluded = excluded.union(self.reward_keys_filt)
         if exclude_done:
             excluded = excluded.union(self.done_keys)
         if exclude_action:
@@ -130,6 +137,12 @@ class _StepMDP:
         self.keys_from_next = list(self.observation_keys)
         if not exclude_reward:
             self.keys_from_next += self.reward_keys
+        else:
+            self.keys_from_next += [
+                reward_key
+                for reward_key in self.reward_keys
+                if reward_key in self.state_keys
+            ]
         if not exclude_done:
             self.keys_from_next += self.done_keys
         self.keys_from_root = []
@@ -144,12 +157,16 @@ class _StepMDP:
 
         reset_keys = {_replace_last(key, "_reset") for key in self.done_keys}
         self.exclude_from_root += list(reset_keys)
-        self.exclude_from_root += list(self.reward_keys)
+        self.exclude_from_root += self.reward_keys_filt
 
         self.exclude_from_root = self._repr_key_list_as_tree(self.exclude_from_root)
         self.keys_from_root = self._repr_key_list_as_tree(self.keys_from_root)
         self.keys_from_next = self._repr_key_list_as_tree(self.keys_from_next)
         self.validated = None
+
+        # Model based envs can have missing keys
+        # TODO: do we want to always allow this? check_env_specs should catch these or downstream ops
+        self._allow_absent_keys = True
 
     def validate(self, tensordict):
         if self.validated:
@@ -171,7 +188,11 @@ class _StepMDP:
                     return key == "_reset"
                 return key[-1] == "_reset"
 
-            actual = {key for key in tensordict.keys(True, True) if not _is_reset(key)}
+            actual = {
+                key
+                for key in tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
+                if not _is_reset(key)
+            }
             expected = set(expected)
             self.validated = expected.intersection(actual) == expected
             if not self.validated:
@@ -196,7 +217,11 @@ class _StepMDP:
 
     @classmethod
     def _grab_and_place(
-        cls, nested_key_dict: dict, data_in: TensorDictBase, data_out: TensorDictBase
+        cls,
+        nested_key_dict: dict,
+        data_in: TensorDictBase,
+        data_out: TensorDictBase,
+        _allow_absent_keys: bool,
     ):
         for key, subdict in nested_key_dict.items():
             val = data_in._get_str(key, NO_DEFAULT)
@@ -208,7 +233,12 @@ class _StepMDP:
 
                     val = LazyStackedTensorDict(
                         *(
-                            cls._grab_and_place(subdict, _val, _val_out)
+                            cls._grab_and_place(
+                                subdict,
+                                _val,
+                                _val_out,
+                                _allow_absent_keys=_allow_absent_keys,
+                            )
                             for (_val, _val_out) in zip(
                                 val.unbind(val.stack_dim),
                                 val_out.unbind(val_out.stack_dim),
@@ -217,10 +247,16 @@ class _StepMDP:
                         stack_dim=val.stack_dim,
                     )
                 else:
-                    val = cls._grab_and_place(subdict, val, val_out)
-            data_out._set_str(
-                key, val, validated=True, inplace=False, non_blocking=False
-            )
+                    val = cls._grab_and_place(
+                        subdict, val, val_out, _allow_absent_keys=_allow_absent_keys
+                    )
+            if val is NO_DEFAULT:
+                if not _allow_absent_keys:
+                    raise KeyError(f"key {key} not found.")
+            else:
+                data_out._set_str(
+                    key, val, validated=True, inplace=False, non_blocking=False
+                )
         return data_out
 
     @classmethod
@@ -235,7 +271,7 @@ class _StepMDP:
                 cls._exclude(nested_key_dict, td, td_out)
             return out
         has_set = False
-        for key, value in data_in.items():
+        for key, value in data_in.items(is_leaf=_is_leaf_nontensor):
             subdict = nested_key_dict.get(key, NO_DEFAULT)
             if subdict is NO_DEFAULT:
                 value = value.copy() if is_tensor_collection(value) else value
@@ -260,15 +296,37 @@ class _StepMDP:
                 tensordict.stack_dim,
             )
             return out
-
         next_td = tensordict._get_str("next", None)
         if self.validate(tensordict):
             if self.keep_other:
                 out = self._exclude(self.exclude_from_root, tensordict, out=None)
             else:
                 out = next_td.empty()
-                self._grab_and_place(self.keys_from_root, tensordict, out)
-            self._grab_and_place(self.keys_from_next, next_td, out)
+                self._grab_and_place(
+                    self.keys_from_root,
+                    tensordict,
+                    out,
+                    _allow_absent_keys=self._allow_absent_keys,
+                )
+            if isinstance(next_td, LazyStackedTensorDict):
+                if not isinstance(out, LazyStackedTensorDict):
+                    out = LazyStackedTensorDict(
+                        *out.unbind(next_td.stack_dim), stack_dim=next_td.stack_dim
+                    )
+                for _next_td, _out in zip(next_td.tensordicts, out.tensordicts):
+                    self._grab_and_place(
+                        self.keys_from_next,
+                        _next_td,
+                        _out,
+                        _allow_absent_keys=self._allow_absent_keys,
+                    )
+            else:
+                self._grab_and_place(
+                    self.keys_from_next,
+                    next_td,
+                    out,
+                    _allow_absent_keys=self._allow_absent_keys,
+                )
             return out
         else:
             out = next_td.empty()
@@ -394,6 +452,12 @@ def step_mdp(
             device=None,
             is_shared=False)
 
+    .. warning:: This function will not work properly if the reward key is also part of the input key when
+        the reward keys are excluded. This is why the :class:`~torchrl.envs.RewardSum` transform registers
+        the episode reward in the observation and not the reward spec by default.
+        When using the fast, cached version of this function (``_StepMDP``), this issue should not
+        be observed.
+
     """
     if isinstance(tensordict, LazyStackedTensorDict):
         if next_tensordict is not None:
@@ -501,7 +565,9 @@ def _set(source, dest, key, total_key, excluded):
     if unravel_key(total_key) not in excluded:
         try:
             val = source.get(key)
-            if is_tensor_collection(val):
+            if is_tensor_collection(val) and not isinstance(
+                val, (NonTensorData, NonTensorStack)
+            ):
                 # if val is a tensordict we need to copy the structure
                 new_val = dest.get(key, None)
                 if new_val is None:
@@ -604,12 +670,12 @@ SUPPORTED_LIBRARIES = {
 
 def _per_level_env_check(data0, data1, check_dtype):
     """Checks shape and dtype of two tensordicts, accounting for lazy stacks."""
-    if isinstance(data0, LazyStackedTensorDict) and isinstance(
-        data1, LazyStackedTensorDict
-    ):
-        if data0.stack_dim != data1.stack_dim:
-            raise AssertionError(f"Stack dimension mismatch: {data0} vs {data1}.")
-        for _data0, _data1 in zip(data0.tensordicts, data1.tensordicts):
+    if isinstance(data0, LazyStackedTensorDict):
+        for _data0, _data1 in zip(data0.tensordicts, data1.unbind(data0.stack_dim)):
+            _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
+        return
+    if isinstance(data1, LazyStackedTensorDict):
+        for _data0, _data1 in zip(data0.unbind(data1.stack_dim), data1.tensordicts):
             _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
         return
     else:
@@ -687,11 +753,19 @@ def check_env_specs(
             [fake_tensordict.clone() for _ in range(3)], -1
         )
     # eliminate empty containers
-    fake_tensordict_select = fake_tensordict.select(*fake_tensordict.keys(True, True))
-    real_tensordict_select = real_tensordict.select(*real_tensordict.keys(True, True))
+    fake_tensordict_select = fake_tensordict.select(
+        *fake_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+    )
+    real_tensordict_select = real_tensordict.select(
+        *real_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+    )
     # check keys
-    fake_tensordict_keys = set(fake_tensordict.keys(True, True))
-    real_tensordict_keys = set(real_tensordict.keys(True, True))
+    fake_tensordict_keys = set(
+        fake_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+    )
+    real_tensordict_keys = set(
+        real_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+    )
     if fake_tensordict_keys != real_tensordict_keys:
         raise AssertionError(
             f"""The keys of the specs and data do not match:
@@ -699,19 +773,32 @@ def check_env_specs(
     - List of keys present in fake but not in real: {fake_tensordict_keys-real_tensordict_keys}.
 """
         )
-    if (
-        fake_tensordict_select.apply(lambda x: torch.zeros_like(x))
-        != real_tensordict_select.apply(lambda x: torch.zeros_like(x))
-    ).any():
-        raise AssertionError(
-            "zeroing the two tensordicts did not make them identical. "
-            f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
-        )
-
-    # Checks shapes and eventually dtypes of keys at all nesting levels
-    _per_level_env_check(
-        fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype
+    zeroing_err_msg = (
+        "zeroing the two tensordicts did not make them identical. "
+        "Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
     )
+    from torchrl.envs.common import _has_dynamic_specs
+
+    if _has_dynamic_specs(env.specs):
+        for real, fake in zip(real_tensordict.unbind(-1), fake_tensordict.unbind(-1)):
+            fake = fake.apply(lambda x, y: x.expand_as(y), real)
+            if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
+                raise AssertionError(zeroing_err_msg)
+
+            # Checks shapes and eventually dtypes of keys at all nesting levels
+            _per_level_env_check(fake, real, check_dtype=check_dtype)
+
+    else:
+        if (
+            torch.zeros_like(fake_tensordict_select)
+            != torch.zeros_like(real_tensordict_select)
+        ).any():
+            raise AssertionError(zeroing_err_msg)
+
+        # Checks shapes and eventually dtypes of keys at all nesting levels
+        _per_level_env_check(
+            fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype
+        )
 
     # Check specs
     last_td = real_tensordict[..., -1]
@@ -736,7 +823,7 @@ def check_env_specs(
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.select(*spec.keys(True, True), strict=True)
-        if not spec.is_in(td):
+        if not spec.contains(td):
             raise AssertionError(
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
@@ -748,7 +835,7 @@ def check_env_specs(
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.get("next").select(*spec.keys(True, True), strict=True)
-        if not spec.is_in(td):
+        if not spec.contains(td):
             raise AssertionError(
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
@@ -1080,10 +1167,6 @@ def _terminated_or_truncated(
 
         if aggregate is not None:
             if key is not None:
-                if aggregate.ndim > data.ndim:
-                    # accounts for trailing singleton dim in done.
-                    # _reset is always expanded on the right if needed so this can only be useful
-                    aggregate = aggregate.squeeze(-1)
                 data.set(key, aggregate)
                 list_of_keys.append(curr_done_key + (key,))
             any_eot = any_eot | aggregate.any()
@@ -1320,7 +1403,13 @@ def _update_during_reset(
                 reset = reset.any(-1)
             reset = reset.reshape(node.shape)
             # node.update(node.where(~reset, other=node_reset, pad=0))
+
             node.where(~reset, other=node_reset, out=node, pad=0)
+            # node = node.clone()
+            # idx = reset.nonzero(as_tuple=True)[0]
+            # node[idx].update(node_reset[idx])
+            # node["done"] = torch.zeros((*node.shape, 1), dtype=torch.bool)
+
     return tensordict
 
 

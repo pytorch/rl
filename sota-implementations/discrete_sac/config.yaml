@@ -14,7 +14,7 @@ collector:
   init_env_steps: 1000
   frames_per_batch: 500
   reset_at_each_iter: False
-  device: cuda:0
+  device: null
   env_per_collector: 1
   num_workers: 1
 
@@ -42,7 +42,7 @@ optim:
 network:
   hidden_sizes: [256, 256]
   activation: relu
-  device: "cuda:0"
+  device: null
 
 # logging
 logger:
@@ -52,3 +52,4 @@ logger:
   exp_name: ${env.name}_DiscreteSAC
   mode: online
   eval_iter: 5000
+  video: False

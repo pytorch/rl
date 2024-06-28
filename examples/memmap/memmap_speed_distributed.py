@@ -9,7 +9,7 @@ import time
 import configargparse
 import torch
 import torch.distributed.rpc as rpc
-from tensordict import MemmapTensor
+from tensordict import MemoryMappedTensor
 
 parser = configargparse.ArgumentParser()
 parser.add_argument("--rank", default=-1, type=int)
@@ -59,7 +59,7 @@ if __name__ == "__main__":
         # create tensor
         tensor = torch.zeros(10000, 10000)
         if tensortype == "memmap":
-            tensor = MemmapTensor(tensor)
+            tensor = MemoryMappedTensor.from_tensor(tensor)
         elif tensortype == "tensor":
             pass
         else:

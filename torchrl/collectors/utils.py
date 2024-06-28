@@ -219,7 +219,7 @@ def split_trajectories(
             torch.ones(
                 out_split.shape,
                 dtype=torch.bool,
-                device=out_split.get(("next", "done")).device,
+                device=out_split.device,
             ),
         )
     if len(out_splits) > 1:

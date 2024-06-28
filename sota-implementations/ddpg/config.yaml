@@ -32,12 +32,12 @@ optim:
   weight_decay: 1e-4
   batch_size: 256
   target_update_polyak: 0.995
+  device: null
 
 # network
 network:
   hidden_sizes: [256, 256]
   activation: relu
-  device: "cuda:0"
   noise_type: "ou" # ou or gaussian
 
 # logging
@@ -48,3 +48,5 @@ logger:
   exp_name: ${env.name}_DDPG
   mode: online
   eval_iter: 25000
+  video: False
+  num_eval_envs: 1

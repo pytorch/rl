@@ -16,6 +16,7 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
+    NonTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -23,6 +24,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import consolidate_spec
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
+from torchrl.envs.utils import _terminated_or_truncated
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -111,7 +113,6 @@ class _MockEnv(EnvBase):
     ):
         super().__init__(
             device=kwargs.pop("device", "cpu"),
-            dtype=torch.get_default_dtype(),
             allow_done_after_reset=kwargs.pop("allow_done_after_reset", False),
         )
         self.set_seed(seed)
@@ -925,7 +926,6 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
         super().__init__(
             world_model,
             device=device,
-            dtype=dtype,
             batch_size=batch_size,
         )
         self.observation_spec = CompositeSpec(
@@ -1407,7 +1407,9 @@ class HeterogeneousCountingEnv(EnvBase):
         count[:] = self.start_val
 
         self.register_buffer("count", count)
+        self._make_specs()
 
+    def _make_specs(self):
         obs_specs = []
         action_specs = []
         for index in range(self.n_nested_dim):
@@ -1419,13 +1421,7 @@ class HeterogeneousCountingEnv(EnvBase):
 
         self.unbatched_observation_spec = CompositeSpec(
             lazy=obs_spec_unlazy,
-            state=UnboundedContinuousTensorSpec(
-                shape=(
-                    64,
-                    64,
-                    3,
-                )
-            ),
+            state=UnboundedContinuousTensorSpec(shape=(64, 64, 3)),
             device=self.device,
         )
 
@@ -1756,9 +1752,9 @@ class MultiKeyCountingEnv(EnvBase):
         if tensordict is not None:
             _reset = tensordict.get("_reset", None)
             if _reset is not None:
-                self.count[_reset] = self.start_val
-                self.count_nested_1[_reset] = self.start_val
-                self.count_nested_2[_reset] = self.start_val
+                self.count[_reset.squeeze(-1)] = self.start_val
+                self.count_nested_1[_reset.squeeze(-1)] = self.start_val
+                self.count_nested_2[_reset.squeeze(-1)] = self.start_val
             else:
                 reset_all = True
 
@@ -1828,3 +1824,163 @@ class MultiKeyCountingEnv(EnvBase):
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
+
+
+class EnvWithMetadata(EnvBase):
+    def __init__(self):
+        super().__init__()
+        self.observation_spec = CompositeSpec(
+            tensor=UnboundedContinuousTensorSpec(3),
+            non_tensor=NonTensorSpec(shape=()),
+        )
+        self.state_spec = CompositeSpec(
+            non_tensor=NonTensorSpec(shape=()),
+        )
+        self.reward_spec = UnboundedContinuousTensorSpec(1)
+        self.action_spec = UnboundedContinuousTensorSpec(1)
+
+    def _reset(self, tensordict):
+        data = self.observation_spec.zero()
+        data.set_non_tensor("non_tensor", 0)
+        data.update(self.full_done_spec.zero())
+        return data
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        data = self.observation_spec.zero()
+        data.set_non_tensor("non_tensor", tensordict["non_tensor"] + 1)
+        data.update(self.full_done_spec.zero())
+        data.update(self.full_reward_spec.zero())
+        return data
+
+    def _set_seed(self, seed: Optional[int]):
+        return seed
+
+
+class AutoResettingCountingEnv(CountingEnv):
+    def _step(self, tensordict):
+        tensordict = super()._step(tensordict)
+        if tensordict["done"].any():
+            td_reset = super().reset()
+            tensordict.update(td_reset.exclude(*self.done_keys))
+        return tensordict
+
+    def _reset(self, tensordict=None):
+        if tensordict is not None and "_reset" in tensordict:
+            raise RuntimeError
+        return super()._reset(tensordict)
+
+
+class AutoResetHeteroCountingEnv(HeterogeneousCountingEnv):
+    def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
+        super().__init__(**kwargs)
+        self.n_nested_dim = 3
+        self.max_steps = max_steps
+        self.start_val = start_val
+
+        count = torch.zeros(
+            (*self.batch_size, self.n_nested_dim, 1),
+            device=self.device,
+            dtype=torch.int,
+        )
+        count[:] = self.start_val
+
+        self.register_buffer("count", count)
+        self._make_specs()
+
+    def _step(self, tensordict):
+        for i in range(self.n_nested_dim):
+            action = tensordict["lazy"][..., i]["action"]
+            action = action[..., 0].to(torch.bool)
+            self.count[..., i, 0] += action
+
+        td = self.observation_spec.zero()
+        for done_key in self.done_keys:
+            td[done_key] = self.count > self.max_steps
+
+        any_done = _terminated_or_truncated(
+            td,
+            full_done_spec=self.output_spec["full_done_spec"],
+            key=None,
+        )
+        if any_done:
+            self.count[td["lazy", "done"]] = 0
+
+        for i in range(self.n_nested_dim):
+            lazy = tensordict["lazy"][..., i]
+            for obskey in self.observation_spec.keys(True, True):
+                if isinstance(obskey, tuple) and obskey[0] == "lazy":
+                    lazy[obskey[1:]] += expand_right(
+                        self.count[..., i, 0], lazy[obskey[1:]].shape
+                    ).clone()
+        td.update(self.full_done_spec.zero())
+        td.update(self.full_reward_spec.zero())
+
+        assert td.batch_size == self.batch_size
+        return td
+
+    def _reset(self, tensordict=None):
+        if tensordict is not None and self.reset_keys[0] in tensordict.keys(True):
+            raise RuntimeError
+        self.count[:] = self.start_val
+
+        reset_td = self.observation_spec.zero()
+        reset_td.update(self.full_done_spec.zero())
+        assert reset_td.batch_size == self.batch_size
+        return reset_td
+
+
+class EnvWithDynamicSpec(EnvBase):
+    def __init__(self, max_count=5):
+        super().__init__(batch_size=())
+        self.observation_spec = CompositeSpec(
+            observation=UnboundedContinuousTensorSpec(shape=(3, -1, 2)),
+        )
+        self.action_spec = BoundedTensorSpec(low=-1, high=1, shape=(2,))
+        self.full_done_spec = CompositeSpec(
+            done=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+            terminated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+            truncated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+        )
+        self.reward_spec = UnboundedContinuousTensorSpec((1,), dtype=torch.float)
+        self.count = 0
+        self.max_count = max_count
+
+    def _reset(self, tensordict=None):
+        self.count = 0
+        data = TensorDict(
+            {
+                "observation": torch.full(
+                    (3, self.count + 1, 2),
+                    self.count,
+                    dtype=self.observation_spec["observation"].dtype,
+                )
+            }
+        )
+        data.update(self.done_spec.zero())
+        return data
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        self.count += 1
+        done = self.count >= self.max_count
+        observation = TensorDict(
+            {
+                "observation": torch.full(
+                    (3, self.count + 1, 2),
+                    self.count,
+                    dtype=self.observation_spec["observation"].dtype,
+                )
+            }
+        )
+        done = self.full_done_spec.zero() | done
+        reward = self.full_reward_spec.zero()
+        return observation.update(done).update(reward)
+
+    def _set_seed(self, seed: Optional[int]):
+        self.manual_seed = seed
+        return seed

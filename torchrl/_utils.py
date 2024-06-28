@@ -27,11 +27,12 @@ from typing import Any, Callable, cast, Dict, TypeVar, Union
 import numpy as np
 import torch
 from packaging.version import parse
+from tensordict import unravel_key
 
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 
-LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "DEBUG")
+LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
 logger.setLevel(getattr(logging, LOGGING_LEVEL))
 # Disable propagation to the root logger
@@ -48,6 +49,9 @@ logger.addHandler(console_handler)
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
+if RL_WARNINGS:
+    warnings.simplefilter("once", DeprecationWarning)
+
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
 
 
@@ -94,6 +98,12 @@ class timeit:
             )
             logger.info(" -- ".join(strings))
 
+    @classmethod
+    def todict(cls, percall=True):
+        if percall:
+            return {key: val[0] for key, val in cls._REG.items()}
+        return {key: val[1] for key, val in cls._REG.items()}
+
     @staticmethod
     def erase():
         for k in timeit._REG:
@@ -108,6 +118,7 @@ def _check_for_faulty_process(processes):
             for _p in processes:
                 if _p.is_alive():
                     _p.terminate()
+                    _p.close()
         if terminate:
             break
     if terminate:
@@ -716,6 +727,14 @@ def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
         return key[:-1] + (new_ending,)
 
 
+def _append_last(key: NestedKey, new_suffix: str) -> NestedKey:
+    key = unravel_key(key)
+    if isinstance(key, str):
+        return key + new_suffix
+    else:
+        return key[:-1] + (key[-1] + new_suffix,)
+
+
 class _rng_decorator(_DecoratorContextManager):
     """Temporarily sets the seed and sets back the rng state when exiting."""
 
@@ -759,3 +778,11 @@ def _can_be_pickled(obj):
         return True
     except (pickle.PickleError, AttributeError, TypeError):
         return False
+
+
+def _make_ordinal_device(device: torch.device):
+    if device is None:
+        return device
+    if device.type == "cuda" and device.index is None:
+        return torch.device("cuda", index=torch.cuda.current_device())
+    return device

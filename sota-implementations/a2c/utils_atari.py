@@ -36,6 +36,8 @@ from torchrl.modules import (
     TanhNormal,
     ValueOperator,
 )
+from torchrl.record import VideoRecorder
+
 
 # ====================================================================
 # Environment utils
@@ -201,6 +203,11 @@ def make_ppo_models(env_name):
 # --------------------------------------------------------------------
 
 
+def dump_video(module):
+    if isinstance(module, VideoRecorder):
+        module.dump()
+
+
 def eval_model(actor, test_env, num_episodes=3):
     test_rewards = []
     for _ in range(num_episodes):
@@ -213,5 +220,6 @@ def eval_model(actor, test_env, num_episodes=3):
         )
         reward = td_test["next", "episode_reward"][td_test["next", "done"]]
         test_rewards = np.append(test_rewards, reward.cpu().numpy())
+        test_env.apply(dump_video)
     del td_test
     return test_rewards.mean()

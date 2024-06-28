@@ -16,6 +16,7 @@ from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyModule
 from torchrl.objectives import DQNLoss, HardUpdate
+from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils_cartpole import eval_model, make_dqn_model, make_env
 
@@ -23,7 +24,13 @@ from utils_cartpole import eval_model, make_dqn_model, make_env
 @hydra.main(config_path="", config_name="config_cartpole", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    device = torch.device(cfg.device)
+    device = cfg.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+    device = torch.device(device)
 
     # Make the components
     model = make_dqn_model(cfg.env.env_name)
@@ -93,7 +100,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create the test environment
-    test_env = make_env(cfg.env.env_name, "cpu")
+    test_env = make_env(cfg.env.env_name, "cpu", from_pixels=cfg.logger.video)
+    if cfg.logger.video:
+        test_env.insert_transform(
+            0,
+            VideoRecorder(
+                logger, tag=f"rendered/{cfg.env.env_name}", in_keys=["pixels"]
+            ),
+        )
 
     # Main loop
     collected_frames = 0
@@ -108,7 +122,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     sampling_start = time.time()
     q_losses = torch.zeros(num_updates, device=device)
 
-    for data in collector:
+    for i, data in enumerate(collector):
 
         log_info = {}
         sampling_time = time.time() - sampling_start
@@ -167,9 +181,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Get and log evaluation rewards and eval time
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (collected_frames - frames_per_batch) // test_interval < (
-                collected_frames // test_interval
-            ):
+            prev_test_frame = ((i - 1) * frames_per_batch) // test_interval
+            cur_test_frame = (i * frames_per_batch) // test_interval
+            final = current_frames >= collector.total_frames
+            if (i >= 1 and (prev_test_frame < cur_test_frame)) or final:
                 model.eval()
                 eval_start = time.time()
                 test_rewards = eval_model(model, test_env, num_test_episodes)
