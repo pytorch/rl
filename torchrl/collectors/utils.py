@@ -59,13 +59,19 @@ def split_trajectories(
             to ``(prefix, "traj_ids")``.
         done_key (NestedKey, optional): the key pointing to the ``"done""`` signal,
             if the trajectory could not be directly recovered. Defaults to ``"done"``.
-        as_nested (bool, optional): whether to return the results as nested
-            tensors. Defaults to ``False``.\
+        as_nested (bool or torch.layout, optional): whether to return the results as nested
+            tensors. Defaults to ``False``. If a ``torch.layout`` is provided, it will be used
+            to construct the nested tensor, otherwise the default layout will be used.
 
             .. note:: Using ``split_trajectories(tensordict, as_nested=True).to_padded_tensor(mask=mask_key)``
                 should result in the exact same result as ``as_nested=False``. Since this is an experimental
                 feature and relies on nested_tensors, which API may change in the future, we made this
                 an optional feature. The runtime should be faster with ``as_nested=True``.
+
+            .. note:: Providing a layout lets the user control whether the nested tensor is to be used
+                with ``torch.strided`` or ``torch.jagged`` layout. While the former has slightly more
+                capabilities at the time of writing, the second will be the main focus of the PyTorch team
+                in the future due to its better compatibility with :func:`~torch.compile`.
 
     Returns:
         A new tensordict with a leading dimension corresponding to the trajectory.
@@ -102,7 +108,7 @@ def split_trajectories(
             batch_size=torch.Size([2, 10]),
             device=None,
             is_shared=False)
-        >>> # check that split_trajectory got the trajectories right with the done signal
+        >>> # check that split_trajectories got the trajectories right with the done signal
         >>> assert (data_split["traj_ids"] == data_split["trajectory"]).all()
         >>> print(data_split["mask"])
         tensor([[ True,  True,  True,  True,  True,  True,  True,  True,  True,  True],
@@ -202,8 +208,10 @@ def split_trajectories(
         else:
             out_splits = out_splits.split(splits, 0)
 
+            layout = as_nested if as_nested is not bool else None
+
             def nest(*x):
-                return torch.nested.nested_tensor(list(x))
+                return torch.nested.nested_tensor(list(x), layout=layout)
 
             return out_splits[0]._fast_apply(
                 nest,
