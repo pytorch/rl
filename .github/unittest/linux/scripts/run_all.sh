@@ -9,7 +9,7 @@ set -v
 
 if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get update && apt-get upgrade -y
-  apt-get install -y vim git wget
+  apt-get install -y vim git wget libsdl2-dev libsdl2-2.0-0
 
   apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
   apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2

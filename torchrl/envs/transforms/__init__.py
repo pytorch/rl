@@ -8,6 +8,7 @@ from .r3m import R3MTransform
 from .rb_transforms import MultiStepTransform
 from .rlhf import KLRewardTransform
 from .transforms import (
+    ActionDiscretizer,
     ActionMask,
     AutoResetEnv,
     AutoResetTransform,

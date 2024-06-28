@@ -38,6 +38,7 @@ from .libs import (
 )
 from .model_based import DreamerDecoder, DreamerEnv, ModelBasedEnvBase
 from .transforms import (
+    ActionDiscretizer,
     ActionMask,
     AutoResetEnv,
     AutoResetTransform,

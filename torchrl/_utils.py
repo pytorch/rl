@@ -778,3 +778,11 @@ def _can_be_pickled(obj):
         return True
     except (pickle.PickleError, AttributeError, TypeError):
         return False
+
+
+def _make_ordinal_device(device: torch.device):
+    if device is None:
+        return device
+    if device.type == "cuda" and device.index is None:
+        return torch.device("cuda", index=torch.cuda.current_device())
+    return device

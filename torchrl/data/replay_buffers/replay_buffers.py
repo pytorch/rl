@@ -30,7 +30,7 @@ from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 
-from torchrl._utils import accept_remote_rref_udf_invocation
+from torchrl._utils import _make_ordinal_device, accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -585,9 +585,12 @@ class ReplayBuffer:
 
     def update_priority(
         self,
-        index: Union[int, torch.Tensor],
+        index: Union[int, torch.Tensor, Tuple[torch.Tensor]],
         priority: Union[int, torch.Tensor],
     ) -> None:
+        if isinstance(index, tuple):
+            index = torch.stack(index, -1)
+        priority = torch.as_tensor(priority)
         if self.dim_extend > 0 and priority.ndim > 1:
             priority = self._transpose(priority).flatten()
             # priority = priority.flatten()
@@ -1095,7 +1098,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 dtype=torch.float,
                 device=tensordict.device,
             ).expand(tensordict.shape[0])
-        if self._storage.ndim > 1:
+        if self._storage.ndim > 1 and priority.ndim >= self._storage.ndim:
             # We have to flatten the priority otherwise we'll be aggregating
             # the priority across batches
             priority = priority.flatten(0, self._storage.ndim - 1)
@@ -1172,9 +1175,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
         else:
             priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")
-        while index.shape != priority.shape:
-            # reduce index
-            index = index[..., 0]
+        if self._storage.ndim > 1 and index.ndim == 2:
+            index = index.unbind(-1)
+        else:
+            while index.shape != priority.shape:
+                # reduce index
+                index = index[..., 0]
         return self.update_priority(index, priority)
 
     def sample(
@@ -1457,7 +1463,7 @@ class InPlaceSampler:
         self.out = None
         if device is None:
             device = "cpu"
-        self.device = torch.device(device)
+        self.device = _make_ordinal_device(torch.device(device))
 
     def __call__(self, list_of_tds):
         if self.out is None:

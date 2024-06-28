@@ -25,7 +25,7 @@ from tensordict import (
 from tensordict.memmap import MemoryMappedTensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
-from torchrl._utils import implement_for, logger as torchrl_logger
+from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
     ListStorageCheckpointer,
     StorageCheckpointerBase,
@@ -405,7 +405,7 @@ class TensorStorage(Storage):
         else:
             self._len = 0
         self.device = (
-            torch.device(device)
+            _make_ordinal_device(torch.device(device))
             if device != "auto"
             else storage.device
             if storage is not None
@@ -983,7 +983,11 @@ class LazyMemmapStorage(LazyTensorStorage):
             self.scratch_dir = str(scratch_dir)
             if self.scratch_dir[-1] != "/":
                 self.scratch_dir += "/"
-        self.device = torch.device(device) if device != "auto" else torch.device("cpu")
+        self.device = (
+            _make_ordinal_device(torch.device(device))
+            if device != "auto"
+            else torch.device("cpu")
+        )
         if self.device.type != "cpu":
             raise ValueError(
                 "Memory map device other than CPU isn't supported. To cast your data to the desired device, "
