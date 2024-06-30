@@ -3982,7 +3982,7 @@ class CompositeSpec(TensorSpec):
         if isinstance(vals, TensorDict):
             out = vals.empty()  # create and empty tensordict similar to vals
         else:
-            out = TensorDict({}, torch.Size([]), _run_checks=False)
+            out = TensorDict._new_unsafe({}, torch.Size([]))
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
@@ -4047,13 +4047,12 @@ class CompositeSpec(TensorSpec):
         for key, item in self.items():
             if item is not None:
                 _dict[key] = item.rand(shape)
-        return TensorDict(
+        # No need to run checks since we know Composite is compliant with
+        # TensorDict requirements
+        return TensorDict._new_unsafe(
             _dict,
             batch_size=torch.Size([*shape, *self.shape]),
             device=self._device,
-            # No need to run checks since we know Composite is compliant with
-            # TensorDict requirements
-            _run_checks=False,
         )
 
     def keys(
