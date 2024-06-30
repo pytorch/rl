@@ -210,8 +210,20 @@ def split_trajectories(
 
             layout = as_nested if as_nested is not bool else None
 
-            def nest(*x):
-                return torch.nested.nested_tensor(list(x), layout=layout)
+            if torch.__version__ < "2.4":
+                # Layout must be True, there is no other layout available
+                if layout not in (True,):
+                    raise RuntimeError(
+                        f"layout={layout} is only available for torch>=v2.4"
+                    )
+
+                def nest(*x):
+                    return torch.nested.nested_tensor(list(x))
+
+            else:
+
+                def nest(*x):
+                    return torch.nested.nested_tensor(list(x), layout=layout)
 
             return out_splits[0]._fast_apply(
                 nest,
