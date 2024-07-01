@@ -62,9 +62,12 @@ def env_maker(cfg, device="cpu", from_pixels=False):
         env = DMControlEnv(
             cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
         )
-        return TransformedEnv(
-            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
-        )
+        # Select specs
+        keys = []
+        for key, spec in env.observation_spec.items(leaves_only=True):
+            if spec.ndim == 1:
+                keys.append(key)
+        return TransformedEnv(env, CatTensors(in_keys=keys, out_key="observation"))
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
 

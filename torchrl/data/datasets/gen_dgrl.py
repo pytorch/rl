@@ -93,6 +93,27 @@ class GenDGRLExperienceReplay(BaseDatasetExperienceReplay):
         >>> for batch in d:
         ...     break
         >>> print(batch)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                index: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        reward: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([32]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
+                terminated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=cpu,
+            is_shared=False)
 
     """
 

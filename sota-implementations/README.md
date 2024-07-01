@@ -5,7 +5,7 @@ We provide examples to train the following algorithms:
 - [DDPG](ddpg/ddpg.py)
 - [DQN](../sota-implementations/dqn/)
 - [Decision Transformers](../sota-implementations/decision_transformer)
-- [Discrete SAC](discrete_sac/discrete_sac.py)
+- [Discrete SAC](sac/discrete_sac.py)
 - [Dreamer](../sota-implementations/dreamer)
 - [IQL](iql/)
 - [Impala](impala/)

@@ -17,7 +17,9 @@ from torchrl.envs import (
     DMControlEnv,
     DoubleToFloat,
     EnvCreator,
+    JumanjiEnv,
     ParallelEnv,
+    RoboHiveEnv,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
@@ -45,6 +47,24 @@ def env_maker(cfg, device="cpu", from_pixels=False):
                 from_pixels=from_pixels,
                 pixels_only=False,
             )
+    elif lib == "robohive":
+        with set_gym_backend("gymnasium"):
+            # torchrl_logger.info("env:", "myoHandReorientID-v0")
+            RoboHiveEnv.available_envs
+            env = RoboHiveEnv(cfg.env.name, from_pixels=from_pixels, pixels_only=False)
+            env = env.append_transform(
+                CatTensors(
+                    in_keys=list(
+                        set(env.observation_spec.keys(leaves_only=True)) - {"pixels"}
+                    ),
+                    out_key="observation",
+                )
+            )
+            return env
+    elif lib == "jumanji":
+        # torchrl_logger.info("env:", "myoHandReorientID-v0")
+        env = JumanjiEnv(cfg.env.name, from_pixels=from_pixels, pixels_only=False)
+        return env
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
@@ -89,7 +109,7 @@ def make_environment(cfg, logger=None):
         )
     eval_env = TransformedEnv(
         ParallelEnv(
-            cfg.collector.env_per_collector,
+            1,
             EnvCreator(partial),
             serial_for_single=True,
         ),

@@ -9,6 +9,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torchvision.transforms.v2.functional
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
 
