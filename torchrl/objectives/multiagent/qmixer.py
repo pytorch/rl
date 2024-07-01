@@ -333,9 +333,9 @@ class QMixerLoss(LossModule):
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         td_copy = tensordict.clone(False)
-        with self.local_value_network_params.to_module(self.local_value_network):
-            self.local_value_network(
-                td_copy,
+        # with self.local_value_network_params.to_module(self.local_value_network):
+        self.local_value_network(
+                td_copy
             )
 
         action = tensordict.get(self.tensor_keys.action)
@@ -353,8 +353,8 @@ class QMixerLoss(LossModule):
             pred_val_index = (pred_val * action).sum(-1, keepdim=True)
 
         td_copy.set(self.tensor_keys.local_value, pred_val_index)  # [*B, n_agents, 1]
-        with self.mixer_network_params.to_module(self.mixer_network):
-            self.mixer_network(td_copy)
+        # with self.mixer_network_params.to_module(self.mixer_network):
+        self.mixer_network(td_copy)
         pred_val_index = td_copy.get(self.tensor_keys.global_value).squeeze(-1)
         # [*B] this is global and shared among the agents as will be the target
 
