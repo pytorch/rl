@@ -160,6 +160,15 @@ TD3
 
     TD3Loss
 
+TD3+BC
+----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    TD3BCLoss
+
 PPO
 ---
 
