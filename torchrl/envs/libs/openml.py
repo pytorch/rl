@@ -144,6 +144,7 @@ class OpenMLEnv(EnvBase):
                 f"Action and outcome shape differ: {action.shape} vs {y.shape}."
             )
         reward = (action == tensordict["y"]).float().unsqueeze(-1)
+        reward = reward.requires_grad_()
         done = torch.ones_like(reward, dtype=torch.bool)
         td = TensorDict(
             {
