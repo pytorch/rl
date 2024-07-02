@@ -988,7 +988,7 @@ class SerialEnv(BatchedEnvBase):
         tds = []
         for i, _env in enumerate(self._envs):
             if not needs_resetting[i]:
-                if not self._use_buffers and tensordict is not None:
+                if out_tds is not None and tensordict is not None:
                     out_tds[i] = tensordict[i].exclude(*self._envs[i].reset_keys)
                 continue
             if tensordict is not None:
