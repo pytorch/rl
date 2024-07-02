@@ -40,7 +40,7 @@ Get started with logging
 #
 # Usually, building a logger requires
 # at least an experiment name and possibly a logging directory and other
-# hyperapameters.
+# hyperparameters.
 #
 
 from torchrl.record import CSVLogger
@@ -66,9 +66,12 @@ logger.log_scalar("my_scalar", 0.4)
 #
 # Let's first see how we can create a Gym environment that outputs images
 # alongside its observations. :class:`~torchrl.envs.GymEnv` accept two keywords
-# for this purpose: ``from_pixels=True`` will make the env ``step`` function
+# for this purpose:
+# - ``from_pixels=True`` will make the env ``step`` function
 # write a ``"pixels"`` entry containing the images corresponding to your
-# observations, and the ``pixels_only=False`` will indicate that you want the
+# observations, and
+#
+# - ``pixels_only=False`` will indicate that you want the
 # observations to be returned as well.
 #
 
@@ -94,8 +97,8 @@ record_env = TransformedEnv(env, recorder)
 
 #####################################
 # When running this environment, all the ``"pixels"`` entries will be saved in
-# a local buffer and dumped in a video on demand (it is important that you
-# call this method when appropriate):
+# a local buffer (i.e. RAM) and dumped in a video on demand (to prevent excessive
+# RAM usage, you are advised to call this method whenever appropriate!):
 
 rollout = record_env.rollout(max_steps=3)
 # Uncomment this line to save the video on disk:
@@ -104,6 +107,8 @@ rollout = record_env.rollout(max_steps=3)
 #####################################
 # In this specific case, the video format can be chosen when instantiating
 # the CSVLogger.
+#
+# (If you want to customise how your video is recorded, have a look at :ref:`our knowledge base <ref_knowledge_base>`.)
 #
 # This is all we wanted to cover in the getting started tutorial.
 # You should now be ready to code your
