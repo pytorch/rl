@@ -16,6 +16,7 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
+    NonTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -1751,9 +1752,9 @@ class MultiKeyCountingEnv(EnvBase):
         if tensordict is not None:
             _reset = tensordict.get("_reset", None)
             if _reset is not None:
-                self.count[_reset] = self.start_val
-                self.count_nested_1[_reset] = self.start_val
-                self.count_nested_2[_reset] = self.start_val
+                self.count[_reset.squeeze(-1)] = self.start_val
+                self.count_nested_1[_reset.squeeze(-1)] = self.start_val
+                self.count_nested_2[_reset.squeeze(-1)] = self.start_val
             else:
                 reset_all = True
 
@@ -1825,6 +1826,39 @@ class MultiKeyCountingEnv(EnvBase):
         torch.manual_seed(seed)
 
 
+class EnvWithMetadata(EnvBase):
+    def __init__(self):
+        super().__init__()
+        self.observation_spec = CompositeSpec(
+            tensor=UnboundedContinuousTensorSpec(3),
+            non_tensor=NonTensorSpec(shape=()),
+        )
+        self.state_spec = CompositeSpec(
+            non_tensor=NonTensorSpec(shape=()),
+        )
+        self.reward_spec = UnboundedContinuousTensorSpec(1)
+        self.action_spec = UnboundedContinuousTensorSpec(1)
+
+    def _reset(self, tensordict):
+        data = self.observation_spec.zero()
+        data.set_non_tensor("non_tensor", 0)
+        data.update(self.full_done_spec.zero())
+        return data
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        data = self.observation_spec.zero()
+        data.set_non_tensor("non_tensor", tensordict["non_tensor"] + 1)
+        data.update(self.full_done_spec.zero())
+        data.update(self.full_reward_spec.zero())
+        return data
+
+    def _set_seed(self, seed: Optional[int]):
+        return seed
+
+
 class AutoResettingCountingEnv(CountingEnv):
     def _step(self, tensordict):
         tensordict = super()._step(tensordict)
@@ -1881,8 +1915,8 @@ class AutoResetHeteroCountingEnv(HeterogeneousCountingEnv):
                     lazy[obskey[1:]] += expand_right(
                         self.count[..., i, 0], lazy[obskey[1:]].shape
                     ).clone()
-        td.update(self.output_spec["full_done_spec"].zero())
-        td.update(self.output_spec["full_reward_spec"].zero())
+        td.update(self.full_done_spec.zero())
+        td.update(self.full_reward_spec.zero())
 
         assert td.batch_size == self.batch_size
         return td
@@ -1896,3 +1930,57 @@ class AutoResetHeteroCountingEnv(HeterogeneousCountingEnv):
         reset_td.update(self.full_done_spec.zero())
         assert reset_td.batch_size == self.batch_size
         return reset_td
+
+
+class EnvWithDynamicSpec(EnvBase):
+    def __init__(self, max_count=5):
+        super().__init__(batch_size=())
+        self.observation_spec = CompositeSpec(
+            observation=UnboundedContinuousTensorSpec(shape=(3, -1, 2)),
+        )
+        self.action_spec = BoundedTensorSpec(low=-1, high=1, shape=(2,))
+        self.full_done_spec = CompositeSpec(
+            done=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+            terminated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+            truncated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+        )
+        self.reward_spec = UnboundedContinuousTensorSpec((1,), dtype=torch.float)
+        self.count = 0
+        self.max_count = max_count
+
+    def _reset(self, tensordict=None):
+        self.count = 0
+        data = TensorDict(
+            {
+                "observation": torch.full(
+                    (3, self.count + 1, 2),
+                    self.count,
+                    dtype=self.observation_spec["observation"].dtype,
+                )
+            }
+        )
+        data.update(self.done_spec.zero())
+        return data
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        self.count += 1
+        done = self.count >= self.max_count
+        observation = TensorDict(
+            {
+                "observation": torch.full(
+                    (3, self.count + 1, 2),
+                    self.count,
+                    dtype=self.observation_spec["observation"].dtype,
+                )
+            }
+        )
+        done = self.full_done_spec.zero() | done
+        reward = self.full_reward_spec.zero()
+        return observation.update(done).update(reward)
+
+    def _set_seed(self, seed: Optional[int]):
+        self.manual_seed = seed
+        return seed

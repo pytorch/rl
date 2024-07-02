@@ -13,7 +13,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
@@ -266,6 +266,16 @@ class SACLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
+
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    value_network: TensorDictModule | None
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    value_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams | None
 
     def __init__(
         self,
@@ -622,7 +632,7 @@ class SACLoss(LossModule):
     @property
     @_cache_values
     def _cached_target_params_actor_value(self):
-        return TensorDict(
+        return TensorDict._new_unsafe(
             {
                 "module": {
                     "0": self.target_actor_network_params,
@@ -630,14 +640,13 @@ class SACLoss(LossModule):
                 }
             },
             torch.Size([]),
-            _run_checks=False,
         )
 
     def _qvalue_v1_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         target_params = self._cached_target_params_actor_value
-        with set_exploration_type(ExplorationType.MODE):
+        with set_exploration_type(self.deterministic_sampling_mode):
             target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params
             ).squeeze(-1)
@@ -802,7 +811,7 @@ class DiscreteSACLoss(LossModule):
             :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
         num_actions (int, optional): number of actions in the action space.
             To be provided if target_entropy is set to "auto".
-        num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
+        num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 2.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
         alpha_init (float, optional): initial entropy multiplier.
@@ -973,6 +982,16 @@ class DiscreteSACLoss(LossModule):
         "alpha",
         "entropy",
     ]
+
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    value_network: TensorDictModule | None
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    value_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams | None
 
     def __init__(
         self,

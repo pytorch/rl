@@ -46,6 +46,9 @@ Each env will have the following attributes:
   all the output keys (:obj:`"full_observation_spec"`, :obj:`"full_reward_spec"` and :obj:`"full_done_spec"`).
   It is locked and should not be modified directly.
 
+If the environment carries non-tensor data, a :class:`~torchrl.data.NonTensorSpec`
+instance can be used.
+
 Importantly, the environment spec shapes should contain the batch size, e.g.
 an environment with :obj:`env.batch_size == torch.Size([4])` should have
 an :obj:`env.action_spec` with shape :obj:`torch.Size([4, action_size])`.
@@ -548,6 +551,116 @@ observation of an episode should be replaced with some placeholder or not.
           [-3.2109e-02,  5.8997e-01, -6.1507e-02, -8.7363e-01],
           [-2.0310e-02,  3.9574e-01, -7.8980e-02, -6.0090e-01]])
 
+Dynamic Specs
+-------------
+
+.. _dynamic_envs:
+
+Running environments in parallel is usually done via the creation of memory buffers used to pass information from one
+process to another. In some cases, it may be impossible to forecast whether and environment will or will not have
+consistent inputs or outputs during a rollout, as their shape may be variable. We refer to this as dynamic specs.
+
+TorchRL is capable of handling dynamic specs, but the batched environments and collectors will need to be made
+aware of this feature. Note that, in practice, this is detected automatically.
+
+To indicate that a tensor will have a variable size along a dimension, one can set the size value as ``-1`` for the
+desired dimensions. Because the data cannot be stacked contiguously, calls to ``env.rollout`` need to be made with
+the ``return_contiguous=False`` argument.
+Here is a working example:
+
+    >>> from torchrl.envs import EnvBase
+    >>> from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, BoundedTensorSpec, BinaryDiscreteTensorSpec
+    >>> import torch
+    >>> from tensordict import TensorDict, TensorDictBase
+    >>>
+    >>> class EnvWithDynamicSpec(EnvBase):
+    ...     def __init__(self, max_count=5):
+    ...         super().__init__(batch_size=())
+    ...         self.observation_spec = CompositeSpec(
+    ...             observation=UnboundedContinuousTensorSpec(shape=(3, -1, 2)),
+    ...         )
+    ...         self.action_spec = BoundedTensorSpec(low=-1, high=1, shape=(2,))
+    ...         self.full_done_spec = CompositeSpec(
+    ...             done=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+    ...             terminated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+    ...             truncated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+    ...         )
+    ...         self.reward_spec = UnboundedContinuousTensorSpec((1,), dtype=torch.float)
+    ...         self.count = 0
+    ...         self.max_count = max_count
+    ...
+    ...     def _reset(self, tensordict=None):
+    ...         self.count = 0
+    ...         data = TensorDict(
+    ...             {
+    ...                 "observation": torch.full(
+    ...                     (3, self.count + 1, 2),
+    ...                     self.count,
+    ...                     dtype=self.observation_spec["observation"].dtype,
+    ...                 )
+    ...             }
+    ...         )
+    ...         data.update(self.done_spec.zero())
+    ...         return data
+    ...
+    ...     def _step(
+    ...         self,
+    ...         tensordict: TensorDictBase,
+    ...     ) -> TensorDictBase:
+    ...         self.count += 1
+    ...         done = self.count >= self.max_count
+    ...         observation = TensorDict(
+    ...             {
+    ...                 "observation": torch.full(
+    ...                     (3, self.count + 1, 2),
+    ...                     self.count,
+    ...                     dtype=self.observation_spec["observation"].dtype,
+    ...                 )
+    ...             }
+    ...         )
+    ...         done = self.full_done_spec.zero() | done
+    ...         reward = self.full_reward_spec.zero()
+    ...         return observation.update(done).update(reward)
+    ...
+    ...     def _set_seed(self, seed: Optional[int]):
+    ...         self.manual_seed = seed
+    ...         return seed
+    >>> env = EnvWithDynamicSpec()
+    >>> print(env.rollout(5, return_contiguous=False))
+    LazyStackedTensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: LazyStackedTensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([5, 3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                exclusive_fields={
+                },
+                batch_size=torch.Size([5]),
+                device=None,
+                is_shared=False,
+                stack_dim=0),
+            observation: Tensor(shape=torch.Size([5, 3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        exclusive_fields={
+        },
+        batch_size=torch.Size([5]),
+        device=None,
+        is_shared=False,
+        stack_dim=0)
+
+.. warning:: The absence of memory buffers in :class:`~torchrl.envs.ParallelEnv` and in data collectors can impact
+performance of these classes dramatically. Any such usage should be carefully benchmarked against a plain execution on
+a single process, as serializing and deserializing large numbers of tensors can be very expensive.
+
+Currently, :func:`~torchrl.envs.utils.check_env_specs` will pass for dynamic specs where a shape varies along some
+dimensions, but not when a key is present during a step and absent during others, or when the number of dimensions
+varies.
 
 Transforms
 ----------
@@ -655,6 +768,7 @@ to be able to create this other composition:
 
     Transform
     TransformedEnv
+    ActionDiscretizer
     ActionMask
     AutoResetEnv
     AutoResetTransform
@@ -666,17 +780,16 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    DTypeCastTransform
     DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
-    DTypeCastTransform
     EndOfLifeTransform
     ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation
     FrameSkipTransform
     GrayScale
-    gSDENoise
     InitTracker
     KLRewardTransform
     NoopResetEnv
@@ -686,13 +799,13 @@ to be able to create this other composition:
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
+    RemoveEmptySpecs
     RenameTransform
     Resize
+    Reward2GoTransform
     RewardClipping
     RewardScaling
     RewardSum
-    Reward2GoTransform
-    RemoveEmptySpecs
     SelectTransform
     SignTransform
     SqueezeTransform
@@ -702,11 +815,12 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
-    VecGymEnvTransform
-    VecNorm
     VC1Transform
     VIPRewardTransform
     VIPTransform
+    VecGymEnvTransform
+    VecNorm
+    gSDENoise
 
 Environments with masked actions
 --------------------------------

@@ -317,11 +317,20 @@ class DMControlWrapper(GymLikeEnv):
     def _output_transform(
         self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
     ) -> Tuple[np.ndarray, float, bool, bool, dict]:
+        from dm_env import StepType
+
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward
 
-        done = truncated = terminated = False  # dm_control envs are non-terminating
+        truncated = terminated = False
+        if timestep_tuple[0].step_type == StepType.LAST:
+            if np.isclose(timestep_tuple[0].discount, 1):
+                truncated = True
+            else:
+                terminated = True
+        done = truncated or terminated
+
         observation = timestep_tuple[0].observation
         info = {}
 

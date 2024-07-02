@@ -26,16 +26,16 @@
 It provides pytorch and **python-first**, low and high level abstractions for RL that are intended to be **efficient**, **modular**, **documented** and properly **tested**.
 The code is aimed at supporting research in RL. Most of it is written in python in a highly modular way, such that researchers can easily swap components, transform them or write new ones with little effort.
 
-This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](torchrl/envs)), [transforms](torchrl/envs/transforms), [models](torchrl/modules), data utilities (e.g. collectors and containers), etc.
+This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](https://github.com/pytorch/rl/blob/main/torchrl/envs)), [transforms](https://github.com/pytorch/rl/blob/main/torchrl/envs/transforms), [models](https://github.com/pytorch/rl/blob/main/torchrl/modules), data utilities (e.g. collectors and containers), etc.
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch). Common environment libraries (e.g. OpenAI gym) are only optional.
 
-On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
+On the low-level end, torchrl comes with a set of highly re-usable functionals for cost functions, returns and data processing.
 
 TorchRL aims at (1) a high modularity and (2) good runtime performance. Read the [full paper](https://arxiv.org/abs/2306.00577) for a more curated description of the library.
 
 ## Getting started
 
-Check our [Getting Started tutorials](https://pytorch.org/rl/index.html#getting-started) for quickly ramp up with the basic 
+Check our [Getting Started tutorials](https://pytorch.org/rl/stable/index.html#getting-started) for quickly ramp up with the basic 
 features of the library!
 
 ## Documentation and knowledge base
@@ -44,7 +44,7 @@ The TorchRL documentation can be found [here](https://pytorch.org/rl).
 It contains tutorials and the API reference.
 
 TorchRL also provides a RL knowledge base to help you debug your code, or simply
-learn the basics of RL. Check it out [here](https://pytorch.org/rl/reference/knowledge_base.html).
+learn the basics of RL. Check it out [here](https://pytorch.org/rl/stable/reference/knowledge_base.html).
 
 We have some introductory videos for you to get to know the library better, check them out:
 
@@ -138,10 +138,10 @@ lines of code*!
   ```
   </details>
 
-Here is an example of how the [environment API](https://pytorch.org/rl/reference/envs.html)
+Here is an example of how the [environment API](https://pytorch.org/rl/stable/reference/envs.html)
 relies on tensordict to carry data from one function to another during a rollout
 execution:
-![Alt Text](docs/source/_static/img/rollout.gif)
+![Alt Text](https://github.com/pytorch/rl/blob/main/docs/source/_static/img/rollout.gif)
 
 `TensorDict` makes it easy to re-use pieces of code across environments, models and
 algorithms.
@@ -268,14 +268,14 @@ And it is `functorch` and `torch.compile` compatible!
 
 ## Features
 
-- A common [interface for environments](torchrl/envs)
+- A common [interface for environments](https://github.com/pytorch/rl/blob/main/torchrl/envs)
   which supports common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and state-less execution 
   (e.g. Model-based environments).
-  The [batched environments](torchrl/envs/batched_envs.py) containers allow parallel execution<sup>(2)</sup>.
-  A common PyTorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py) is also provided.
+  The [batched environments](https://github.com/pytorch/rl/blob/main/torchrl/envs/batched_envs.py) containers allow parallel execution<sup>(2)</sup>.
+  A common PyTorch-first class of [tensor-specification class](https://github.com/pytorch/rl/blob/main/torchrl/data/tensor_specs.py) is also provided.
   TorchRL's environments API is simple but stringent and specific. Check the 
-  [documentation](https://pytorch.org/rl/reference/envs.html)
-  and [tutorial](https://pytorch.org/rl/tutorials/pendulum.html) to learn more!
+  [documentation](https://pytorch.org/rl/stable/reference/envs.html)
+  and [tutorial](https://pytorch.org/rl/stable/tutorials/pendulum.html) to learn more!
   <details>
     <summary>Code</summary>
 
@@ -288,7 +288,7 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-- multiprocess and distributed [data collectors](torchrl/collectors/collectors.py)<sup>(2)</sup>
+- multiprocess and distributed [data collectors](https://github.com/pytorch/rl/blob/main/torchrl/collectors/collectors.py)<sup>(2)</sup>
   that work synchronously or asynchronously.
   Through the use of TensorDict, TorchRL's training loops are made very similar
   to regular training loops in supervised
@@ -315,10 +315,10 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-  Check our [distributed collector examples](examples/distributed/collectors) to
+  Check our [distributed collector examples](https://github.com/pytorch/rl/blob/main/examples/distributed/collectors) to
   learn more about ultra-fast data collection with TorchRL.
 
-- efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) with modularized storage:
+- efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](https://github.com/pytorch/rl/blob/main/torchrl/data/replay_buffers/replay_buffers.py) with modularized storage:
   <details>
     <summary>Code</summary>
 
@@ -357,7 +357,7 @@ And it is `functorch` and `torch.compile` compatible!
   </details>
 
 
-- cross-library [environment transforms](torchrl/envs/transforms/transforms.py)<sup>(1)</sup>,
+- cross-library [environment transforms](https://github.com/pytorch/rl/blob/main/torchrl/envs/transforms/transforms.py)<sup>(1)</sup>,
   executed on device and in a vectorized fashion<sup>(2)</sup>,
   which process and prepare the data coming out of the environments to be used by the agent:
   <details>
@@ -391,7 +391,7 @@ And it is `functorch` and `torch.compile` compatible!
   </details>
 
 - various tools for distributed learning (e.g. [memory mapped tensors](https://github.com/pytorch/tensordict/blob/main/tensordict/memmap.py))<sup>(2)</sup>;
-- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))<sup>(1)</sup>:
+- various [architectures](https://github.com/pytorch/rl/blob/main/torchrl/modules/models/) and models (e.g. [actor-critic](https://github.com/pytorch/rl/blob/main/torchrl/modules/tensordict_module/actors.py))<sup>(1)</sup>:
   <details>
     <summary>Code</summary>
 
@@ -443,8 +443,8 @@ And it is `functorch` and `torch.compile` compatible!
   ```
   </details>
 
-- exploration [wrappers](torchrl/modules/tensordict_module/exploration.py) and
-  [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation<sup>(1)</sup>:
+- exploration [wrappers](https://github.com/pytorch/rl/blob/main/torchrl/modules/tensordict_module/exploration.py) and
+  [modules](https://github.com/pytorch/rl/blob/main/torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation<sup>(1)</sup>:
   <details>
     <summary>Code</summary>
 
@@ -481,40 +481,40 @@ And it is `functorch` and `torch.compile` compatible!
 
   </details>
 
-- a generic [trainer class](torchrl/trainers/trainers.py)<sup>(1)</sup> that
+- a generic [trainer class](https://github.com/pytorch/rl/blob/main/torchrl/trainers/trainers.py)<sup>(1)</sup> that
   executes the aforementioned training loop. Through a hooking mechanism,
   it also supports any logging or data transformation operation at any given
   time.
 
-- various [recipes](torchrl/trainers/helpers/models.py) to build models that
+- various [recipes](https://github.com/pytorch/rl/blob/main/torchrl/trainers/helpers/models.py) to build models that
     correspond to the environment being deployed.
 
 If you feel a feature is missing from the library, please submit an issue!
-If you would like to contribute to new features, check our [call for contributions](https://github.com/pytorch/rl/issues/509) and our [contribution](CONTRIBUTING.md) page.
+If you would like to contribute to new features, check our [call for contributions](https://github.com/pytorch/rl/issues/509) and our [contribution](https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md) page.
 
 
 ## Examples, tutorials and demos
 
-A series of [examples](examples/) are provided with an illustrative purpose:
-- [DQN](sota-implementations/dqn)
-- [DDPG](sota-implementations/ddpg/ddpg.py)
-- [IQL](sota-implementations/iql/iql.py)
-- [CQL](sota-implementations/iql/cql.py)
-- [TD3](sota-implementations/td3/td3.py)
-- [A2C](examples/a2c_old/a2c.py)
-- [PPO](sota-implementations/ppo/ppo.py)
-- [SAC](sota-implementations/sac/sac.py)
-- [REDQ](sota-implementations/redq/redq.py)
-- [Dreamer](sota-implementations/dreamer/dreamer.py)
-- [Decision Transformers](sota-implementations/decision_transformer)
-- [RLHF](examples/rlhf)
+A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are provided with an illustrative purpose:
+- [DQN](https://github.com/pytorch/rl/blob/main/sota-implementations/dqn)
+- [DDPG](https://github.com/pytorch/rl/blob/main/sota-implementations/ddpg/ddpg.py)
+- [IQL](https://github.com/pytorch/rl/blob/main/sota-implementations/iql/iql_offline.py)
+- [CQL](https://github.com/pytorch/rl/blob/main/sota-implementations/cql/cql_offline.py)
+- [TD3](https://github.com/pytorch/rl/blob/main/sota-implementations/td3/td3.py)
+- [A2C](https://github.com/pytorch/rl/blob/main/examples/a2c_old/a2c.py)
+- [PPO](https://github.com/pytorch/rl/blob/main/sota-implementations/ppo/ppo.py)
+- [SAC](https://github.com/pytorch/rl/blob/main/sota-implementations/sac/sac.py)
+- [REDQ](https://github.com/pytorch/rl/blob/main/sota-implementations/redq/redq.py)
+- [Dreamer](https://github.com/pytorch/rl/blob/main/sota-implementations/dreamer/dreamer.py)
+- [Decision Transformers](https://github.com/pytorch/rl/blob/main/sota-implementations/decision_transformer)
+- [RLHF](https://github.com/pytorch/rl/blob/main/examples/rlhf)
 
 and many more to come!
 
-Check the [examples markdown](sota-implementations/SOTA-IMPLEMENTATIONS.md) directory for more details 
+Check the [examples](https://github.com/pytorch/rl/blob/main/sota-implementations/) directory for more details 
 about handling the various configuration settings.
 
-We also provide [tutorials and demos](https://pytorch.org/rl/#tutorials) that give a sense of
+We also provide [tutorials and demos](https://pytorch.org/rl/stable#tutorials) that give a sense of
 what the library can do.
 
 ## Citation
@@ -550,21 +550,21 @@ including `pip3` or other special installation instructions.
 **Torchrl**
 
 You can install the **latest stable release** by using
-```
+```bash
 pip3 install torchrl
 ```
 This should work on linux, Windows 10 and OsX (Intel or Silicon chips).
 On certain Windows machines (Windows 11), one should install the library locally (see below).
 
 The **nightly build** can be installed via
-```
-pip install torchrl-nightly
+```bash
+pip3install torchrl-nightly
 ```
 which we currently only ship for Linux and OsX (Intel) machines.
 Importantly, the nightly builds require the nightly builds of PyTorch too.
 
 To install extra dependencies, call
-```
+```bash
 pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl,checkpointing]"
 ```
 or a subset of these.
@@ -572,23 +572,37 @@ or a subset of these.
 One may also desire to install the library locally. Three main reasons can motivate this:
 - the nightly/stable release isn't available for one's platform (eg, Windows 11, nightlies for Apple Silicon etc.);
 - contributing to the code;
-- install torchrl with a previous version of PyTorch (note that this should also be doable via a regular install followed
-  by a downgrade to a previous pytorch version -- but the C++ binaries will not be available.)
+- install torchrl with a previous version of PyTorch (any version >= 2.0) (note that this should also be doable via a regular install followed
+  by a downgrade to a previous pytorch version -- but the C++ binaries will not be available so some feature will not work,  
+  such as prioritized replay buffers and the like.)
 
 To install the library locally, start by cloning the repo:
-```
+```bash
 git clone https://github.com/pytorch/rl
+```
+and don't forget to check out the branch or tag you want to use for the build:
+```bash
+git checkout v0.4.0
 ```
 
 Go to the directory where you have cloned the torchrl repo and install it (after
 installing `ninja`)
-```
+```bash
 cd /path/to/torchrl/
-pip install ninja -U
+pip3install ninja -U
 python setup.py develop
 ```
 
-(unfortunately, `pip install -e .` will not work).
+One can also build the wheels to distribute to co-workers using
+```bash
+python setup.py bdist_wheel
+```
+Your wheels will be stored there `./dist/torchrl<name>.whl` and installable via
+```bash
+pip install torchrl<name>.whl
+```
+
+**Warning**: Unfortunately, `pip3 install -e .` does not currently work. Contributions to help fix this are welcome!
 
 On M1 machines, this should work out-of-the-box with the nightly build of PyTorch.
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
@@ -670,7 +684,7 @@ it means that the C++ extensions were not installed or not found.
   ```
 
 Versioning issues can cause error message of the type ```undefined symbol```
-and such. For these, refer to the [versioning issues document](knowledge_base/VERSIONING_ISSUES.md)
+and such. For these, refer to the [versioning issues document](https://github.com/pytorch/rl/blob/main/knowledge_base/VERSIONING_ISSUES.md)
 for a complete explanation and proposed workarounds.
 
 ## Asking a question
@@ -683,7 +697,7 @@ the [PyTorch forum](https://discuss.pytorch.org/c/reinforcement-learning/6).
 ## Contributing
 
 Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
-You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
+You can checkout the detailed contribution guide [here](https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md).
 As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
 
 Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is committed locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
@@ -696,4 +710,4 @@ BC-breaking changes are likely to happen but they will be introduced with a depr
 warranty after a few release cycles.
 
 # License
-TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+TorchRL is licensed under the MIT License. See [LICENSE](https://github.com/pytorch/rl/blob/main/LICENSE) for details.

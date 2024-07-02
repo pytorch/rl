@@ -119,6 +119,7 @@ from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.rlhf import KLRewardTransform
 from torchrl.envs.transforms.transforms import (
     _has_tv,
+    ActionDiscretizer,
     BatchSizeTransform,
     FORWARD_NOT_IMPLEMENTED,
     Transform,
@@ -956,7 +957,7 @@ class TestCatFrames(TransformBase):
         td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
         if dim > 0:
             with pytest.raises(
-                ValueError, match="dim must be < 0 to accomodate for tensordict"
+                ValueError, match="dim must be < 0 to accommodate for tensordict"
             ):
                 cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
             return
@@ -7777,7 +7778,9 @@ class TestVecNorm:
         for idx in range(nprc):
             queues[idx][1].put(msg)
 
-        td = make_env.state_dict()["transforms.1._extra_state"]["td"]
+        td = TensorDict(
+            make_env.state_dict()["transforms.1._extra_state"]
+        ).unflatten_keys(VecNorm.SEP)
 
         obs_sum = td.get(("some", "obs_sum")).clone()
         obs_ssq = td.get(("some", "obs_ssq")).clone()
@@ -7878,7 +7881,9 @@ class TestVecNorm:
         parallel_sd = parallel_env.state_dict()
         assert "worker0" in parallel_sd
         worker_sd = parallel_sd["worker0"]
-        td = worker_sd["transforms.1._extra_state"]["td"]
+        td = TensorDict(worker_sd["transforms.1._extra_state"]).unflatten_keys(
+            VecNorm.SEP
+        )
         queue_out.put("start")
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "first round"
@@ -7951,6 +7956,83 @@ class TestVecNorm:
         assert transform.__dict__.keys() == transform2.__dict__.keys()
         for key in sorted(transform.__dict__.keys()):
             assert isinstance(transform.__dict__[key], type(transform2.__dict__[key]))
+
+    def test_state_dict_vecnorm(self):
+        transform0 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
+        with pytest.warns(UserWarning, match="Querying state_dict on an uninitialized"):
+            sd_empty = transform0.state_dict()
+
+        transform1 = transform0.clone()
+        # works fine
+        transform1.load_state_dict(sd_empty)
+        transform1._step(td, td)
+        with pytest.raises(KeyError, match="Could not find a tensordict"):
+            transform1.load_state_dict(sd_empty)
+
+        transform0._step(td, td)
+        sd = transform0.state_dict()
+
+        transform1 = transform0.clone()
+        assert transform0[0]._td.is_shared() is transform1[0]._td.is_shared()
+
+        def assert_differs(a, b):
+            assert a.untyped_storage().data_ptr() == b.untyped_storage().data_ptr()
+
+        transform1[0]._td.apply(assert_differs, transform0[0]._td, filter_empty=True)
+
+        transform1 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        with pytest.warns(UserWarning, match="VecNorm wasn't initialized"):
+            transform1.load_state_dict(sd)
+        transform1._step(td, td)
+
+        transform1 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        transform1._step(td, td)
+        transform1.load_state_dict(sd)
+
+    def test_to_obsnorm_multikeys(self):
+        transform0 = Compose(
+            VecNorm(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+        )
+        td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
+        td0 = transform0._step(td, td.clone())
+        td1 = transform0[0].to_observation_norm()._step(td, td.clone())
+        assert_allclose_td(td0, td1)
+
+        loc = transform0[0].loc
+        scale = transform0[0].scale
+        keys = list(transform0[0].in_keys)
+        td2 = (td.select(*keys) - loc) / (scale + torch.finfo(scale.dtype).eps)
+        td2.rename_key_("a", "a_avg")
+        td2.rename_key_(("b", "c"), ("b", "c_avg"))
+        assert_allclose_td(td0.select(*td2.keys(True, True)), td2)
+
+    def test_frozen(self):
+        transform0 = VecNorm(
+            in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")]
+        )
+        with pytest.raises(
+            RuntimeError, match="Make sure the VecNorm has been initialized"
+        ):
+            transform0.frozen_copy()
+        td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
+        td0 = transform0._step(td, td.clone())
+        transform1 = transform0.frozen_copy()
+        td1 = transform1._step(td, td.clone())
+        assert_allclose_td(td0, td1)
+
+        td += 1
+        td2 = transform0._step(td, td.clone())
+        td3 = transform1._step(td, td.clone())
+        assert_allclose_td(td2, td3)
+        with pytest.raises(AssertionError):
+            assert_allclose_td(td0, td2)
 
 
 def test_added_transforms_are_in_eval_mode_trivial():
@@ -9173,6 +9255,7 @@ class TestKLRewardTransform(TransformBase):
     )
     def test_transform_env(self, out_key):
         base_env = self.envclass()
+        torch.manual_seed(0)
         actor = self._make_actor()
         # we need to patch the env and create a sample_log_prob spec to make check_env_specs happy
         env = TransformedEnv(
@@ -9182,6 +9265,7 @@ class TestKLRewardTransform(TransformBase):
                 KLRewardTransform(actor, out_keys=out_key),
             ),
         )
+        torch.manual_seed(0)
         actor = self._make_actor()
         td1 = env.rollout(3, actor)
         tdparams = TensorDict(dict(actor.named_parameters()), []).unflatten_keys(".")
@@ -10929,6 +11013,125 @@ class TestBatchSizeTransform(TransformBase):
     def test_transform_inverse(self):
         # Tested in single_env
         return
+
+
+class TestActionDiscretizer(TransformBase):
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_single_trans_env_check(self, categorical):
+        base_env = ContinuousActionVecMockEnv()
+        env = base_env.append_transform(
+            ActionDiscretizer(num_intervals=5, categorical=categorical)
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_serial_trans_env_check(self, categorical):
+        def make_env():
+            base_env = ContinuousActionVecMockEnv()
+            return base_env.append_transform(
+                ActionDiscretizer(num_intervals=5, categorical=categorical)
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_parallel_trans_env_check(self, categorical):
+        def make_env():
+            base_env = ContinuousActionVecMockEnv()
+            env = base_env.append_transform(
+                ActionDiscretizer(num_intervals=5, categorical=categorical)
+            )
+            return env
+
+        env = ParallelEnv(2, make_env, mp_start_method="fork")
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_trans_serial_env_check(self, categorical):
+        env = SerialEnv(2, ContinuousActionVecMockEnv).append_transform(
+            ActionDiscretizer(num_intervals=5, categorical=categorical)
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("categorical", [True, False])
+    def test_trans_parallel_env_check(self, categorical):
+        env = ParallelEnv(
+            2, ContinuousActionVecMockEnv, mp_start_method="fork"
+        ).append_transform(ActionDiscretizer(num_intervals=5, categorical=categorical))
+        check_env_specs(env)
+
+    def test_transform_no_env(self):
+        categorical = True
+        with pytest.raises(RuntimeError, match="Cannot execute transform"):
+            ActionDiscretizer(num_intervals=5, categorical=categorical)._init()
+
+    def test_transform_compose(self):
+        categorical = True
+        env = SerialEnv(2, ContinuousActionVecMockEnv).append_transform(
+            Compose(ActionDiscretizer(num_intervals=5, categorical=categorical))
+        )
+        check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
+    @pytest.mark.parametrize("envname", ["cheetah", "pendulum"])
+    @pytest.mark.parametrize("interval_as_tensor", [False, True])
+    @pytest.mark.parametrize("categorical", [True, False])
+    @pytest.mark.parametrize(
+        "sampling",
+        [
+            None,
+            ActionDiscretizer.SamplingStrategy.MEDIAN,
+            ActionDiscretizer.SamplingStrategy.LOW,
+            ActionDiscretizer.SamplingStrategy.HIGH,
+            ActionDiscretizer.SamplingStrategy.RANDOM,
+        ],
+    )
+    def test_transform_env(self, envname, interval_as_tensor, categorical, sampling):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        base_env = GymEnv(
+            HALFCHEETAH_VERSIONED() if envname == "cheetah" else PENDULUM_VERSIONED(),
+            device=device,
+        )
+        if interval_as_tensor:
+            num_intervals = torch.arange(5, 11 if envname == "cheetah" else 6)
+        else:
+            num_intervals = 5
+        t = ActionDiscretizer(
+            num_intervals=num_intervals,
+            categorical=categorical,
+            sampling=sampling,
+            out_action_key="action_disc",
+        )
+        env = base_env.append_transform(t)
+        check_env_specs(env)
+        r = env.rollout(4)
+        assert r["action"].dtype == torch.float
+        if categorical:
+            assert r["action_disc"].dtype == torch.int64
+        else:
+            assert r["action_disc"].dtype == torch.bool
+        if t.sampling in (
+            t.SamplingStrategy.LOW,
+            t.SamplingStrategy.MEDIAN,
+            t.SamplingStrategy.RANDOM,
+        ):
+            assert (r["action"] < base_env.action_spec.high).all()
+        if t.sampling in (
+            t.SamplingStrategy.HIGH,
+            t.SamplingStrategy.MEDIAN,
+            t.SamplingStrategy.RANDOM,
+        ):
+            assert (r["action"] > base_env.action_spec.low).all()
+
+    def test_transform_model(self):
+        pytest.skip("Tested elsewhere")
+
+    def test_transform_rb(self):
+        pytest.skip("Tested elsewhere")
+
+    def test_transform_inverse(self):
+        pytest.skip("Tested elsewhere")
 
 
 if __name__ == "__main__":

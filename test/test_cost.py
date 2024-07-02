@@ -245,6 +245,10 @@ class LossModuleTestBase:
 @pytest.mark.parametrize("dropout", (0.0, 0.1))
 def test_loss_vmap_random(device, vmap_randomness, dropout):
     class VmapTestLoss(LossModule):
+        model: TensorDictModule
+        model_params: TensorDict
+        target_model_params: TensorDict
+
         def __init__(self):
             super().__init__()
             layers = [nn.Linear(4, 4), nn.ReLU()]
@@ -10607,6 +10611,10 @@ class TestDiscreteIQL(LossModuleTestBase):
 )
 def test_param_buffer_types(create_target_params, cast):
     class MyLoss(LossModule):
+        actor_network: TensorDictModule
+        actor_network_params: TensorDict
+        target_actor_network_params: TensorDict
+
         def __init__(self, actor_network):
             super().__init__()
             self.convert_to_functional(
@@ -10751,6 +10759,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             upd = SoftUpdate(module, eps=1 - 1 / value_network_update_interval)
 
     class custom_module(LossModule):
+        module1: TensorDictModule
+        module1_params: TensorDict
+        target_module1_params: TensorDict
+
         def __init__(self, delay_module=True):
             super().__init__()
             module1 = torch.nn.BatchNorm2d(10).eval()
@@ -12509,6 +12521,13 @@ def test_shared_params(dest, expected_dtype, expected_device):
     td_module = ActorValueOperator(td_module_hidden, td_module_action, td_module_value)
 
     class MyLoss(LossModule):
+        actor_network: TensorDictModule
+        actor_network_params: TensorDict
+        target_actor_network_params: TensorDict
+        qvalue_network: TensorDictModule
+        qvalue_network_params: TensorDict
+        target_qvalue_network_params: TensorDict
+
         def __init__(self, actor_network, qvalue_network):
             super().__init__()
             self.convert_to_functional(
@@ -13066,6 +13085,13 @@ class TestBase:
     @pytest.mark.skipif(not _has_functorch, reason="functorch is needed for expansion")
     def test_convert_to_func(self, compare_against, expand_dim):
         class MyLoss(LossModule):
+            module_a: TensorDictModule
+            module_b: TensorDictModule
+            module_a_params: TensorDict
+            module_b_params: TensorDict
+            target_module_a_params: TensorDict
+            target_module_b_params: TensorDict
+
             def __init__(self, compare_against, expand_dim):
                 super().__init__()
                 module1 = nn.Linear(3, 4)
@@ -13412,6 +13438,13 @@ class TestBuffer:
         # test that when casting a loss module, all the tensors (params and buffers)
         # are properly cast
         class DummyModule(LossModule):
+            actor: TensorDictModule
+            value: TensorDictModule
+            actor_params: TensorDict
+            value_params: TensorDict
+            target_actor_params: TensorDict
+            target_value_params: TensorDict
+
             def __init__(self):
                 common = nn.Linear(3, 4)
                 actor = nn.Linear(4, 4)
@@ -13486,17 +13519,36 @@ class TestBuffer:
 
 def test_loss_exploration():
     class DummyLoss(LossModule):
-        def forward(self, td):
-            assert exploration_type() == InteractionType.MODE
+        def forward(self, td, mode):
+            if mode is None:
+                mode = self.deterministic_sampling_mode
+            assert exploration_type() == mode
             with set_exploration_type(ExplorationType.RANDOM):
                 assert exploration_type() == ExplorationType.RANDOM
-            assert exploration_type() == ExplorationType.MODE
+            assert exploration_type() == mode
             return td
 
     loss_fn = DummyLoss()
     with set_exploration_type(ExplorationType.RANDOM):
         assert exploration_type() == ExplorationType.RANDOM
-        loss_fn(None)
+        loss_fn(None, None)
+        assert exploration_type() == ExplorationType.RANDOM
+
+    with set_exploration_type(ExplorationType.RANDOM):
+        assert exploration_type() == ExplorationType.RANDOM
+        loss_fn(None, ExplorationType.DETERMINISTIC)
+        assert exploration_type() == ExplorationType.RANDOM
+
+    loss_fn.deterministic_sampling_mode = ExplorationType.MODE
+    with set_exploration_type(ExplorationType.RANDOM):
+        assert exploration_type() == ExplorationType.RANDOM
+        loss_fn(None, ExplorationType.MODE)
+        assert exploration_type() == ExplorationType.RANDOM
+
+    loss_fn.deterministic_sampling_mode = ExplorationType.MEAN
+    with set_exploration_type(ExplorationType.RANDOM):
+        assert exploration_type() == ExplorationType.RANDOM
+        loss_fn(None, ExplorationType.MEAN)
         assert exploration_type() == ExplorationType.RANDOM
 
 

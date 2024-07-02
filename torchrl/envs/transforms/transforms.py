@@ -5,12 +5,12 @@
 
 from __future__ import annotations
 
-import collections
 import functools
 import importlib.util
 import multiprocessing as mp
 import warnings
 from copy import copy
+from enum import IntEnum
 from functools import wraps
 from textwrap import indent
 from typing import (
@@ -45,7 +45,7 @@ from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import _append_last, _ends_with, _replace_last
+from torchrl._utils import _append_last, _ends_with, _make_ordinal_device, _replace_last
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -342,7 +342,7 @@ class Transform(nn.Module):
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
         def clone(data):
             try:
-                # we priviledge speed for tensordicts
+                # we privilege speed for tensordicts
                 return data.clone(recurse=False)
             except AttributeError:
                 return tree_map(lambda x: x, data)
@@ -2005,12 +2005,12 @@ class FlattenObservation(ObservationTransform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if not allow_positive_dim and first_dim >= 0:
             raise ValueError(
-                "first_dim should be smaller than 0 to accomodate for "
+                "first_dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes."
             )
         if not allow_positive_dim and last_dim >= 0:
             raise ValueError(
-                "last_dim should be smaller than 0 to accomodate for "
+                "last_dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes."
             )
         self._first_dim = first_dim
@@ -2085,13 +2085,21 @@ class UnsqueezeTransform(Transform):
 
     def __init__(
         self,
-        unsqueeze_dim: int,
+        dim: int = None,
         allow_positive_dim: bool = False,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
+        **kwargs,
     ):
+        if "unsqueeze_dim" in kwargs:
+            warnings.warn(
+                "The `unsqueeze_dim` kwarg will be removed in v0.6. Please use `dim` instead."
+            )
+            dim = kwargs["unsqueeze_dim"]
+        elif dim is None:
+            raise TypeError("dim must be provided.")
         if in_keys is None:
             in_keys = []  # default
         if out_keys is None:
@@ -2107,19 +2115,19 @@ class UnsqueezeTransform(Transform):
             out_keys_inv=out_keys_inv,
         )
         self.allow_positive_dim = allow_positive_dim
-        if unsqueeze_dim >= 0 and not allow_positive_dim:
+        if dim >= 0 and not allow_positive_dim:
             raise RuntimeError(
-                "unsqueeze_dim should be smaller than 0 to accomodate for "
-                "envs of different batch_sizes. Turn allow_positive_dim to accomodate "
+                "dim should be smaller than 0 to accommodate for "
+                "envs of different batch_sizes. Turn allow_positive_dim to accommodate "
                 "for positive unsqueeze_dim."
             )
-        self._unsqueeze_dim = unsqueeze_dim
+        self._dim = dim
 
     @property
     def unsqueeze_dim(self):
-        if self._unsqueeze_dim >= 0 and self.parent is not None:
-            return len(self.parent.batch_size) + self._unsqueeze_dim
-        return self._unsqueeze_dim
+        if self._dim >= 0 and self.parent is not None:
+            return len(self.parent.batch_size) + self._dim
+        return self._dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         observation = observation.unsqueeze(self.unsqueeze_dim)
@@ -2446,6 +2454,9 @@ class ObservationNorm(ObservationTransform):
 
             as it is done for standardization. Default is `False`.
 
+        eps (float, optional): epsilon increment for the scale in the ``standard_normal`` case.
+            Defaults to ``1e-6`` if not recoverable directly from the scale dtype.
+
     Examples:
         >>> torch.set_default_tensor_type(torch.DoubleTensor)
         >>> r = torch.randn(100, 3)*torch.randn(3) + torch.randn(3)
@@ -2487,6 +2498,7 @@ class ObservationNorm(ObservationTransform):
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
         standard_normal: bool = False,
+        eps: float | None = None,
     ):
         if in_keys is None:
             raise RuntimeError(
@@ -2509,7 +2521,13 @@ class ObservationNorm(ObservationTransform):
         if not isinstance(standard_normal, torch.Tensor):
             standard_normal = torch.as_tensor(standard_normal)
         self.register_buffer("standard_normal", standard_normal)
-        self.eps = 1e-6
+        self.eps = (
+            eps
+            if eps is not None
+            else torch.finfo(scale.dtype).eps
+            if isinstance(scale, torch.Tensor) and scale.dtype.is_floating_point
+            else 1e-6
+        )
 
         if loc is not None and not isinstance(loc, torch.Tensor):
             loc = torch.tensor(loc, dtype=torch.get_default_dtype())
@@ -2803,7 +2821,7 @@ class CatFrames(ObservationTransform):
 
     inplace = False
     _CAT_DIM_ERR = (
-        "dim must be < 0 to accomodate for tensordict of "
+        "dim must be < 0 to accommodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "constant", "zeros"}
@@ -3049,7 +3067,7 @@ class CatFrames(ObservationTransform):
             reset_unfold_list = [torch.zeros_like(reset_unfold_slice)]
             for r in reversed(reset_unfold.unbind(-1)):
                 reset_unfold_list.append(r | reset_unfold_list[-1])
-                reset_unfold_slice = reset_unfold_list[-1]
+                # reset_unfold_slice = reset_unfold_list[-1]
             reset_unfold = torch.stack(list(reversed(reset_unfold_list))[1:], -1)
             reset = reset[prefix + (slice(self.N - 1, None),)]
             reset[prefix + (0,)] = 1
@@ -3809,7 +3827,7 @@ class DeviceCastTransform(Transform):
         in_keys_inv=None,
         out_keys_inv=None,
     ):
-        device = self.device = torch.device(device)
+        device = self.device = _make_ordinal_device(torch.device(device))
         self.orig_device = (
             torch.device(orig_device) if orig_device is not None else orig_device
         )
@@ -4511,6 +4529,11 @@ class TensorDictPrimer(Transform):
         tensor([[1., 1., 1.],
                 [1., 1., 1.]])
 
+    .. note:: Some TorchRL modules rely on specific keys being present in the environment TensorDicts,
+        like :class:`~torchrl.modules.models.LSTM` or :class:`~torchrl.modules.models.GRU`.
+        To facilitate this process, the method :func:`~torchrl.models.utils.get_primers_from_module`
+        automatically checks for required primer transforms in a module and its submodules and
+        generates them.
     """
 
     def __init__(
@@ -4696,15 +4719,18 @@ class TensorDictPrimer(Transform):
         spec shape is assumed to match the tensordict's.
 
         """
-        shape = (
-            ()
-            if (not self.parent or self.parent.batch_locked)
-            else tensordict.batch_size
-        )
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
+                if spec.shape[: len(tensordict.batch_size)] != tensordict.batch_size:
+                    expanded_spec = self._expand_shape(spec)
+                    self.primers[key] = spec = expanded_spec
                 if self.random:
+                    shape = (
+                        ()
+                        if (not self.parent or self.parent.batch_locked)
+                        else tensordict.batch_size
+                    )
                     value = spec.rand(shape)
                 else:
                     value = self.default_value[key]
@@ -4799,7 +4825,10 @@ class VecNorm(Transform):
     processes that share the same reference.
 
     To use VecNorm at inference time and avoid updating the values with the new
-    observations, one should substitute this layer by `vecnorm.to_observation_norm()`.
+    observations, one should substitute this layer by :meth:`~.to_observation_norm`.
+    This will provide a static version of `VecNorm` which will not be updated
+    when the source transform is updated.
+    To get a frozen copy of the VecNorm layer, see :meth:`~.frozen_copy`.
 
     Args:
         in_keys (sequence of NestedKey, optional): keys to be updated.
@@ -4808,6 +4837,8 @@ class VecNorm(Transform):
             Defaults to ``in_keys``.
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
+        lock (mp.Lock): a lock to prevent race conditions between processes.
+            Defaults to None (lock created during init).
         decay (number, optional): decay rate of the moving average.
             default: 0.99
         eps (number, optional): lower bound of the running standard
@@ -4879,6 +4910,35 @@ class VecNorm(Transform):
         self.decay = decay
         self.shapes = shapes
         self.eps = eps
+        self.frozen = False
+
+    def freeze(self) -> VecNorm:
+        """Freezes the VecNorm, avoiding the stats to be updated when called.
+
+        See :meth:`~.unfreeze`.
+        """
+        self.frozen = True
+        return self
+
+    def unfreeze(self) -> VecNorm:
+        """Unfreezes the VecNorm.
+
+        See :meth:`~.freeze`.
+        """
+        self.frozen = False
+        return self
+
+    def frozen_copy(self):
+        """Returns a copy of the Transform that keeps track of the stats but does not update them."""
+        if self._td is None:
+            raise RuntimeError(
+                "Make sure the VecNorm has been initialized before creating a frozen copy."
+            )
+        clone = self.clone()
+        # replace values
+        clone._td = self._td.copy()
+        # freeze
+        return clone.freeze()
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
@@ -4892,7 +4952,7 @@ class VecNorm(Transform):
         if self.lock is not None:
             self.lock.acquire()
 
-        for key in self.in_keys:
+        for key, key_out in zip(self.in_keys, self.out_keys):
             if key not in tensordict.keys(include_nested=True):
                 # TODO: init missing rewards with this
                 # for key_suffix in [_append_last(key, suffix) for suffix in ("_sum", "_ssq", "_count")]:
@@ -4904,7 +4964,7 @@ class VecNorm(Transform):
                 key, tensordict.get(key), N=max(1, tensordict.numel())
             )
 
-            tensordict.set(key, new_val)
+            tensordict.set(key_out, new_val)
 
         if self.lock is not None:
             self.lock.release()
@@ -4962,60 +5022,129 @@ class VecNorm(Transform):
             pass
 
     def _update(self, key, value, N) -> torch.Tensor:
+        # TODO: we should revert this and have _td be like: TensorDict{"sum": ..., "ssq": ..., "count"...})
+        #  to facilitate the computation of the stats using TD internals.
+        #  Moreover, _td can be locked so these ops will be very fast on CUDA.
         _sum = self._td.get(_append_last(key, "_sum"))
         _ssq = self._td.get(_append_last(key, "_ssq"))
         _count = self._td.get(_append_last(key, "_count"))
 
         value_sum = _sum_left(value, _sum)
-        _sum *= self.decay
-        _sum += value_sum
-        self._td.set_(
-            _append_last(key, "_sum"),
-            _sum,
-        )
+
+        if not self.frozen:
+            _sum *= self.decay
+            _sum += value_sum
+            self._td.set_(
+                _append_last(key, "_sum"),
+                _sum,
+            )
 
         _ssq = self._td.get(_append_last(key, "_ssq"))
         value_ssq = _sum_left(value.pow(2), _ssq)
-        _ssq *= self.decay
-        _ssq += value_ssq
-        self._td.set_(
-            _append_last(key, "_ssq"),
-            _ssq,
-        )
+        if not self.frozen:
+            _ssq *= self.decay
+            _ssq += value_ssq
+            self._td.set_(
+                _append_last(key, "_ssq"),
+                _ssq,
+            )
 
         _count = self._td.get(_append_last(key, "_count"))
-        _count *= self.decay
-        _count += N
-        self._td.set_(
-            _append_last(key, "_count"),
-            _count,
-        )
+        if not self.frozen:
+            _count *= self.decay
+            _count += N
+            self._td.set_(
+                _append_last(key, "_count"),
+                _count,
+            )
 
         mean = _sum / _count
         std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
         return (value - mean) / std.clamp_min(self.eps)
 
     def to_observation_norm(self) -> Union[Compose, ObservationNorm]:
-        """Converts VecNorm into an ObservationNorm class that can be used at inference time."""
+        """Converts VecNorm into an ObservationNorm class that can be used at inference time.
+
+        The :class:`~torchrl.envs.ObservationNorm` layer can be updated using the :meth:`~torch.nn.Module.state_dict`
+        API.
+
+        Examples:
+            >>> from torchrl.envs import GymEnv, VecNorm
+            >>> vecnorm = VecNorm(in_keys=["observation"])
+            >>> train_env = GymEnv("CartPole-v1", device=None).append_transform(
+            ...     vecnorm)
+            >>>
+            >>> r = train_env.rollout(4)
+            >>>
+            >>> eval_env = GymEnv("CartPole-v1").append_transform(
+            ...     vecnorm.to_observation_norm())
+            >>> print(eval_env.transform.loc, eval_env.transform.scale)
+            >>>
+            >>> r = train_env.rollout(4)
+            >>> # Update entries with state_dict
+            >>> eval_env.transform.load_state_dict(
+            ...     vecnorm.to_observation_norm().state_dict())
+            >>> print(eval_env.transform.loc, eval_env.transform.scale)
+
+        """
         out = []
+        loc = self.loc
+        scale = self.scale
+        for key, key_out in zip(self.in_keys, self.out_keys):
+            _out = ObservationNorm(
+                loc=loc.get(key),
+                scale=scale.get(key),
+                standard_normal=True,
+                in_keys=key,
+                out_keys=key_out,
+            )
+            out += [_out]
+        if len(self.in_keys) > 1:
+            return Compose(*out)
+        return _out
+
+    def _get_loc_scale(self, loc_only=False, scale_only=False):
+        loc = {}
+        scale = {}
         for key in self.in_keys:
             _sum = self._td.get(_append_last(key, "_sum"))
             _ssq = self._td.get(_append_last(key, "_ssq"))
             _count = self._td.get(_append_last(key, "_count"))
-            mean = _sum / _count
-            std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
+            loc[key] = _sum / _count
+            scale[key] = (_ssq / _count - loc[key].pow(2)).clamp_min(self.eps).sqrt()
+        if not scale_only:
+            loc = TensorDict(loc)
+        else:
+            loc = None
+        if not loc_only:
+            scale = TensorDict(scale)
+        else:
+            scale = None
+        return loc, scale
 
-            _out = ObservationNorm(
-                loc=mean,
-                scale=std,
-                standard_normal=True,
-                in_keys=self.in_keys,
-            )
-            if len(self.in_keys) == 1:
-                return _out
-            else:
-                out += ObservationNorm
-        return Compose(*out)
+    @property
+    def standard_normal(self):
+        """Whether the affine transform given by `loc` and `scale` follows the standard normal equation.
+
+        Similar to :class:`~torchrl.envs.ObservationNorm` standard_normal attribute.
+
+        Always returns ``True``.
+        """
+        return True
+
+    @property
+    def loc(self):
+        """Returns a TensorDict with the loc to be used for an affine transform."""
+        # We can't cache that value bc the summary stats could be updated by a different process
+        loc, _ = self._get_loc_scale(loc_only=True)
+        return loc
+
+    @property
+    def scale(self):
+        """Returns a TensorDict with the scale to be used for an affine transform."""
+        # We can't cache that value bc the summary stats could be updated by a different process
+        _, scale = self._get_loc_scale(scale_only=True)
+        return scale
 
     @staticmethod
     def build_td_for_shared_vecnorm(
@@ -5082,29 +5211,44 @@ class VecNorm(Transform):
             return td_select.memmap_()
         return td_select.share_memory_()
 
+    # We use a different separator to ensure that keys can have points within them.
+    SEP = "-<.>-"
+
     def get_extra_state(self) -> OrderedDict:
-        return collections.OrderedDict({"lock": self.lock, "td": self._td})
+        if self._td is None:
+            warnings.warn(
+                "Querying state_dict on an uninitialized VecNorm transform will "
+                "return a `None` value for the summary statistics. "
+                "Loading such a state_dict on an initialized VecNorm will result in "
+                "an error."
+            )
+            return
+        return self._td.flatten_keys(self.SEP).to_dict()
 
     def set_extra_state(self, state: OrderedDict) -> None:
-        lock = state["lock"]
-        if lock is not None:
-            """
-            since locks can't be serialized, we have use cases for stripping them
-            for example in ParallelEnv, in which case keep the lock we already have
-            to avoid an updated tensor dict being sent between processes to erase locks
-            """
-            self.lock = lock
-        td = state["td"]
-        if td is not None and not td.is_shared():
-            raise RuntimeError(
-                "Only shared tensordicts can be set in VecNorm transforms"
-            )
-        self._td = td
+        if state is not None:
+            td = TensorDict(state).unflatten_keys(self.SEP)
+            if self._td is None and not td.is_shared():
+                warnings.warn(
+                    "VecNorm wasn't initialized and the tensordict is not shared. In single "
+                    "process settings, this is ok, but if you need to share the statistics "
+                    "between workers this should require some attention. "
+                    "Make sure that the content of VecNorm is transmitted to the workers "
+                    "after calling load_state_dict and not before, as other workers "
+                    "may not have access to the loaded TensorDict."
+                )
+                td.share_memory_()
+            if self._td is not None:
+                self._td.update_(td)
+            else:
+                self._td = td
+        elif self._td is not None:
+            raise KeyError("Could not find a tensordict in the state_dict.")
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(decay={self.decay:4.4f},"
-            f"eps={self.eps:4.4f}, keys={self.in_keys})"
+            f"eps={self.eps:4.4f}, in_keys={self.in_keys}, out_keys={self.out_keys})"
         )
 
     def __getstate__(self) -> Dict[str, Any]:
@@ -6988,16 +7132,29 @@ class VecGymEnvTransform(Transform):
         if (
             reset is not done
             and (reset != done).any()
-            and (not reset.all() or not reset.any())
+            # it can happen that all are reset, in which case
+            # it's fine (doesn't need to match done)
+            and not reset.all()
         ):
             raise RuntimeError(
-                "Cannot partially reset a gym(nasium) async env with a reset mask that does not match the done mask. "
+                "Cannot partially reset a gym(nasium) async env with a "
+                "reset mask that does not match the done mask. "
                 f"Got reset={reset}\nand done={done}"
             )
         # if not reset.any(), we don't need to do anything.
         # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
-        if reset is not None and reset.any() and not reset.all():
+        if reset is not None and reset.any():
+            if reset.all():
+                # We're fine: this means that a full reset was passed and the
+                # env was manually reset
+                tensordict_reset.pop(self.final_name, None)
+                return tensordict_reset
             saved_next = self._memo["saved_next"]
+            if saved_next is None:
+                raise RuntimeError(
+                    "Did not find a saved tensordict while the reset mask was "
+                    f"not empty: reset={reset}. Done was {done}."
+                )
             # reset = reset.view(tensordict.shape)
             # we have a data container from the previous call to step
             # that contains part of the observation we need.
@@ -8129,3 +8286,281 @@ class AutoResetTransform(Transform):
                                 _dest.set(key, val_set_reg)
         delattr(self, "_saved_td_autorest")
         return tensordict_reset
+
+
+class ActionDiscretizer(Transform):
+    """A transform to discretize a continuous action space.
+
+    This transform makes it possible to use an algorithm designed for discrete
+    action spaces such as DQN over environments with a continuous action space.
+
+    Args:
+        num_intervals (int or torch.Tensor): the number of discrete values
+            for each element of the action space. If a single integer is provided,
+            all action items are sliced with the same number of elements.
+            If a tensor is provided, it must have the same number of elements
+            as the action space (ie, the length of the ``num_intervals`` tensor
+            must match the last dimension of the action space).
+        action_key (NestedKey, optional): the action key to use. Points to
+            the action of the parent env (the floating point action).
+            Defaults to ``"action"``.
+        out_action_key (NestedKey, optional): the key where the discrete
+            action should be written. If ``None`` is provided, it defaults to
+            the value of ``action_key``. If both keys do not match, the
+            continuous action_spec is moved from the ``full_action_spec``
+            environment attribute to the ``full_state_spec`` container,
+            as only the discrete action should be sampled for an action to
+            be taken. Providing ``out_action_key`` can ensure that the
+            floating point action is available to be recorded.
+        sampling (ActionDiscretizer.SamplingStrategy, optinoal): an element
+            of the ``ActionDiscretizer.SamplingStrategy`` ``IntEnum`` object
+            (``MEDIAN``, ``LOW``, ``HIGH`` or ``RANDOM``). Indicates how the
+            continuous action should be sampled in the provided interval.
+        categorical (bool, optional): if ``False``, one-hot encoding is used.
+            Defaults to ``True``.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv, check_env_specs
+        >>> import torch
+        >>> base_env = GymEnv("HalfCheetah-v4")
+        >>> num_intervals = torch.arange(5, 11)
+        >>> categorical = True
+        >>> sampling = ActionDiscretizer.SamplingStrategy.MEDIAN
+        >>> t = ActionDiscretizer(
+        ...     num_intervals=num_intervals,
+        ...     categorical=categorical,
+        ...     sampling=sampling,
+        ...     out_action_key="action_disc",
+        ... )
+        >>> env = base_env.append_transform(t)
+        TransformedEnv(
+            env=GymEnv(env=HalfCheetah-v4, batch_size=torch.Size([]), device=cpu),
+            transform=ActionDiscretizer(
+                num_intervals=tensor([ 5,  6,  7,  8,  9, 10]),
+                action_key=action,
+                out_action_key=action_disc,,
+                sampling=0,
+                categorical=True))
+        >>> check_env_specs(env)
+        >>> # Produce a rollout
+        >>> r = env.rollout(4)
+        >>> print(r)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([4, 6]), device=cpu, dtype=torch.float32, is_shared=False),
+                action_disc: Tensor(shape=torch.Size([4, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([4, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([4, 17]), device=cpu, dtype=torch.float64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([4]),
+            device=cpu,
+            is_shared=False)
+        >>> assert r["action"].dtype == torch.float
+        >>> assert r["action_disc"].dtype == torch.int64
+        >>> assert (r["action"] < base_env.action_spec.high).all()
+        >>> assert (r["action"] > base_env.action_spec.low).all()
+
+    """
+
+    class SamplingStrategy(IntEnum):
+        """The sampling strategies for ActionDiscretizer."""
+
+        MEDIAN = 0
+        LOW = 1
+        HIGH = 2
+        RANDOM = 3
+
+    def __init__(
+        self,
+        num_intervals: int | torch.Tensor,
+        action_key: NestedKey = "action",
+        out_action_key: NestedKey = None,
+        sampling=None,
+        categorical: bool = True,
+    ):
+        if out_action_key is None:
+            out_action_key = action_key
+        super().__init__(in_keys_inv=[action_key], out_keys_inv=[out_action_key])
+        self.action_key = action_key
+        self.out_action_key = out_action_key
+        if not isinstance(num_intervals, torch.Tensor):
+            self.num_intervals = num_intervals
+        else:
+            self.register_buffer("num_intervals", num_intervals)
+        if sampling is None:
+            sampling = self.SamplingStrategy.MEDIAN
+        self.sampling = sampling
+        self.categorical = categorical
+
+    def __repr__(self):
+        def _indent(s):
+            return indent(s, 4 * " ")
+
+        num_intervals = f"num_intervals={self.num_intervals}"
+        action_key = f"action_key={self.action_key}"
+        out_action_key = f"out_action_key={self.out_action_key}"
+        sampling = f"sampling={self.sampling}"
+        categorical = f"categorical={self.categorical}"
+        return (
+            f"{type(self).__name__}(\n{_indent(num_intervals)},\n{_indent(action_key)},"
+            f"\n{_indent(out_action_key)},\n{_indent(sampling)},\n{_indent(categorical)})"
+        )
+
+    def transform_input_spec(self, input_spec):
+        try:
+            action_spec = input_spec["full_action_spec", self.in_keys_inv[0]]
+            if not isinstance(action_spec, BoundedTensorSpec):
+                raise TypeError(
+                    f"action spec type {type(action_spec)} is not supported."
+                )
+
+            n_act = action_spec.shape
+            if not n_act:
+                n_act = 1
+            else:
+                n_act = n_act[-1]
+            self.n_act = n_act
+
+            self.dtype = action_spec.dtype
+            interval = (action_spec.high - action_spec.low).unsqueeze(-1)
+
+            num_intervals = self.num_intervals
+
+            def custom_arange(nint):
+                result = torch.arange(
+                    start=0.0,
+                    end=1.0,
+                    step=1 / nint,
+                    dtype=self.dtype,
+                    device=action_spec.device,
+                )
+                result_ = result
+                if self.sampling in (
+                    self.SamplingStrategy.HIGH,
+                    self.SamplingStrategy.MEDIAN,
+                ):
+                    result_ = (1 - result).flip(0)
+                if self.sampling == self.SamplingStrategy.MEDIAN:
+                    result = (result + result_) / 2
+                else:
+                    result = result_
+                return result
+
+            if isinstance(num_intervals, int):
+                arange = (
+                    custom_arange(num_intervals).expand(n_act, num_intervals) * interval
+                )
+                self.register_buffer(
+                    "intervals", action_spec.low.unsqueeze(-1) + arange
+                )
+            else:
+                arange = [
+                    custom_arange(_num_intervals) * interval
+                    for _num_intervals, interval in zip(
+                        num_intervals.tolist(), interval.unbind(-2)
+                    )
+                ]
+                self.intervals = [
+                    low + arange
+                    for low, arange in zip(
+                        action_spec.low.unsqueeze(-1).unbind(-2), arange
+                    )
+                ]
+
+            cls = (
+                functools.partial(MultiDiscreteTensorSpec, remove_singleton=False)
+                if self.categorical
+                else MultiOneHotDiscreteTensorSpec
+            )
+
+            if not isinstance(num_intervals, torch.Tensor):
+                nvec = torch.as_tensor(num_intervals, device=action_spec.device)
+            else:
+                nvec = num_intervals
+            if nvec.ndim > 1:
+                raise RuntimeError(f"Cannot use num_intervals with shape {nvec.shape}")
+            if nvec.ndim == 0 or nvec.numel() == 1:
+                nvec = nvec.expand(action_spec.shape[-1])
+            self.register_buffer("nvec", nvec)
+            if self.sampling == self.SamplingStrategy.RANDOM:
+                # compute jitters
+                self.jitters = interval.squeeze(-1) / nvec
+            shape = (
+                action_spec.shape
+                if self.categorical
+                else (*action_spec.shape[:-1], nvec.sum())
+            )
+            action_spec = cls(nvec=nvec, shape=shape, device=action_spec.device)
+            input_spec["full_action_spec", self.out_keys_inv[0]] = action_spec
+
+            if self.out_keys_inv[0] != self.in_keys_inv[0]:
+                input_spec["full_state_spec", self.in_keys_inv[0]] = input_spec[
+                    "full_action_spec", self.in_keys_inv[0]
+                ].clone()
+                del input_spec["full_action_spec", self.in_keys_inv[0]]
+            return input_spec
+        except AttributeError as err:
+            # To avoid silent AttributeErrors
+            raise RuntimeError(str(err))
+
+    def _init(self):
+        # We just need to access the action spec for everything to be initialized
+        try:
+            _ = self.container.full_action_spec
+        except AttributeError:
+            raise RuntimeError(
+                f"Cannot execute transform {type(self).__name__} without a parent env."
+            )
+
+    def inv(self, tensordict):
+        if self.out_keys_inv[0] == self.in_keys_inv[0]:
+            return super().inv(tensordict)
+        # We re-write this because we don't want to clone the TD here
+        return self._inv_call(tensordict)
+
+    def _inv_call(self, tensordict):
+        # action is categorical, map it to desired dtype
+        intervals = getattr(self, "intervals", None)
+        if intervals is None:
+            self._init()
+            return self._inv_call(tensordict)
+        action = tensordict.get(self.out_keys_inv[0])
+        if self.categorical:
+            action = action.unsqueeze(-1)
+            if isinstance(intervals, torch.Tensor):
+                action = intervals.gather(index=action, dim=-1).squeeze(-1)
+            else:
+                action = torch.stack(
+                    [
+                        interval.gather(index=action, dim=-1).squeeze(-1)
+                        for interval, action in zip(intervals, action.unbind(-2))
+                    ],
+                    -1,
+                )
+        else:
+            nvec = self.nvec.tolist()
+            action = action.split(nvec, dim=-1)
+            if isinstance(intervals, torch.Tensor):
+                intervals = intervals.unbind(-2)
+            action = torch.stack(
+                [
+                    intervals[action].view(action.shape[:-1])
+                    for (intervals, action) in zip(intervals, action)
+                ],
+                -1,
+            )
+
+        if self.sampling == self.SamplingStrategy.RANDOM:
+            action = action + self.jitters * torch.rand_like(self.jitters)
+        return tensordict.set(self.in_keys_inv[0], action)

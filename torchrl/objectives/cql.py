@@ -14,7 +14,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
@@ -255,6 +255,13 @@ class CQLLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
+
+    actor_network: TensorDictModule
+    qvalue_network: TensorDictModule
+    actor_network_params: TensorDictParams
+    qvalue_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
 
     def __init__(
         self,
@@ -1025,6 +1032,10 @@ class DiscreteCQLLoss(LossModule):
         "loss_qvalue",
         "loss_cql",
     ]
+
+    value_network: TensorDictModule
+    value_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams
 
     def __init__(
         self,

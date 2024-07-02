@@ -22,6 +22,7 @@ from torchrl.envs import (
     EnvCreator,
     InitTracker,
     SerialEnv,
+    TensorDictPrimer,
     TransformedEnv,
 )
 from torchrl.envs.utils import set_exploration_type, step_mdp
@@ -52,6 +53,7 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
+from torchrl.modules.utils import get_primers_from_module
 from torchrl.objectives import DDPGLoss
 
 _has_functorch = False
@@ -1414,8 +1416,8 @@ class TestDecisionTransformerInferenceWrapper:
             )
             dist_class = TanhDelta
         dist_kwargs = {
-            "min": -1.0,
-            "max": 1.0,
+            "low": -1.0,
+            "high": 1.0,
         }
         actor = ProbabilisticActor(
             in_keys=in_keys,
@@ -1547,6 +1549,53 @@ class TestBatchedActor:
             rollout[1]["observation"]
             == (torch.arange(50) % 6).reshape_as(rollout[1]["observation"])
         ).all()
+
+
+def test_get_primers_from_module():
+
+    # No primers in the model
+    module = MLP(in_features=10, out_features=10, num_cells=[])
+    transform = get_primers_from_module(module)
+    assert transform is None
+
+    # 1 primer in the model
+    gru_module = GRUModule(
+        input_size=10,
+        hidden_size=10,
+        num_layers=1,
+        in_keys=["input", "gru_recurrent_state", "is_init"],
+        out_keys=["features", ("next", "gru_recurrent_state")],
+    )
+    transform = get_primers_from_module(gru_module)
+    assert isinstance(transform, TensorDictPrimer)
+    assert "gru_recurrent_state" in transform.primers
+
+    # 2 primers in the model
+    composed_model = TensorDictSequential(
+        gru_module,
+        LSTMModule(
+            input_size=10,
+            hidden_size=10,
+            num_layers=1,
+            in_keys=[
+                "input",
+                "lstm_recurrent_state_c",
+                "lstm_recurrent_state_h",
+                "is_init",
+            ],
+            out_keys=[
+                "features",
+                ("next", "lstm_recurrent_state_c"),
+                ("next", "lstm_recurrent_state_h"),
+            ],
+        ),
+    )
+    transform = get_primers_from_module(composed_model)
+    assert isinstance(transform, Compose)
+    assert len(transform) == 2
+    assert "gru_recurrent_state" in transform[0].primers
+    assert "lstm_recurrent_state_c" in transform[1].primers
+    assert "lstm_recurrent_state_h" in transform[1].primers
 
 
 if __name__ == "__main__":

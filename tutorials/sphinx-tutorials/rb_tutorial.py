@@ -874,3 +874,4 @@ print("steps are successive", sample["steps"])
 #   :class:`~torchrl.data.PrioritizedSliceSampler` and
 #   :class:`~torchrl.data.SliceSamplerWithoutReplacement`, or other writers
 #   such as :class:`~torchrl.data.TensorDictMaxValueWriter`.
+# - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.
