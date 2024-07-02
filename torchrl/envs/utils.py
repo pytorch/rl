@@ -41,7 +41,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.utils import is_non_tensor, NestedKey
+from tensordict.utils import NestedKey
 from torch import nn as nn
 from torch.utils._pytree import tree_map
 from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logger
@@ -254,8 +254,6 @@ class _StepMDP:
                 if not _allow_absent_keys:
                     raise KeyError(f"key {key} not found.")
             else:
-                if is_non_tensor(val):
-                    val = val.clone()
                 data_out._set_str(
                     key, val, validated=True, inplace=False, non_blocking=False
                 )
@@ -1405,6 +1403,7 @@ def _update_during_reset(
                 reset = reset.any(-1)
             reset = reset.reshape(node.shape)
             # node.update(node.where(~reset, other=node_reset, pad=0))
+
             node.where(~reset, other=node_reset, out=node, pad=0)
             # node = node.clone()
             # idx = reset.nonzero(as_tuple=True)[0]
