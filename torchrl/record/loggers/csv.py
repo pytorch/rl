@@ -187,7 +187,7 @@ class CSVLogger(Logger):
 
         .. note:: If the video format is `mp4`, many more arguments can be passed to the :meth:`~torchvision.io.write_video`
             function.
-            For more information on video logging with :class:`~torchrl.record.loggers.csv.CVSLogger`,
+            For more information on video logging with :class:`~torchrl.record.loggers.csv.CSVLogger`,
             see the :meth:`~torchrl.record.loggers.csv.CSVExperiment.add_video` documentation.
         """
         # check for correct format of the video tensor ((N), T, C, H, W)
