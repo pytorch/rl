@@ -1047,7 +1047,6 @@ class SerialEnv(BatchedEnvBase):
             filter_empty=True,
         )
         if out_tds is not None:
-            print("out_tds", out_tds)
             out.update(
                 LazyStackedTensorDict(*out_tds), keys_to_update=self._non_tensor_keys
             )
