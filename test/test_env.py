@@ -3225,7 +3225,7 @@ class TestNonTensorEnv:
             env = SerialEnv(2, [env0, env1])
         s = env.reset()
         i = 0
-        for i in range(10):
+        for i in range(10):  # noqa: B007
             s, s_ = env.step_and_maybe_reset(
                 s.set("action", torch.ones(2, 1, dtype=torch.int))
             )
