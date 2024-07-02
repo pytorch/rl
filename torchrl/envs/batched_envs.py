@@ -988,7 +988,7 @@ class SerialEnv(BatchedEnvBase):
         tds = []
         for i, _env in enumerate(self._envs):
             if not needs_resetting[i]:
-                if out_tds is not None and tensordict is not None:
+                if not self._use_buffers and tensordict is not None:
                     out_tds[i] = tensordict[i].exclude(*self._envs[i].reset_keys)
                 continue
             if tensordict is not None:
@@ -1047,7 +1047,6 @@ class SerialEnv(BatchedEnvBase):
             filter_empty=True,
         )
         if out_tds is not None:
-            print("out_tds", out_tds)
             out.update(
                 LazyStackedTensorDict(*out_tds), keys_to_update=self._non_tensor_keys
             )
