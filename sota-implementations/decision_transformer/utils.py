@@ -357,7 +357,7 @@ def make_odt_model(cfg):
         ],
     )
     dist_class = TanhNormal
-    dist_kwargs = {"min": -1.0, "max": 1.0, "tanh_loc": False, "upscale": 5.0}
+    dist_kwargs = {"low": -1.0, "high": 1.0, "tanh_loc": False, "upscale": 5.0}
 
     actor = ProbabilisticActor(
         spec=action_spec,
@@ -409,8 +409,8 @@ def make_dt_model(cfg):
     )
     dist_class = TanhDelta
     dist_kwargs = {
-        "min": action_spec.space.low,
-        "max": action_spec.space.high,
+        "low": action_spec.space.low,
+        "high": action_spec.space.high,
     }
 
     actor = ProbabilisticActor(
