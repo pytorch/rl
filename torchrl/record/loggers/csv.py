@@ -98,9 +98,8 @@ class CSVExperiment:
                 vid_tensor = vid_tensor.flatten(0, vid_tensor.ndim - 4)
             vid_tensor = vid_tensor.permute((0, 2, 3, 1))
             vid_tensor = vid_tensor.expand(*vid_tensor.shape[:-1], 3)
-            torchvision.io.write_video(
-                filepath, vid_tensor, fps=self.video_fps, **kwargs
-            )
+            kwargs.setdefault("fps", self.video_fps)
+            torchvision.io.write_video(filepath, vid_tensor, **kwargs)
         else:
             raise ValueError(
                 f"Unknown video format {self.video_format}. Must be one of 'pt', 'memmap' or 'mp4'."
