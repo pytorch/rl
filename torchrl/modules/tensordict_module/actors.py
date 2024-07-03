@@ -1810,8 +1810,8 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         ...         out_keys=["param"])
         >>> dist_class = TanhDelta
         >>> dist_kwargs = {
-        ...     "min": -1.0,
-        ...     "max": 1.0,
+        ...     "low": -1.0,
+        ...     "high": 1.0,
         ... }
         >>> actor = ProbabilisticActor(
         ...     in_keys=["param"],

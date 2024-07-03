@@ -213,8 +213,8 @@ def make_iql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": action_spec.space.low,
-            "max": action_spec.space.high,
+            "low": action_spec.space.low,
+            "high": action_spec.space.high,
             "tanh_loc": False,
         },
         default_interaction_type=ExplorationType.RANDOM,
