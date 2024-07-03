@@ -526,18 +526,16 @@ class CrossQLoss(LossModule):
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qnetworkN0(
             td_q,
-            self._cached_detached_qvalue_params,  # should we clone?
+            self._cached_detached_qvalue_params,
         )
-        min_q_logprob = (
-            td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
-        )
+        min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
 
-        if log_prob.shape != min_q_logprob.shape:
+        if log_prob.shape != min_q.shape:
             raise RuntimeError(
-                f"Losses shape mismatch: {log_prob.shape} and {min_q_logprob.shape}"
+                f"Losses shape mismatch: {log_prob.shape} and {min_q.shape}"
             )
 
-        return self._alpha * log_prob - min_q_logprob, {"log_prob": log_prob.detach()}
+        return self._alpha * log_prob - min_q, {"log_prob": log_prob.detach()}
 
     def qvalue_loss(
         self, tensordict: TensorDictBase
@@ -591,7 +589,12 @@ class CrossQLoss(LossModule):
         tensordict.set(
             ("next", self.value_estimator.tensor_keys.value), next_state_action_value
         )
-        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+        # target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+
+        reward = tensordict.get(("next", self.tensor_keys.reward))
+        done = tensordict.get(("next", self.tensor_keys.done))
+        target_value = (reward + (~done) * 0.99 * next_state_action_value).squeeze(-1)
+
         # get current q-values
         pred_val = current_state_action_value.squeeze(-1)
 

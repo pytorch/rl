@@ -5,7 +5,7 @@
 
 import torch
 
-from batchrenorm import BatchRenorm
+# from batchrenorm import AdaptiveBatchRenorm, BatchRenorm
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
@@ -154,11 +154,11 @@ def make_crossQ_agent(cfg, train_env, device):
         "num_cells": cfg.network.actor_hidden_sizes,
         "out_features": 2 * action_spec.shape[-1],
         "activation_class": get_activation(cfg.network.actor_activation),
-        "norm_class": BatchRenorm,
+        "norm_class": nn.BatchNorm1d,
         "norm_kwargs": {
             "momentum": cfg.network.batch_norm_momentum,
             "num_features": cfg.network.actor_hidden_sizes[-1],
-            "warmup_steps": cfg.network.warmup_steps,
+            # "warmup_steps": cfg.network.warmup_steps,
         },
     }
 
@@ -166,8 +166,8 @@ def make_crossQ_agent(cfg, train_env, device):
 
     dist_class = TanhNormal
     dist_kwargs = {
-        "min": action_spec.space.low,
-        "max": action_spec.space.high,
+        "low": action_spec.space.low,
+        "high": action_spec.space.high,
         "tanh_loc": False,
     }
 
@@ -201,11 +201,11 @@ def make_crossQ_agent(cfg, train_env, device):
         "num_cells": cfg.network.critic_hidden_sizes,
         "out_features": 1,
         "activation_class": get_activation(cfg.network.critic_activation),
-        "norm_class": BatchRenorm,
+        "norm_class": nn.BatchNorm1d,
         "norm_kwargs": {
             "momentum": cfg.network.batch_norm_momentum,
             "num_features": cfg.network.critic_hidden_sizes[-1],
-            "warmup_steps": cfg.network.warmup_steps,
+            # "warmup_steps": cfg.network.warmup_steps,
         },
     }
 
