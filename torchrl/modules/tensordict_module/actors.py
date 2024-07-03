@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import warnings
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
@@ -922,10 +921,9 @@ class QValueHook:
         out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if isinstance(action_space, TensorSpec):
-            warnings.warn(
-                "Using specs in action_space will be deprecated in v0.4.0,"
-                " please use the 'spec' argument if you want to provide an action spec",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Using specs in action_space is deprecated. "
+                "Please use the 'spec' argument if you want to provide an action spec"
             )
         action_space, _ = _process_action_space_spec(action_space, None)
 
@@ -1136,10 +1134,9 @@ class QValueActor(SafeSequential):
         action_mask_key: Optional[NestedKey] = None,
     ):
         if isinstance(action_space, TensorSpec):
-            warnings.warn(
-                "Using specs in action_space will be deprecated v0.4.0,"
-                " please use the 'spec' argument if you want to provide an action spec",
-                category=DeprecationWarning,
+            raise RuntimeError(
+                "Using specs in action_space is deprecated."
+                "Please use the 'spec' argument if you want to provide an action spec"
             )
         action_space, spec = _process_action_space_spec(action_space, spec)
 
