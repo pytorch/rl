@@ -655,7 +655,7 @@ class TanhDelta(FasterTransformedDistribution):
         warnings.warn(
             f"the min / high keyword arguments are deprecated in favor of low / high in {type(self).__name__} "
             f"and will be removed entirely in v0.6. ",
-            DeprecationWarning,
+            category=DeprecationWarning,
         )
 
     def __init__(

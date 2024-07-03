@@ -101,8 +101,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
             out_keys=[env.action_key],
             distribution_class=TanhNormal,
             distribution_kwargs={
-                "min": env.unbatched_action_spec[("agents", "action")].space.low,
-                "max": env.unbatched_action_spec[("agents", "action")].space.high,
+                "low": env.unbatched_action_spec[("agents", "action")].space.low,
+                "high": env.unbatched_action_spec[("agents", "action")].space.high,
             },
             return_log_prob=True,
         )
