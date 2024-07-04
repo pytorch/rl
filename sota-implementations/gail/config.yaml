@@ -1,0 +1,50 @@
+env:
+  env_name: HalfCheetah-v4
+  seed: 42
+  backend: gym
+
+
+# logger
+logger:
+  backend: wandb
+  project_name: gail
+  group_name: null
+  exp_name: gail_ppo
+  test_interval: 5000
+  num_test_episodes: 5
+  video: False
+  mode: online
+
+ppo:
+  # collector
+  collector:
+    frames_per_batch: 2048
+    total_frames: 1_000_000
+
+  # Optim
+  optim:
+    lr: 3e-4
+    weight_decay: 0.0
+    anneal_lr: True
+
+  # loss
+  loss:
+    gamma: 0.99
+    mini_batch_size: 64
+    ppo_epochs: 10
+    gae_lambda: 0.95
+    clip_epsilon: 0.2
+    anneal_clip_epsilon: False
+    critic_coef: 0.25
+    entropy_coef: 0.0
+    loss_critic_type: l2
+
+gail:
+  hidden_dim: 128
+  lr: 3e-4
+  use_grad_penalty: True
+  gp_lambda: 10.0
+
+replay_buffer:
+  dataset: halfcheetah-expert-v2
+  batch_size: 256
