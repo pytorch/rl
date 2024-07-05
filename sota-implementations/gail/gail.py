@@ -43,7 +43,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create logger
-    exp_name = generate_exp_name("Gail-offline", cfg.logger.exp_name)
+    exp_name = generate_exp_name("Gail", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
@@ -170,11 +170,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         with torch.no_grad():
             data = discriminator(data)
         d_rewards = -torch.log(1 - data["d_logits"] + 1e-8)
-        d_rewards = torch.log(data["d_logits"] + 1e-8) - torch.log(
-            1 - data["d_logits"] + 1e-8
-        )
 
-        # set d_rewards to tensordict
+        # Set discriminator rewards to tensordict
         data.set(("next", "reward"), d_rewards)
 
         # Get training rewards and episode lengths
