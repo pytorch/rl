@@ -2,7 +2,7 @@
 env:
   name: HalfCheetah-v4  # Use v4 to get rid of mujoco-py dependency
   task: ""
-  library: gym
+  library: gymnasium
   seed: 42
   max_episode_steps: 1000
 
