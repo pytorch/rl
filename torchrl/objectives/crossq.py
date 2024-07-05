@@ -515,6 +515,7 @@ class CrossQLoss(LossModule):
     def actor_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
+        """Compute the actor loss."""
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
@@ -540,7 +541,7 @@ class CrossQLoss(LossModule):
     def qvalue_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
-
+        """Compute the CrossQ-value loss."""
         # # compute next action
         with torch.no_grad():
             with set_exploration_type(
@@ -609,6 +610,7 @@ class CrossQLoss(LossModule):
         return loss_qval, metadata
 
     def alpha_loss(self, log_prob: Tensor) -> Tensor:
+        """Compute the entropy loss."""
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
             alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
