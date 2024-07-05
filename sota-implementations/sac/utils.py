@@ -174,8 +174,8 @@ def make_sac_agent(cfg, train_env, eval_env, device):
 
     dist_class = TanhNormal
     dist_kwargs = {
-        "min": action_spec.space.low,
-        "max": action_spec.space.high,
+        "low": action_spec.space.low,
+        "high": action_spec.space.high,
         "tanh_loc": False,
     }
 

@@ -3312,6 +3312,8 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         device (str, int or torch.device, optional): device of
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
+        remove_singleton (bool, optional): if ``True``, singleton samples (of size [1])
+            will be squeezed. Defaults to ``True``.
 
     Examples:
         >>> ts = MultiDiscreteTensorSpec((3, 2, 3))
@@ -3330,6 +3332,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = torch.int64,
         mask: torch.Tensor | None = None,
+        remove_singleton: bool = True,
     ):
         if not isinstance(nvec, torch.Tensor):
             nvec = torch.tensor(nvec)
@@ -3354,6 +3357,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             shape, space, device, dtype, domain="discrete"
         )
         self.update_mask(mask)
+        self.remove_singleton = remove_singleton
 
     def update_mask(self, mask):
         if mask is not None:
@@ -3442,7 +3446,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                 *self.shape[:-1],
             )
         x = self._rand(space=self.space, shape=shape, i=self.nvec.ndim)
-        if self.shape == torch.Size([1]):
+        if self.remove_singleton and self.shape == torch.Size([1]):
             x = x.squeeze(-1)
         return x
 
@@ -3978,7 +3982,7 @@ class CompositeSpec(TensorSpec):
         if isinstance(vals, TensorDict):
             out = vals.empty()  # create and empty tensordict similar to vals
         else:
-            out = TensorDict({}, torch.Size([]), _run_checks=False)
+            out = TensorDict._new_unsafe({}, torch.Size([]))
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
@@ -4043,13 +4047,12 @@ class CompositeSpec(TensorSpec):
         for key, item in self.items():
             if item is not None:
                 _dict[key] = item.rand(shape)
-        return TensorDict(
+        # No need to run checks since we know Composite is compliant with
+        # TensorDict requirements
+        return TensorDict._new_unsafe(
             _dict,
             batch_size=torch.Size([*shape, *self.shape]),
             device=self._device,
-            # No need to run checks since we know Composite is compliant with
-            # TensorDict requirements
-            _run_checks=False,
         )
 
     def keys(

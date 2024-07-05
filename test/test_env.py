@@ -59,6 +59,7 @@ from tensordict import (
     dense_stack_tds,
     LazyStackedTensorDict,
     TensorDict,
+    TensorDictBase,
 )
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import _unravel_key_to_tuple
@@ -68,6 +69,7 @@ from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
+    NonTensorSpec,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
@@ -84,7 +86,11 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
-from torchrl.envs.transforms.transforms import AutoResetEnv, AutoResetTransform
+from torchrl.envs.transforms.transforms import (
+    AutoResetEnv,
+    AutoResetTransform,
+    Transform,
+)
 from torchrl.envs.utils import (
     _StepMDP,
     _terminated_or_truncated,
@@ -3187,6 +3193,49 @@ class TestNonTensorEnv:
         env = ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
         r = env.rollout(N, break_when_any_done=bwad)
         assert r.get("non_tensor").tolist() == [list(range(N))] * 2
+
+    class AddString(Transform):
+        def __init__(self):
+            super().__init__()
+            self._str = "0"
+
+        def _call(self, td):
+            td["string"] = str(int(self._str) + 1)
+            self._str = td["string"]
+            return td
+
+        def _reset(
+            self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+        ) -> TensorDictBase:
+            self._str = "0"
+            tensordict_reset["string"] = self._str
+            return tensordict_reset
+
+        def transform_observation_spec(self, observation_spec):
+            observation_spec["string"] = NonTensorSpec(())
+            return observation_spec
+
+    @pytest.mark.parametrize("batched", ["serial", "parallel"])
+    def test_partial_rest(self, batched):
+        env0 = lambda: CountingEnv(5).append_transform(self.AddString())
+        env1 = lambda: CountingEnv(6).append_transform(self.AddString())
+        if batched == "parallel":
+            env = ParallelEnv(2, [env0, env1], mp_start_method=mp_ctx)
+        else:
+            env = SerialEnv(2, [env0, env1])
+        s = env.reset()
+        i = 0
+        for i in range(10):  # noqa: B007
+            s, s_ = env.step_and_maybe_reset(
+                s.set("action", torch.ones(2, 1, dtype=torch.int))
+            )
+            if s.get(("next", "done")).any():
+                break
+            s = s_
+        assert i == 5
+        assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
+        assert s_["string"] == ["0", "6"]
+        assert s["next", "string"] == ["6", "6"]
 
 
 if __name__ == "__main__":
