@@ -321,7 +321,7 @@ class BraxWrapper(_EnvWrapper):
         state["reward"] = state.get("reward").view(*self.reward_spec.shape)
         state["done"] = state.get("done").view(*self.reward_spec.shape)
         done = state["done"].bool()
-        tensordict_out = TensorDict(
+        tensordict_out = TensorDict._new_unsafe(
             source={
                 "observation": state.get("obs"),
                 # "reward": reward,
@@ -331,7 +331,6 @@ class BraxWrapper(_EnvWrapper):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=False,
         )
         return tensordict_out
 
@@ -357,7 +356,7 @@ class BraxWrapper(_EnvWrapper):
         next_state.set("done", next_state.get("done").view(self.reward_spec.shape))
         done = next_state["done"].bool()
         reward = next_state["reward"]
-        tensordict_out = TensorDict(
+        tensordict_out = TensorDict._new_unsafe(
             source={
                 "observation": next_state.get("obs"),
                 "reward": reward,
@@ -367,7 +366,6 @@ class BraxWrapper(_EnvWrapper):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=False,
         )
         return tensordict_out
 
@@ -396,7 +394,7 @@ class BraxWrapper(_EnvWrapper):
         next_state.get("pipeline_state").update(dict(zip(qp_keys, next_qp_values)))
 
         # build result
-        tensordict_out = TensorDict(
+        tensordict_out = TensorDict._new_unsafe(
             source={
                 "observation": next_obs,
                 "reward": next_reward,
@@ -406,7 +404,6 @@ class BraxWrapper(_EnvWrapper):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=False,
         )
         return tensordict_out
 

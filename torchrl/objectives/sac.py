@@ -632,7 +632,7 @@ class SACLoss(LossModule):
     @property
     @_cache_values
     def _cached_target_params_actor_value(self):
-        return TensorDict(
+        return TensorDict._new_unsafe(
             {
                 "module": {
                     "0": self.target_actor_network_params,
@@ -640,7 +640,6 @@ class SACLoss(LossModule):
                 }
             },
             torch.Size([]),
-            _run_checks=False,
         )
 
     def _qvalue_v1_loss(
