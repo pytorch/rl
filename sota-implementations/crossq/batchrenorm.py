@@ -23,62 +23,57 @@ class BatchRenorm(nn.Module):
     Keyword Args:
         momentum (float, optional): Momentum factor for computing the running mean and variance. Default is 0.01.
         eps (float, optional): Small value added to the variance to avoid division by zero. Default is 1e-5.
-        r_max (float, optional): Maximum value for the scaling factor r. Default is 3.0.
-        d_max (float, optional): Maximum value for the bias factor d. Default is 5.0.
-        warmup_steps (int, optional): Number of warm-up steps for the running mean and variance. Default is 5000.
+        max_r (float, optional): Maximum value for the scaling factor r. Default is 3.0.
+        max_d (float, optional): Maximum value for the bias factor d. Default is 5.0.
+        warmup_steps (int, optional): Number of warm-up steps for the running mean and variance. Default is 10000.
     """
 
     def __init__(
         self,
         num_features,
         momentum=0.99,
-        epsilon=1e-5,
+        eps=1e-5,
         max_r=3.0,
         max_d=5.0,
         warmup_steps=10000,
     ):
         super(BatchRenorm, self).__init__()
         self.num_features = num_features
-        self.epsilon = epsilon
+        self.eps = eps
         self.momentum = momentum
         self.max_r = max_r
         self.max_d = max_d
         self.warmup_steps = warmup_steps
 
-        self.register_buffer("running_mean", torch.zeros(num_features))
-        self.register_buffer("running_var", torch.ones(num_features))
-        self.weight = nn.Parameter(torch.ones(num_features))
-        self.bias = nn.Parameter(torch.zeros(num_features))
-
         self.register_buffer(
-            "num_batches_tracked", torch.tensor(0, dtype=torch.float32)
+            "running_mean", torch.zeros(num_features, dtype=torch.float32)
         )
+        self.register_buffer(
+            "running_var", torch.ones(num_features, dtype=torch.float32)
+        )
+        self.register_buffer("num_batches_tracked", torch.tensor(0, dtype=torch.int64))
+        self.weight = nn.Parameter(torch.ones(num_features, dtype=torch.float32))
+        self.bias = nn.Parameter(torch.zeros(num_features, dtype=torch.float32))
 
-    def forward(self, x):
-        if x.dim() not in [2, 3]:
-            raise ValueError("BatchRenorm expects 2D or 3D inputs")
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        assert x.dim() >= 2
+        view_dims = [1, x.shape[1]] + [1] * (x.dim() - 2)
+        # _v = lambda v: v.view(view_dims)
 
-        if x.dim() == 3:
-            batch_size, seq_len, _ = x.size()
-            x = x.reshape(batch_size * seq_len, self.num_features)
+        def _v(v):
+            return v.view(view_dims)
+
+        running_std = (self.running_var + self.eps).sqrt_()
 
         if self.training:
-            self.num_batches_tracked += 1
+            reduce_dims = [i for i in range(x.dim()) if i != 1]
+            b_mean = x.mean(reduce_dims)
+            b_var = x.var(reduce_dims, unbiased=False)
+            b_std = (b_var + self.eps).sqrt_()
 
-            batch_mean = x.mean(dim=0)
-            batch_var = x.var(dim=0, unbiased=False)
-
-            # Compute r and d factors
-            r = torch.clamp(
-                (batch_var.sqrt() / (self.running_var.sqrt() + self.epsilon)),
-                1 / self.max_r,
-                self.max_r,
-            )
+            r = torch.clamp((b_std.detach() / running_std), 1 / self.max_r, self.max_r)
             d = torch.clamp(
-                (
-                    (batch_mean - self.running_mean)
-                    / (self.running_var.sqrt() + self.epsilon)
-                ),
+                (b_mean.detach() - self.running_mean) / running_std,
                 -self.max_d,
                 self.max_d,
             )
@@ -87,32 +82,17 @@ class BatchRenorm(nn.Module):
             warmup_factor = torch.clamp(
                 self.num_batches_tracked / self.warmup_steps, 0.0, 1.0
             )
+            r = 1.0 + (r - 1.0) * warmup_factor
+            d = d * warmup_factor
 
-            # Interpolate between batch norm and renorm based on warmup factor
-            effective_r = 1.0 + (r - 1.0) * warmup_factor
-            effective_d = d * warmup_factor
+            x = (x - _v(b_mean)) / _v(b_std) * _v(r) + _v(d)
 
-            x_hat = (x - batch_mean[None, :]) * effective_r[None, :] + effective_d[
-                None, :
-            ]
-            x_hat = x_hat / (batch_var[None, :] + self.epsilon).sqrt()
-
-            # Update running statistics using Flax-style momentum
-            self.running_mean = (
-                self.momentum * self.running_mean + (1 - self.momentum) * batch_mean
-            )
-            self.running_var = (
-                self.momentum * self.running_var + (1 - self.momentum) * batch_var
-            )
-
+            unbiased_var = b_var.detach() * x.shape[1] / (x.shape[1] - 1)
+            self.running_var += self.momentum * (unbiased_var - self.running_var)
+            self.running_mean += self.momentum * (b_mean.detach() - self.running_mean)
+            self.num_batches_tracked += 1
         else:
-            x_hat = (x - self.running_mean[None, :]) / (
-                self.running_var[None, :] + self.epsilon
-            ).sqrt()
+            x = (x - _v(self.running_mean)) / _v(running_std)
 
-        output = self.weight[None, :] * x_hat + self.bias[None, :]
-
-        if x.dim() == 3:
-            output = output.reshape(batch_size, seq_len, self.num_features)
-
-        return output
+        x = _v(self.weight) * x + _v(self.bias)
+        return x

@@ -587,14 +587,10 @@ class CrossQLoss(LossModule):
         next_state_action_value = (
             next_state_action_value - self._alpha * next_sample_log_prob
         ).detach()
-        tensordict.set(
-            ("next", self.value_estimator.tensor_keys.value), next_state_action_value
-        )
-        # target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
 
-        reward = tensordict.get(("next", self.tensor_keys.reward))
-        done = tensordict.get(("next", self.tensor_keys.done))
-        target_value = (reward + (~done) * 0.99 * next_state_action_value).squeeze(-1)
+        target_value = self.value_estimator.value_estimate(
+            tensordict, next_value=next_state_action_value
+        ).squeeze(-1)
 
         # get current q-values
         pred_val = current_state_action_value.squeeze(-1)
