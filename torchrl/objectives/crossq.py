@@ -524,12 +524,15 @@ class CrossQLoss(LossModule):
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
+        self.qvalue_network.eval()
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qnetworkN0(
             td_q,
             self._cached_detached_qvalue_params,
         )
+
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
+        self.qvalue_network.train()
 
         if log_prob.shape != min_q.shape:
             raise RuntimeError(

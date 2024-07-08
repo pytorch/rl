@@ -58,7 +58,6 @@ class BatchRenorm(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         assert x.dim() >= 2
         view_dims = [1, x.shape[1]] + [1] * (x.dim() - 2)
-        # _v = lambda v: v.view(view_dims)
 
         def _v(v):
             return v.view(view_dims)
