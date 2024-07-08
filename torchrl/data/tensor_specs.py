@@ -39,8 +39,7 @@ from tensordict import (
     unravel_key,
 )
 from tensordict.utils import _getitem_batch_size, NestedKey
-
-from torchrl._utils import get_binary_env_var
+from torchrl._utils import _make_ordinal_device, get_binary_env_var
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
@@ -91,7 +90,7 @@ def _default_dtype_and_device(
     if dtype is None:
         dtype = torch.get_default_dtype()
     if device is not None:
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
     elif not allow_none_device:
         device = torch.zeros(()).device
     return dtype, device
@@ -536,6 +535,14 @@ class TensorSpec:
 
         return decorator
 
+    @property
+    def device(self) -> torch.device:
+        return self._device
+
+    @device.setter
+    def device(self, device: torch.device | None) -> None:
+        self._device = _make_ordinal_device(device)
+
     def clear_device_(self):
         """A no-op for all leaf specs (which must have a device)."""
         return self
@@ -643,7 +650,7 @@ class TensorSpec:
             indexed tensor
 
         """
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def expand(self, *shape):
@@ -656,7 +663,7 @@ class TensorSpec:
                 from it if the current dimension is a singleton.
 
         """
-        raise NotImplementedError
+        ...
 
     def squeeze(self, dim: int | None = None):
         """Returns a new Spec with all the dimensions of size ``1`` removed.
@@ -740,7 +747,7 @@ class TensorSpec:
             boolean indicating if values belongs to the TensorSpec box
 
         """
-        raise NotImplementedError
+        ...
 
     def contains(self, item):
         """Returns whether a sample is contained within the space defined by the TensorSpec.
@@ -2120,7 +2127,9 @@ class NonTensorSpec(TensorSpec):
         return (
             isinstance(val, NonTensorData)
             and val.shape == shape
-            and val.device == self.device
+            # We relax constrains on device as they're hard to enforce for non-tensor
+            #  tensordicts and pointless
+            # and val.device == self.device
             and val.dtype == self.dtype
         )
 
@@ -3303,6 +3312,8 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         device (str, int or torch.device, optional): device of
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
+        remove_singleton (bool, optional): if ``True``, singleton samples (of size [1])
+            will be squeezed. Defaults to ``True``.
 
     Examples:
         >>> ts = MultiDiscreteTensorSpec((3, 2, 3))
@@ -3321,6 +3332,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = torch.int64,
         mask: torch.Tensor | None = None,
+        remove_singleton: bool = True,
     ):
         if not isinstance(nvec, torch.Tensor):
             nvec = torch.tensor(nvec)
@@ -3345,6 +3357,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             shape, space, device, dtype, domain="discrete"
         )
         self.update_mask(mask)
+        self.remove_singleton = remove_singleton
 
     def update_mask(self, mask):
         if mask is not None:
@@ -3433,7 +3446,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                 *self.shape[:-1],
             )
         x = self._rand(space=self.space, shape=shape, i=self.nvec.ndim)
-        if self.shape == torch.Size([1]):
+        if self.remove_singleton and self.shape == torch.Size([1]):
             x = x.squeeze(-1)
         return x
 
@@ -3802,7 +3815,9 @@ class CompositeSpec(TensorSpec):
         for key, value in kwargs.items():
             self.set(key, value)
 
-        _device = torch.device(device) if device is not None else device
+        _device = (
+            _make_ordinal_device(torch.device(device)) if device is not None else device
+        )
         if len(kwargs):
             for key, item in self.items():
                 if item is None:
@@ -3845,7 +3860,7 @@ class CompositeSpec(TensorSpec):
             raise RuntimeError(
                 "To erase the device of a composite spec, call " "spec.clear_device_()."
             )
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
         self.to(device)
 
     def clear_device_(self):
@@ -3967,7 +3982,7 @@ class CompositeSpec(TensorSpec):
         if isinstance(vals, TensorDict):
             out = vals.empty()  # create and empty tensordict similar to vals
         else:
-            out = TensorDict({}, torch.Size([]), _run_checks=False)
+            out = TensorDict._new_unsafe({}, torch.Size([]))
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
@@ -4032,13 +4047,12 @@ class CompositeSpec(TensorSpec):
         for key, item in self.items():
             if item is not None:
                 _dict[key] = item.rand(shape)
-        return TensorDict(
+        # No need to run checks since we know Composite is compliant with
+        # TensorDict requirements
+        return TensorDict._new_unsafe(
             _dict,
             batch_size=torch.Size([*shape, *self.shape]),
             device=self._device,
-            # No need to run checks since we know Composite is compliant with
-            # TensorDict requirements
-            _run_checks=False,
         )
 
     def keys(

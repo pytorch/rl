@@ -473,7 +473,6 @@ class A2CLoss(LossModule):
                 target_params=self.target_critic_network_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
-        assert not advantage.requires_grad
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
         td_out = TensorDict({"loss_objective": loss}, batch_size=[])

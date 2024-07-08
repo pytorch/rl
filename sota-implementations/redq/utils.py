@@ -477,8 +477,8 @@ def make_redq_model(
 
     dist_class = TanhNormal
     dist_kwargs = {
-        "min": action_spec.space.low,
-        "max": action_spec.space.high,
+        "low": action_spec.space.low,
+        "high": action_spec.space.high,
         "tanh_loc": tanh_loc,
     }
 

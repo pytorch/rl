@@ -343,8 +343,9 @@ class GymLikeEnv(_EnvWrapper):
                     for key, val in TensorDict(obs_dict, []).items(True, True)
                 )
         else:
-            tensordict_out = TensorDict(
-                obs_dict, batch_size=tensordict.batch_size, _run_checks=False
+            tensordict_out = TensorDict._new_unsafe(
+                obs_dict,
+                batch_size=tensordict.batch_size,
             )
         if self.device is not None:
             tensordict_out = tensordict_out.to(self.device, non_blocking=True)
@@ -377,10 +378,9 @@ class GymLikeEnv(_EnvWrapper):
 
         source = self.read_obs(obs)
 
-        tensordict_out = TensorDict(
+        tensordict_out = TensorDict._new_unsafe(
             source=source,
             batch_size=self.batch_size,
-            _run_checks=not self.validated,
         )
         if self.info_dict_reader and info is not None:
             for info_dict_reader in self.info_dict_reader:

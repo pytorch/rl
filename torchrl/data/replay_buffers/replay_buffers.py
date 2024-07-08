@@ -30,7 +30,7 @@ from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 
-from torchrl._utils import accept_remote_rref_udf_invocation
+from torchrl._utils import _make_ordinal_device, accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -383,6 +383,30 @@ class ReplayBuffer:
 
         return data
 
+    def __setitem__(self, index, value) -> None:
+        if isinstance(index, str) or (isinstance(index, tuple) and unravel_key(index)):
+            self[:][index] = value
+            return
+        if isinstance(index, tuple):
+            if len(index) == 1:
+                self[index[0]] = value
+            else:
+                self[:][index] = value
+            return
+        index = _to_numpy(index)
+
+        if self._transform is not None and len(self._transform):
+            value = self._transform.inv(value)
+
+        if self.dim_extend > 0:
+            index = (slice(None),) * self.dim_extend + (index,)
+            with self._replay_lock:
+                self._storage[index] = self._transpose(value)
+        else:
+            with self._replay_lock:
+                self._storage[index] = value
+        return
+
     def state_dict(self) -> Dict[str, Any]:
         return {
             "_storage": self._storage.state_dict(),
@@ -561,9 +585,12 @@ class ReplayBuffer:
 
     def update_priority(
         self,
-        index: Union[int, torch.Tensor],
+        index: Union[int, torch.Tensor, Tuple[torch.Tensor]],
         priority: Union[int, torch.Tensor],
     ) -> None:
+        if isinstance(index, tuple):
+            index = torch.stack(index, -1)
+        priority = torch.as_tensor(priority)
         if self.dim_extend > 0 and priority.ndim > 1:
             priority = self._transpose(priority).flatten()
             # priority = priority.flatten()
@@ -1071,7 +1098,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 dtype=torch.float,
                 device=tensordict.device,
             ).expand(tensordict.shape[0])
-        if self._storage.ndim > 1:
+        if self._storage.ndim > 1 and priority.ndim >= self._storage.ndim:
             # We have to flatten the priority otherwise we'll be aggregating
             # the priority across batches
             priority = priority.flatten(0, self._storage.ndim - 1)
@@ -1148,9 +1175,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
         else:
             priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")
-        while index.shape != priority.shape:
-            # reduce index
-            index = index[..., 0]
+        if self._storage.ndim > 1 and index.ndim == 2:
+            index = index.unbind(-1)
+        else:
+            while index.shape != priority.shape:
+                # reduce index
+                index = index[..., 0]
         return self.update_priority(index, priority)
 
     def sample(
@@ -1433,7 +1463,7 @@ class InPlaceSampler:
         self.out = None
         if device is None:
             device = "cpu"
-        self.device = torch.device(device)
+        self.device = _make_ordinal_device(torch.device(device))
 
     def __call__(self, list_of_tds):
         if self.out is None:

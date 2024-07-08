@@ -19,6 +19,7 @@ from tensordict.base import NO_DEFAULT
 from tensordict.utils import NestedKey
 from torchrl._utils import (
     _ends_with,
+    _make_ordinal_device,
     _replace_last,
     implement_for,
     prod,
@@ -154,7 +155,7 @@ class EnvMetaData:
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
         if device is not None:
-            device = torch.device(device)
+            device = _make_ordinal_device(torch.device(device))
             device_map = {key: device for key in self.device_map}
         tensordict = self.tensordict.contiguous().to(device)
         specs = self.specs.to(device)
@@ -348,7 +349,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     ):
         self.__dict__.setdefault("_batch_size", None)
         if device is not None:
-            self.__dict__["_device"] = torch.device(device)
+            self.__dict__["_device"] = _make_ordinal_device(torch.device(device))
             output_spec = self.__dict__.get("_output_spec")
             if output_spec is not None:
                 self.__dict__["_output_spec"] = (
@@ -2609,9 +2610,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             for key in self.done_keys:
                 if _ends_with(key, "truncated"):
                     val = out_td.get(("next", key))
+                    done = out_td.get(("next", _replace_last(key, "done")))
                     val[(slice(None),) * (out_td.ndim - 1) + (-1,)] = True
                     out_td.set(("next", key), val)
-                    out_td.set(("next", _replace_last(key, "done")), val)
+                    out_td.set(("next", _replace_last(key, "done")), val | done)
                     found_truncated = True
             if not found_truncated:
                 raise RuntimeError(
@@ -2946,7 +2948,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 pass
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:
-        device = torch.device(device)
+        device = _make_ordinal_device(torch.device(device))
         if device == self.device:
             return self
         self.__dict__["_input_spec"] = self.input_spec.to(device).lock_()

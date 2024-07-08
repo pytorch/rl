@@ -208,8 +208,8 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": action_spec.space.low[len(train_env.batch_size) :],
-            "max": action_spec.space.high[
+            "low": action_spec.space.low[len(train_env.batch_size) :],
+            "high": action_spec.space.high[
                 len(train_env.batch_size) :
             ],  # remove batch-size
             "tanh_loc": False,

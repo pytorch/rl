@@ -946,7 +946,7 @@ if (downloadNote.length >= 1) {
         tutorialUrlArray[0] = tutorialUrlArray[0] + "/sphinx-tutorials"
 
     var githubLink = "https://github.com/pytorch/rl/blob/main/" + tutorialUrlArray.join("/") + ".py",
-        notebookLink = $(".reference.download")[1].href,
+        notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
         notebookDownloadPath = notebookLink.split('_downloads')[1],
         colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
 

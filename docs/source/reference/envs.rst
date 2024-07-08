@@ -46,6 +46,9 @@ Each env will have the following attributes:
   all the output keys (:obj:`"full_observation_spec"`, :obj:`"full_reward_spec"` and :obj:`"full_done_spec"`).
   It is locked and should not be modified directly.
 
+If the environment carries non-tensor data, a :class:`~torchrl.data.NonTensorSpec`
+instance can be used.
+
 Importantly, the environment spec shapes should contain the batch size, e.g.
 an environment with :obj:`env.batch_size == torch.Size([4])` should have
 an :obj:`env.action_spec` with shape :obj:`torch.Size([4, action_size])`.
@@ -765,6 +768,7 @@ to be able to create this other composition:
 
     Transform
     TransformedEnv
+    ActionDiscretizer
     ActionMask
     AutoResetEnv
     AutoResetTransform
@@ -776,17 +780,16 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    DTypeCastTransform
     DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
-    DTypeCastTransform
     EndOfLifeTransform
     ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation
     FrameSkipTransform
     GrayScale
-    gSDENoise
     InitTracker
     KLRewardTransform
     NoopResetEnv
@@ -796,13 +799,13 @@ to be able to create this other composition:
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
+    RemoveEmptySpecs
     RenameTransform
     Resize
+    Reward2GoTransform
     RewardClipping
     RewardScaling
     RewardSum
-    Reward2GoTransform
-    RemoveEmptySpecs
     SelectTransform
     SignTransform
     SqueezeTransform
@@ -812,11 +815,12 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
-    VecGymEnvTransform
-    VecNorm
     VC1Transform
     VIPRewardTransform
     VIPTransform
+    VecGymEnvTransform
+    VecNorm
+    gSDENoise
 
 Environments with masked actions
 --------------------------------

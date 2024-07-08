@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib.util
+import warnings
 
 from typing import Dict, Optional, Union
 
@@ -202,6 +203,11 @@ class BraxWrapper(_EnvWrapper):
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
         super().__init__(**kwargs)
+        if not self.device:
+            warnings.warn(
+                f"No device is set for env {self}. "
+                f"Setting a device in Brax wrapped environments is strongly recommended."
+            )
 
     def _check_kwargs(self, kwargs: Dict):
         brax = self.lib
@@ -315,7 +321,7 @@ class BraxWrapper(_EnvWrapper):
         state["reward"] = state.get("reward").view(*self.reward_spec.shape)
         state["done"] = state.get("done").view(*self.reward_spec.shape)
         done = state["done"].bool()
-        tensordict_out = TensorDict(
+        tensordict_out = TensorDict._new_unsafe(
             source={
                 "observation": state.get("obs"),
                 # "reward": reward,
@@ -325,7 +331,6 @@ class BraxWrapper(_EnvWrapper):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=False,
         )
         return tensordict_out
 
@@ -351,7 +356,7 @@ class BraxWrapper(_EnvWrapper):
         next_state.set("done", next_state.get("done").view(self.reward_spec.shape))
         done = next_state["done"].bool()
         reward = next_state["reward"]
-        tensordict_out = TensorDict(
+        tensordict_out = TensorDict._new_unsafe(
             source={
                 "observation": next_state.get("obs"),
                 "reward": reward,
@@ -361,7 +366,6 @@ class BraxWrapper(_EnvWrapper):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=False,
         )
         return tensordict_out
 
@@ -390,7 +394,7 @@ class BraxWrapper(_EnvWrapper):
         next_state.get("pipeline_state").update(dict(zip(qp_keys, next_qp_values)))
 
         # build result
-        tensordict_out = TensorDict(
+        tensordict_out = TensorDict._new_unsafe(
             source={
                 "observation": next_obs,
                 "reward": next_reward,
@@ -400,7 +404,6 @@ class BraxWrapper(_EnvWrapper):
             },
             batch_size=self.batch_size,
             device=self.device,
-            _run_checks=False,
         )
         return tensordict_out
 
@@ -657,10 +660,12 @@ class _BraxEnvStep(torch.autograd.Function):
 
         # call vjp to get gradients
         grad_state, grad_action = ctx.vjp_fn(grad_next_state_flat)
+        # assert grad_action.device == ctx.env.device
 
         # reshape batch size
         grad_state = _tree_reshape(grad_state, ctx.env.batch_size)
         grad_action = _tree_reshape(grad_action, ctx.env.batch_size)
+        # assert grad_action.device == ctx.env.device
 
         # convert ndarrays to tensors
         grad_state_qp = _object_to_tensordict(
@@ -668,9 +673,10 @@ class _BraxEnvStep(torch.autograd.Function):
             device=ctx.env.device,
             batch_size=ctx.env.batch_size,
         )
-        grad_action = _ndarray_to_tensor(grad_action)
+        grad_action = _ndarray_to_tensor(grad_action).to(ctx.env.device)
         grad_state_qp = {
             key: val if key not in none_keys else None
             for key, val in grad_state_qp.items()
         }
-        return (None, None, grad_action, *grad_state_qp.values())
+        grads = (grad_action, *grad_state_qp.values())
+        return (None, None, *grads)

@@ -43,6 +43,7 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
     EnvWithDynamicSpec,
+    EnvWithMetadata,
     HeterogeneousCountingEnv,
     HeterogeneousCountingEnvPolicy,
     MockBatchedLockedEnv,
@@ -58,6 +59,7 @@ from tensordict import (
     dense_stack_tds,
     LazyStackedTensorDict,
     TensorDict,
+    TensorDictBase,
 )
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import _unravel_key_to_tuple
@@ -67,6 +69,7 @@ from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
+    NonTensorSpec,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
@@ -83,7 +86,11 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
-from torchrl.envs.transforms.transforms import AutoResetEnv, AutoResetTransform
+from torchrl.envs.transforms.transforms import (
+    AutoResetEnv,
+    AutoResetTransform,
+    Transform,
+)
 from torchrl.envs.utils import (
     _StepMDP,
     _terminated_or_truncated,
@@ -2395,6 +2402,7 @@ class TestMultiKeyEnvs:
 @pytest.mark.parametrize(
     "envclass",
     [
+        EnvWithMetadata,
         ContinuousActionConvMockEnv,
         ContinuousActionConvMockEnvNumpy,
         ContinuousActionVecMockEnv,
@@ -2419,6 +2427,7 @@ def test_mocking_envs(envclass):
     env.set_seed(100)
     reset = env.reset()
     _ = env.rand_step(reset)
+    r = env.rollout(3)
     check_env_specs(env, seed=100, return_contiguous=False)
 
 
@@ -3160,6 +3169,73 @@ class TestEnvWithDynamicSpec:
             rollout_no_buffers_parallel.exclude("action"),
         )
         assert_allclose_td(rollout_no_buffers_serial, rollout_no_buffers_parallel)
+
+
+class TestNonTensorEnv:
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_single(self, bwad):
+        env = EnvWithMetadata()
+        r = env.rollout(10, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == list(range(10))
+
+    @pytest.mark.parametrize("bwad", [True, False])
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_serial(self, bwad, use_buffers):
+        N = 50
+        env = SerialEnv(2, EnvWithMetadata, use_buffers=use_buffers)
+        r = env.rollout(N, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == [list(range(N))] * 2
+
+    @pytest.mark.parametrize("bwad", [True, False])
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_parallel(self, bwad, use_buffers):
+        N = 50
+        env = ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
+        r = env.rollout(N, break_when_any_done=bwad)
+        assert r.get("non_tensor").tolist() == [list(range(N))] * 2
+
+    class AddString(Transform):
+        def __init__(self):
+            super().__init__()
+            self._str = "0"
+
+        def _call(self, td):
+            td["string"] = str(int(self._str) + 1)
+            self._str = td["string"]
+            return td
+
+        def _reset(
+            self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+        ) -> TensorDictBase:
+            self._str = "0"
+            tensordict_reset["string"] = self._str
+            return tensordict_reset
+
+        def transform_observation_spec(self, observation_spec):
+            observation_spec["string"] = NonTensorSpec(())
+            return observation_spec
+
+    @pytest.mark.parametrize("batched", ["serial", "parallel"])
+    def test_partial_rest(self, batched):
+        env0 = lambda: CountingEnv(5).append_transform(self.AddString())
+        env1 = lambda: CountingEnv(6).append_transform(self.AddString())
+        if batched == "parallel":
+            env = ParallelEnv(2, [env0, env1], mp_start_method=mp_ctx)
+        else:
+            env = SerialEnv(2, [env0, env1])
+        s = env.reset()
+        i = 0
+        for i in range(10):  # noqa: B007
+            s, s_ = env.step_and_maybe_reset(
+                s.set("action", torch.ones(2, 1, dtype=torch.int))
+            )
+            if s.get(("next", "done")).any():
+                break
+            s = s_
+        assert i == 5
+        assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
+        assert s_["string"] == ["0", "6"]
+        assert s["next", "string"] == ["6", "6"]
 
 
 if __name__ == "__main__":

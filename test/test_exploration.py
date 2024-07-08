@@ -585,7 +585,7 @@ def test_gsde(
         wrapper = NormalParamWrapper(model)
         module = SafeModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
         distribution_class = TanhNormal
-        distribution_kwargs = {"min": -bound, "max": bound}
+        distribution_kwargs = {"low": -bound, "high": bound}
     spec = BoundedTensorSpec(
         -torch.ones(action_dim) * bound, torch.ones(action_dim) * bound, (action_dim,)
     ).to(device)
