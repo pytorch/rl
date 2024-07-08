@@ -11,13 +11,20 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from tensordict import make_tensordict, TensorDict
-from torchrl._utils import implement_for
+from tensordict import TensorDict
 from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
-from torchrl.envs.libs.gym import _AsyncMeta, _gym_to_torchrl_spec_transform, GymEnv
+from torchrl.envs.libs.gym import (
+    _AsyncMeta,
+    _gym_to_torchrl_spec_transform,
+    gym_backend,
+    GymEnv,
+)
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
-_has_gym = importlib.util.find_spec("gym") is not None
+_has_gym = (
+    importlib.util.find_spec("gym") is not None
+    or importlib.util.find_spec("gymnasium") is not None
+)
 _has_robohive = importlib.util.find_spec("robohive") is not None and _has_gym
 
 if _has_robohive:
@@ -88,6 +95,10 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             be returned (by default under the ``"pixels"`` entry in the output tensordict).
             If ``False``, observations (eg, states) and pixels will be returned
             whenever ``from_pixels=True``. Defaults to ``True``.
+        from_depths (bool, optional): if ``True``, an attempt to return the depth
+            observations from the env will be performed. By default, these observations
+            will be written under the ``"depths"`` entry. Requires ``from_pixels`` to be ``True``.
+            Defaults to ``False``.
         frame_skip (int, optional): if provided, indicates for how many steps the
             same action is to be repeated. The observation returned will be the
             last observation of the sequence, whereas the reward will be the sum
@@ -126,7 +137,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     def available_envs(cls):
         if not _has_robohive:
             return []
-        RoboHiveEnv.register_envs()
+        cls.register_envs()
         return cls.env_list
 
     @classmethod
@@ -143,30 +154,12 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         if not len(robohive_envs):
             raise RuntimeError("did not load any environment.")
 
-    @implement_for(
-        "gymnasium",
-    )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):  # noqa: F811
-        raise NotImplementedError(
-            "Your gym version is too recent, RoboHiveEnv is only compatible with gym==0.13."
-        )
-
-    @implement_for(
-        "gym", "0.14", None
-    )  # make sure gym 0.13 is installed, otherwise raise an exception
-    def _build_env(self, *args, **kwargs):  # noqa: F811
-        raise NotImplementedError(
-            "Your gym version is too recent, RoboHiveEnv is only compatible with gym 0.13."
-        )
-
-    @implement_for(
-        "gym", None, "0.14"
-    )  # make sure gym 0.13 is installed, otherwise raise an exception
     def _build_env(  # noqa: F811
         self,
         env_name: str,
         from_pixels: bool = False,
         pixels_only: bool = False,
+        from_depths: bool = False,
         **kwargs,
     ) -> "gym.core.Env":  # noqa: F821
         if from_pixels:
@@ -180,7 +173,9 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
                 )
                 kwargs["cameras"] = self.get_available_cams(env_name)
             cams = list(kwargs.pop("cameras"))
-            env_name = self.register_visual_env(cams=cams, env_name=env_name)
+            env_name = self.register_visual_env(
+                cams=cams, env_name=env_name, from_depths=from_depths
+            )
 
         elif "cameras" in kwargs and kwargs["cameras"]:
             raise RuntimeError("Got a list of cameras but from_pixels is set to False.")
@@ -206,10 +201,6 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
                 **kwargs,
             )
             self.wrapper_frame_skip = 1
-            if env.visual_keys:
-                from_pixels = bool(len(env.visual_keys))
-            else:
-                from_pixels = False
         except TypeError as err:
             if "unexpected keyword argument 'frameskip" not in str(err):
                 raise err
@@ -221,23 +212,34 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         # except Exception as err:
         #     raise RuntimeError(f"Failed to build env {env_name}.") from err
         self.from_pixels = from_pixels
+        self.from_depths = from_depths
         self.render_device = render_device
         if kwargs.get("read_info", True):
             self.set_info_dict_reader(self.read_info)
         return env
 
+    def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+        out = super()._make_specs(env=env, batch_size=batch_size)
+        self.env.reset()
+        *_, info = self.env.step(self.env.action_space.sample())
+        info = self.read_info(info, TensorDict({}, []))
+        info = info.get("info")
+        self.observation_spec["info"] = make_composite_from_td(info)
+        return out
+
     @classmethod
-    def register_visual_env(cls, env_name, cams):
+    def register_visual_env(cls, env_name, cams, from_depths):
         with set_directory(cls.CURR_DIR):
             from robohive.envs.env_variants import register_env_variant
 
             if not len(cams):
                 raise RuntimeError("Cannot create a visual envs without cameras.")
             cams = sorted(cams)
-            new_env_name = "-".join([cam[:-3] for cam in cams] + [env_name])
-            if new_env_name in cls.env_list:
-                return new_env_name
+            cams_rep = [i.replace("A:", "A_") for i in cams]
+            new_env_name = "-".join([cam[:-3] for cam in cams_rep] + [env_name])
             visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
+            if from_depths:
+                visual_keys.extend([f"d:{c}:224x224:2d" for c in cams])
             register_env_variant(
                 env_name,
                 variants={
@@ -264,13 +266,17 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             if self.from_pixels:
                 visual = self.env.get_exteroception()
                 obs_dict.update(visual)
-            pixel_list = []
+            pixel_list, depth_list = [], []
             for obs_key in obs_dict:
                 if obs_key.startswith("rgb"):
                     pix = obs_dict[obs_key]
                     if not pix.shape[0] == 1:
                         pix = pix[None]
                     pixel_list.append(pix)
+                elif obs_key.startswith("d:"):
+                    dep = obs_dict[obs_key]
+                    dep = dep[None]
+                    depth_list.append(dep)
                 elif obs_key in env.obs_keys:
                     value = env.obs_dict[obs_key]
                     if not value.shape:
@@ -278,20 +284,24 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
                     _dict[obs_key] = value
             if pixel_list:
                 _dict["pixels"] = np.concatenate(pixel_list, 0)
+            if depth_list:
+                _dict["depths"] = np.concatenate(depth_list, 0)
             return _dict
 
         for i in range(3):
             _dict = {}
             _dict.update(get_obs())
             _dict["action"] = action = env.action_space.sample()
-            _, r, d, _ = env.step(action)
+            _, r, trunc, term, done, _ = self._output_transform(env.step(action))
             _dict[("next", "reward")] = r.reshape(1)
             _dict[("next", "done")] = [1]
+            _dict[("next", "terminated")] = [1]
+            _dict[("next", "truncated")] = [1]
             _dict["next"] = get_obs()
             rollout[i] = TensorDict(_dict, [])
 
         observation_spec = make_composite_from_td(
-            rollout.get("next").exclude("done", "reward")[0]
+            rollout.get("next").exclude("done", "reward", "terminated", "truncated")[0]
         )
         self.observation_spec = observation_spec
 
@@ -307,6 +317,12 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         rollout = rollout[..., 0]
         spec = make_composite_from_td(rollout)
         self.observation_spec.update(spec)
+        self.empty_cache()
+
+    def _reset_output_transform(self, reset_data):
+        if not (isinstance(reset_data, tuple) and len(reset_data) == 2):
+            return reset_data, {}
+        return reset_data
 
     def set_from_pixels(self, from_pixels: bool) -> None:
         """Sets the from_pixels attribute to an existing environment.
@@ -329,7 +345,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             pass
         # recover vec
         obsdict = {}
-        pixel_list = []
+        pixel_list, depth_list = [], []
         if self.from_pixels:
             visual = self.env.get_exteroception()
             observations.update(visual)
@@ -339,6 +355,10 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
                 if not pix.shape[0] == 1:
                     pix = pix[None]
                 pixel_list.append(pix)
+            elif key.startswith("d:"):
+                dep = observations[key]
+                dep = dep[None]
+                depth_list.append(dep)
             elif key in self._env.obs_keys:
                 value = observations[key]
                 if not value.shape:
@@ -348,23 +368,41 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         #     obsvec = np.concatenate(obsvec, 0)
         if self.from_pixels:
             obsdict.update({"pixels": np.concatenate(pixel_list, 0)})
+        if self.from_pixels and self.from_depths:
+            obsdict.update({"depths": np.concatenate(depth_list, 0)})
         out = obsdict
         return super().read_obs(out)
 
     def read_info(self, info, tensordict_out):
-        out = {}
-        for key, value in info.items():
-            if key in ("obs_dict", "done", "reward", *self._env.obs_keys, "act"):
-                continue
-            if isinstance(value, dict):
-                value = {key: _val for key, _val in value.items() if _val is not None}
-                value = make_tensordict(value, batch_size=[])
-            if value is not None:
-                out[key] = value
-        tensordict_out.update(out)
-        tensordict_out.update(
-            tensordict_out.apply(lambda x: x.reshape((1,)) if not x.shape else x)
+        if not info:
+            info_spec = self.observation_spec.get("info", None)
+            if info_spec is None:
+                return tensordict_out
+            tensordict_out.set("info", info_spec.zero())
+            return tensordict_out
+        out = (
+            TensorDict(info, [])
+            .filter_non_tensor_data()
+            .exclude("obs_dict", "done", "reward", *self._env.obs_keys, "act")
+            .apply(lambda x: x, filter_empty=True)
         )
+        if "info" in self.observation_spec.keys():
+            info_spec = self.observation_spec["info"]
+
+            def func(name, x):
+                spec = info_spec.get(name, None)
+                if spec is None:
+                    return None
+                return x.reshape(info_spec[name].shape)
+
+            out.update(out.named_apply(func, nested_keys=True, filter_empty=True))
+        else:
+            out.update(
+                out.apply(
+                    lambda x: x.reshape((1,)) if not x.shape else x, filter_empty=True
+                )
+            )
+        tensordict_out.set("info", out)
         return tensordict_out
 
     def _init_env(self):
@@ -382,8 +420,6 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
 
     @classmethod
     def get_available_cams(cls, env_name):
-        import gym
-
-        env = gym.make(env_name)
+        env = gym_backend().make(env_name)
         cams = [env.sim.model.id2name(ic, 7) for ic in range(env.sim.model.ncam)]
         return cams

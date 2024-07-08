@@ -254,7 +254,11 @@ class TestOrnsteinUhlenbeckProcessWrapper:
         out_noexp = []
         out = []
         for i in range(n_steps):
-            tensordict_noexp = policy(tensordict.clone())
+            tensordict_noexp = policy(
+                tensordict.clone().exclude(
+                    *(key for key in tensordict.keys() if key.startswith("_"))
+                )
+            )
             tensordict = exploratory_policy(tensordict.clone())
             if i == 0:
                 assert (tensordict[exploratory_policy.ou.steps_key] == 1).all()
@@ -581,7 +585,7 @@ def test_gsde(
         wrapper = NormalParamWrapper(model)
         module = SafeModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
         distribution_class = TanhNormal
-        distribution_kwargs = {"min": -bound, "max": bound}
+        distribution_kwargs = {"low": -bound, "high": bound}
     spec = BoundedTensorSpec(
         -torch.ones(action_dim) * bound, torch.ones(action_dim) * bound, (action_dim,)
     ).to(device)

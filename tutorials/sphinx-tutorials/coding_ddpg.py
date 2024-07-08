@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 TorchRL objectives: Coding a DDPG loss
 ======================================
@@ -12,7 +11,7 @@ TorchRL objectives: Coding a DDPG loss
 # Overview
 # --------
 #
-# TorchRL separates the training of RL algorithms in various pieces that will be
+# TorchRL separates the training of RL sota-implementations in various pieces that will be
 # assembled in your training script: the environment, the data collection and
 # storage, the model and finally the loss function.
 #
@@ -168,7 +167,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 # the losses without it. However, we encourage its usage for the following
 # reason.
 #
-# The reason TorchRL does this is that RL algorithms often execute the same
+# The reason TorchRL does this is that RL sota-implementations often execute the same
 # model with different sets of parameters, called "trainable" and "target"
 # parameters.
 # The "trainable" parameters are those that the optimizer needs to fit. The
@@ -339,7 +338,7 @@ def _loss_value(
         batch_size=self.target_actor_network_params.batch_size,
         device=self.target_actor_network_params.device,
     )
-    with target_params.to_module(self.value_estimator):
+    with target_params.to_module(self.actor_critic):
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
 
     # Computes the value loss: L2, L1 or smooth L1 depending on `self.loss_function`
@@ -407,7 +406,7 @@ class DDPGLoss(LossModule):
 # Environment
 # -----------
 #
-# In most algorithms, the first thing that needs to be taken care of is the
+# In most sota-implementations, the first thing that needs to be taken care of is the
 # construction of the environment as it conditions the remainder of the
 # training script.
 #
@@ -1059,7 +1058,7 @@ loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=gamma, lmbda=lm
 # Target network updater
 # ~~~~~~~~~~~~~~~~~~~~~~
 #
-# Target networks are a crucial part of off-policy RL algorithms.
+# Target networks are a crucial part of off-policy RL sota-implementations.
 # Updating the target network parameters is made easy thanks to the
 # :class:`~torchrl.objectives.HardUpdate` and :class:`~torchrl.objectives.SoftUpdate`
 # classes. They're built with the loss module as argument, and the update is

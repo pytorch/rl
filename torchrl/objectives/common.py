@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 import abc
+import functools
 import warnings
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
@@ -25,17 +25,26 @@ from torchrl.objectives.value import ValueEstimatorBase
 
 
 def _updater_check_forward_prehook(module, *args, **kwargs):
-    if not all(v for v in module._has_update_associated.values()) and RL_WARNINGS:
+    if not all(module._has_update_associated.values()) and RL_WARNINGS:
         warnings.warn(
             module.TARGET_NET_WARNING,
             category=UserWarning,
         )
 
 
+def _forward_wrapper(func):
+    @functools.wraps(func)
+    def new_forward(self, *args, **kwargs):
+        with set_exploration_type(self.deterministic_sampling_mode):
+            return func(self, *args, **kwargs)
+
+    return new_forward
+
+
 class _LossMeta(abc.ABCMeta):
     def __init__(cls, name, bases, attr_dict):
         super().__init__(name, bases, attr_dict)
-        cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
+        cls.forward = _forward_wrapper(cls.forward)
 
 
 class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
@@ -56,7 +65,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         The value estimator can be changed using the :meth:`~.make_value_estimator` method.
 
     By default, the forward method is always decorated with a
-    gh :class:`torchrl.envs.ExplorationType.MODE`
+    gh :class:`torchrl.envs.ExplorationType.MEAN`
 
     To utilize the ability configuring the tensordict keys via
     :meth:`~.set_keys()` a subclass must define an _AcceptedKeys dataclass.
@@ -76,6 +85,15 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         >>>
         >>> loss = MyLoss()
         >>> loss.set_keys(action="action2")
+
+    .. note:: When a policy that is wrapped or augmented with an exploration module is passed
+        to the loss, we want to deactivate the exploration through ``set_exploration_mode(<mode>)`` where
+        ``<mode>`` is either ``ExplorationType.MEAN``, ``ExplorationType.MODE`` or
+        ``ExplorationType.DETERMINISTIC``. The default value is ``DETERMINISTIC`` and it is set
+        through the ``deterministic_sampling_mode`` loss attribute. If another
+        exploration mode is required (or if ``DETERMINISTIC`` is not available), one can
+        change the value of this attribute which will change the mode.
+
     """
 
     @dataclass
@@ -90,6 +108,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     _vmap_randomness = None
     default_value_estimator: ValueEstimators = None
+
+    deterministic_sampling_mode: ExplorationType = ExplorationType.DETERMINISTIC
+
     SEP = "."
     TARGET_NET_WARNING = (
         "No target network updater has been associated "
@@ -217,12 +238,16 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 will carry gradients as expected.
 
         """
-        if kwargs.pop("funs_to_decorate", None) is not None:
-            warnings.warn(
-                "funs_to_decorate is without effect with the new objective API. This "
-                "warning will be replaced by an error in v0.4.0.",
-                category=DeprecationWarning,
-            )
+        for name in (
+            module_name,
+            module_name + "_params",
+            "target_" + module_name + "_params",
+        ):
+            if name not in self.__class__.__annotations__.keys():
+                warnings.warn(
+                    f"The name {name} wasn't part of the annotations ({self.__class__.__annotations__.keys()}). Make sure it is present in the definition class."
+                )
+
         if kwargs:
             raise TypeError(f"Unrecognised keyword arguments {list(kwargs.keys())}")
         # To make it robust to device casting, we must register list of
@@ -295,13 +320,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
         setattr(self, param_name, params)
 
-        # set the functional module: we need to convert the params to non-differentiable params
-        # otherwise they will appear twice in parameters
-        with params.apply(
-            self._make_meta_params, device=torch.device("meta"), filter_empty=False
-        ).to_module(module):
-            # avoid buffers and params being exposed
-            self.__dict__[module_name] = deepcopy(module)
+        # Set the module in the __dict__ directly to avoid listing its params
+        # A deepcopy with meta device could be used but that assumes that the model is copyable!
+        self.__dict__[module_name] = module
 
         name_params_target = "target_" + module_name
         if create_target_params:

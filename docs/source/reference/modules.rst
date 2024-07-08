@@ -25,8 +25,8 @@ The main features are:
   and/or return the distribution of interest;
 - Custom containers for Q-Value learning, model-based agents and others.
 
-SafeModules
-~~~~~~~~~~~
+TensorDictModules and SafeModules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 TorchRL :class:`~torchrl.modules.tensordict_module.SafeModule` allows you to
 check the you model output matches what is to be expected for the environment.
@@ -52,6 +52,7 @@ projected (in a L1-manner) into the desired domain.
     :template: rl_template_noinherit.rst
 
     Actor
+    MultiStepActorWrapper
     SafeModule
     SafeSequential
     TanhModule
@@ -314,7 +315,6 @@ Regular modules
     MLP
     ConvNet
     Conv3dNet
-    LSTMNet
     SqueezeLayer
     Squeeze2dLayer
 
@@ -427,6 +427,7 @@ Utils
     mappings
     inv_softplus
     biased_softplus
+    get_primers_from_module
 
 .. currentmodule:: torchrl.modules
 

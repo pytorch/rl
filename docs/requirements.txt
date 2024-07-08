@@ -3,7 +3,7 @@ numpy
 sphinx-copybutton
 sphinx-gallery
 sphinx===5.0.0
-Jinja2==3.1.3
+Jinja2==3.1.4
 sphinx-autodoc-typehints
 sphinx-serve==1.0.1
 git+https://github.com/vmoens/aafig@4319769eae88fff8e3464858f3cf8c277f35335d
@@ -25,4 +25,4 @@ imageio[ffmpeg,pyav]
 memory_profiler
 pyrender
 pytest
-vmas==1.2.11
+vmas

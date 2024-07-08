@@ -662,23 +662,13 @@ class ReplayBufferTrainer(TrainerHookBase):
         batch_size: Optional[int] = None,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
-        flatten_tensordicts: bool = None,
+        flatten_tensordicts: bool = False,
         max_dims: Optional[Sequence[int]] = None,
     ) -> None:
         self.replay_buffer = replay_buffer
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
-        if flatten_tensordicts is None:
-            warnings.warn(
-                "flatten_tensordicts default value has now changed "
-                "to False for a faster execution. Make sure your "
-                "code is robust to this change. To silence this warning, "
-                "pass flatten_tensordicts=<value> in your code. "
-                "This warning will be removed in v0.4.",
-                category=DeprecationWarning,
-            )
-            flatten_tensordicts = True
         self.flatten_tensordicts = flatten_tensordicts
         self.max_dims = max_dims
 
@@ -1003,7 +993,7 @@ def mask_batch(batch: TensorDictBase) -> TensorDictBase:
 
 
 class BatchSubSampler(TrainerHookBase):
-    """Data subsampler for online RL algorithms.
+    """Data subsampler for online RL sota-implementations.
 
     This class subsamples a part of a whole batch of data just collected from the
     environment.
@@ -1156,12 +1146,12 @@ class Recorder(TrainerHookBase):
             Given that this instance is supposed to both explore and render
             the performance of the policy, it should be possible to turn off
             the explorative behaviour by calling the
-            `set_exploration_type(ExplorationType.MODE)` context manager.
+            `set_exploration_type(ExplorationType.DETERMINISTIC)` context manager.
         environment (EnvBase): An environment instance to be used
             for testing.
         exploration_type (ExplorationType, optional): exploration mode to use for the
             policy. By default, no exploration is used and the value used is
-            ExplorationType.MODE. Set to ExplorationType.RANDOM to enable exploration
+            ``ExplorationType.DETERMINISTIC``. Set to ``ExplorationType.RANDOM`` to enable exploration
         log_keys (sequence of str or tuples or str, optional): keys to read in the tensordict
             for logging. Defaults to ``[("next", "reward")]``.
         out_keys (Dict[str, str], optional): a dictionary mapping the ``log_keys``

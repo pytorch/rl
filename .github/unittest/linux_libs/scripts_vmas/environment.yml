@@ -7,7 +7,6 @@ dependencies:
     - cloudpickle
     - gym
     - gym-notices
-    - importlib-metadata
     - numpy
     - pyglet==1.5.27
     - six

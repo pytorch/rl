@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Get started with TorchRL's modules
 ==================================
@@ -118,7 +117,7 @@ rollout = env.rollout(max_steps=10, policy=policy)
 # Probabilistic policies
 # ----------------------
 #
-# Policy-optimization algorithms like
+# Policy-optimization sota-implementations like
 # `PPO <https://arxiv.org/abs/1707.06347>`_ require the policy to be
 # stochastic: unlike in the examples above, the module now encodes a map from
 # the observation space to a parameter space encoding a distribution over the
@@ -162,7 +161,7 @@ print(rollout)
 #
 # - Since we asked for it during the construction of the actor, the
 #   log-probability of the actions given the distribution at that time is
-#   also written. This is necessary for algorithms like PPO.
+#   also written. This is necessary for sota-implementations like PPO.
 # - The parameters of the distribution are returned within the output
 #   tensordict too under the ``"loc"`` and ``"scale"`` entries.
 #
@@ -273,9 +272,7 @@ from torchrl.modules import QValueModule
 
 policy = TensorDictSequential(
     value_net,  # writes action values in our tensordict
-    QValueModule(
-        action_space=env.action_spec
-    ),  # Reads the "action_value" entry by default
+    QValueModule(spec=env.action_spec),  # Reads the "action_value" entry by default
 )
 
 ###################################

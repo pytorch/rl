@@ -8,13 +8,17 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
 
 import torch
 
-from tensordict import make_tensordict, pad, TensorDict
+from tensordict import make_tensordict, NonTensorData, pad, TensorDict
+from tensordict.utils import _is_non_tensor
+
+from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
@@ -29,7 +33,7 @@ _has_datasets = importlib.util.find_spec("datasets", None) is not None
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 
-class OpenXExperienceReplay(TensorDictReplayBuffer):
+class OpenXExperienceReplay(BaseDatasetExperienceReplay):
     """Open X-Embodiment datasets experience replay.
 
     The Open X-Embodiment Dataset contains 1M+ real robot trajectories
@@ -301,9 +305,9 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         slice_len: int | None = None,
         pad: float | bool | None = None,
         replacement: bool = None,
-        streaming: bool = True,
+        streaming: bool | None = None,
         root: str | Path | None = None,
-        download: bool = False,
+        download: bool | None = None,
         sampler: Sampler | None = None,
         writer: Writer | None = None,
         collate_fn: Callable | None = None,
@@ -313,6 +317,13 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
         split_trajs: bool = False,
         strict_length: bool = True,
     ):
+        if download is None and streaming is None:
+            download = False
+            streaming = True
+        elif download is None:
+            download = not streaming
+        elif streaming is None:
+            streaming = not download
         self.download = download
         self.streaming = streaming
         self.dataset_id = dataset_id
@@ -340,6 +351,9 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
             if self.download == "force" or (
                 self.download and not self._is_downloaded()
             ):
+                if download == "force" and os.path.exists(self.data_path_root):
+                    shutil.rmtree(self.data_path_root)
+
                 storage = self._download_and_preproc()
             else:
                 storage = TensorStorage(TensorDict.load_memmap(self.root / dataset_id))
@@ -472,6 +486,7 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                 streaming=False,
                 split="train",
                 cache_dir=cache_dir,
+                trust_remote_code=True,
             )
             # iterate over the dataset a first time to count elements
             total_frames = 0
@@ -494,7 +509,18 @@ class OpenXExperienceReplay(TensorDictReplayBuffer):
                         _format_data(td, 0)
                         td = td[0]
                 total_frames += len(data["data.pickle"]["steps"])
-            td_data = td.expand(total_frames).memmap_like(self.root / self.dataset_id)
+            td_data = td.expand(total_frames)
+
+            def expand_non_tensor(x):
+                if isinstance(x, NonTensorData):
+                    return x.maybe_to_stack()
+                return x
+
+            td_data = td_data._apply_nest(
+                expand_non_tensor,
+                is_leaf=lambda x: issubclass(x, torch.Tensor) or _is_non_tensor(x),
+            )
+            td_data = td_data.memmap_like(self.root / self.dataset_id)
             if _has_tqdm:
                 pbar = tqdm.tqdm(dataset, desc="preproc", total=total_frames)
             else:

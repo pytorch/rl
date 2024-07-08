@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import importlib.util
 
 import pytest
 import torch
@@ -26,6 +27,8 @@ from torchrl.modules.distributions import (
     TanhDelta,
 )
 from torchrl.modules.distributions.continuous import SafeTanhTransform
+
+_has_scipy = importlib.util.find_spec("scipy", None) is not None
 
 
 @pytest.mark.skipif(torch.__version__ < "2.0", reason="torch 2.0 is required")
@@ -82,6 +85,84 @@ def _map_all(*tensors_or_other, device):
 
 class TestTanhNormal:
     @pytest.mark.parametrize(
+        "low", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
+    )
+    @pytest.mark.parametrize(
+        "high", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 0.1]
+    )
+    @pytest.mark.parametrize(
+        "vecs",
+        [
+            (torch.tensor([0.1, 10.0, 5.0]), torch.tensor([0.1, 10.0, 5.0])),
+            (torch.zeros(7, 3), torch.ones(7, 3)),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "upscale", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 3]
+    )
+    @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_tanhnormal(self, low, high, vecs, upscale, shape, device):
+        torch.manual_seed(0)
+        low, high, vecs, upscale, shape = _map_all(
+            low, high, vecs, upscale, shape, device=device
+        )
+        torch.manual_seed(0)
+        d = TanhNormal(
+            *vecs,
+            upscale=upscale,
+            low=low,
+            high=high,
+        )
+        for _ in range(100):
+            a = d.rsample(shape)
+            assert a.shape[: len(shape)] == shape
+            assert (a >= d.low).all()
+            assert (a <= d.high).all()
+            lp = d.log_prob(a)
+            assert torch.isfinite(lp).all()
+
+    def test_tanhnormal_mode(self):
+        # Checks that the std of the mode computed by tanh normal is within a certain range
+        # when starting from close points
+
+        torch.manual_seed(0)
+        # 10 start points with 1000 jitters around that
+        # std of the loc is about 1e-4
+        loc = torch.randn(10) + torch.randn(1000, 10) / 10000
+
+        t = TanhNormal(loc=loc, scale=0.5, low=-1, high=1, event_dims=0)
+
+        mode = t.get_mode()
+        assert mode.shape == loc.shape
+        empirical_mode, empirical_mode_lp = torch.zeros_like(loc), -float("inf")
+        for v in torch.arange(-1, 1, step=0.01):
+            lp = t.log_prob(v.expand_as(t.loc))
+            empirical_mode = torch.where(lp > empirical_mode_lp, v, empirical_mode)
+            empirical_mode_lp = torch.where(
+                lp > empirical_mode_lp, lp, empirical_mode_lp
+            )
+        assert abs(empirical_mode - mode).max() < 0.1, abs(empirical_mode - mode).max()
+        assert mode.shape == loc.shape
+        assert (mode.std(0).max() < 0.1).all(), mode.std(0)
+
+    @pytest.mark.parametrize("event_dims", [0, 1, 2])
+    def test_tanhnormal_event_dims(self, event_dims):
+        scale = 1
+        loc = torch.randn(1, 2, 3, 4)
+        t = TanhNormal(loc=loc, scale=scale, event_dims=event_dims)
+        sample = t.sample()
+        assert sample.shape == loc.shape
+        exp_shape = loc.shape[:-event_dims] if event_dims > 0 else loc.shape
+        assert t.log_prob(sample).shape == exp_shape, (
+            t.log_prob(sample).shape,
+            event_dims,
+            exp_shape,
+        )
+
+
+class TestTruncatedNormal:
+    @pytest.mark.parametrize(
         "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
     )
     @pytest.mark.parametrize(
@@ -99,45 +180,6 @@ class TestTanhNormal:
     )
     @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_tanhnormal(self, min, max, vecs, upscale, shape, device):
-        min, max, vecs, upscale, shape = _map_all(
-            min, max, vecs, upscale, shape, device=device
-        )
-        torch.manual_seed(0)
-        d = TanhNormal(
-            *vecs,
-            upscale=upscale,
-            min=min,
-            max=max,
-        )
-        for _ in range(100):
-            a = d.rsample(shape)
-            assert a.shape[: len(shape)] == shape
-            assert (a >= d.min).all()
-            assert (a <= d.max).all()
-            lp = d.log_prob(a)
-            assert torch.isfinite(lp).all()
-
-
-@pytest.mark.parametrize(
-    "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
-)
-@pytest.mark.parametrize(
-    "max", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 0.1]
-)
-@pytest.mark.parametrize(
-    "vecs",
-    [
-        (torch.tensor([0.1, 10.0, 5.0]), torch.tensor([0.1, 10.0, 5.0])),
-        (torch.zeros(7, 3), torch.ones(7, 3)),
-    ],
-)
-@pytest.mark.parametrize(
-    "upscale", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 3]
-)
-@pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
-@pytest.mark.parametrize("device", get_default_devices())
-class TestTruncatedNormal:
     def test_truncnormal(self, min, max, vecs, upscale, shape, device):
         torch.manual_seed(0)
         *vecs, min, max, vecs, upscale = torch.utils._pytree.tree_map(
@@ -156,15 +198,64 @@ class TestTruncatedNormal:
             a = d.rsample(shape)
             assert a.device == device
             assert a.shape[: len(shape)] == shape
-            assert (a >= d.min).all()
-            assert (a <= d.max).all()
+            assert (a >= d.low).all()
+            assert (a <= d.high).all()
             lp = d.log_prob(a)
             assert torch.isfinite(lp).all()
-        oob_min = d.min.expand((*d.batch_shape, *d.event_shape)) - 1e-2
+        oob_min = d.low.expand((*d.batch_shape, *d.event_shape)) - 1e-2
         assert not torch.isfinite(d.log_prob(oob_min)).any()
-        oob_max = d.max.expand((*d.batch_shape, *d.event_shape)) + 1e-2
+        oob_max = d.high.expand((*d.batch_shape, *d.event_shape)) + 1e-2
         assert not torch.isfinite(d.log_prob(oob_max)).any()
 
+    @pytest.mark.skipif(not _has_scipy, reason="scipy not installed")
+    def test_truncnormal_against_scipy(self):
+        from scipy.stats import truncnorm as sp_truncnorm
+
+        # torchrl version
+        x = torch.linspace(-1.5, 2.5, 1000).view(-1, 1, 1)
+        mu = torch.tensor([0.0], requires_grad=True)
+        sigma = torch.tensor([1.0], requires_grad=True)
+        high = 2
+        low = -1
+        log_pi_x = TruncatedNormal(
+            mu, sigma, min=low, max=high, tanh_loc=False
+        ).log_prob(x)
+        pi_x = torch.exp(log_pi_x)
+        log_pi_x.backward(torch.ones_like(log_pi_x))
+        # plot pi_x
+        x_numpy = x.view(-1).detach().numpy()
+        pi_x = pi_x.view(-1).detach()
+
+        # scipy version
+        sigma = sigma.item()
+        mu = mu.item()
+
+        U, L = (high - mu) / sigma, (low - mu) / sigma
+        scipy_truncnorm = sp_truncnorm(L, U, loc=mu, scale=sigma)
+        pdf_scypi_truncnorm = scipy_truncnorm.pdf(x_numpy)
+
+        torch.testing.assert_close(
+            pi_x, torch.as_tensor(pdf_scypi_truncnorm, dtype=torch.float32)
+        )
+
+    @pytest.mark.parametrize(
+        "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
+    )
+    @pytest.mark.parametrize(
+        "max", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 0.1]
+    )
+    @pytest.mark.parametrize(
+        "vecs",
+        [
+            (torch.tensor([0.1, 10.0, 5.0]), torch.tensor([0.1, 10.0, 5.0])),
+            (torch.zeros(7, 3), torch.ones(7, 3)),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "upscale", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 3]
+    )
+    @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_truncnormal_mode(self, min, max, vecs, upscale, shape, device):
         torch.manual_seed(0)
         min, max, vecs, upscale, shape = _map_all(

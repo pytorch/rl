@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Reinforcement Learning (PPO) with TorchRL Tutorial
 ==================================================
@@ -27,12 +26,12 @@ Key learnings:
 
 We will cover six crucial components of TorchRL:
 
-* `environments <https://pytorch.org/rl/reference/envs.html>`__
-* `transforms <https://pytorch.org/rl/reference/envs.html#transforms>`__
-* `models (policy and value function) <https://pytorch.org/rl/reference/modules.html>`__
-* `loss modules <https://pytorch.org/rl/reference/objectives.html>`__
-* `data collectors <https://pytorch.org/rl/reference/collectors.html>`__
-* `replay buffers <https://pytorch.org/rl/reference/data.html#replay-buffers>`__
+* :ref:`environments <Environment-API>`
+* :ref:`transforms <transforms>`
+* :ref:`models <ref_modules>`
+* :ref:`loss modules <ref_objectives>`
+* :ref:`data collectors <ref_collectors>`
+* :ref:`replay buffers <ref_buffers>`
 
 """
 
@@ -432,8 +431,8 @@ policy_module = ProbabilisticActor(
     in_keys=["loc", "scale"],
     distribution_class=TanhNormal,
     distribution_kwargs={
-        "min": env.action_spec.space.low,
-        "max": env.action_spec.space.high,
+        "low": env.action_spec.space.low,
+        "high": env.action_spec.space.high,
     },
     return_log_prob=True,
     # we'll need the log-prob for the numerator of the importance weights
@@ -479,7 +478,7 @@ print("Running value:", value_module(env.reset()))
 # Data collector
 # --------------
 #
-# TorchRL provides a set of `DataCollector classes <https://pytorch.org/rl/reference/collectors.html>`__.
+# TorchRL provides a set of :ref:`DataCollector classes <ref_collectors>`.
 # Briefly, these classes execute three operations: reset an environment,
 # compute an action given the latest observation, execute a step in the environment,
 # and repeat the last two steps until the environment signals a stop (or reaches
@@ -519,7 +518,7 @@ collector = SyncDataCollector(
 # Replay buffer
 # -------------
 #
-# Replay buffers are a common building piece of off-policy RL algorithms.
+# Replay buffers are a common building piece of off-policy RL sota-implementations.
 # In on-policy contexts, a replay buffer is refilled every time a batch of
 # data is collected, and its data is repeatedly consumed for a certain number
 # of epochs.

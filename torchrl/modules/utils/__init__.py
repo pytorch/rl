@@ -25,3 +25,4 @@ else:
 
 
 from .mappings import biased_softplus, inv_softplus, mappings
+from .utils import get_primers_from_module

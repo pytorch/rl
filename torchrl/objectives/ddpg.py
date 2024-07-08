@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 
 from tensordict.utils import NestedKey, unravel_key
@@ -183,6 +183,13 @@ class DDPGLoss(LossModule):
         "pred_value_max",
         "target_value_max",
     ]
+
+    actor_network: TensorDictModule
+    value_network: actor_network
+    actor_network_params: TensorDictParams
+    value_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    target_value_network_params: TensorDictParams
 
     def __init__(
         self,

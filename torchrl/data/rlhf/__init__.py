@@ -11,4 +11,4 @@ from .dataset import (
 )
 from .prompt import PromptData, PromptTensorDictTokenizer
 from .reward import PairwiseDataset, RewardData
-from .utils import RolloutFromModel
+from .utils import AdaptiveKLController, ConstantKLController, RolloutFromModel

@@ -12,7 +12,7 @@ project_name="torchrl-example-check-$current_commit"
 group_name="a2c_atari"
 
 export PYTHONPATH=$(dirname $(dirname $PWD))
-python $PYTHONPATH/examples/a2c/a2c_atari.py \
+python $PYTHONPATH/sota-implementations/a2c/a2c_atari.py \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"
