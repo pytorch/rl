@@ -1,0 +1,52 @@
+# environment and task
+env:
+  name: MountainCarContinuous-v0
+  task: ""
+  exp_name: ${env.name}_TQC
+  library: gymnasium
+  max_episode_steps: 1_000
+  seed: 42
+
+# collector
+collector:
+  total_frames: 1_000_000
+  init_random_frames: 25_000
+  frames_per_batch: 1_000
+  collector_device: cpu
+  env_per_collector: 1
+  reset_at_each_iter: False
+
+# replay buffer
+replay_buffer:
+  size: 1_000_000
+  prb: False # use prioritized experience replay
+  scratch_dir:
+
+# optim
+optim:
+  utd_ratio: 1.0
+  gamma: 0.99
+  lr: 3.0e-4
+  weight_decay: 0.0
+  batch_size: 256
+  target_update_polyak: 0.995
+  alpha_init: 1.0
+  adam_eps: 1.0e-8
+
+# network
+network:
+  actor_hidden_sizes: [256, 256]
+  critic_hidden_sizes: [512, 512, 512]
+  n_quantiles: 25
+  n_nets: 5
+  top_quantiles_to_drop_per_net: 2
+  activation: relu
+  default_policy_scale: 1.0
+  scale_lb: 0.1
+  device: cuda
+
+# logging
+logger:
+  backend: wandb
+  mode: online
+  eval_iter: 25_000
