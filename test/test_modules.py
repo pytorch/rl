@@ -1447,11 +1447,18 @@ def test_python_gru(device, bias, dropout, batch_first, num_layers):
 
 class TestBatchRenorm:
     @pytest.mark.parametrize("num_steps", [0, 5])
-    def test_batchrenorm(self, num_steps):
+    @pytest.mark.parametrize("smooth", [False, True])
+    def test_batchrenorm(self, num_steps, smooth):
         torch.manual_seed(0)
         bn = torch.nn.BatchNorm1d(5, momentum=0.1, eps=1e-5)
         brn = BatchRenorm1d(
-            5, momentum=0.1, eps=1e-5, warmup_steps=num_steps, max_d=10000, max_r=10000
+            5,
+            momentum=0.1,
+            eps=1e-5,
+            warmup_steps=num_steps,
+            max_d=10000,
+            max_r=10000,
+            smooth=smooth,
         )
         bn.train()
         brn.train()
@@ -1460,7 +1467,9 @@ class TestBatchRenorm:
         for i, d in enumerate(data_train):
             b = bn(d)
             a = brn(d)
-            if num_steps > 0 and i < num_steps:
+            if num_steps > 0 and (
+                (i < num_steps and not smooth) or (i == 0 and smooth)
+            ):
                 torch.testing.assert_close(a, b)
             else:
                 assert not torch.isclose(a, b).all(), i

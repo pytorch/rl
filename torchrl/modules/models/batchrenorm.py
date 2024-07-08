@@ -32,6 +32,10 @@ class BatchRenorm1d(nn.Module):
             Defaults to ``5.0``.
         warmup_steps (int, optional): Number of warm-up steps for the running mean and variance.
             Defaults to ``10000``.
+        smooth (bool, optional): if ``True``, the behaviour smoothly transitions from regular
+            batch-norm (when ``iter=0``) to batch-renorm (when ``iter=warmup_steps``).
+            Otherwise, the behaviour will transition from batch-norm to batch-renorm when
+            ``iter=warmup_steps``. Defaults to ``False``.
     """
 
     def __init__(
@@ -43,6 +47,7 @@ class BatchRenorm1d(nn.Module):
         max_r: float = 3.0,
         max_d: float = 5.0,
         warmup_steps: int = 10000,
+        smooth: bool = False,
     ):
         super().__init__()
         self.num_features = num_features
@@ -51,6 +56,7 @@ class BatchRenorm1d(nn.Module):
         self.max_r = max_r
         self.max_d = max_d
         self.warmup_steps = warmup_steps
+        self.smooth = smooth
 
         self.register_buffer(
             "running_mean", torch.zeros(num_features, dtype=torch.float32)
@@ -90,7 +96,10 @@ class BatchRenorm1d(nn.Module):
 
             # Compute warmup factor (0 during warmup, 1 after warmup)
             if self.warmup_steps > 0:
-                warmup_factor = self.num_batches_tracked // self.warmup_steps
+                if self.smooth:
+                    warmup_factor = self.num_batches_tracked / self.warmup_steps
+                else:
+                    warmup_factor = self.num_batches_tracked // self.warmup_steps
                 r = 1.0 + (r - 1.0) * warmup_factor
                 d = d * warmup_factor
 
