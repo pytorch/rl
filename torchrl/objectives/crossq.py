@@ -556,17 +556,6 @@ class CrossQLoss(LossModule):
                 next_tensordict.set(self.tensor_keys.action, next_action)
                 next_sample_log_prob = next_dist.log_prob(next_action)
 
-        # TODO: separate forward pass seems faster than the combined.
-        # next_state_action_value = self._vmap_qnetworkN0(
-        #     next_tensordict.select(*self.qvalue_network.in_keys, strict=False),
-        #     self.qvalue_network_params,
-        # ).get(self.tensor_keys.state_action_value)
-
-        # current_state_action_value = self._vmap_qnetworkN0(
-        #     tensordict.select(*self.qvalue_network.in_keys, strict=False),
-        #     self.qvalue_network_params,
-        # ).get(self.tensor_keys.state_action_value)
-
         combined = torch.cat(
             [
                 tensordict.select(*self.qvalue_network.in_keys, strict=False),
