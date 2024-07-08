@@ -6,7 +6,7 @@
 
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet
 
-from .batchrenorm1d import BatchRenorm1d
+from .batchrenorm import BatchRenorm1d
 
 from .decision_transformer import DecisionTransformer
 from .exploration import NoisyLazyLinear, NoisyLinear, reset_noise

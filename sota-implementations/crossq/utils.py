@@ -25,7 +25,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
 
-from torchrl.modules.models.batchrenorm1d import BatchRenorm1d
+from torchrl.modules.models.batchrenorm import BatchRenorm1d
 from torchrl.objectives import CrossQLoss
 
 # ====================================================================
