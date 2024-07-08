@@ -251,7 +251,6 @@ class CrossQLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
-        gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -326,8 +325,6 @@ class CrossQLoss(LossModule):
 
         self._target_entropy = target_entropy
         self._action_spec = action_spec
-        if gamma is not None:
-            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )

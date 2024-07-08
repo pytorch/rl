@@ -34,7 +34,14 @@ from torchrl.modules import (
     VDNMixer,
 )
 from torchrl.modules.distributions.utils import safeatanh, safetanh
-from torchrl.modules.models import Conv3dNet, ConvNet, MLP, NoisyLazyLinear, NoisyLinear
+from torchrl.modules.models import (
+    BatchRenorm1d,
+    Conv3dNet,
+    ConvNet,
+    MLP,
+    NoisyLazyLinear,
+    NoisyLinear,
+)
 from torchrl.modules.models.decision_transformer import (
     _has_transformers,
     DecisionTransformer,
@@ -1436,6 +1443,32 @@ def test_python_gru(device, bias, dropout, batch_first, num_layers):
     if dropout == 0.0:
         torch.testing.assert_close(output1, output2)
         torch.testing.assert_close(h1, h2)
+
+
+class TestBatchRenorm:
+    @pytest.mark.parametrize("num_steps", [0, 5])
+    def test_batchrenorm(self, num_steps):
+        torch.manual_seed(0)
+        bn = torch.nn.BatchNorm1d(5, momentum=0.1, eps=1e-5)
+        brn = BatchRenorm1d(
+            5, momentum=0.1, eps=1e-5, warmup_steps=num_steps, max_d=10000, max_r=10000
+        )
+        bn.train()
+        brn.train()
+        data_train = torch.randn(100, 5).split(25)
+        data_test = torch.randn(100, 5)
+        for d in data_train:
+            _ = bn(d)
+            _ = brn(d)
+        # if num_steps == 0:
+        #     print(a, b)
+        #     torch.testing.assert_close(a, b)
+        # else:
+        #     assert not torch.isclose(a, b).all()
+
+        bn.eval()
+        brn.eval()
+        torch.testing.assert_close(bn(data_test), brn(data_test))
 
 
 if __name__ == "__main__":
