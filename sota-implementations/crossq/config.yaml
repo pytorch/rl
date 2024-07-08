@@ -28,20 +28,21 @@ optim:
   policy_update_delay: 3
   gamma: 0.99
   loss_function: l2
-  lr: 3.0e-4
+  lr: 1.0e-3
   weight_decay: 0.0
   batch_size: 256
   alpha_init: 1.0
-  # Adam β1 = 0.5
   adam_eps: 1.0e-8
+  beta1: 0.5
+  beta2: 0.999
 
 # network
 network:
   batch_norm_momentum: 0.01
-  # warmup_steps: 100000 # 10^5
+  warmup_steps: 100000 
   critic_hidden_sizes: [2048, 2048]
   actor_hidden_sizes: [256, 256]
-  critic_activation: tanh
+  critic_activation: relu
   actor_activation: relu
   default_policy_scale: 1.0
   scale_lb: 0.1

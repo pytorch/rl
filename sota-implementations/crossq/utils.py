@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
+
+from batchrenorm import BatchRenorm
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
@@ -25,7 +27,6 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
 from torchrl.objectives import CrossQLoss
-
 
 # ====================================================================
 # Environment utils
@@ -120,7 +121,6 @@ def make_replay_buffer(
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=scratch_dir,
-                device=device,
             ),
             batch_size=batch_size,
         )
@@ -131,10 +131,10 @@ def make_replay_buffer(
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=scratch_dir,
-                device=device,
             ),
             batch_size=batch_size,
         )
+    replay_buffer.append_transform(lambda x: x.to(device, non_blocking=True))
     return replay_buffer
 
 
@@ -143,7 +143,7 @@ def make_replay_buffer(
 # -----
 
 
-def make_crossQ_agent(cfg, train_env, eval_env, device):
+def make_crossQ_agent(cfg, train_env, device):
     """Make CrossQ agent."""
     # Define Actor Network
     in_keys = ["observation"]
@@ -154,10 +154,11 @@ def make_crossQ_agent(cfg, train_env, eval_env, device):
         "num_cells": cfg.network.actor_hidden_sizes,
         "out_features": 2 * action_spec.shape[-1],
         "activation_class": get_activation(cfg.network.actor_activation),
-        "norm_class": nn.BatchNorm1d,  # Should be BRN (https://arxiv.org/abs/1702.03275) not sure if added to torch
+        "norm_class": BatchRenorm,
         "norm_kwargs": {
             "momentum": cfg.network.batch_norm_momentum,
             "num_features": cfg.network.actor_hidden_sizes[-1],
+            "warmup_steps": cfg.network.warmup_steps,
         },
     }
 
@@ -165,8 +166,8 @@ def make_crossQ_agent(cfg, train_env, eval_env, device):
 
     dist_class = TanhNormal
     dist_kwargs = {
-        "min": action_spec.space.low,
-        "max": action_spec.space.high,
+        "low": action_spec.space.low,
+        "high": action_spec.space.high,
         "tanh_loc": False,
     }
 
@@ -200,10 +201,11 @@ def make_crossQ_agent(cfg, train_env, eval_env, device):
         "num_cells": cfg.network.critic_hidden_sizes,
         "out_features": 1,
         "activation_class": get_activation(cfg.network.critic_activation),
-        "norm_class": nn.BatchNorm1d,  # Should be BRN (https://arxiv.org/abs/1702.03275) not sure if added to torch
+        "norm_class": BatchRenorm,
         "norm_kwargs": {
             "momentum": cfg.network.batch_norm_momentum,
             "num_features": cfg.network.critic_hidden_sizes[-1],
+            "warmup_steps": cfg.network.warmup_steps,
         },
     }
 
@@ -220,14 +222,13 @@ def make_crossQ_agent(cfg, train_env, eval_env, device):
 
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = eval_env.reset()
+        td = train_env.fake_tensordict()
         td = td.to(device)
         for net in model:
             net.eval()
             net(td)
             net.train()
     del td
-    eval_env.close()
 
     return model, model[0]
 
@@ -273,16 +274,18 @@ def make_crossQ_optimizer(cfg, loss_module):
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.adam_eps,
+        betas=(cfg.optim.beta1, cfg.optim.beta2),
     )
     optimizer_critic = optim.Adam(
         critic_params,
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.adam_eps,
+        betas=(cfg.optim.beta1, cfg.optim.beta2),
     )
     optimizer_alpha = optim.Adam(
         [loss_module.log_alpha],
-        lr=3.0e-4,
+        lr=cfg.optim.lr,
     )
     return optimizer_actor, optimizer_critic, optimizer_alpha
 

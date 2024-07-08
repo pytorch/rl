@@ -36,6 +36,8 @@ from utils import (
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.network.device)
+    if device is None:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Create logger
     exp_name = generate_exp_name("CrossQ", cfg.logger.exp_name)
@@ -60,7 +62,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     train_env, eval_env = make_environment(cfg)
 
     # Create agent
-    model, exploration_policy = make_crossQ_agent(cfg, train_env, eval_env, device)
+    model, exploration_policy = make_crossQ_agent(cfg, train_env, device)
 
     # Create CrossQ loss
     loss_module = make_loss_module(cfg, model)
@@ -133,14 +135,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample()
                 if sampled_tensordict.device != device:
-                    sampled_tensordict = sampled_tensordict.to(
-                        device, non_blocking=True
-                    )
+                    sampled_tensordict = sampled_tensordict.to(device)
                 else:
                     sampled_tensordict = sampled_tensordict.clone()
 
                 # Compute loss
-                q_loss, *_ = loss_module._qvalue_loss(sampled_tensordict)
+                q_loss, *_ = loss_module.qvalue_loss(sampled_tensordict)
                 q_loss = q_loss.mean()
                 # Update critic
                 optimizer_critic.zero_grad()
@@ -149,14 +149,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_losses.append(q_loss.detach().item())
 
                 if update_actor:
-                    actor_loss, metadata_actor = loss_module._actor_loss(
+                    actor_loss, metadata_actor = loss_module.actor_loss(
                         sampled_tensordict
                     )
                     actor_loss = actor_loss.mean()
-                    alpha_loss = loss_module._alpha_loss(
+                    alpha_loss = loss_module.alpha_loss(
                         log_prob=metadata_actor["log_prob"]
-                    )
-                    alpha_loss = alpha_loss.mean()
+                    ).mean()
+
                     # Update actor
                     optimizer_actor.zero_grad()
                     actor_loss.backward()
