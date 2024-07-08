@@ -285,7 +285,7 @@ def make_crossQ_optimizer(cfg, loss_module):
     )
     optimizer_alpha = optim.Adam(
         [loss_module.log_alpha],
-        lr=3.0e-4,
+        lr=cfg.optim.lr,
     )
     return optimizer_actor, optimizer_critic, optimizer_alpha
 

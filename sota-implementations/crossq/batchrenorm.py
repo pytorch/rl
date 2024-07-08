@@ -31,7 +31,7 @@ class BatchRenorm(nn.Module):
     def __init__(
         self,
         num_features,
-        momentum=0.99,
+        momentum=0.01,
         eps=1e-5,
         max_r=3.0,
         max_d=5.0,
