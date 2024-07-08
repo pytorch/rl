@@ -1460,10 +1460,10 @@ class TestBatchRenorm:
         for i, d in enumerate(data_train):
             b = bn(d)
             a = brn(d)
-            if num_steps > 0 and i == 0:
+            if num_steps > 0 and i < num_steps:
                 torch.testing.assert_close(a, b)
             else:
-                assert not torch.isclose(a, b).all()
+                assert not torch.isclose(a, b).all(), i
 
         bn.eval()
         brn.eval()

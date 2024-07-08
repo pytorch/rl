@@ -90,7 +90,7 @@ class BatchRenorm1d(nn.Module):
 
             # Compute warmup factor (0 during warmup, 1 after warmup)
             if self.warmup_steps > 0:
-                warmup_factor = self.num_batches_tracked / self.warmup_steps
+                warmup_factor = self.num_batches_tracked // self.warmup_steps
                 r = 1.0 + (r - 1.0) * warmup_factor
                 d = d * warmup_factor
 
