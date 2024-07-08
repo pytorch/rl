@@ -42,10 +42,15 @@ class GAILLoss(LossModule):
         default values.
 
         Attributes:
-            action (NestedKey): The input tensordict key where the action is expected.
+            expert_action (NestedKey): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
-            observation (NestedKey): The tensordict key where the observation is expected.
+            expert_observation (NestedKey): The tensordict key where the observation is expected.
                 Defaults to ``"observation"``.
+            collector_action (NestedKey): The tensordict key where the collector action is expected.
+                Defaults to ``"collector_action"``.
+            collector_observation (NestedKey): The tensordict key where the collector observation is expected.
+                Defaults to ``"collector_observation"``.
+            discriminator_pred (NestedKey): The tensordict key where the discriminator prediction is expected.
         """
 
         expert_action: NestedKey = "action"
