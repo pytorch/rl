@@ -48,8 +48,10 @@ class GAILLoss(LossModule):
                 Defaults to ``"observation"``.
         """
 
-        action: NestedKey = "action"
-        observation: NestedKey = "observation"
+        expert_action: NestedKey = "action"
+        expert_observation: NestedKey = "observation"
+        collector_action: NestedKey = "collector_action"
+        collector_observation: NestedKey = "collector_observation"
         discriminator_pred: NestedKey = "d_logits"
 
     default_keys = _AcceptedKeys()
@@ -86,6 +88,8 @@ class GAILLoss(LossModule):
     def _set_in_keys(self):
         keys = self.discriminator_network.in_keys
         keys = set(keys)
+        keys.add(self.tensor_keys.expert_observation)
+        keys.add(self.tensor_keys.expert_action)
         self._in_keys = sorted(keys, key=str)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
@@ -114,25 +118,35 @@ class GAILLoss(LossModule):
 
     @dispatch
     def forward(
-        self, tensordict: TensorDictBase, collection_tensordict: TensorDictBase
+        self,
+        tensordict: TensorDictBase,
     ) -> TensorDictBase:
         """Compute the GAIL discriminator loss."""
-        expert_tensordict = tensordict.clone(False)
-        expert_input = expert_tensordict.select(*self.in_keys).detach()
+        tensordict = tensordict.clone(False)
+        batch_size = tensordict.batch_size[0]
+        collector_obs = tensordict.get(self.tensor_keys.collector_observation)
+        collector_act = tensordict.get(self.tensor_keys.collector_action)
 
-        collection_tensordict = collection_tensordict.clone(False)
-        collection_input = collection_tensordict.select(*self.in_keys).detach()
+        expert_obs = tensordict.get(self.tensor_keys.expert_observation)
+        expert_act = tensordict.get(self.tensor_keys.expert_action)
 
-        combined_inputs = torch.cat([expert_input, collection_input], dim=0)
+        combined_obs_inputs = torch.cat([expert_obs, collector_obs], dim=0)
+        combined_act_inputs = torch.cat([expert_act, collector_act], dim=0)
+
+        combined_inputs = TensorDict(
+            {
+                self.tensor_keys.expert_observation: combined_obs_inputs,
+                self.tensor_keys.expert_action: combined_act_inputs,
+            },
+            batch_size=[2 * batch_size],
+        )
 
         # create labels
-        collection_bs = collection_tensordict.batch_size[0]
-        expert_bs = expert_tensordict.batch_size[0]
-        fake_labels = torch.zeros((collection_bs, 1), dtype=torch.float32).to(
-            collection_tensordict.device
+        fake_labels = torch.zeros((batch_size, 1), dtype=torch.float32).to(
+            tensordict.device
         )
-        real_labels = torch.ones((expert_bs, 1), dtype=torch.float32).to(
-            expert_tensordict.device
+        real_labels = torch.ones((batch_size, 1), dtype=torch.float32).to(
+            tensordict.device
         )
 
         with self.discriminator_network_params.to_module(self.discriminator_network):
@@ -141,7 +155,7 @@ class GAILLoss(LossModule):
             )
 
         expert_preds, collection_preds = torch.split(
-            d_logits, [expert_bs, collection_bs], dim=0
+            d_logits, [batch_size, batch_size], dim=0
         )
 
         expert_loss = self.loss_function(expert_preds, real_labels)
@@ -150,13 +164,10 @@ class GAILLoss(LossModule):
         loss = expert_loss + collection_loss
         out = {"loss": loss}
         if not self.use_grad_penalty:
-            obs = collection_tensordict.get(self.tensor_keys.observation)
-            acts = collection_tensordict.get(self.tensor_keys.action)
-            obs_e = expert_tensordict.get(self.tensor_keys.observation)
-            acts_e = expert_tensordict.get(self.tensor_keys.action)
-
-            obs = obs[:expert_bs]
-            acts = acts[:expert_bs]
+            obs = tensordict.get(self.tensor_keys.collector_observation)
+            acts = tensordict.get(self.tensor_keys.colecctor_action)
+            obs_e = tensordict.get(self.tensor_keys.expert_observation)
+            acts_e = tensordict.get(self.tensor_keys.expert_action)
 
             obss_noise = (
                 torch.distributions.Uniform(0.0, 1.0)
@@ -175,8 +186,8 @@ class GAILLoss(LossModule):
 
             pg_input_td = TensorDict(
                 {
-                    self.tensor_keys.observation: obss_mixture,
-                    self.tensor_keys.action: acts_mixture,
+                    self.tensor_keys.expert_observation: obss_mixture,
+                    self.tensor_keys.expert_action: acts_mixture,
                 },
                 [],
             )

@@ -155,11 +155,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(data.numel())
 
         # Update discriminator
-
         # Get expert data
         expert_data = replay_buffer.sample()
         expert_data = expert_data.to(device)
-        d_loss = discriminator_loss(expert_data, data)
+        # Add collector data to expert data
+        expert_data.set(
+            discriminator_loss.tensor_keys.collector_action,
+            data["action"][: expert_data.batch_size[0]],
+        )
+        expert_data.set(
+            discriminator_loss.tensor_keys.collector_observation,
+            data["observation"][: expert_data.batch_size[0]],
+        )
+        d_loss = discriminator_loss(expert_data)
 
         # Backward pass
         discriminator_optim.zero_grad()
