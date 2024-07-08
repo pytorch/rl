@@ -1457,14 +1457,13 @@ class TestBatchRenorm:
         brn.train()
         data_train = torch.randn(100, 5).split(25)
         data_test = torch.randn(100, 5)
-        for d in data_train:
-            _ = bn(d)
-            _ = brn(d)
-        # if num_steps == 0:
-        #     print(a, b)
-        #     torch.testing.assert_close(a, b)
-        # else:
-        #     assert not torch.isclose(a, b).all()
+        for i, d in enumerate(data_train):
+            b = bn(d)
+            a = brn(d)
+            if num_steps > 0 and i == 0:
+                torch.testing.assert_close(a, b)
+            else:
+                assert not torch.isclose(a, b).all()
 
         bn.eval()
         brn.eval()
