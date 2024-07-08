@@ -22,7 +22,6 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     _vmap_func,
     default_value_kwargs,

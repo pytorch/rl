@@ -7,8 +7,7 @@ import torch.nn as nn
 
 
 class BatchRenorm1d(nn.Module):
-    """
-    BatchRenorm Module (https://arxiv.org/abs/1702.03275).
+    """BatchRenorm Module (https://arxiv.org/abs/1702.03275).
 
     The code is adapted from https://github.com/google-research/corenet
 
