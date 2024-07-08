@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 
 from packaging import version as pack_version
-from tensordict._C import unravel_keys
+from tensordict._tensordict import unravel_keys
 
 from tensordict.nn import (
     InteractionType,
