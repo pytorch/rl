@@ -4405,33 +4405,25 @@ class TestCrossQ(LossModuleTestBase):
         )
         return td
 
-    @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_crossq(
         self,
-        delay_actor,
         num_qvalue,
         device,
         td_est,
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_crossq(device=device)
-
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
-
-        kwargs = {}
-        if delay_actor:
-            kwargs["delay_actor"] = True
 
         loss_fn = CrossQLoss(
             actor_network=actor,
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
-            **kwargs,
         )
 
         if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
@@ -4441,9 +4433,7 @@ class TestCrossQ(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ):
+        with _check_td_steady(td):
             loss = loss_fn(td)
 
         assert loss_fn.tensor_keys.priority in td.keys()
@@ -4515,12 +4505,10 @@ class TestCrossQ(LossModuleTestBase):
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
-    @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_crossq_state_dict(
         self,
-        delay_actor,
         num_qvalue,
         device,
     ):
@@ -4529,16 +4517,11 @@ class TestCrossQ(LossModuleTestBase):
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
 
-        kwargs = {}
-        if delay_actor:
-            kwargs["delay_actor"] = True
-
         loss_fn = CrossQLoss(
             actor_network=actor,
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
-            **kwargs,
         )
         sd = loss_fn.state_dict()
         loss_fn2 = CrossQLoss(
@@ -4546,7 +4529,6 @@ class TestCrossQ(LossModuleTestBase):
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
-            **kwargs,
         )
         loss_fn2.load_state_dict(sd)
 
@@ -4554,10 +4536,10 @@ class TestCrossQ(LossModuleTestBase):
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_crossq_separate_losses(
         self,
-        device,
         separate_losses,
-        n_act=4,
+        device,
     ):
+        n_act = 4
         torch.manual_seed(self.seed)
         actor, qvalue, common, td = self._create_mock_common_layer_setup(n_act=n_act)
 
@@ -4568,85 +4550,80 @@ class TestCrossQ(LossModuleTestBase):
             num_qvalue_nets=1,
             separate_losses=separate_losses,
         )
-        with pytest.warns(UserWarning, match="No target network updater has been"):
-            loss = loss_fn(td)
+        loss = loss_fn(td)
 
-            assert loss_fn.tensor_keys.priority in td.keys()
+        assert loss_fn.tensor_keys.priority in td.keys()
 
-            # check that losses are independent
-            for k in loss.keys():
-                if not k.startswith("loss"):
-                    continue
-                loss[k].sum().backward(retain_graph=True)
-                if k == "loss_actor":
+        # check that losses are independent
+        for k in loss.keys():
+            if not k.startswith("loss"):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            elif k == "loss_qvalue":
+                common_layers_no = len(list(common.parameters()))
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                if separate_losses:
+                    common_layers = itertools.islice(
+                        loss_fn.qvalue_network_params.values(True, True),
+                        common_layers_no,
+                    )
                     assert all(
-                        (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.qvalue_network_params.values(
-                            include_nested=True, leaves_only=True
-                        )
+                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
+                    )
+                    qvalue_layers = itertools.islice(
+                        loss_fn.qvalue_network_params.values(True, True),
+                        common_layers_no,
+                        None,
                     )
                     assert not any(
-                        (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.actor_network_params.values(
-                            include_nested=True, leaves_only=True
-                        )
-                    )
-                elif k == "loss_qvalue":
-                    common_layers_no = len(list(common.parameters()))
-                    assert all(
-                        (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.actor_network_params.values(
-                            include_nested=True, leaves_only=True
-                        )
-                    )
-                    if separate_losses:
-                        common_layers = itertools.islice(
-                            loss_fn.qvalue_network_params.values(True, True),
-                            common_layers_no,
-                        )
-                        assert all(
-                            (p.grad is None) or (p.grad == 0).all()
-                            for p in common_layers
-                        )
-                        qvalue_layers = itertools.islice(
-                            loss_fn.qvalue_network_params.values(True, True),
-                            common_layers_no,
-                            None,
-                        )
-                        assert not any(
-                            (p.grad is None) or (p.grad == 0).all()
-                            for p in qvalue_layers
-                        )
-                    else:
-                        assert not any(
-                            (p.grad is None) or (p.grad == 0).all()
-                            for p in loss_fn.qvalue_network_params.values(True, True)
-                        )
-                elif k == "loss_alpha":
-                    assert all(
-                        (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.actor_network_params.values(
-                            include_nested=True, leaves_only=True
-                        )
-                    )
-                    assert all(
-                        (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.qvalue_network_params.values(
-                            include_nested=True, leaves_only=True
-                        )
+                        (p.grad is None) or (p.grad == 0).all() for p in qvalue_layers
                     )
                 else:
-                    raise NotImplementedError(k)
-                loss_fn.zero_grad()
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(True, True)
+                    )
+            elif k == "loss_alpha":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
 
     @pytest.mark.parametrize("n", range(1, 4))
-    @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_crossq_batcher(
         self,
         n,
-        delay_actor,
         num_qvalue,
         device,
     ):
@@ -4656,16 +4633,11 @@ class TestCrossQ(LossModuleTestBase):
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
 
-        kwargs = {}
-        if delay_actor:
-            kwargs["delay_actor"] = True
-
         loss_fn = CrossQLoss(
             actor_network=actor,
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
-            **kwargs,
         )
 
         ms = MultiStep(gamma=0.9, n_steps=n).to(device)
@@ -4675,80 +4647,68 @@ class TestCrossQ(LossModuleTestBase):
 
         torch.manual_seed(0)
         np.random.seed(0)
-        with pytest.warns(
-            UserWarning,
-            match="No target network updater has been associated with this loss module",
-        ):
-            with _check_td_steady(ms_td):
-                loss_ms = loss_fn(ms_td)
-            assert loss_fn.tensor_keys.priority in ms_td.keys()
 
-            with torch.no_grad():
-                torch.manual_seed(0)  # log-prob is computed with a random action
-                np.random.seed(0)
-                loss = loss_fn(td)
-            if n == 1:
-                assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-                _loss = sum(
-                    [item for name, item in loss.items() if name.startswith("loss_")]
-                )
-                _loss_ms = sum(
-                    [item for name, item in loss_ms.items() if name.startswith("loss_")]
-                )
-                assert (
-                    abs(_loss - _loss_ms) < 1e-3
-                ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
-            else:
-                with pytest.raises(AssertionError):
-                    assert_allclose_td(loss, loss_ms)
-            sum(
-                [item for name, item in loss_ms.items() if name.startswith("loss_")]
-            ).backward()
-            named_parameters = loss_fn.named_parameters()
-            for name, p in named_parameters:
-                if not name.startswith("target_"):
-                    assert (
-                        p.grad is not None and p.grad.norm() > 0.0
-                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
-                else:
-                    assert (
-                        p.grad is None or p.grad.norm() == 0.0
-                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+        with _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
 
-            # Check param update effect on targets
-            target_actor = [
-                p.clone()
-                for p in loss_fn.target_actor_network_params.values(
-                    include_nested=True, leaves_only=True
-                )
-            ]
-            for p in loss_fn.parameters():
-                if p.requires_grad:
-                    p.data += torch.randn_like(p)
-            target_actor2 = [
-                p.clone()
-                for p in loss_fn.target_actor_network_params.values(
-                    include_nested=True, leaves_only=True
-                )
-            ]
-
-            if loss_fn.delay_actor:
-                assert all(
-                    (p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2)
-                )
-            else:
-                assert not any(
-                    (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
-                )
-
-            # check that policy is updated after parameter update
-            parameters = [p.clone() for p in actor.parameters()]
-            for p in loss_fn.parameters():
-                if p.requires_grad:
-                    p.data += torch.randn_like(p)
-            assert all(
-                (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
+        with torch.no_grad():
+            torch.manual_seed(0)  # log-prob is computed with a random action
+            np.random.seed(0)
+            loss = loss_fn(td)
+        if n == 1:
+            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
+            _loss = sum(
+                [item for name, item in loss.items() if name.startswith("loss_")]
             )
+            _loss_ms = sum(
+                [item for name, item in loss_ms.items() if name.startswith("loss_")]
+            )
+            assert (
+                abs(_loss - _loss_ms) < 1e-3
+            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+        else:
+            with pytest.raises(AssertionError):
+                assert_allclose_td(loss, loss_ms)
+        sum(
+            [item for name, item in loss_ms.items() if name.startswith("loss_")]
+        ).backward()
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+
+        # Check param update effect on targets
+        target_actor = [
+            p.clone()
+            for p in loss_fn.target_actor_network_params.values(
+                include_nested=True, leaves_only=True
+            )
+        ]
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
+        target_actor2 = [
+            p.clone()
+            for p in loss_fn.target_actor_network_params.values(
+                include_nested=True, leaves_only=True
+            )
+        ]
+
+        assert not any((p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2))
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize(
         "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
@@ -4846,8 +4806,7 @@ class TestCrossQ(LossModuleTestBase):
         # setting the seed for each loss so that drawing the random samples from value network
         # leads to same numbers for both runs
         torch.manual_seed(self.seed)
-        with pytest.warns(UserWarning, match="No target network updater"):
-            loss_val = loss(**kwargs)
+        loss_val = loss(**kwargs)
 
         torch.manual_seed(self.seed)
 
@@ -4935,7 +4894,6 @@ class TestCrossQ(LossModuleTestBase):
             actor_network=actor,
             qvalue_network=qvalue,
             loss_function="l2",
-            delay_actor=False,
             reduction=reduction,
         )
         loss_fn.make_value_estimator()
