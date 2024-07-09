@@ -56,7 +56,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create test environment
-    test_env = make_env(cfg.env, obs_loc, obs_std, from_pixels=cfg.logger.video)
+    test_env = make_env(
+        cfg.env, obs_loc, obs_std, from_pixels=cfg.logger.video, device=model_device
+    )
     if cfg.logger.video:
         test_env = test_env.append_transform(
             VideoRecorder(logger, tag="rendered", in_keys=["pixels"])
