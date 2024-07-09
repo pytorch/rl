@@ -76,9 +76,6 @@ class CrossQLoss(LossModule):
         target_entropy (float or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
             computed as :obj:`-prod(n_actions)`.
-        delay_actor (bool, optional): Whether to separate the target actor
-            networks from the actor networks used for data collection.
-            Default is ``False``.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Tensordict key where to write the
             priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
@@ -226,6 +223,8 @@ class CrossQLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+            log_prob (NestedKey): The input tensordict key where the log probability is expected.
+                Defaults to ``"_log_prob"``.
         """
 
         action: NestedKey = "action"
@@ -234,15 +233,16 @@ class CrossQLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        log_prob: NestedKey = "_log_prob"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
 
     actor_network: ProbabilisticActor
     actor_network_params: TensorDictParams
-    target_actor_network_params: TensorDictParams
     qvalue_network: TensorDictModule
     qvalue_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
     target_qvalue_network_params: TensorDictParams
 
     def __init__(
@@ -258,7 +258,6 @@ class CrossQLoss(LossModule):
         action_spec=None,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
-        delay_actor: bool = False,
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -271,11 +270,10 @@ class CrossQLoss(LossModule):
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         # Actor
-        self.delay_actor = delay_actor
         self.convert_to_functional(
             actor_network,
             "actor_network",
-            create_target_params=self.delay_actor,
+            create_target_params=False,
         )
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
@@ -511,16 +509,18 @@ class CrossQLoss(LossModule):
             "loss_alpha": loss_alpha,
             "alpha": self._alpha,
             "entropy": entropy.detach().mean(),
+            **metadata_actor,
+            **value_metadata,
         }
         td_out = TensorDict(out, [])
-        td_out = td_out.named_apply(
-            lambda name, value: (
-                _reduce(value, reduction=self.reduction)
-                if name.startswith("loss_")
-                else value
-            ),
-            batch_size=[],
-        )
+        # td_out = td_out.named_apply(
+        #     lambda name, value: (
+        #         _reduce(value, reduction=self.reduction)
+        #         if name.startswith("loss_")
+        #         else value
+        #     ),
+        #     batch_size=[],
+        # )
         return td_out
 
     @property
@@ -564,8 +564,10 @@ class CrossQLoss(LossModule):
             raise RuntimeError(
                 f"Losses shape mismatch: {log_prob.shape} and {min_q.shape}"
             )
-
-        return self._alpha * log_prob - min_q, {"log_prob": log_prob.detach()}
+        actor_loss = self._alpha * log_prob - min_q
+        return _reduce(actor_loss, reduction=self.reduction), {
+            "log_prob": log_prob.detach()
+        }
 
     def qvalue_loss(
         self, tensordict: TensorDictBase
@@ -631,7 +633,7 @@ class CrossQLoss(LossModule):
             loss_function=self.loss_function,
         ).sum(0)
         metadata = {"td_error": td_error.detach().max(0)[0]}
-        return loss_qval, metadata
+        return _reduce(loss_qval, reduction=self.reduction), metadata
 
     def alpha_loss(self, log_prob: Tensor) -> Tensor:
         """Compute the entropy loss.
@@ -649,7 +651,7 @@ class CrossQLoss(LossModule):
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_prob)
-        return alpha_loss
+        return _reduce(alpha_loss, reduction=self.reduction)
 
     @property
     def _alpha(self):
