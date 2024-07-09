@@ -1101,7 +1101,7 @@ class TestGym:
     def test_vecenvs_nan(self):  # noqa: F811
         # old versions of gym must return nan for next values when there is a done state
         torch.manual_seed(0)
-        env = GymEnv("CartPole-v0", num_envs=2, device="cpu")
+        env = GymEnv("CartPole-v0", num_envs=2)
         env.set_seed(0)
         rollout = env.rollout(200)
         assert torch.isfinite(rollout.get("observation")).all()
@@ -1110,7 +1110,7 @@ class TestGym:
         del env
 
         # same with collector
-        env = GymEnv("CartPole-v0", num_envs=2)  # , device="cpu")
+        env = GymEnv("CartPole-v0", num_envs=2)
         env.set_seed(0)
         c = SyncDataCollector(
             env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
