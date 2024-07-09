@@ -88,6 +88,7 @@ def _make_env(cfg, device, from_pixels=False):
             cfg.env.task,
             from_pixels=cfg.env.from_pixels or from_pixels,
             pixels_only=cfg.env.from_pixels,
+            device=device,
         )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
@@ -98,7 +99,6 @@ def _make_env(cfg, device, from_pixels=False):
     env = env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
     )
-    assert env is not None
     return env
 
 
