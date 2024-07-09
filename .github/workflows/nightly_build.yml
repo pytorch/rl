@@ -86,7 +86,7 @@ jobs:
       - name: Checkout torchrl
         uses: actions/checkout@v3
       - name: Download built wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
@@ -138,7 +138,7 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
       - name: Download built wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
@@ -229,7 +229,7 @@ jobs:
         run: |
           python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Download built wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: torchrl-win-${{ matrix.python_version[0] }}.whl
           path: wheels
@@ -267,7 +267,7 @@ jobs:
       - name: Checkout torchrl
         uses: actions/checkout@v3
       - name: Download built wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: torchrl-win-${{ matrix.python_version[0] }}.whl
           path: wheels
