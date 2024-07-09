@@ -42,7 +42,7 @@ ppo:
 gail:
   hidden_dim: 128
   lr: 3e-4
-  use_grad_penalty: True
+  use_grad_penalty: False
   gp_lambda: 10.0
 
 replay_buffer:

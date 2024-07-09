@@ -168,9 +168,9 @@ class GAILLoss(LossModule):
 
         loss = expert_loss + collection_loss
         out = {"loss": loss}
-        if not self.use_grad_penalty:
+        if self.use_grad_penalty:
             obs = tensordict.get(self.tensor_keys.collector_observation)
-            acts = tensordict.get(self.tensor_keys.colecctor_action)
+            acts = tensordict.get(self.tensor_keys.collector_action)
             obs_e = tensordict.get(self.tensor_keys.expert_observation)
             acts_e = tensordict.get(self.tensor_keys.expert_action)
 
