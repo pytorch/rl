@@ -2061,6 +2061,7 @@ class TestConcurrentEnvs:
             total_frames=N * n_workers * 100,
             storing_device=device,
             device=device,
+            cat_results=-1,
         )
         single_collectors = [
             SyncDataCollector(
