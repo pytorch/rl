@@ -108,6 +108,7 @@ from torchrl.objectives import (
     DreamerModelLoss,
     DreamerValueLoss,
     DTLoss,
+    GAILLoss,
     IQLLoss,
     KLPENPPOLoss,
     OnlineDTLoss,
@@ -9042,13 +9043,16 @@ class TestGAIL(LossModuleTestBase):
         )
         return td
 
-    def test_dt_tensordict_keys(self):
-        actor = self._create_mock_actor()
-        loss_fn = DTLoss(actor)
+    def test_gail_tensordict_keys(self):
+        discriminator = self._create_mock_discriminator()
+        loss_fn = GAILLoss(discriminator)
 
         default_keys = {
-            "action_target": "action",
-            "action_pred": "action",
+            "expert_action": "action",
+            "expert_observation": "observation",
+            "collector_action": "collector_action",
+            "collector_observation": "collector_observation",
+            "discriminator_pred": "d_logits",
         }
 
         self.tensordict_keys_test(
@@ -9057,30 +9061,36 @@ class TestGAIL(LossModuleTestBase):
         )
 
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_dt_notensordict(self, device):
+    def test_gail_notensordict(self, device):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
-        td = self._create_mock_data_dt(device=device)
-        loss_fn = DTLoss(actor)
+        discriminator = self._create_mock_discriminator(device=device)
+        loss_fn = DTLoss(discriminator)
+
+        expert_td = self._create_mock_data_gail(device=device)
+        collector_td = self._create_mock_data_gail(device=device)
+        expert_td.set(
+            loss_fn.tensor_keys.collector_observation, collector_td["observation"]
+        )
+        expert_td.set(loss_fn.tensor_keys.collector_action, collector_td["action"])
 
         in_keys = self._flatten_in_keys(loss_fn.in_keys)
-        kwargs = dict(td.flatten_keys("_").select(*in_keys))
+        kwargs = dict(expert_td.flatten_keys("_").select(*in_keys))
 
-        loss_val_td = loss_fn(td)
+        loss_val_td = loss_fn(expert_td)
         loss_val = loss_fn(**kwargs)
         torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
         # test select
         loss_fn.select_out_keys("loss")
         if torch.__version__ >= "2.0.0":
-            loss_actor = loss_fn(**kwargs)
+            loss_discriminator = loss_fn(**kwargs)
         else:
             with pytest.raises(
                 RuntimeError,
                 match="You are likely using tensordict.nn.dispatch with keyword arguments",
             ):
-                loss_actor = loss_fn(**kwargs)
+                loss_discriminator = loss_fn(**kwargs)
             return
-        assert loss_actor == loss_val_td["loss"]
+        assert loss_discriminator == loss_val_td["loss"]
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_dt(self, device):
