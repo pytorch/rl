@@ -90,7 +90,7 @@ def make_environment(cfg):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(cfg, train_env, actor_model_explore, device):
     """Make collector."""
     collector = SyncDataCollector(
         train_env,
@@ -98,7 +98,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.device,
+        device=device,
     )
     collector.set_seed(cfg.env.seed)
     return collector

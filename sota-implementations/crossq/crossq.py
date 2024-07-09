@@ -72,7 +72,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module = make_loss_module(cfg, model)
 
     # Create off-policy collector
-    collector = make_collector(cfg, train_env, exploration_policy.eval())
+    collector = make_collector(cfg, train_env, exploration_policy.eval(), device=device)
 
     # Create replay buffer
     replay_buffer = make_replay_buffer(
