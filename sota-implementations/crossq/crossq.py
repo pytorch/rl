@@ -35,9 +35,13 @@ from utils import (
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    device = torch.device(cfg.network.device)
-    if device is None:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = cfg.network.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        else:
+            device = torch.device("cpu")
+    device = torch.device(device)
 
     # Create logger
     exp_name = generate_exp_name("CrossQ", cfg.logger.exp_name)
