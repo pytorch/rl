@@ -103,7 +103,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             sampled_tensordict = sampled_tensordict.clone()
 
         # Compute loss
-        q_loss, *_ = loss_module.value_loss(sampled_tensordict)
+        q_loss, *_ = loss_module.qvalue_loss(sampled_tensordict)
 
         # Update critic
         optimizer_critic.zero_grad()
