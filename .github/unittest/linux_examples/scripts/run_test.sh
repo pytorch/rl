@@ -9,8 +9,18 @@
 #
 #
 
-set -e
+#set -e
 set -v
+
+# Initialize an error flag
+error_occurred=0
+# Function to handle errors
+error_handler() {
+    echo "Error on line $1"
+    error_occurred=1
+}
+# Trap ERR to call the error_handler function with the failing line number
+trap 'error_handler $LINENO' ERR
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
@@ -299,3 +309,11 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ba
 
 coverage combine
 coverage xml -i
+
+# Check if any errors occurred during the script execution
+if [ "$error_occurred" -ne 0 ]; then
+    echo "Errors occurred during script execution"
+    exit 1
+else
+    echo "Script executed successfully"
+fi
