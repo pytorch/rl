@@ -18,8 +18,6 @@ collector:
   init_random_frames: 3000
   frames_per_batch: 1000
   device:
-    _target_: dreamer_utils._default_device
-    device: null
 
 optimization:
   train_every: 1000

@@ -15,7 +15,7 @@ from dreamer_utils import (
     make_collector,
     make_dreamer,
     make_environments,
-    make_replay_buffer,
+    make_replay_buffer, _default_device,
 )
 from hydra.utils import instantiate
 
@@ -38,7 +38,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 def main(cfg: "DictConfig"):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
 
-    device = torch.device(instantiate(cfg.networks.device))
+    device = _default_device(cfg.networks.device)
 
     # Create logger
     exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
