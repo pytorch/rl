@@ -41,7 +41,7 @@ jobs:
       matrix:
         python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"], ["3.12", "cp312-cp312"]]
         cuda_support: [["", "cpu", "cpu"]]
-    container: pytorch/manylinux-cuda116
+    container: pytorch/manylinux-${{ matrix.cuda_support[2] }}
     steps:
       - name: Checkout torchrl
         uses: actions/checkout@v3
