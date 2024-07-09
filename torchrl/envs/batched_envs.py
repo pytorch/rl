@@ -411,9 +411,7 @@ class BatchedEnvBase(EnvBase):
             def find_all_worker_devices(item):
                 nonlocal worker_not_main
                 if hasattr(item, "device"):
-                    worker_not_main = worker_not_main or (
-                        item.device != self_device
-                    )
+                    worker_not_main = worker_not_main or (item.device != self_device)
 
             for td in self.shared_tensordicts:
                 td.apply(find_all_worker_devices, filter_empty=True)
