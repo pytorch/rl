@@ -10,8 +10,6 @@ env:
   horizon: 500
   n_parallel_envs: 8
   device:
-    _target_: dreamer_utils._default_device
-    device: null
 
 collector:
   total_frames: 5_000_000
@@ -39,8 +37,6 @@ optimization:
 networks:
   exploration_noise: 0.3
   device:
-    _target_: dreamer_utils._default_device
-    device: null
   state_dim: 30
   rssm_hidden_dim: 200
   hidden_dim: 400
