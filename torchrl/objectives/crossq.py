@@ -10,7 +10,7 @@ from functools import wraps
 from typing import Dict, Tuple, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
@@ -237,6 +237,13 @@ class CrossQLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
+
+    actor_network: ProbabilisticActor
+    actor_network_params: TensorDictParams
+    target_actor_network_params: TensorDictParams
+    qvalue_network: TensorDictModule
+    qvalue_network_params: TensorDictParams
+    target_qvalue_network_params: TensorDictParams
 
     def __init__(
         self,
