@@ -406,17 +406,18 @@ class BatchedEnvBase(EnvBase):
             return _do_nothing, _do_nothing
 
         if worker_device is None:
-            worker_not_main = [False]
+            worker_not_main = False
 
-            def find_all_worker_devices(item, worker_not_main=worker_not_main):
+            def find_all_worker_devices(item):
+                nonlocal worker_not_main
                 if hasattr(item, "device"):
-                    worker_not_main[0] = worker_not_main[0] or (
+                    worker_not_main = worker_not_main or (
                         item.device != self_device
                     )
 
             for td in self.shared_tensordicts:
                 td.apply(find_all_worker_devices, filter_empty=True)
-            if worker_not_main[0]:
+            if worker_not_main:
                 if torch.cuda.is_available():
                     worker_device = (
                         torch.device("cuda")
@@ -431,6 +432,8 @@ class BatchedEnvBase(EnvBase):
                     )
                 else:
                     raise RuntimeError("Did not find a valid worker device")
+            else:
+                worker_device = self_device
 
         if (
             worker_device is not None
@@ -460,6 +463,7 @@ class BatchedEnvBase(EnvBase):
             and self_device.type == "mps"
         ):
             return _mps_sync(self_device), _mps_sync(self_device)
+        return _do_nothing, _do_nothing
 
     def __getstate__(self):
         out = copy(self.__dict__)
