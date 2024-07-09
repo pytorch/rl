@@ -10,14 +10,14 @@ import torch
 import torch.cuda
 import tqdm
 from dreamer_utils import (
+    _default_device,
     dump_video,
     log_metrics,
     make_collector,
     make_dreamer,
     make_environments,
-    make_replay_buffer, _default_device,
+    make_replay_buffer,
 )
-from hydra.utils import instantiate
 
 # mixed precision training
 from torch.cuda.amp import GradScaler

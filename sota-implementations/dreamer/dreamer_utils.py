@@ -9,7 +9,6 @@ from contextlib import nullcontext
 import torch
 
 import torch.nn as nn
-from hydra.utils import instantiate
 from tensordict import NestedKey
 from tensordict.nn import (
     InteractionType,
@@ -138,7 +137,10 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     train_env = transform_env(cfg, train_env)
     train_env.set_seed(cfg.env.seed)
     func = functools.partial(
-        _make_env, cfg=cfg, device=_default_device(cfg.env.device), from_pixels=cfg.logger.video
+        _make_env,
+        cfg=cfg,
+        device=_default_device(cfg.env.device),
+        from_pixels=cfg.logger.video,
     )
     eval_env = ParallelEnv(
         1,
