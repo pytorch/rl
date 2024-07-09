@@ -246,7 +246,6 @@ def make_loss_module(cfg, model):
         qvalue_network=model[1],
         num_qvalue_nets=2,
         loss_function=cfg.optim.loss_function,
-        delay_actor=False,
         alpha_init=cfg.optim.alpha_init,
     )
     loss_module.make_value_estimator(gamma=cfg.optim.gamma)
