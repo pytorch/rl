@@ -284,7 +284,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Evaluation
         if (i % eval_iter) == 0:
             # Real env
-            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
                 eval_rollout = test_env.rollout(
                     eval_rollout_steps,
                     policy,
@@ -298,7 +298,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     log_metrics(logger, eval_metrics, collected_frames)
             # Simulated env
             if model_based_env_eval is not None:
-                with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
                     eval_rollout = model_based_env_eval.rollout(
                         eval_rollout_steps,
                         policy,

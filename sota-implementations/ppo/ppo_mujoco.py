@@ -210,7 +210,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
         # Get test rewards
-        with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
+        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
             if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
                 i * frames_in_batch
             ) // cfg_logger_test_interval:

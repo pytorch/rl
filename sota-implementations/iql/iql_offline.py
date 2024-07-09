@@ -130,7 +130,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # evaluation
         if i % evaluation_interval == 0:
-            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
                 eval_td = eval_env.rollout(
                     max_steps=eval_steps, policy=model[0], auto_cast_to_device=True
                 )

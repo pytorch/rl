@@ -535,7 +535,7 @@ def _dreamer_make_actor_real(
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys=[action_key],
-                default_interaction_type=InteractionType.MODE,
+                default_interaction_type=InteractionType.DETERMINISTIC,
                 distribution_class=TanhNormal,
                 distribution_kwargs={"tanh_loc": True},
                 spec=CompositeSpec(
