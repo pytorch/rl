@@ -19,7 +19,6 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
-    _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     _vmap_func,
     default_value_kwargs,
@@ -238,7 +237,6 @@ class TD3BCLoss(LossModule):
         loss_function: str = "smooth_l1",
         delay_actor: bool = True,
         delay_qvalue: bool = True,
-        gamma: float = None,
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -319,8 +317,6 @@ class TD3BCLoss(LossModule):
             high = high.to(device)
         self.register_buffer("max_action", high)
         self.register_buffer("min_action", low)
-        if gamma is not None:
-            raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self._vmap_qvalue_network00 = _vmap_func(
             self.qvalue_network, randomness=self.vmap_randomness
         )
