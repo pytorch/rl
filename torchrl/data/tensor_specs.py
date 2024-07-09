@@ -1143,6 +1143,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         if not isinstance(other, LazyStackedTensorSpec):
             return False
         if self.device != other.device:
+            raise RuntimeError((self, other))
             return False
         if len(self._specs) != len(other._specs):
             return False
@@ -4778,6 +4779,7 @@ def _stack_specs(list_of_spec, dim, out=None):
                 dim += len(shape) + 1
             shape.insert(dim, len(list_of_spec))
             return spec0.clone().unsqueeze(dim).expand(shape)
+        raise RuntimeError(list_of_spec)
         return LazyStackedTensorSpec(*list_of_spec, dim=dim)
     else:
         raise NotImplementedError

@@ -348,8 +348,7 @@ class GymLikeEnv(_EnvWrapper):
                 batch_size=tensordict.batch_size,
             )
         if self.device is not None:
-            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
-            self._sync_device()
+            tensordict_out = tensordict_out.to(self.device)
 
         if self.info_dict_reader and (info_dict is not None):
             if not isinstance(info_dict, dict):
@@ -393,8 +392,7 @@ class GymLikeEnv(_EnvWrapper):
                 if key not in tensordict_out.keys(True, True):
                     tensordict_out[key] = item.zero()
         if self.device is not None:
-            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
-            self._sync_device()
+            tensordict_out = tensordict_out.to(self.device)
         return tensordict_out
 
     @abc.abstractmethod
