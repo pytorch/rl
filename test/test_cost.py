@@ -2715,9 +2715,6 @@ class TestTD3(LossModuleTestBase):
                 assert loss[key].shape == torch.Size([])
 
 
-@pytest.mark.skipif(
-    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-)
 class TestTD3BC(LossModuleTestBase):
     seed = 0
 
