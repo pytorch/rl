@@ -46,7 +46,7 @@ class CrossQLoss(LossModule):
     Presented in "CROSSQ: BATCH NORMALIZATION IN DEEP REINFORCEMENT LEARNING
     FOR GREATER SAMPLE EFFICIENCY AND SIMPLICITY" https://openreview.net/pdf?id=PczQtTsTIX
 
-    This class has three loss functions that will be called sequentially by the `forward` method:  
+    This class has three loss functions that will be called sequentially by the `forward` method:
     :meth:`~.qvalue_loss`, :meth:`~.actor_loss` and :meth:`~.alpha_loss`. Alternatively, they can
     be called by the user that order.
 
@@ -216,8 +216,6 @@ class CrossQLoss(LossModule):
                 Defaults to ``"advantage"``.
             state_action_value (NestedKey): The input tensordict key where the
                 state action value is expected.  Defaults to ``"state_action_value"``.
-            # log_prob (NestedKey): The input tensordict key where the log probability is expected.
-            #     Defaults to ``"_log_prob"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
@@ -232,7 +230,6 @@ class CrossQLoss(LossModule):
 
         action: NestedKey = "action"
         state_action_value: NestedKey = "state_action_value"
-        # log_prob: NestedKey = "_log_prob"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
@@ -476,13 +473,13 @@ class CrossQLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-    """The forward method.
+        """The forward method.
 
-    Computes successively the :meth:`~.qvalue_loss`, :meth:`~.actor_loss` and :meth:`~.alpha_loss`, and returns
-    a tensordict with these values along with the `"alpha"` value and the `"entropy"` value (detached).
-    To see what keys are expected in the input tensordict and what keys are expected as output, check the
-    class's `"in_keys"` and `"out_keys"` attributes.
-    """  
+        Computes successively the :meth:`~.qvalue_loss`, :meth:`~.actor_loss` and :meth:`~.alpha_loss`, and returns
+        a tensordict with these values along with the `"alpha"` value and the `"entropy"` value (detached).
+        To see what keys are expected in the input tensordict and what keys are expected as output, check the
+        class's `"in_keys"` and `"out_keys"` attributes.
+        """
         shape = None
         if tensordict.ndimension() > 1:
             shape = tensordict.shape
@@ -528,10 +525,10 @@ class CrossQLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         """Compute the actor loss.
-        
-        
-        The actor loss should be computed after the :meth:`~.qvalue_loss` and before the `~.alpha_loss` which requires the `log_prob` field of the `metadata` returned by this method.
-        
+
+        The actor loss should be computed after the :meth:`~.qvalue_loss` and before the `~.alpha_loss` which
+        requires the `log_prob` field of the `metadata` returned by this method.
+
         Args:
             tensordict (TensorDictBase): the input data for the loss. Check the class's `in_keys` to see what fields
                 are required for this to be computed.
@@ -574,7 +571,8 @@ class CrossQLoss(LossModule):
             tensordict (TensorDictBase): the input data for the loss. Check the class's `in_keys` to see what fields
                 are required for this to be computed.
 
-        Returns: a differentiable tensor with the qvalue loss along with a metadata dictionary containing the detached `"td_error"` to be used for prioritized sampling.
+        Returns: a differentiable tensor with the qvalue loss along with a metadata dictionary containing
+            the detached `"td_error"` to be used for prioritized sampling.
         """
         # # compute next action
         with torch.no_grad():
@@ -630,11 +628,11 @@ class CrossQLoss(LossModule):
 
     def alpha_loss(self, log_prob: Tensor) -> Tensor:
         """Compute the entropy loss.
-        
+
         The entropy loss should be computed last.
-        
+
         Args:
-            log_prob: a log-probability as computed by the :meth:`~.actor_loss` and returned in the `metadata`.
+            log_prob (torch.Tensor): a log-probability as computed by the :meth:`~.actor_loss` and returned in the `metadata`.
 
         Returns: a differentiable tensor with the entropy loss.
         """
