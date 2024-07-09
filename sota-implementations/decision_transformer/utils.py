@@ -57,7 +57,7 @@ from torchrl.trainers.helpers.envs import LIBS
 # -----------------
 
 
-def make_base_env(env_cfg, from_pixels=False):
+def make_base_env(env_cfg, from_pixels=False, device=None):
     set_gym_backend(env_cfg.backend).set()
 
     env_library = LIBS[env_cfg.library]
@@ -73,7 +73,7 @@ def make_base_env(env_cfg, from_pixels=False):
     if env_library is DMControlEnv:
         env_task = env_cfg.task
         env_kwargs.update({"task_name": env_task})
-    env = env_library(**env_kwargs)
+    env = env_library(**env_kwargs, device=device)
     return env
 
 
