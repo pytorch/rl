@@ -4217,9 +4217,6 @@ class TestDiscreteSAC(LossModuleTestBase):
                 assert loss[key].shape == torch.Size([])
 
 
-@pytest.mark.skipif(
-    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-)
 class TestCrossQ(LossModuleTestBase):
     seed = 0
 
