@@ -5,7 +5,7 @@
 
 import abc
 from abc import abstractmethod
-from typing import Callable, Dict, Generic, List, TypeVar, Mapping, Any
+from typing import Any, Callable, Dict, Generic, List, Mapping, TypeVar
 
 import torch
 
@@ -14,33 +14,44 @@ import torch.nn as nn
 from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.nn.common import TensorDictModuleBase
 
-from torchrl.data.td2td import SipHash
+from torchrl.data.map import SipHash
 
 K = TypeVar("K")
 V = TypeVar("V")
+
 
 class HashToInt(nn.Module):
     def __init__(self):
         self._index_to_index = {}
 
-    def __call__(self, key: torch.Tensor) -> torch.Tensor:
+    def __call__(self, key: torch.Tensor, extend: bool = False) -> torch.Tensor:
         result = []
-        for _item in key.tolist():
-            result.append(
-                self._index_to_index.setdefault(_item, len(self._index_to_index))
-            )
+        if extend:
+            for _item in key.tolist():
+                result.append(
+                    self._index_to_index.setdefault(_item, len(self._index_to_index))
+                )
+        else:
+            for _item in key.tolist():
+                result.append(
+                    self._index_to_index.get(_item, len(self._index_to_index))
+                )
         return torch.tensor(result, device=key.device, dtype=key.dtype)
 
     def state_dict(self) -> Dict[str, torch.Tensor]:
         values = torch.tensor(self._index_to_index.values())
         keys = torch.tensor(self._index_to_index.keys())
         return {"keys": keys, "values": values}
+
     def load_state_dict(
         self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False
     ):
-        keys = state_dict['keys']
-        values=  state_dict["values"]
-        self._index_to_index = {key: val for key, val in zip(keys.tolist(), values.tolist())}
+        keys = state_dict["keys"]
+        values = state_dict["values"]
+        self._index_to_index = {
+            key: val for key, val in zip(keys.tolist(), values.tolist())
+        }
+
 
 class QueryModule(TensorDictModuleBase):
     """A Module to generate compatible indices for storage.
@@ -91,7 +102,7 @@ class QueryModule(TensorDictModuleBase):
         index_key: NestedKey = "_index",
         *,
         hash_module: torch.nn.Module | None = None,
-        hash_to_int: Callable[[int], int] | None=None,
+        hash_to_int: Callable[[int], int] | None = None,
         clone: bool = False,
     ):
         self.in_keys = in_keys if isinstance(in_keys, List) else [in_keys]
@@ -112,22 +123,27 @@ class QueryModule(TensorDictModuleBase):
         self.index_key = index_key
         self.clone = clone
 
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def forward(
+        self, tensordict: TensorDictBase, extend: bool = True
+    ) -> TensorDictBase:
         hash_values = []
 
         i = -1  # to make linter happy
-        for k in self.in_keys:
+        for i, k in enumerate(self.in_keys):
             hash_values.append(self.hash_module(tensordict.get(k)))
 
         if i > 0:
             td_hash_value = self.hash_to_int(
-                torch.stack(
-                    hash_values,
-                    dim=-1,
+                self.hash_module(
+                    torch.stack(
+                        hash_values,
+                        dim=-1,
+                    )
                 ),
+                extend=extend,
             )
         else:
-            td_hash_value = self.hash_to_int(hash_values[0])
+            td_hash_value = self.hash_to_int(hash_values[0], extend=extend)
 
         if self.clone:
             output = tensordict.copy()

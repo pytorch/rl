@@ -18,7 +18,6 @@ K = TypeVar("K")
 V = TypeVar("V")
 
 
-
 class BinaryToDecimal(torch.nn.Module):
     """A Module to convert binaries encoded tensors to decimals.
 
@@ -179,4 +178,3 @@ class RandomProjectionHash(SipHash):
         x = self.transform.transform(x)
         x = torch.as_tensor(x, dtype=self.dtype_cast)
         return super().forward(x)
-

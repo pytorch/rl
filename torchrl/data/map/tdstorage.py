@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from tensordict.nn import TensorDictModuleBase
 
 import abc
 from abc import abstractmethod
@@ -13,14 +12,14 @@ import torch
 import torch.nn as nn
 
 from tensordict import NestedKey, TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModuleBase
 from tensordict.nn.common import TensorDictModuleBase
 
 from torchrl.data import LazyTensorStorage, Storage
-from torchrl.data.td2td import QueryModule, RandomProjectionHash
+from torchrl.data.map import QueryModule, RandomProjectionHash
 
 K = TypeVar("K")
 V = TypeVar("V")
-
 
 
 class TensorMap(abc.ABC, Generic[K, V]):
@@ -51,6 +50,7 @@ class TensorMap(abc.ABC, Generic[K, V]):
 
     def __contains__(self, item):
         return self.contains(item)
+
 
 class TensorDictMap(
     TensorDictModuleBase, TensorMap[TensorDictModuleBase, TensorDictModuleBase]
@@ -201,8 +201,8 @@ class TensorDictMap(
         for mem in self.key_to_storage.values():
             mem.clear()
 
-    def _to_index(self, item: TensorDictBase) -> torch.Tensor:
-        item = self.query_module(item)
+    def _to_index(self, item: TensorDictBase, extend: bool) -> torch.Tensor:
+        item = self.query_module(item, extend=extend)
         return item[self.index_key]
 
     def _maybe_add_batch(
@@ -226,7 +226,7 @@ class TensorDictMap(
     def __getitem__(self, item: TensorDictBase) -> TensorDictBase:
         item, _ = self._maybe_add_batch(item, None)
 
-        index = self._to_index(item)
+        index = self._to_index(item, extend=False)
 
         res = TensorDict({}, batch_size=item.batch_size)
         for k in self.out_keys:
@@ -239,7 +239,7 @@ class TensorDictMap(
     def __setitem__(self, item: TensorDictBase, value: TensorDictBase):
         item, value = self._maybe_add_batch(item, value)
 
-        index = self._to_index(item)
+        index = self._to_index(item, extend=True)
         for k in self.out_keys:
             storage: Storage = self.key_to_storage[k]
             storage.set(index, value[k])
@@ -248,9 +248,8 @@ class TensorDictMap(
         return len(next(iter(self.key_to_storage.values())))
 
     def contains(self, item: TensorDictBase) -> torch.Tensor:
-        raise NotImplementedError
         item, _ = self._maybe_add_batch(item, None)
-        index = self._to_index(item)
+        index = self._to_index(item, extend=False)
 
         res = next(iter(self.key_to_storage.values())).contains(index)
         res = self._maybe_remove_batch(res)

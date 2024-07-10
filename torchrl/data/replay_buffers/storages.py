@@ -185,6 +185,13 @@ class Storage:
         """Alias for :meth:`~.loads`."""
         return self.loads(*args, **kwargs)
 
+    def __contains__(self, item):
+        return self.contains(item)
+
+    @abc.abstractmethod
+    def contains(self, item):
+        ...
+
 
 class ListStorage(Storage):
     """A storage stored in a list.
@@ -194,13 +201,16 @@ class ListStorage(Storage):
     (like lists, tuples, tensors or tensordicts with non-empty batch-size).
 
     Args:
-        max_size (int): the maximum number of elements stored in the storage.
+        max_size (int, optional): the maximum number of elements stored in the storage.
+            If not provided, an unlimited storage is created.
 
     """
 
     _default_checkpointer = ListStorageCheckpointer
 
-    def __init__(self, max_size: int):
+    def __init__(self, max_size: int | None = None):
+        if max_size is None:
+            max_size = torch.iinfo(torch.int64).max
         super().__init__(max_size)
         self._storage = []
 
@@ -304,6 +314,20 @@ class ListStorage(Storage):
 
     def __repr__(self):
         return f"{self.__class__.__name__}(items=[{self._storage[0]}, ...])"
+
+    def contains(self, item):
+        if isinstance(item, int):
+            if item < 0:
+                item += len(self._storage)
+
+            return 0 <= item < len(self._storage)
+        if isinstance(item, torch.Tensor):
+            return torch.tensor(
+                [self.contains(elt) for elt in item.tolist()],
+                dtype=torch.bool,
+                device=item.device,
+            ).reshape_as(item)
+        raise NotImplementedError(f"type {type(item)} is not supported yet.")
 
 
 class TensorStorage(Storage):
@@ -781,6 +805,30 @@ class TensorStorage(Storage):
         len_str = textwrap.indent(f"len={len(self)}", 4 * " ")
         maxsize_str = textwrap.indent(f"max_size={self.max_size}", 4 * " ")
         return f"{self.__class__.__name__}(\n{storage_str}, \n{shape_str}, \n{len_str}, \n{maxsize_str})"
+
+    def contains(self, item):
+        if isinstance(item, int):
+            if index < 0:
+                index += self._len_along_dim0
+
+            return 0 <= index < self._len_along_dim0
+        if isinstance(item, torch.Tensor):
+
+            def _is_valid_index(idx):
+                try:
+                    torch.zeros(self.shape, device="meta")[idx]
+                    return True
+                except IndexError:
+                    return False
+
+            if item.ndim:
+                return torch.tensor(
+                    [_is_valid_index(idx) for idx in item],
+                    dtype=torch.bool,
+                    device=item.device,
+                )
+            return torch.tensor(_is_valid_index(item), device=item.device)
+        raise NotImplementedError(f"type {type(item)} is not supported yet.")
 
 
 class LazyTensorStorage(TensorStorage):
