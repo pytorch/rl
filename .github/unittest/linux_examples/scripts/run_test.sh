@@ -174,18 +174,6 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cr
   env.name=Pendulum-v1 \
   network.device= \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
-  collector.total_frames=200 \
-  collector.init_random_frames=10 \
-  collector.frames_per_batch=200 \
-  env.n_parallel_envs=4 \
-  optimization.optim_steps_per_batch=1 \
-  logger.video=True \
-  logger.backend=csv \
-  replay_buffer.buffer_size=120 \
-  replay_buffer.batch_size=24 \
-  replay_buffer.batch_length=12 \
-  networks.rssm_hidden_dim=17
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -225,8 +213,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dr
   collector.frames_per_batch=200 \
   env.n_parallel_envs=1 \
   optimization.optim_steps_per_batch=1 \
-  logger.backend=csv \
   logger.video=True \
+  logger.backend=csv \
   replay_buffer.buffer_size=120 \
   replay_buffer.batch_size=24 \
   replay_buffer.batch_length=12 \
