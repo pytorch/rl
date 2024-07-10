@@ -56,6 +56,13 @@ def HALFCHEETAH_VERSIONED():
 
 def PONG_VERSIONED():
     # load gym
+    # Gymnasium says that the ale_py behaviour changes from 1.0
+    # but with python 3.12 it is already the case with 0.29.1
+    try:
+        import ale_py  # noqa
+    except ImportError:
+        pass
+
     if gym_backend() is not None:
         _set_gym_environments()
         return _PONG_VERSIONED
