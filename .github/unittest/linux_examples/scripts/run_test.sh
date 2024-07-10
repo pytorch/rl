@@ -62,10 +62,12 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/cql_offline.py \
   optim.gradient_steps=55 \
   logger.backend=
-
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
 
+python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3_bc/td3_bc.py \
+  optim.gradient_steps=55 \
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/impala/impala_single_node.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
@@ -159,6 +161,18 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/di
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=CartPole-v1 \
+  logger.backend=
+python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/crossq/crossq.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector.device= \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
+  network.device= \
   logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
   collector.total_frames=200 \
