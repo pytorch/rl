@@ -39,7 +39,7 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
-from tensordict._tensordict import _unravel_key_to_tuple
+from tensordict._C import _unravel_key_to_tuple
 from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn, Tensor
@@ -3411,14 +3411,7 @@ class DTypeCastTransform(Transform):
         out_keys_inv: Sequence[NestedKey] | None = None,
     ):
         if in_keys is not None and in_keys_inv is None:
-            warnings.warn(
-                "in_keys have been provided but not in_keys_inv. From v0.5, "
-                "this will result in in_keys_inv being an empty list whereas "
-                "now the input keys are retrieved automatically. "
-                "To silence this warning, pass the (possibly empty) "
-                "list of in_keys_inv.",
-                category=DeprecationWarning,
-            )
+            in_keys_inv = []
 
         self.dtype_in = dtype_in
         self.dtype_out = dtype_out

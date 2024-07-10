@@ -2,55 +2,54 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Discrete SAC Example.
+"""CrossQ Example.
 
-This is a simple self-contained example of a discrete SAC training script.
+This is a simple self-contained example of a CrossQ training script.
 
-It supports gym state environments like CartPole.
+It supports state environments like MuJoCo.
 
 The helper functions are coded in the utils.py associated with this script.
 """
 import time
 
 import hydra
+
 import numpy as np
 import torch
 import torch.cuda
 import tqdm
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
-    dump_video,
     log_metrics,
     make_collector,
+    make_crossQ_agent,
+    make_crossQ_optimizer,
     make_environment,
     make_loss_module,
-    make_optimizer,
     make_replay_buffer,
-    make_sac_agent,
 )
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
     device = cfg.network.device
     if device in ("", None):
         if torch.cuda.is_available():
-            device = "cuda:0"
+            device = torch.device("cuda:0")
         else:
-            device = "cpu"
+            device = torch.device("cpu")
     device = torch.device(device)
 
     # Create logger
-    exp_name = generate_exp_name("DiscreteSAC", cfg.logger.exp_name)
+    exp_name = generate_exp_name("CrossQ", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
         logger = get_logger(
             logger_type=cfg.logger.backend,
-            logger_name="DiscreteSAC_logging",
+            logger_name="crossq_logging",
             experiment_name=exp_name,
             wandb_kwargs={
                 "mode": cfg.logger.mode,
@@ -60,21 +59,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
             },
         )
 
-    # Set seeds
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
 
     # Create environments
-    train_env, eval_env = make_environment(cfg, logger=logger)
+    train_env, eval_env = make_environment(cfg)
 
     # Create agent
-    model = make_sac_agent(cfg, train_env, eval_env, device)
+    model, exploration_policy = make_crossQ_agent(cfg, train_env, device)
 
-    # Create TD3 loss
-    loss_module, target_net_updater = make_loss_module(cfg, model)
+    # Create CrossQ loss
+    loss_module = make_loss_module(cfg, model)
 
     # Create off-policy collector
-    collector = make_collector(cfg, train_env, model[0])
+    collector = make_collector(cfg, train_env, exploration_policy.eval(), device=device)
 
     # Create replay buffer
     replay_buffer = make_replay_buffer(
@@ -86,9 +84,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizers
-    optimizer_actor, optimizer_critic, optimizer_alpha = make_optimizer(
-        cfg, loss_module
-    )
+    (
+        optimizer_actor,
+        optimizer_critic,
+        optimizer_alpha,
+    ) = make_crossQ_optimizer(cfg, loss_module)
 
     # Main loop
     start_time = time.time()
@@ -102,12 +102,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         * cfg.optim.utd_ratio
     )
     prb = cfg.replay_buffer.prb
-    eval_rollout_steps = cfg.env.max_episode_steps
     eval_iter = cfg.logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
+    eval_rollout_steps = cfg.env.max_episode_steps
 
     sampling_start = time.time()
-    for i, tensordict in enumerate(collector):
+    update_counter = 0
+    delayed_updates = cfg.optim.policy_update_delay
+    for _, tensordict in enumerate(collector):
         sampling_time = time.time() - sampling_start
 
         # Update weights of the inference policy
@@ -126,50 +128,51 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if collected_frames >= init_random_frames:
             (
                 actor_losses,
-                q_losses,
                 alpha_losses,
+                q_losses,
             ) = ([], [], [])
             for _ in range(num_updates):
+
+                # Update actor every delayed_updates
+                update_counter += 1
+                update_actor = update_counter % delayed_updates == 0
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample()
                 if sampled_tensordict.device != device:
-                    sampled_tensordict = sampled_tensordict.to(
-                        device, non_blocking=True
-                    )
+                    sampled_tensordict = sampled_tensordict.to(device)
                 else:
                     sampled_tensordict = sampled_tensordict.clone()
 
                 # Compute loss
-                loss_out = loss_module(sampled_tensordict)
-
-                actor_loss, q_loss, alpha_loss = (
-                    loss_out["loss_actor"],
-                    loss_out["loss_qvalue"],
-                    loss_out["loss_alpha"],
-                )
-
+                q_loss, *_ = loss_module.qvalue_loss(sampled_tensordict)
+                q_loss = q_loss.mean()
                 # Update critic
                 optimizer_critic.zero_grad()
                 q_loss.backward()
                 optimizer_critic.step()
-                q_losses.append(q_loss.item())
+                q_losses.append(q_loss.detach().item())
 
-                # Update actor
-                optimizer_actor.zero_grad()
-                actor_loss.backward()
-                optimizer_actor.step()
+                if update_actor:
+                    actor_loss, metadata_actor = loss_module.actor_loss(
+                        sampled_tensordict
+                    )
+                    actor_loss = actor_loss.mean()
+                    alpha_loss = loss_module.alpha_loss(
+                        log_prob=metadata_actor["log_prob"]
+                    ).mean()
 
-                actor_losses.append(actor_loss.item())
+                    # Update actor
+                    optimizer_actor.zero_grad()
+                    actor_loss.backward()
+                    optimizer_actor.step()
 
-                # Update alpha
-                optimizer_alpha.zero_grad()
-                alpha_loss.backward()
-                optimizer_alpha.step()
+                    # Update alpha
+                    optimizer_alpha.zero_grad()
+                    alpha_loss.backward()
+                    optimizer_alpha.step()
 
-                alpha_losses.append(alpha_loss.item())
-
-                # Update target params
-                target_net_updater.step()
+                    actor_losses.append(actor_loss.detach().item())
+                    alpha_losses.append(alpha_loss.detach().item())
 
                 # Update priority
                 if prb:
@@ -191,20 +194,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
                 episode_length
             )
-
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = np.mean(q_losses)
-            metrics_to_log["train/a_loss"] = np.mean(actor_losses)
-            metrics_to_log["train/alpha_loss"] = np.mean(alpha_losses)
+            metrics_to_log["train/q_loss"] = np.mean(q_losses).item()
+            metrics_to_log["train/actor_loss"] = np.mean(actor_losses).item()
+            metrics_to_log["train/alpha_loss"] = np.mean(alpha_losses).item()
             metrics_to_log["train/sampling_time"] = sampling_time
             metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
-        prev_test_frame = ((i - 1) * frames_per_batch) // eval_iter
-        cur_test_frame = (i * frames_per_batch) // eval_iter
-        final = current_frames >= collector.total_frames
-        if (i >= 1 and (prev_test_frame < cur_test_frame)) or final:
-            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+        if abs(collected_frames % eval_iter) < frames_per_batch:
+            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,
@@ -212,7 +211,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
-                eval_env.apply(dump_video)
                 eval_time = time.time() - eval_start
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward

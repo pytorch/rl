@@ -2065,18 +2065,18 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def iterator(self) -> Iterator[TensorDictBase]:
         cat_results = self.cat_results
         if cat_results is None:
-            cat_results = 0
+            cat_results = "stack"
             warnings.warn(
                 f"`cat_results` was not specified in the constructor of {type(self).__name__}. "
                 f"For MultiSyncDataCollector, `cat_results` indicates how the data should "
-                f"be packed: the preferred option is `cat_results='stack'` which provides "
-                f"the best interoperability across torchrl components. "
+                f"be packed: the preferred option and current default is `cat_results='stack'` "
+                f"which provides the best interoperability across torchrl components. "
                 f"Other accepted values are `cat_results=0` (previous behaviour) and "
                 f"`cat_results=-1` (cat along time dimension). Among these two, the latter "
                 f"should be preferred for consistency across environment configurations. "
-                f"Currently, the default value is `0` (using torch.cat along first dimension)."
-                f"From v0.5 onward, this will default to `'stack'`. "
-                f"To suppress this warning, set stack_results to the desired value.",
+                f"Currently, the default value is `'stack'`."
+                f"From v0.6 onward, this warning will be removed. "
+                f"To suppress this warning, set `cat_results` to the desired value.",
                 category=DeprecationWarning,
             )
 

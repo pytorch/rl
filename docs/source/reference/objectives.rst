@@ -121,6 +121,15 @@ REDQ
 
     REDQLoss
 
+CrossQ
+----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    CrossQ
+
 IQL
 ----
 
@@ -159,6 +168,15 @@ TD3
     :template: rl_template_noinherit.rst
 
     TD3Loss
+
+TD3+BC
+----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    TD3BCLoss
 
 PPO
 ---

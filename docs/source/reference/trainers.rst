@@ -124,26 +124,26 @@ Checkpointing
 -------------
 
 The trainer class and hooks support checkpointing, which can be achieved either
-using the ``torchsnapshot <https://github.com/pytorch/torchsnapshot/>``_ backend or
+using the `torchsnapshot <https://github.com/pytorch/torchsnapshot/>`_ backend or
 the regular torch backend. This can be controlled via the global variable ``CKPT_BACKEND``:
 
 .. code-block::
 
-    $ CKPT_BACKEND=torch python script.py
+    $ CKPT_BACKEND=torchsnapshot python script.py
 
-which defaults to ``torchsnapshot``. The advantage of torchsnapshot over pytorch
+``CKPT_BACKEND`` defaults to ``torch``. The advantage of torchsnapshot over pytorch
 is that it is a more flexible API, which supports distributed checkpointing and
 also allows users to load tensors from a file stored on disk to a tensor with a
 physical storage (which pytorch currently does not support). This allows, for instance,
 to load tensors from and to a replay buffer that would otherwise not fit in memory.
 
-When building a trainer, one can provide a file path where the checkpoints are to
+When building a trainer, one can provide a path where the checkpoints are to
 be written. With the ``torchsnapshot`` backend, a directory path is expected,
 whereas the ``torch`` backend expects a file path (typically a  ``.pt`` file).
 
 .. code-block::
 
-    >>> filepath = "path/to/dir/"
+    >>> filepath = "path/to/dir/or/file"
     >>> trainer = Trainer(
     ...     collector=collector,
     ...     total_frames=total_frames,

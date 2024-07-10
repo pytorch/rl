@@ -183,7 +183,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Evaluation
         if abs(collected_frames % eval_iter) < frames_per_batch:
-            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,
