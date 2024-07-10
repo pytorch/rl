@@ -481,9 +481,10 @@ class TanhNormal(FasterTransformedDistribution):
     @property
     def mode(self):
         warnings.warn(
-            "This computation of the mode is based on the first-order Taylor expansion "
-            "of the transform around the normal mean value, which can be inaccurate. "
+            "This computation of the mode is based on an inaccurate estimation of the mode "
+            "given the base_dist mode. "
             "To use a more stable implementation of the mode, use dist.get_mode() method instead. "
+            "To silence this warning, consider using the DETERMINISTIC exploration_type."
             "This implementation will be removed in v0.6.",
             category=DeprecationWarning,
         )

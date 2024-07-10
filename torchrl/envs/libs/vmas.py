@@ -795,7 +795,9 @@ class VmasEnv(VmasWrapper):
             env=vmas.make_env(
                 scenario=scenario,
                 num_envs=num_envs,
-                device=self.device,
+                device=self.device
+                if self.device is not None
+                else torch.get_default_device(),
                 continuous_actions=continuous_actions,
                 max_steps=max_steps,
                 seed=seed,

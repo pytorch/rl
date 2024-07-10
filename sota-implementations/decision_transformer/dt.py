@@ -56,7 +56,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create test environment
-    test_env = make_env(cfg.env, obs_loc, obs_std, from_pixels=cfg.logger.video)
+    test_env = make_env(
+        cfg.env, obs_loc, obs_std, from_pixels=cfg.logger.video, device=model_device
+    )
     if cfg.logger.video:
         test_env = test_env.append_transform(
             VideoRecorder(logger, tag="rendered", in_keys=["pixels"])
@@ -114,7 +116,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         to_log = {"train/loss": loss_vals["loss"]}
 
         # Evaluation
-        with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+        with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
             if i % pretrain_log_interval == 0:
                 eval_td = test_env.rollout(
                     max_steps=eval_steps,

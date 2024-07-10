@@ -15,7 +15,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key
-from tensordict.base import NO_DEFAULT
 from tensordict.utils import NestedKey
 from torchrl._utils import (
     _ends_with,
@@ -3020,21 +3019,11 @@ class _EnvWrapper(EnvBase):
     def __init__(
         self,
         *args,
-        device: DEVICE_TYPING = NO_DEFAULT,
+        device: DEVICE_TYPING = None,
         batch_size: Optional[torch.Size] = None,
         allow_done_after_reset: bool = False,
         **kwargs,
     ):
-        if device is NO_DEFAULT:
-            warnings.warn(
-                "Your wrapper was not given a device. Currently, this "
-                "value will default to 'cpu'. From v0.5 it will "
-                "default to `None`. With a device of None, no device casting "
-                "is performed and the resulting tensordicts are deviceless. "
-                "Please set your device accordingly.",
-                category=DeprecationWarning,
-            )
-            device = torch.device("cpu")
         super().__init__(
             device=device,
             batch_size=batch_size,

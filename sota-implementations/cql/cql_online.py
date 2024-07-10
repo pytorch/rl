@@ -204,7 +204,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cur_test_frame = (i * frames_per_batch) // evaluation_interval
         final = current_frames >= collector.total_frames
         if (i >= 1 and (prev_test_frame < cur_test_frame)) or final:
-            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,

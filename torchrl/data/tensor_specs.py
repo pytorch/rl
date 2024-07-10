@@ -1143,6 +1143,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         if not isinstance(other, LazyStackedTensorSpec):
             return False
         if self.device != other.device:
+            raise RuntimeError((self, other))
             return False
         if len(self._specs) != len(other._specs):
             return False
