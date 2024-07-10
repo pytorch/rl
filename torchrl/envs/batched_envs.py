@@ -26,8 +26,8 @@ from tensordict import (
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
+    unravel_key,
 )
-from tensordict._tensordict import unravel_key
 from torch import multiprocessing as mp
 from torchrl._utils import (
     _check_for_faulty_process,
