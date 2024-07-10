@@ -9,7 +9,7 @@ env:
   image_size : 64
   horizon: 500
   n_parallel_envs: 8
-  device:
+  device: cpu
 
 collector:
   total_frames: 5_000_000
