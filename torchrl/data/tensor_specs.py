@@ -1370,9 +1370,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         return self.space.n
 
     def update_mask(self, mask):
-        """
-        Sets a mask to prevent some of the possible outcomes when a sample is
-        taken. The mask can also be set during initialization of the spec.
+        """Sets a mask to prevent some of the possible outcomes when a sample is taken.
+
+        The mask can also be set during initialization of the spec.
 
         Args:
             mask (torch.Tensor or None): boolean mask. If None, the mask is
@@ -2587,9 +2587,9 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         self.update_mask(mask)
 
     def update_mask(self, mask):
-        """
-        Sets a mask to prevent some of the possible outcomes when a sample is
-        taken. The mask can also be set during initialization of the spec.
+        """Sets a mask to prevent some of the possible outcomes when a sample is taken.
+
+        The mask can also be set during initialization of the spec.
 
         Args:
             mask (torch.Tensor or None): boolean mask. If None, the mask is
@@ -2980,9 +2980,9 @@ class DiscreteTensorSpec(TensorSpec):
         return self.space.n
 
     def update_mask(self, mask):
-        """
-        Sets a mask to prevent some of the possible outcomes when a sample is
-        taken. The mask can also be set during initialization of the spec.
+        """Sets a mask to prevent some of the possible outcomes when a sample is taken.
+
+        The mask can also be set during initialization of the spec.
 
         Args:
             mask (torch.Tensor or None): boolean mask. If None, the mask is
@@ -3429,9 +3429,9 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         self.remove_singleton = remove_singleton
 
     def update_mask(self, mask):
-        """
-        Sets a mask to prevent some of the possible outcomes when a sample is
-        taken. The mask can also be set during initialization of the spec.
+        """Sets a mask to prevent some of the possible outcomes when a sample is taken.
+
+        The mask can also be set during initialization of the spec.
 
         Args:
             mask (torch.Tensor or None): boolean mask. If None, the mask is
