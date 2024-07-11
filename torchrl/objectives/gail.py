@@ -63,6 +63,13 @@ class GAILLoss(LossModule):
 
     discriminator_network: TensorDictModule
     discriminator_network_params: TensorDictParams
+    target_discriminator_network: TensorDictModule
+    target_discriminator_network_params: TensorDictParams
+
+    out_keys = [
+        "loss",
+        "gp_loss",
+    ]
 
     def __init__(
         self,
@@ -84,7 +91,7 @@ class GAILLoss(LossModule):
             "discriminator_network",
             create_target_params=False,
         )
-        self.loss_function = torch.nn.BCELoss()
+        self.loss_function = torch.nn.BCELoss(reduction="none")
         self.use_grad_penalty = use_grad_penalty
         self.gp_lambda = gp_lambda
 
@@ -95,6 +102,8 @@ class GAILLoss(LossModule):
         keys = set(keys)
         keys.add(self.tensor_keys.expert_observation)
         keys.add(self.tensor_keys.expert_action)
+        keys.add(self.tensor_keys.collector_observation)
+        keys.add(self.tensor_keys.collector_action)
         self._in_keys = sorted(keys, key=str)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
@@ -114,6 +123,8 @@ class GAILLoss(LossModule):
     def out_keys(self):
         if self._out_keys is None:
             keys = ["loss"]
+            if self.use_grad_penalty:
+                keys.append("gp_loss")
             self._out_keys = keys
         return self._out_keys
 
@@ -126,9 +137,19 @@ class GAILLoss(LossModule):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        """Compute the GAIL discriminator loss."""
+        """The forward method.
+
+        Computes the discriminator loss and gradient penalty if `use_grad_penalty` is set to True. If `use_grad_penalty` is set to True, the detached gradient penalty loss is also returned for logging purposes.
+        To see what keys are expected in the input tensordict and what keys are expected as output, check the
+        class's `"in_keys"` and `"out_keys"` attributes.
+        """
+        device = self.discriminator_network.device
         tensordict = tensordict.clone(False)
-        batch_size = tensordict.batch_size[0]
+        shape = tensordict.shape
+        if len(shape) > 1:
+            batch_size, seq_len = shape
+        else:
+            batch_size = shape[0]
         collector_obs = tensordict.get(self.tensor_keys.collector_observation)
         collector_act = tensordict.get(self.tensor_keys.collector_action)
 
@@ -144,15 +165,20 @@ class GAILLoss(LossModule):
                 self.tensor_keys.expert_action: combined_act_inputs,
             },
             batch_size=[2 * batch_size],
+            device=device,
         )
 
-        # create labels
-        fake_labels = torch.zeros((batch_size, 1), dtype=torch.float32).to(
-            tensordict.device
-        )
-        real_labels = torch.ones((batch_size, 1), dtype=torch.float32).to(
-            tensordict.device
-        )
+        # create
+        if len(shape) > 1:
+            fake_labels = torch.zeros((batch_size, seq_len, 1), dtype=torch.float32).to(
+                device
+            )
+            real_labels = torch.ones((batch_size, seq_len, 1), dtype=torch.float32).to(
+                device
+            )
+        else:
+            fake_labels = torch.zeros((batch_size, 1), dtype=torch.float32).to(device)
+            real_labels = torch.ones((batch_size, 1), dtype=torch.float32).to(device)
 
         with self.discriminator_network_params.to_module(self.discriminator_network):
             d_logits = self.discriminator_network(combined_inputs).get(
@@ -167,7 +193,7 @@ class GAILLoss(LossModule):
         collection_loss = self.loss_function(collection_preds, fake_labels)
 
         loss = expert_loss + collection_loss
-        out = {"loss": loss}
+        out = {}
         if self.use_grad_penalty:
             obs = tensordict.get(self.tensor_keys.collector_observation)
             acts = tensordict.get(self.tensor_keys.collector_action)
@@ -175,14 +201,10 @@ class GAILLoss(LossModule):
             acts_e = tensordict.get(self.tensor_keys.expert_action)
 
             obss_noise = (
-                torch.distributions.Uniform(0.0, 1.0)
-                .sample(obs_e.shape)
-                .to(tensordict.device)
+                torch.distributions.Uniform(0.0, 1.0).sample(obs_e.shape).to(device)
             )
             acts_noise = (
-                torch.distributions.Uniform(0.0, 1.0)
-                .sample(acts_e.shape)
-                .to(tensordict.device)
+                torch.distributions.Uniform(0.0, 1.0).sample(acts_e.shape).to(device)
             )
             obss_mixture = obss_noise * obs + (1 - obss_noise) * obs_e
             acts_mixture = acts_noise * acts + (1 - acts_noise) * acts_e
@@ -195,6 +217,7 @@ class GAILLoss(LossModule):
                     self.tensor_keys.expert_action: acts_mixture,
                 },
                 [],
+                device=device,
             )
 
             with self.discriminator_network_params.to_module(
@@ -208,9 +231,7 @@ class GAILLoss(LossModule):
                 autograd.grad(
                     outputs=d_logits_mixture,
                     inputs=(obss_mixture, acts_mixture),
-                    grad_outputs=torch.ones(
-                        d_logits_mixture.size(), device=tensordict.device
-                    ),
+                    grad_outputs=torch.ones(d_logits_mixture.size(), device=device),
                     create_graph=True,
                     retain_graph=True,
                     only_inputs=True,
@@ -223,8 +244,8 @@ class GAILLoss(LossModule):
             )
 
             loss += gp_loss
-            out["gp_loss"] = gp_loss
+            out["gp_loss"] = gp_loss.detach()
         loss = _reduce(loss, reduction=self.reduction)
-
+        out["loss"] = loss
         td_out = TensorDict(out, [])
         return td_out

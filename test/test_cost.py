@@ -10438,6 +10438,8 @@ class TestGAIL(LossModuleTestBase):
             source={
                 "observation": obs,
                 "action": action,
+                "collector_action": action,
+                "collector_observation": obs,
             },
             device=device,
         )
@@ -10455,6 +10457,8 @@ class TestGAIL(LossModuleTestBase):
             source={
                 "observation": obs,
                 "action": action,
+                "collector_action": action,
+                "collector_observation": obs,
             },
             device=device,
         )
@@ -10478,23 +10482,26 @@ class TestGAIL(LossModuleTestBase):
         )
 
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_gail_notensordict(self, device):
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_gail_notensordict(self, device, use_grad_penalty, gp_lambda):
         torch.manual_seed(self.seed)
         discriminator = self._create_mock_discriminator(device=device)
-        loss_fn = DTLoss(discriminator)
-
-        expert_td = self._create_mock_data_gail(device=device)
-        collector_td = self._create_mock_data_gail(device=device)
-        expert_td.set(
-            loss_fn.tensor_keys.collector_observation, collector_td["observation"]
+        loss_fn = GAILLoss(
+            discriminator, use_grad_penalty=use_grad_penalty, gp_lambda=gp_lambda
         )
-        expert_td.set(loss_fn.tensor_keys.collector_action, collector_td["action"])
+
+        tensordict = self._create_mock_data_gail(device=device)
 
         in_keys = self._flatten_in_keys(loss_fn.in_keys)
-        kwargs = dict(expert_td.flatten_keys("_").select(*in_keys))
+        kwargs = dict(tensordict.flatten_keys("_").select(*in_keys))
 
-        loss_val_td = loss_fn(expert_td)
-        loss_val = loss_fn(**kwargs)
+        loss_val_td = loss_fn(tensordict)
+        if use_grad_penalty:
+            loss_val, _ = loss_fn(**kwargs)
+        else:
+            loss_val = loss_fn(**kwargs)
+
         torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
         # test select
         loss_fn.select_out_keys("loss")
@@ -10510,13 +10517,17 @@ class TestGAIL(LossModuleTestBase):
         assert loss_discriminator == loss_val_td["loss"]
 
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dt(self, device):
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_gail(self, device, use_grad_penalty, gp_lambda):
         torch.manual_seed(self.seed)
-        td = self._create_mock_data_dt(device=device)
+        td = self._create_mock_data_gail(device=device)
 
-        actor = self._create_mock_actor(device=device)
+        discriminator = self._create_mock_discriminator(device=device)
 
-        loss_fn = DTLoss(actor)
+        loss_fn = GAILLoss(
+            discriminator, use_grad_penalty=use_grad_penalty, gp_lambda=gp_lambda
+        )
         loss = loss_fn(td)
         loss_transformer = loss["loss"]
         loss_transformer.backward(retain_graph=True)
@@ -10524,11 +10535,9 @@ class TestGAIL(LossModuleTestBase):
 
         for name, p in named_parameters:
             if p.grad is not None and p.grad.norm() > 0.0:
-                assert "actor" in name
-                assert "alpha" not in name
+                assert "discriminator" in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "alpha" in name
+                assert "discriminator" not in name
         loss_fn.zero_grad()
 
         sum([loss_transformer]).backward()
@@ -10542,24 +10551,28 @@ class TestGAIL(LossModuleTestBase):
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dt_state_dict(self, device):
+    def test_gail_state_dict(self, device):
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(device=device)
+        discriminator = self._create_mock_discriminator(device=device)
 
-        loss_fn = DTLoss(actor)
+        loss_fn = GAILLoss(discriminator)
         sd = loss_fn.state_dict()
-        loss_fn2 = DTLoss(actor)
+        loss_fn2 = GAILLoss(discriminator)
         loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_seq_dt(self, device):
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_seq_gail(self, device, use_grad_penalty, gp_lambda):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_dt(device=device)
+        td = self._create_seq_mock_data_gail(device=device)
 
-        actor = self._create_mock_actor(device=device)
+        discriminator = self._create_mock_discriminator(device=device)
 
-        loss_fn = DTLoss(actor)
+        loss_fn = GAILLoss(
+            discriminator, use_grad_penalty=use_grad_penalty, gp_lambda=gp_lambda
+        )
         loss = loss_fn(td)
         loss_transformer = loss["loss"]
         loss_transformer.backward(retain_graph=True)
@@ -10567,11 +10580,9 @@ class TestGAIL(LossModuleTestBase):
 
         for name, p in named_parameters:
             if p.grad is not None and p.grad.norm() > 0.0:
-                assert "actor" in name
-                assert "alpha" not in name
+                assert "discriminator" in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "alpha" in name
+                assert "discriminator" not in name
         loss_fn.zero_grad()
 
         sum([loss_transformer]).backward()
@@ -10585,19 +10596,21 @@ class TestGAIL(LossModuleTestBase):
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_dt_reduction(self, reduction):
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_gail_reduction(self, reduction, use_grad_penalty, gp_lambda):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
             if torch.cuda.device_count() == 0
             else torch.device("cuda")
         )
-        td = self._create_mock_data_dt(device=device)
-        actor = self._create_mock_actor(device=device)
-        loss_fn = DTLoss(actor, reduction=reduction)
+        td = self._create_mock_data_gail(device=device)
+        discriminator = self._create_mock_discriminator(device=device)
+        loss_fn = GAILLoss(discriminator, reduction=reduction)
         loss = loss_fn(td)
         if reduction == "none":
-            assert loss["loss"].shape == td["action"].shape
+            assert loss["loss"].shape == (td["observation"].shape[0], 1)
         else:
             assert loss["loss"].shape == torch.Size([])
 
