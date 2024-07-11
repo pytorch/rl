@@ -57,7 +57,7 @@ from torchrl.trainers.helpers.envs import LIBS
 # -----------------
 
 
-def make_base_env(env_cfg, from_pixels=False):
+def make_base_env(env_cfg, from_pixels=False, device=None):
     set_gym_backend(env_cfg.backend).set()
 
     env_library = LIBS[env_cfg.library]
@@ -73,7 +73,7 @@ def make_base_env(env_cfg, from_pixels=False):
     if env_library is DMControlEnv:
         env_task = env_cfg.task
         env_kwargs.update({"task_name": env_task})
-    env = env_library(**env_kwargs)
+    env = env_library(**env_kwargs, device=device)
     return env
 
 
@@ -134,7 +134,9 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     return transformed_env
 
 
-def make_parallel_env(env_cfg, obs_loc, obs_std, train=False, from_pixels=False):
+def make_parallel_env(
+    env_cfg, obs_loc, obs_std, train=False, from_pixels=False, device=None
+):
     if train:
         num_envs = env_cfg.num_train_envs
     else:
@@ -142,10 +144,12 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False, from_pixels=False)
 
     def make_env():
         with set_gym_backend(env_cfg.backend):
-            return make_base_env(env_cfg, from_pixels=from_pixels)
+            return make_base_env(env_cfg, from_pixels=from_pixels, device="cpu")
 
     env = make_transformed_env(
-        ParallelEnv(num_envs, EnvCreator(make_env), serial_for_single=True),
+        ParallelEnv(
+            num_envs, EnvCreator(make_env), serial_for_single=True, device=device
+        ),
         env_cfg,
         obs_loc,
         obs_std,
@@ -154,11 +158,15 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False, from_pixels=False)
     return env
 
 
-def make_env(env_cfg, obs_loc, obs_std, train=False, from_pixels=False):
-    env = make_parallel_env(
-        env_cfg, obs_loc, obs_std, train=train, from_pixels=from_pixels
+def make_env(env_cfg, obs_loc, obs_std, train=False, from_pixels=False, device=None):
+    return make_parallel_env(
+        env_cfg,
+        obs_loc,
+        obs_std,
+        train=train,
+        from_pixels=from_pixels,
+        device=device,
     )
-    return env
 
 
 # ====================================================================

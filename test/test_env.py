@@ -483,6 +483,7 @@ class TestParallel:
 
     @pytest.mark.parametrize("start_method", [None, mp_ctx])
     def test_serial_for_single(self, maybe_fork_ParallelEnv, start_method):
+        gc.collect()
         env = ParallelEnv(
             1,
             ContinuousActionVecMockEnv,
@@ -2002,6 +2003,7 @@ class TestConcurrentEnvs:
 
     @staticmethod
     def main_penv(j, q=None):
+        gc.collect()
         device = "cpu" if not torch.cuda.device_count() else "cuda:0"
         n_workers = 1
         env_p = ParallelEnv(
@@ -2061,6 +2063,7 @@ class TestConcurrentEnvs:
             total_frames=N * n_workers * 100,
             storing_device=device,
             device=device,
+            cat_results=-1,
         )
         single_collectors = [
             SyncDataCollector(
@@ -2328,6 +2331,7 @@ class TestHeteroEnvs:
     def test_vec_env(
         self, batch_size, env_type, break_when_any_done, rollout_steps=4, n_workers=2
     ):
+        gc.collect()
         env_fun = lambda: HeterogeneousCountingEnv(batch_size=batch_size)
         if env_type == "serial":
             vec_env = SerialEnv(n_workers, env_fun)
@@ -2591,6 +2595,7 @@ class TestLibThreading:
         reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_num_threads(self):
+        gc.collect()
         from torchrl.envs import batched_envs
 
         _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
@@ -2617,6 +2622,7 @@ class TestLibThreading:
         reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_auto_num_threads(self, maybe_fork_ParallelEnv):
+        gc.collect()
         init_threads = torch.get_num_threads()
 
         try:
@@ -2671,6 +2677,8 @@ def test_run_type_checks():
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device found.")
 @pytest.mark.parametrize("break_when_any_done", [True, False])
 def test_auto_cast_to_device(break_when_any_done):
+    gc.collect()
+
     env = ContinuousActionVecMockEnv(device="cpu")
     policy = Actor(
         nn.Linear(
@@ -2701,6 +2709,8 @@ def test_auto_cast_to_device(break_when_any_done):
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("share_individual_td", [True, False])
 def test_backprop(device, maybe_fork_ParallelEnv, share_individual_td):
+    gc.collect()
+
     # Tests that backprop through a series of single envs and through a serial env are identical
     # Also tests that no backprop can be achieved with parallel env.
     class DifferentiableEnv(EnvBase):
@@ -2785,6 +2795,7 @@ def test_backprop(device, maybe_fork_ParallelEnv, share_individual_td):
         assert not r_parallel.exclude("action").requires_grad
     finally:
         p_env.close()
+        del p_env
 
 
 @pytest.mark.skipif(not _has_gym, reason="Gym required for this test")
@@ -2808,20 +2819,22 @@ def test_non_td_policy():
 def test_parallel_another_ctx():
     from torch import multiprocessing as mp
 
-    sm = mp.get_start_method()
-    if sm == "spawn":
-        other_sm = "fork"
-    else:
-        other_sm = "spawn"
-    env = ParallelEnv(2, ContinuousActionVecMockEnv, mp_start_method=other_sm)
+    gc.collect()
+
     try:
+        sm = mp.get_start_method()
+        if sm == "spawn":
+            other_sm = "fork"
+        else:
+            other_sm = "spawn"
+        env = ParallelEnv(2, ContinuousActionVecMockEnv, mp_start_method=other_sm)
         assert env.rollout(3) is not None
         assert env._workers[0]._start_method == other_sm
     finally:
         try:
             env.close()
             del env
-        except RuntimeError:
+        except Exception:
             pass
 
 

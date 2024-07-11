@@ -65,6 +65,7 @@ scripts=(
     run_ppo_mujoco.sh
     run_sac.sh
     run_td3.sh
+    run_td3bc.sh
     run_dt.sh
     run_dt_online.sh
 )

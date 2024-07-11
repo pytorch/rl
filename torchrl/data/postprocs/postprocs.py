@@ -233,10 +233,7 @@ def _multi_step_func(
             try:
                 # let's try to reshape the tensordict
                 tensordict.batch_size = done.shape
-                tensordict = tensordict.apply(
-                    lambda x: x.transpose(ndim - 1, tensordict.ndim - 1),
-                    batch_size=done.transpose(ndim - 1, tensordict.ndim - 1).shape,
-                )
+                tensordict = tensordict.transpose(ndim - 1, tensordict.ndim - 1)
                 done = tensordict.get(("next", done_key))
             except Exception as err:
                 raise RuntimeError(

@@ -199,7 +199,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
         # Get and log evaluation rewards and eval time
-        with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
+        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
             prev_test_frame = ((i - 1) * frames_per_batch) // test_interval
             cur_test_frame = (i * frames_per_batch) // test_interval
             final = current_frames >= collector.total_frames
