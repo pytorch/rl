@@ -462,10 +462,10 @@ class PPOLoss(LossModule):
                 f"tensordict stored {self.tensor_keys.action} requires grad."
             )
 
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
-            dist = self.actor_network.get_dist(tensordict)
+        # with self.actor_network_params.to_module(
+        #     self.actor_network
+        # ) if self.functional else contextlib.nullcontext():
+        dist = self.actor_network.get_dist(tensordict)
         log_prob = dist.log_prob(action)
 
         prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
@@ -503,10 +503,10 @@ class PPOLoss(LossModule):
                     f"Make sure that the value_key passed to PPO exists in the input tensordict."
                 )
 
-        with self.critic_network_params.to_module(
-            self.critic_network
-        ) if self.functional else contextlib.nullcontext():
-            state_value_td = self.critic_network(tensordict)
+        # with self.critic_network_params.to_module(
+        #     self.critic_network
+        # ) if self.functional else contextlib.nullcontext():
+        state_value_td = self.critic_network(tensordict)
 
         try:
             state_value = state_value_td.get(self.tensor_keys.value)
@@ -1096,10 +1096,10 @@ class KLPENPPOLoss(PPOLoss):
         log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
 
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
-            current_dist = self.actor_network.get_dist(tensordict_copy)
+        # with self.actor_network_params.to_module(
+        #     self.actor_network
+        # ) if self.functional else contextlib.nullcontext():
+        current_dist = self.actor_network.get_dist(tensordict_copy)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:

@@ -311,8 +311,8 @@ class DDPGLoss(LossModule):
         td_copy = tensordict.select(
             *self.actor_in_keys, *self.value_exclusive_keys, strict=False
         ).detach()
-        with self.actor_network_params.to_module(self.actor_network):
-            td_copy = self.actor_network(td_copy)
+        # with self.actor_network_params.to_module(self.actor_network):
+        td_copy = self.actor_network(td_copy)
         with self._cached_detached_value_params.to_module(self.value_network):
             td_copy = self.value_network(td_copy)
         loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
@@ -326,6 +326,8 @@ class DDPGLoss(LossModule):
     ) -> Tuple[torch.Tensor, dict]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
+        # We need this functional call here, because some params in value_network_params
+        # may be detached from value_network
         with self.value_network_params.to_module(self.value_network):
             self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
