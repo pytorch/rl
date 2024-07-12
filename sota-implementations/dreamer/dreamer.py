@@ -10,6 +10,7 @@ import torch
 import torch.cuda
 import tqdm
 from dreamer_utils import (
+    _default_device,
     dump_video,
     log_metrics,
     make_collector,
@@ -17,7 +18,6 @@ from dreamer_utils import (
     make_environments,
     make_replay_buffer,
 )
-from hydra.utils import instantiate
 
 # mixed precision training
 from torch.cuda.amp import GradScaler
@@ -38,7 +38,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 def main(cfg: "DictConfig"):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
 
-    device = torch.device(instantiate(cfg.networks.device))
+    device = _default_device(cfg.networks.device)
 
     # Create logger
     exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
@@ -284,7 +284,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Evaluation
         if (i % eval_iter) == 0:
             # Real env
-            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
                 eval_rollout = test_env.rollout(
                     eval_rollout_steps,
                     policy,
@@ -298,7 +298,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     log_metrics(logger, eval_metrics, collected_frames)
             # Simulated env
             if model_based_env_eval is not None:
-                with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                with set_exploration_type(
+                    ExplorationType.DETERMINISTIC
+                ), torch.no_grad():
                     eval_rollout = model_based_env_eval.rollout(
                         eval_rollout_steps,
                         policy,

@@ -18,6 +18,8 @@ export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
 export BATCHED_PIPE_TIMEOUT=60
 
-MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py
+MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_parallel.py -m pytest --instafail \
+    -v --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py --capture no \
+    --timeout=120 --mp_fork_if_no_cuda
 coverage combine
 coverage xml -i

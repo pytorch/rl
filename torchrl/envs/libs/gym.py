@@ -27,7 +27,6 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
-    LazyStackedTensorSpec,
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -246,8 +245,8 @@ def _gym_to_torchrl_spec_transform(
         ).expand(batch_size)
     gym_spaces = gym_backend("spaces")
     if isinstance(spec, gym_spaces.tuple.Tuple):
-        result = LazyStackedTensorSpec(
-            *[
+        result = torch.stack(
+            [
                 _gym_to_torchrl_spec_transform(
                     s,
                     device=device,

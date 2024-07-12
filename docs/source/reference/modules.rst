@@ -317,6 +317,7 @@ Regular modules
     Conv3dNet
     SqueezeLayer
     Squeeze2dLayer
+    BatchRenorm
 
 Algorithm-specific modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

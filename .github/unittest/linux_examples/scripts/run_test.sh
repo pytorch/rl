@@ -9,8 +9,18 @@
 #
 #
 
-set -e
+#set -e
 set -v
+
+# Initialize an error flag
+error_occurred=0
+# Function to handle errors
+error_handler() {
+    echo "Error on line $1"
+    error_occurred=1
+}
+# Trap ERR to call the error_handler function with the failing line number
+trap 'error_handler $LINENO' ERR
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
@@ -24,6 +34,7 @@ lib_dir="${env_dir}/lib"
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
+export CUDA_LAUNCH_BLOCKING=1
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
 #python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200
@@ -51,10 +62,12 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/cql_offline.py \
   optim.gradient_steps=55 \
   logger.backend=
-
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
 
+python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3_bc/td3_bc.py \
+  optim.gradient_steps=55 \
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/impala/impala_single_node.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
@@ -149,18 +162,18 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/di
   replay_buffer.size=120 \
   env.name=CartPole-v1 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
-  collector.total_frames=200 \
+python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/crossq/crossq.py \
+  collector.total_frames=48 \
   collector.init_random_frames=10 \
-  collector.frames_per_batch=200 \
-  env.n_parallel_envs=4 \
-  optimization.optim_steps_per_batch=1 \
-  logger.video=True \
-  logger.backend=csv \
-  replay_buffer.buffer_size=120 \
-  replay_buffer.batch_size=24 \
-  replay_buffer.batch_length=12 \
-  networks.rssm_hidden_dim=17
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector.device= \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
+  network.device= \
+  logger.backend=
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -200,8 +213,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dr
   collector.frames_per_batch=200 \
   env.n_parallel_envs=1 \
   optimization.optim_steps_per_batch=1 \
-  logger.backend=csv \
   logger.video=True \
+  logger.backend=csv \
   replay_buffer.buffer_size=120 \
   replay_buffer.batch_size=24 \
   replay_buffer.batch_length=12 \
@@ -298,3 +311,11 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ba
 
 coverage combine
 coverage xml -i
+
+# Check if any errors occurred during the script execution
+if [ "$error_occurred" -ne 0 ]; then
+    echo "Errors occurred during script execution"
+    exit 1
+else
+    echo "Script executed successfully"
+fi

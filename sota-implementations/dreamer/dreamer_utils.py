@@ -9,7 +9,6 @@ from contextlib import nullcontext
 import torch
 
 import torch.nn as nn
-from hydra.utils import instantiate
 from tensordict import NestedKey
 from tensordict.nn import (
     InteractionType,
@@ -88,6 +87,7 @@ def _make_env(cfg, device, from_pixels=False):
             cfg.env.task,
             from_pixels=cfg.env.from_pixels or from_pixels,
             pixels_only=cfg.env.from_pixels,
+            device=device,
         )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
@@ -98,7 +98,6 @@ def _make_env(cfg, device, from_pixels=False):
     env = env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
     )
-    assert env is not None
     return env
 
 
@@ -129,7 +128,7 @@ def transform_env(cfg, env):
 
 def make_environments(cfg, parallel_envs=1, logger=None):
     """Make environments for training and evaluation."""
-    func = functools.partial(_make_env, cfg=cfg, device=cfg.env.device)
+    func = functools.partial(_make_env, cfg=cfg, device=_default_device(cfg.env.device))
     train_env = ParallelEnv(
         parallel_envs,
         EnvCreator(func),
@@ -138,7 +137,10 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     train_env = transform_env(cfg, train_env)
     train_env.set_seed(cfg.env.seed)
     func = functools.partial(
-        _make_env, cfg=cfg, device=cfg.env.device, from_pixels=cfg.logger.video
+        _make_env,
+        cfg=cfg,
+        device=_default_device(cfg.env.device),
+        from_pixels=cfg.logger.video,
     )
     eval_env = ParallelEnv(
         1,
@@ -332,7 +334,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        policy_device=instantiate(cfg.collector.device),
+        policy_device=_default_device(cfg.collector.device),
         env_device=train_env.device,
         storing_device="cpu",
     )
@@ -535,7 +537,7 @@ def _dreamer_make_actor_real(
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys=[action_key],
-                default_interaction_type=InteractionType.MODE,
+                default_interaction_type=InteractionType.DETERMINISTIC,
                 distribution_class=TanhNormal,
                 distribution_kwargs={"tanh_loc": True},
                 spec=CompositeSpec(

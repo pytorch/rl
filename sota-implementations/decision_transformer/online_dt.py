@@ -126,7 +126,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         }
 
         # Evaluation
-        with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
+        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
             inference_policy.eval()
             if i % pretrain_log_interval == 0:
                 eval_td = test_env.rollout(

@@ -221,11 +221,11 @@ class VideoRecorder(ObservationTransform):
                 observation_trsf = make_grid(
                     obs_flat, nrow=int(math.ceil(math.sqrt(obs_flat.shape[0])))
                 )
-                self.obs.append(observation_trsf.to(torch.uint8))
+                self.obs.append(observation_trsf.to("cpu", torch.uint8))
             elif observation_trsf.ndimension() >= 4:
-                self.obs.extend(observation_trsf.to(torch.uint8).flatten(0, -4))
+                self.obs.extend(observation_trsf.to("cpu", torch.uint8).flatten(0, -4))
             else:
-                self.obs.append(observation_trsf.to(torch.uint8))
+                self.obs.append(observation_trsf.to("cpu", torch.uint8))
         return observation
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
