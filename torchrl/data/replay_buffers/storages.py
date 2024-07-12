@@ -808,10 +808,10 @@ class TensorStorage(Storage):
 
     def contains(self, item):
         if isinstance(item, int):
-            if index < 0:
-                index += self._len_along_dim0
+            if item < 0:
+                item += self._len_along_dim0
 
-            return 0 <= index < self._len_along_dim0
+            return 0 <= item < self._len_along_dim0
         if isinstance(item, torch.Tensor):
 
             def _is_valid_index(idx):
@@ -1300,10 +1300,14 @@ def _collate_list_tensordict(x):
     return out
 
 
-def _stack_anything(x):
-    if is_tensor_collection(x[0]):
-        return LazyStackedTensorDict.maybe_dense_stack(x)
-    return torch.stack(x)
+def _stack_anything(data):
+    if is_tensor_collection(data[0]):
+        return LazyStackedTensorDict.maybe_dense_stack(data)
+    return torch.utils._pytree.tree_map(
+        lambda *x: torch.stack(x),
+        *data,
+        is_leaf=lambda x: isinstance(x, torch.Tensor) or is_tensor_collection(x),
+    )
 
 
 def _collate_id(x):
@@ -1312,10 +1316,7 @@ def _collate_id(x):
 
 def _get_default_collate(storage, _is_tensordict=False):
     if isinstance(storage, ListStorage):
-        if _is_tensordict:
-            return _collate_list_tensordict
-        else:
-            return torch.utils.data._utils.collate.default_collate
+        return _stack_anything
     elif isinstance(storage, TensorStorage):
         return _collate_id
     else:

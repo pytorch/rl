@@ -85,16 +85,20 @@ class SipHash(torch.nn.Module):
 
     A hash function module based on SipHash implementation in python.
 
-    .. warning:: This module relies on the builtin ``hash`` function.
-        To get reproducible results across runs, the ``PYTHONHASHSEED`` environment
-        variable must be set before the code is run (changing this value during code
-        execution is without effect).
+    Args:
+        as_tensor (bool, optional): if ``True``, the bytes will be turned into integers
+            through the builtin ``hash`` function and mapped to a tensor. Default: ``True``.
+
+        .. warning:: This module relies on the builtin ``hash`` function.
+            To get reproducible results across runs, the ``PYTHONHASHSEED`` environment
+            variable must be set before the code is run (changing this value during code
+            execution is without effect).
 
     Examples:
         >>> # Assuming we set PYTHONHASHSEED=0 prior to running this code
         >>> a = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]])
         >>> b = a.clone()
-        >>> hash_module = SipHash()
+        >>> hash_module = SipHash(as_tensor=True)
         >>> hash_a = hash_module(a)
         >>> hash_a
         tensor([-4669941682990263259, -3778166555168484291, -9122128731510687521])
@@ -102,30 +106,41 @@ class SipHash(torch.nn.Module):
         >>> assert (hash_a == hash_b).all()
     """
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        hash_values = []
-        for x_i in x.detach().cpu().numpy():
-            hash_value = hash(x_i.tobytes())
-            hash_values.append(hash_value)
+    def __init__(self, as_tensor: bool = True):
+        super().__init__()
+        self.as_tensor = as_tensor
 
-        return torch.tensor(hash_values, dtype=torch.int64)
+    def forward(self, x: torch.Tensor) -> torch.Tensor | List[bytes]:
+        hash_values = []
+        if x.dtype in (torch.bfloat16,):
+            x = x.to(torch.float16)
+        for x_i in x.detach().cpu().numpy():
+            hash_value = x_i.tobytes()
+            hash_values.append(hash_value)
+        if not self.as_tensor:
+            return hash_value
+        return torch.tensor([hash(x) for x in hash_values], dtype=torch.int64)
 
 
 class RandomProjectionHash(SipHash):
-    """A module that combines random projections with SipHash to get a low-dimensional tensor, easier to embed through SipHash.
+    """A module that combines random projections with SipHash to get a low-dimensional tensor, easier to embed through :class:`~.SipHash`.
 
     This module requires sklearn to be installed.
 
     Keyword Args:
         n_components (int, optional): the low-dimensional number of components of the projections.
             Defaults to 16.
-        projection_type (str, optional): the projection type to use.
-            Must be one of ``"gaussian"`` or ``"sparse_random"``. Defaults to "gaussian".
         dtype_cast (torch.dtype, optional): the dtype to cast the projection to.
-            Defaults to ``torch.float16``.
-        lazy (bool, optional): if ``True``, the random projection is fit on the first batch of data
-            received. Defaults to ``False``.
+            Defaults to ``torch.bfloat16``.
+        as_tensor (bool, optional): if ``True``, the bytes will be turned into integers
+            through the builtin ``hash`` function and mapped to a tensor. Default: ``True``.
 
+        .. warning:: This module relies on the builtin ``hash`` function.
+            To get reproducible results across runs, the ``PYTHONHASHSEED`` environment
+            variable must be set before the code is run (changing this value during code
+            execution is without effect).
+
+        init_method: TODO
     """
 
     _N_COMPONENTS_DEFAULT = 16
@@ -134,47 +149,43 @@ class RandomProjectionHash(SipHash):
         self,
         *,
         n_components: int | None = None,
-        projection_type: str = "sparse_random",
-        dtype_cast=torch.float16,
-        lazy: bool = False,
+        dtype_cast=torch.bfloat16,
+        as_tensor: bool = True,
+        init_method: Callable[[torch.Tensor], torch.Tensor | None] | None = None,
         **kwargs,
     ):
         if n_components is None:
             n_components = self._N_COMPONENTS_DEFAULT
 
-        super().__init__()
-        from sklearn.random_projection import (
-            GaussianRandomProjection,
-            SparseRandomProjection,
-        )
+        super().__init__(as_tensor=as_tensor)
+        self.register_buffer("_n_components", torch.as_tensor(n_components))
 
-        self.lazy = lazy
-        self._init = not lazy
+        self._init = False
+        if init_method is None:
+            init_method = torch.nn.init.normal_
+        self.init_method = init_method
 
         self.dtype_cast = dtype_cast
-        if projection_type.lower() == "gaussian":
-            self.transform = GaussianRandomProjection(
-                n_components=n_components, **kwargs
-            )
-        elif projection_type.lower() in ("sparse_random", "sparse-random"):
-            self.transform = SparseRandomProjection(n_components=n_components, **kwargs)
-        else:
-            raise ValueError(
-                f"Only 'gaussian' and 'sparse_random' projections are supported. Got projection_type={projection_type}."
-            )
+        self.register_buffer("transform", torch.nn.UninitializedBuffer())
+
+    @property
+    def n_components(self):
+        return self._n_components.item()
 
     def fit(self, x):
         """Fits the random projection to the input data."""
-        self.transform.fit(x)
+        self.transform.materialize(
+            (x.shape[-1], self.n_components), dtype=self.dtype_cast, device=x.device
+        )
+        self.init_method(self.transform)
         self._init = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.lazy and not self._init:
+        if not self._init:
             self.fit(x)
         elif not self._init:
             raise RuntimeError(
                 f"The {type(self).__name__} has not been initialized. Call fit before calling this method."
             )
-        x = self.transform.transform(x)
-        x = torch.as_tensor(x, dtype=self.dtype_cast)
+        x = x.to(self.dtype_cast) @ self.transform
         return super().forward(x)

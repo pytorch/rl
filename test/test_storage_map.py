@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import importlib.util
-from typing import cast
 
 import pytest
 
@@ -12,7 +11,13 @@ import torch
 
 from tensordict import TensorDict
 from torchrl.data import LazyTensorStorage, ListStorage
-from torchrl.data.map import BinaryToDecimal, QueryModule, SipHash, TensorDictMap
+from torchrl.data.map import (
+    BinaryToDecimal,
+    QueryModule,
+    RandomProjectionHash,
+    SipHash,
+    TensorDictMap,
+)
 from torchrl.envs import GymEnv
 
 _has_gym = importlib.util.find_spec("gymnasium", None) or importlib.util.find_spec(
@@ -60,13 +65,29 @@ def test_binary_to_decimal():
     assert (decimal == torch.Tensor([3, 2])).all()
 
 
-def test_sip_hash():
-    a = torch.rand((3, 2))
-    b = a.clone()
-    hash_module = SipHash()
-    hash_a = cast(torch.Tensor, hash_module(a))
-    hash_b = cast(torch.Tensor, hash_module(b))
-    assert (hash_a == hash_b).all()
+class TestHash:
+    def test_sip_hash(self):
+        a = torch.rand((3, 2))
+        b = a.clone()
+        hash_module = SipHash(as_tensor=True)
+        hash_a = torch.tensor(hash_module(a))
+        hash_b = torch.tensor(hash_module(b))
+        assert (hash_a == hash_b).all()
+
+    @pytest.mark.parametrize("n_components", [None, 14])
+    @pytest.mark.parametrize("scale", [0.001, 0.01, 1, 100, 1000])
+    def test_randomprojection_hash(self, n_components, scale):
+        torch.manual_seed(0)
+        r = RandomProjectionHash(n_components=n_components)
+        x = torch.randn(10000, 100).mul_(scale)
+        y = r(x)
+        if n_components is None:
+            assert r.n_components == r._N_COMPONENTS_DEFAULT
+        else:
+            assert r.n_components == n_components
+
+        assert y.shape == (10000,)
+        assert y.unique().numel() == y.numel()
 
 
 def test_query():
@@ -104,7 +125,7 @@ def test_query_module():
 
     tensor_dict_storage = TensorDictMap(
         query_module=query_module,
-        key_to_storage={"index": embedding_storage},
+        storage=embedding_storage,
     )
 
     index = TensorDict(
@@ -140,7 +161,7 @@ def test_storage():
 
     tensor_dict_storage = TensorDictMap(
         query_module=query_module,
-        key_to_storage={"index": embedding_storage},
+        storage=embedding_storage,
     )
 
     index = TensorDict(
@@ -162,7 +183,7 @@ def test_storage():
     new_index["key3"] = torch.Tensor([[4], [5], [6], [7]])
     retrieve_value = tensor_dict_storage[new_index]
 
-    assert cast(torch.Tensor, retrieve_value["index"] == value["index"]).all()
+    assert (retrieve_value["index"] == value["index"]).all()
 
 
 @pytest.mark.skipif(not _has_gym, reason="gym not installed")
