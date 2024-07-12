@@ -51,7 +51,7 @@ jobs:
   tests-gpu:
     strategy:
       matrix:
-        python_version: ["3.12"]
+        python_version: ["3.11"]
         cuda_arch_version: ["12.1"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
