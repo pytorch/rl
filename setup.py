@@ -204,6 +204,7 @@ def _main(argv):
         ],
         "dm_control": ["dm_control"],
         "gym_continuous": ["gymnasium", "mujoco"],
+        "open_spiel": ["open_spiel"],
         "rendering": ["moviepy"],
         "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
         "utils": [

@@ -106,6 +106,7 @@ from torchrl.envs.libs.gym import (
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
+from torchrl.envs.libs.open_spiel import _has_open_spiel, OpenSpielEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
@@ -182,7 +183,6 @@ if _has_dmc:
 
 if _has_vmas:
     import vmas
-
 
 if _has_envpool:
     import envpool
@@ -3858,6 +3858,14 @@ class TestMeltingpot:
         image_from_env = env.get_rgb_image()
         assert torch.equal(rollout_last_image, image_from_env)
         assert not torch.equal(rollout_penultimate_image, image_from_env)
+
+
+@pytest.mark.skipif(not _has_open_spiel, reason="OpenSpiel not found")
+class TestOpenSpiel:
+    @pytest.mark.parametrize("game", ["tic_tac_toe"])
+    def test_spec(self, game: str):
+        env = OpenSpielEnv(game=game)
+        check_env_specs(env)
 
 
 if __name__ == "__main__":
