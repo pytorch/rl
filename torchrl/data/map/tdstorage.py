@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import abc
 import functools
@@ -9,10 +10,15 @@ from abc import abstractmethod
 from typing import Any, Callable, Dict, Generic, List, TypeVar
 
 import torch
-from tensordict import NestedKey, TensorDictBase
+from tensordict import is_tensor_collection, NestedKey, TensorDictBase
 from tensordict.nn.common import TensorDictModuleBase
-from torchrl.data.map import QueryModule, RandomProjectionHash
-from torchrl.data.replay_buffers.storages import _get_default_collate, LazyTensorStorage
+from torchrl.data.map.hash import RandomProjectionHash, SipHash
+from torchrl.data.map.query import QueryModule
+from torchrl.data.replay_buffers.storages import (
+    _get_default_collate,
+    LazyTensorStorage,
+    TensorStorage,
+)
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -66,7 +72,7 @@ class TensorDictMap(
         collate_fn (callable, optional): a function to use to collate samples from the
             storage. Defaults to a custom value for each known storage type (stack for
             :class:`~torchrl.data.ListStorage`, identity for :class:`~torchrl.data.TensorStorage`
-             subtypes and others).
+            subtypes and others).
 
     Examples:
         >>> import torch
@@ -113,10 +119,15 @@ class TensorDictMap(
         query_module: QueryModule,
         storage: Dict[NestedKey, TensorMap[torch.Tensor, torch.Tensor]],
         collate_fn: Callable[[Any], Any] | None = None,
+        out_keys: List[NestedKey] | None = None,
+        write_fn: Callable[[Any, Any], Any] | None = None,
     ):
-        self.in_keys = query_module.in_keys
-
         super().__init__()
+
+        self.in_keys = query_module.in_keys
+        if out_keys is not None:
+            self.out_keys = out_keys
+            assert not self._has_lazy_out_keys()
 
         self.query_module = query_module
         self.index_key = query_module.index_key
@@ -125,18 +136,19 @@ class TensorDictMap(
         if collate_fn is None:
             collate_fn = _get_default_collate(self.storage)
         self.collate_fn = collate_fn
+        self.write_fn = write_fn
 
     @property
     def out_keys(self) -> List[NestedKey]:
-        out_keys = self.__dict__.get("_out_keys")
+        out_keys = self.__dict__.get("_out_keys_and_lazy")
         if out_keys is not None:
             return out_keys[0]
         storage = self.storage
-        if isinstance(storage, TensorDictStorage) and is_tensor_collection(
+        if isinstance(storage, TensorStorage) and is_tensor_collection(
             storage._storage
         ):
             out_keys = list(storage._storage.keys(True, True))
-            self._out_keys = (out_keys, True)
+            self._out_keys_and_lazy = (out_keys, True)
             return self.out_keys
         raise AttributeError(
             f"No out-keys found in the storage of type {type(storage)}"
@@ -144,10 +156,13 @@ class TensorDictMap(
 
     @out_keys.setter
     def out_keys(self, value):
-        self._out_keys = (value, False)
+        self._out_keys_and_lazy = (value, False)
 
     def _has_lazy_out_keys(self):
-        return self._out_keys[1]
+        _out_keys_and_lazy = self.__dict__.get("_out_keys_and_lazy")
+        if _out_keys_and_lazy is None:
+            return True
+        return self._out_keys_and_lazy[1]
 
     @classmethod
     def from_tensordict_pair(
@@ -156,8 +171,10 @@ class TensorDictMap(
         dest,
         in_keys: List[NestedKey],
         out_keys: List[NestedKey] | None = None,
-        storage_constructor: type = functools.partial(LazyTensorStorage, 1000),
+        storage_constructor: type | None = None,
         hash_module: Callable | None = None,
+        collate_fn: Callable[[Any], Any] | None = None,
+        write_fn: Callable[[Any, Any], Any] | None = None,
     ):
         """Creates a new TensorDictStorage from a pair of tensordicts (source and dest) using pre-defined rules of thumb.
 
@@ -174,6 +191,10 @@ class TensorDictMap(
             hash_module (Callable, optional): a hash function to use in the :class:`~tensordict.nn.storage.QueryModule`.
                 Defaults to :class:`SipHash` for low-dimensional inputs, and :class:`~tensordict.nn.storage.RandomProjectionHash`
                 for larger inputs.
+            collate_fn (callable, optional): a function to use to collate samples from the
+                storage. Defaults to a custom value for each known storage type (stack for
+                :class:`~torchrl.data.ListStorage`, identity for :class:`~torchrl.data.TensorStorage`
+                subtypes and others).
 
         Examples:
             >>> # The following example requires torchrl and gymnasium to be installed
@@ -209,17 +230,27 @@ class TensorDictMap(
             # Count the features, if they're greater than RandomProjectionHash._N_COMPONENTS_DEFAULT
             #  use that module to project them to that dimensionality.
             n_feat = 0
+            hash_module = []
             for in_key in in_keys:
-                n_feat += source[in_key].shape[-1]
-            if n_feat > RandomProjectionHash._N_COMPONENTS_DEFAULT:
-                hash_module = RandomProjectionHash()
+                n_feat = source[in_key].shape[-1]
+                if n_feat > RandomProjectionHash._N_COMPONENTS_DEFAULT:
+                    _hash_module = RandomProjectionHash()
+                else:
+                    _hash_module = SipHash()
+                hash_module.append(_hash_module)
         query_module = QueryModule(in_keys, hash_module=hash_module)
 
         # Build key_to_storage
+        if storage_constructor is None:
+            storage_constructor = functools.partial(LazyTensorStorage, 1000)
         storage = storage_constructor()
-        result = cls(query_module=query_module, storage=storage)
-        if out_keys is not None:
-            result.out_keys = out_keys
+        result = cls(
+            query_module=query_module,
+            storage=storage,
+            collate_fn=collate_fn,
+            out_keys=out_keys,
+            write_fn=write_fn,
+        )
         return result
 
     def clear(self) -> None:
@@ -259,15 +290,26 @@ class TensorDictMap(
         return res
 
     def __setitem__(self, item: TensorDictBase, value: TensorDictBase):
-        if not self._has_lazy_out_keys:
+        if not self._has_lazy_out_keys():
             # TODO: make this work with pytrees and avoid calling select if keys match
-            value = value.select(self.out_keys)
+            value = value.select(*self.out_keys)
+        if self.write_fn is not None:
+            modifiable = self.contains(item)
+            if modifiable.any():
+                to_modify = (value[modifiable], self[item[modifiable]])
+                v1 = self.write_fn(*to_modify)
+                result = value.empty()
+                result[modifiable] = v1
+                result[~modifiable] = self.write_fn(value[~modifiable])
+                value = result
+            else:
+                value = self.write_fn(value)
         item, value = self._maybe_add_batch(item, value)
         index = self._to_index(item, extend=True)
         self.storage.set(index, value)
 
     def __len__(self):
-        return len(next(iter(self.storage.values())))
+        return len(self.storage)
 
     def contains(self, item: TensorDictBase) -> torch.Tensor:
         item, _ = self._maybe_add_batch(item, None)

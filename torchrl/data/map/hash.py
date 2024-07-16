@@ -3,19 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import abc
-from abc import abstractmethod
-from typing import Callable, Dict, Generic, List, TypeVar
+from typing import Callable, List
 
 import torch
-
-import torch.nn as nn
-
-from tensordict import NestedKey, TensorDict, TensorDictBase
-from tensordict.nn.common import TensorDictModuleBase
-
-K = TypeVar("K")
-V = TypeVar("V")
 
 
 class BinaryToDecimal(torch.nn.Module):
@@ -119,7 +109,8 @@ class SipHash(torch.nn.Module):
             hash_values.append(hash_value)
         if not self.as_tensor:
             return hash_value
-        return torch.tensor([hash(x) for x in hash_values], dtype=torch.int64)
+        result = torch.tensor([hash(x) for x in hash_values], dtype=torch.int64)
+        return result
 
 
 class RandomProjectionHash(SipHash):

@@ -440,6 +440,110 @@ compress the data and save some more space.
   the batch-size of the storage, these checkpointers will fail. For example, a done state with shape ``torch.Size([3, 4, 5])``
   within a storage of shape ``torch.Size([3, 4])`` is not allowed.
 
+  Here is a concrete example of how an H5DB checkpointer could be used in practice:
+
+    >>> from torchrl.data import ReplayBuffer, H5StorageCheckpointer, LazyMemmapStorage
+    >>> from torchrl.collectors import SyncDataCollector
+    >>> from torchrl.envs import GymEnv, SerialEnv
+    >>> import torch
+    >>> env = SerialEnv(3, lambda: GymEnv("CartPole-v1", device=None))
+    >>> env.set_seed(0)
+    >>> torch.manual_seed(0)
+    >>> collector = SyncDataCollector(
+    >>>     env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+    >>> )
+    >>> rb = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+    >>> rb_test = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+    >>> rb.storage.checkpointer = H5StorageCheckpointer()
+    >>> rb_test.data_storage.checkpointer = H5StorageCheckpointer()
+    >>> for i, data in enumerate(collector):
+    ...     rb.extend(data)
+    ...     assert rb._storage.max_size == 102
+    ...     rb.dumps(path_to_save_dir)
+    ...     rb_test.loads(path_to_save_dir)
+    ...     assert_allclose_td(rb_test[:], rb[:])
+
+
+  Whenever saving data using
+
+  Here is a concrete example of how an H5DB checkpointer could be used in practice:
+
+    >>> from torchrl.data import ReplayBuffer, H5StorageCheckpointer, LazyMemmapStorage
+    >>> from torchrl.collectors import SyncDataCollector
+    >>> from torchrl.envs import GymEnv, SerialEnv
+    >>> import torch
+    >>> env = SerialEnv(3, lambda: GymEnv("CartPole-v1", device=None))
+    >>> env.set_seed(0)
+    >>> torch.manual_seed(0)
+    >>> collector = SyncDataCollector(
+    >>>     env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+    >>> )
+    >>> rb = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+    >>> rb_test = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+    >>> rb.storage.checkpointer = H5StorageCheckpointer()
+    >>> rb_test.data_storage.checkpointer = H5StorageCheckpointer()
+    >>> for i, data in enumerate(collector):
+    ...     rb.extend(data)
+    ...     assert rb._storage.max_size == 102
+    ...     rb.dumps(path_to_save_dir)
+    ...     rb_test.loads(path_to_save_dir)
+    ...     assert_allclose_td(rb_test[:], rb[:])
+
+
+  Whenever saving data using
+
+  Here is a concrete example of how an H5DB checkpointer could be used in practice:
+
+    >>> from torchrl.data import ReplayBuffer, H5StorageCheckpointer, LazyMemmapStorage
+    >>> from torchrl.collectors import SyncDataCollector
+    >>> from torchrl.envs import GymEnv, SerialEnv
+    >>> import torch
+    >>> env = SerialEnv(3, lambda: GymEnv("CartPole-v1", device=None))
+    >>> env.set_seed(0)
+    >>> torch.manual_seed(0)
+    >>> collector = SyncDataCollector(
+    >>>     env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+    >>> )
+    >>> rb = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+    >>> rb_test = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+    >>> rb.data_storage.checkpointer = H5StorageCheckpointer()
+    >>> rb_test.data_storage.checkpointer = H5StorageCheckpointer()
+    >>> for i, data in enumerate(collector):
+    ...     rb.extend(data)
+    ...     assert rb._storage.max_size == 102
+    ...     rb.dumps(path_to_save_dir)
+    ...     rb_test.loads(path_to_save_dir)
+    ...     assert_allclose_td(rb_test[:], rb[:])
+
+
+  Whenever saving data using
+
+  Here is a concrete example of how an H5DB checkpointer could be used in practice:
+
+    >>> from torchrl.data import ReplayBuffer, H5StorageCheckpointer, LazyMemmapStorage
+    >>> from torchrl.collectors import SyncDataCollector
+    >>> from torchrl.envs import GymEnv, SerialEnv
+    >>> import torch
+    >>> env = SerialEnv(3, lambda: GymEnv("CartPole-v1", device=None))
+    >>> env.set_seed(0)
+    >>> torch.manual_seed(0)
+    >>> collector = SyncDataCollector(
+    >>>     env, policy=env.rand_step, total_frames=200, frames_per_batch=22
+    >>> )
+    >>> rb = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+    >>> rb_test = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))
+    >>> rb.data_storage.checkpointer = H5StorageCheckpointer()
+    >>> rb_test.data_storage.checkpointer = H5StorageCheckpointer()
+    >>> for i, data in enumerate(collector):
+    ...     rb.extend(data)
+    ...     assert rb._storage.max_size == 102
+    ...     rb.dumps(path_to_save_dir)
+    ...     rb_test.loads(path_to_save_dir)
+    ...     assert_allclose_td(rb_test[:], rb[:])
+
+
+  Whenever saving data using
+
 Here is a concrete example of how an H5DB checkpointer could be used in practice:
 
   >>> from torchrl.data import ReplayBuffer, H5StorageCheckpointer, LazyMemmapStorage

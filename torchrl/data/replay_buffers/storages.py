@@ -243,7 +243,7 @@ class ListStorage(Storage):
                     np.ndarray,
                 ),
             ):
-                for _cursor, _data in zip(cursor, data):
+                for _cursor, _data in zip(cursor, data, strict=True):
                     self.set(_cursor, _data, set_cursor=set_cursor)
             else:
                 raise TypeError(

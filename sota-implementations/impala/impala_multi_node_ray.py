@@ -75,7 +75,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         "log_to_driver": cfg.ray_init_config.log_to_driver,
         "namespace": cfg.ray_init_config.namespace,
         "runtime_env": cfg.ray_init_config.runtime_env,
-        "storage": cfg.ray_init_config.storage,
+        "storage": cfg.ray_init_config.data_storage,
     }
     remote_config = {
         "num_cpus": cfg.remote_worker_resources.num_cpus,

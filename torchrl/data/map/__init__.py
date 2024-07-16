@@ -4,5 +4,5 @@
 # LICENSE file in the root directory of this source tree.
 
 from .hash import BinaryToDecimal, RandomProjectionHash, SipHash
-from .query import QueryModule
+from .query import HashToInt, QueryModule
 from .tdstorage import TensorDictMap, TensorMap
