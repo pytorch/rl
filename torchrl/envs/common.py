@@ -1515,7 +1515,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             shape = (*leading_dim, *item.shape)
             if val is not None:
                 if val.shape != shape:
-                    data.set(key, val.reshape(shape))
+                    val = val.reshape(shape)
+                    data.set(key, val)
                 vals[key] = val
 
         if len(vals) < i + 1:
@@ -1535,6 +1536,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                             "Cannot infer the value of terminated when only done and truncated are present."
                         )
                     data.set("terminated", val)
+                    data_keys.add("terminated")
                 elif (
                     key == "terminated"
                     and val is not None
@@ -1542,11 +1544,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     and "done" not in data_keys
                 ):
                     if "truncated" in data_keys:
-                        done = val | data.get("truncated")
-                        data.set("done", done)
-                    else:
-                        data.set("done", val)
-                elif val is None:
+                        val = val | data.get("truncated")
+                    data.set("done", val)
+                    data_keys.add("done")
+                elif val is None and key not in data_keys:
                     # we must keep this here: we only want to fill with 0s if we're sure
                     # done should not be copied to terminated or terminated to done
                     # in this case, just fill with 0s
