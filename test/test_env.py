@@ -311,6 +311,62 @@ def test_rollout_predictability(device):
     ).all()
 
 
+# Check that the "terminated" key is filled in automatically if only the "done"
+# key is provided in `_step`.
+def test_done_key_completion_done():
+    class DoneEnv(CountingEnv):
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            self.count += 1
+            tensordict = TensorDict(
+                source={
+                    "observation": self.count.clone(),
+                    "done": self.count > self.max_steps,
+                    "reward": torch.zeros_like(self.count, dtype=torch.float),
+                },
+                batch_size=self.batch_size,
+                device=self.device,
+            )
+            return tensordict
+
+    env = DoneEnv(max_steps=torch.tensor([[0], [1]]), batch_size=(2,))
+    td = env.reset()
+    env.rand_action(td)
+    td = env.step(td)
+    assert torch.equal(td[("next", "done")], torch.tensor([[True], [False]]))
+    assert torch.equal(td[("next", "terminated")], torch.tensor([[True], [False]]))
+
+
+# Check that the "done" key is filled in automatically if only the "terminated"
+# key is provided in `_step`.
+def test_done_key_completion_terminated():
+    class TerminatedEnv(CountingEnv):
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            self.count += 1
+            tensordict = TensorDict(
+                source={
+                    "observation": self.count.clone(),
+                    "terminated": self.count > self.max_steps,
+                    "reward": torch.zeros_like(self.count, dtype=torch.float),
+                },
+                batch_size=self.batch_size,
+                device=self.device,
+            )
+            return tensordict
+
+    env = TerminatedEnv(max_steps=torch.tensor([[0], [1]]), batch_size=(2,))
+    td = env.reset()
+    env.rand_action(td)
+    td = env.step(td)
+    assert torch.equal(td[("next", "done")], torch.tensor([[True], [False]]))
+    assert torch.equal(td[("next", "terminated")], torch.tensor([[True], [False]]))
+
+
 @pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
 @pytest.mark.parametrize("frame_skip", [1])
