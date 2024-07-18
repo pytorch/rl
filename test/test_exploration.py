@@ -44,6 +44,7 @@ from torchrl.modules.tensordict_module.actors import (
 )
 from torchrl.modules.tensordict_module.exploration import (
     _OrnsteinUhlenbeckProcess,
+    AdditiveGaussianModule,
     AdditiveGaussianWrapper,
     EGreedyModule,
     EGreedyWrapper,
@@ -392,39 +393,51 @@ class TestOrnsteinUhlenbeckProcessWrapper:
 @pytest.mark.parametrize("device", get_default_devices())
 class TestAdditiveGaussian:
     @pytest.mark.parametrize("spec_origin", ["spec", "policy", None])
+    @pytest.mark.parametrize("interface", ["module", "wrapper"])
     def test_additivegaussian_sd(
         self,
         device,
         spec_origin,
+        interface,
         d_obs=4,
         d_act=6,
         batch=32,
         n_steps=100,
         seed=0,
     ):
+        if interface == "module" and spec_origin != "spec":
+            pytest.skip("module raises an error if given spec=None")
+
         torch.manual_seed(seed)
-        net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
         action_spec = BoundedTensorSpec(
             -torch.ones(d_act, device=device),
             torch.ones(d_act, device=device),
             (d_act,),
             device=device,
         )
-        module = SafeModule(
-            net,
-            in_keys=["observation"],
-            out_keys=["loc", "scale"],
-            spec=None,
-        )
-        policy = ProbabilisticActor(
-            spec=CompositeSpec(action=action_spec) if spec_origin is not None else None,
-            module=module,
-            in_keys=["loc", "scale"],
-            distribution_class=TanhNormal,
-            default_interaction_type=InteractionType.RANDOM,
-        ).to(device)
-        given_spec = action_spec if spec_origin == "spec" else None
-        exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec).to(device)
+        if interface == "module":
+            exploratory_policy = AdditiveGaussianModule(action_spec).to(device)
+        else:
+            net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
+            module = SafeModule(
+                net,
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+                spec=None,
+            )
+            policy = ProbabilisticActor(
+                spec=CompositeSpec(action=action_spec)
+                if spec_origin is not None
+                else None,
+                module=module,
+                in_keys=["loc", "scale"],
+                distribution_class=TanhNormal,
+                default_interaction_type=InteractionType.RANDOM,
+            ).to(device)
+            given_spec = action_spec if spec_origin == "spec" else None
+            exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec).to(
+                device
+            )
         if spec_origin is not None:
             sigma_init = (
                 action_spec.project(
@@ -442,9 +455,14 @@ class TestAdditiveGaussian:
             sigma_init = exploratory_policy.sigma_init
             sigma_end = exploratory_policy.sigma_end
         if spec_origin is None:
+            class_name = (
+                "AdditiveGaussianModule"
+                if interface == "module"
+                else "AdditiveGaussianWrapper"
+            )
             with pytest.raises(
                 RuntimeError,
-                match="the action spec must be provided to AdditiveGaussianWrapper",
+                match=f"the action spec must be provided to {class_name}",
             ):
                 exploratory_policy._add_noise(action_spec.rand((100000,)).zero_())
             return
@@ -466,9 +484,21 @@ class TestAdditiveGaussian:
         assert abs(noisy_action.std() - sigma_end) < 1e-1
 
     @pytest.mark.parametrize("spec_origin", ["spec", "policy", None])
-    def test_additivegaussian_wrapper(
-        self, device, spec_origin, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
+    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    def test_additivegaussian(
+        self,
+        device,
+        spec_origin,
+        interface,
+        d_obs=4,
+        d_act=6,
+        batch=32,
+        n_steps=100,
+        seed=0,
     ):
+        if interface == "module" and spec_origin != "spec":
+            pytest.skip("module raises an error if given spec=None")
+
         torch.manual_seed(seed)
         net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
@@ -486,9 +516,14 @@ class TestAdditiveGaussian:
             default_interaction_type=InteractionType.RANDOM,
         ).to(device)
         given_spec = action_spec if spec_origin == "spec" else None
-        exploratory_policy = AdditiveGaussianWrapper(
-            policy, spec=given_spec, safe=False
-        ).to(device)
+        if interface == "module":
+            exploratory_policy = TensorDictSequential(
+                policy, AdditiveGaussianModule(spec=given_spec).to(device)
+            )
+        else:
+            exploratory_policy = AdditiveGaussianWrapper(
+                policy, spec=given_spec, safe=False
+            ).to(device)
 
         tensordict = TensorDict(
             batch_size=[batch],
@@ -513,7 +548,8 @@ class TestAdditiveGaussian:
                 assert action_spec.is_in(out.get("action"))
 
     @pytest.mark.parametrize("parallel_spec", [True, False])
-    def test_collector(self, device, parallel_spec, seed=0):
+    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    def test_collector(self, device, parallel_spec, interface, seed=0):
         torch.manual_seed(seed)
         env = SerialEnv(
             2,
@@ -539,7 +575,12 @@ class TestAdditiveGaussian:
             default_interaction_type=InteractionType.RANDOM,
             spec=action_spec,
         ).to(device)
-        exploratory_policy = AdditiveGaussianWrapper(policy, safe=False)
+        if interface == "module":
+            exploratory_policy = TensorDictSequential(
+                policy, AdditiveGaussianModule(spec=action_spec).to(device)
+            )
+        else:
+            exploratory_policy = AdditiveGaussianWrapper(policy, safe=False)
         exploratory_policy(env.reset())
         collector = SyncDataCollector(
             create_env_fn=env,
@@ -552,6 +593,10 @@ class TestAdditiveGaussian:
             # check that we can run the policy
             pass
         return
+
+    def test_no_spec_error(self, device):
+        with pytest.raises(RuntimeError, match="spec cannot be None."):
+            AdditiveGaussianModule(spec=None).to(device)
 
 
 @pytest.mark.parametrize("state_dim", [7])

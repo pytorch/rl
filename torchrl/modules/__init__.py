@@ -51,6 +51,7 @@ from .tensordict_module import (
     ActorCriticOperator,
     ActorCriticWrapper,
     ActorValueOperator,
+    AdditiveGaussianModule,
     AdditiveGaussianWrapper,
     DecisionTransformerInferenceWrapper,
     DistributionalQValueActor,
