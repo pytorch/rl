@@ -21,6 +21,7 @@ class HashToInt(nn.Module):
     """Converts a hash value to an integer that can be used for indexing a contiguous storage."""
 
     def __init__(self):
+        super().__init__()
         self._index_to_index = {}
 
     def __call__(self, key: torch.Tensor, extend: bool = False) -> torch.Tensor:
@@ -61,10 +62,12 @@ class QueryModule(TensorDictModuleBase):
     Args:
         in_keys (list of NestedKeys): keys of the input tensordict that
             will be used to generate the hash value.
-        index_key (NestedKey): the output key where the hash value will be written.
+        index_key (NestedKey): the output key where the index value will be written.
             Defaults to ``"_index"``.
 
     Keyword Args:
+        hash_key (NestedKey): the output key where the hash value will be written.
+            Defaults to ``"_hash"``.
         hash_module (Callable[[Any], int] or a list of these, optional): a hash
             module similar to :class:`~tensordict.nn.SipHash` (default).
             If a list of callables is provided, its length must equate the number of in_keys.
@@ -107,6 +110,7 @@ class QueryModule(TensorDictModuleBase):
         self,
         in_keys: List[NestedKey],
         index_key: NestedKey = "_index",
+        hash_key: NestedKey = "_hash",
         *,
         hash_module: Callable[[Any], int] | List[Callable[[Any], int]] | None = None,
         hash_to_int: Callable[[int], int] | None = None,
@@ -119,8 +123,9 @@ class QueryModule(TensorDictModuleBase):
 
         super().__init__()
         in_keys = self.in_keys = in_keys
-        self.out_keys = [index_key]
+        self.out_keys = [index_key, hash_key]
         index_key = self.out_keys[0]
+        self.hash_key = self.out_keys[1]
 
         if aggregator is not None and len(self.in_keys) == 1:
             torchrl_logger.warn(
@@ -160,7 +165,10 @@ class QueryModule(TensorDictModuleBase):
         self.clone = clone
 
     def forward(
-        self, tensordict: TensorDictBase, extend: bool = True
+        self,
+        tensordict: TensorDictBase,
+        extend: bool = True,
+        write_hash: bool = True,
     ) -> TensorDictBase:
         hash_values = []
 
@@ -174,6 +182,7 @@ class QueryModule(TensorDictModuleBase):
             hash_values = self.aggregator(hash_values)
         else:
             hash_values = hash_values[0]
+
         td_hash_value = self.hash_to_int(hash_values, extend=extend)
 
         if self.clone:
@@ -182,4 +191,6 @@ class QueryModule(TensorDictModuleBase):
             output = tensordict
 
         output.set(self.index_key, td_hash_value)
+        if write_hash:
+            output.set(self.hash_key, hash_values)
         return output

@@ -292,16 +292,19 @@ class TensorDictMap(
     def __setitem__(self, item: TensorDictBase, value: TensorDictBase):
         if not self._has_lazy_out_keys():
             # TODO: make this work with pytrees and avoid calling select if keys match
-            value = value.select(*self.out_keys)
+            value = value.select(*self.out_keys, strict=False)
         if self.write_fn is not None:
-            modifiable = self.contains(item)
-            if modifiable.any():
-                to_modify = (value[modifiable], self[item[modifiable]])
-                v1 = self.write_fn(*to_modify)
-                result = value.empty()
-                result[modifiable] = v1
-                result[~modifiable] = self.write_fn(value[~modifiable])
-                value = result
+            if len(self):
+                modifiable = self.contains(item)
+                if modifiable.any():
+                    to_modify = (value[modifiable], self[item[modifiable]])
+                    v1 = self.write_fn(*to_modify)
+                    result = value.empty()
+                    result[modifiable] = v1
+                    result[~modifiable] = self.write_fn(value[~modifiable])
+                    value = result
+                else:
+                    value = self.write_fn(value)
             else:
                 value = self.write_fn(value)
         item, value = self._maybe_add_batch(item, value)
