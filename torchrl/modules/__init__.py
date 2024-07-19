@@ -66,6 +66,7 @@ from .tensordict_module import (
     LSTMCell,
     LSTMModule,
     MultiStepActorWrapper,
+    OrnsteinUhlenbeckProcessModule,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
     QValueActor,

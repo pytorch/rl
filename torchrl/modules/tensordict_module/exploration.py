@@ -24,6 +24,7 @@ __all__ = [
     "EGreedyWrapper",
     "EGreedyModule",
     "AdditiveGaussianWrapper",
+    "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
 ]
 
@@ -491,6 +492,12 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         safe: bool = True,
         key: Optional[NestedKey] = None,
     ):
+        warnings.warn(
+            "OrnsteinUhlenbeckProcessWrapper is deprecated and will be removed "
+            "in v0.7. Please use torchrl.modules.OrnsteinUhlenbeckProcessModule "
+            "instead.",
+            category=DeprecationWarning,
+        )
         if key is not None:
             action_key = key
             warnings.warn(
@@ -575,6 +582,199 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = super().forward(tensordict)
+        if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
+            is_init = tensordict.get(self.is_init_key, None)
+            if is_init is None:
+                warnings.warn(
+                    f"The tensordict passed to {self.__class__.__name__} appears to be "
+                    f"missing the '{self.is_init_key}' entry. This entry is used to "
+                    f"reset the noise at the beginning of a trajectory, without it "
+                    f"the behaviour of this exploration method is undefined. "
+                    f"This is allowed for BC compatibility purposes but it will be deprecated soon! "
+                    f"To create a '{self.is_init_key}' entry, simply append an torchrl.envs.InitTracker "
+                    f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
+                )
+            tensordict = self.ou.add_sample(
+                tensordict, self.eps.item(), is_init=is_init
+            )
+        return tensordict
+
+
+class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
+    r"""Ornstein-Uhlenbeck exploration policy module.
+
+    Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf.
+
+    The OU exploration is to be used with continuous control policies and introduces a auto-correlated exploration
+    noise. This enables a sort of 'structured' exploration.
+
+    Noise equation:
+
+    .. math::
+        noise_t = noise_{t-1} + \theta * (mu - noise_{t-1}) * dt + \sigma_t * \sqrt{dt} * W
+
+    Sigma equation:
+
+    .. math::
+        \sigma_t = max(\sigma^{min, (-(\sigma_{t-1} - \sigma^{min}) / (n^{\text{steps annealing}}) * n^{\text{steps}} + \sigma))
+
+    To keep track of the steps and noise from sample to sample, an :obj:`"ou_prev_noise{id}"` and :obj:`"ou_steps{id}"` keys
+    will be written in the input/output tensordict. It is expected that the tensordict will be zeroed at reset,
+    indicating that a new trajectory is being collected. If not, and is the same tensordict is used for consecutive
+    trajectories, the step count will keep on increasing across rollouts. Note that the collector classes take care of
+    zeroing the tensordict at reset time.
+
+    .. note::
+        It is
+        crucial to incorporate a call to :meth:`~.step` in the training loop
+        to update the exploration factor.
+        Since it is not easy to capture this omission no warning or exception
+        will be raised if this is ommitted!
+
+    Args:
+        spec (TensorSpec): the spec used for sampling actions. The sampled
+            action will be projected onto the valid action space once explored.
+        eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
+            default: 1.0
+        eps_end (scalar): final epsilon value, determining the amount of noise to be added.
+            default: 0.1
+        annealing_num_steps (int): number of steps it will take for epsilon to reach the eps_end value.
+            default: 1000
+        theta (scalar): theta factor in the noise equation
+            default: 0.15
+        mu (scalar): OU average (mu in the noise equation).
+            default: 0.0
+        sigma (scalar): sigma value in the sigma equation.
+            default: 0.2
+        dt (scalar): dt in the noise equation.
+            default: 0.01
+        x0 (Tensor, ndarray, optional): initial value of the process.
+            default: 0.0
+        sigma_min (number, optional): sigma_min in the sigma equation.
+            default: None
+        n_steps_annealing (int): number of steps for the sigma annealing.
+            default: 1000
+
+    Keyword Args:
+        action_key (NestedKey, optional): key of the action to be modified.
+            default: "action"
+        is_init_key (NestedKey, optional): key where to find the is_init flag used to reset the noise steps.
+            default: "is_init"
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictSequential
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules import OrnsteinUhlenbeckProcessModule, Actor
+        >>> torch.manual_seed(0)
+        >>> spec = BoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> module = torch.nn.Linear(4, 4, bias=False)
+        >>> policy = Actor(module=module, spec=spec)
+        >>> ou = OrnsteinUhlenbeckProcessModule(spec=spec)
+        >>> explorative_policy = TensorDictSequential(policy, ou)
+        >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
+        >>> print(explorative_policy(td))
+        TensorDict(
+            fields={
+                _ou_prev_noise: Tensor(shape=torch.Size([10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                _ou_steps: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int64, is_shared=False),
+                action: Tensor(shape=torch.Size([10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)
+    """
+
+    def __init__(
+        self,
+        spec: TensorSpec,
+        eps_init: float = 1.0,
+        eps_end: float = 0.1,
+        annealing_num_steps: int = 1000,
+        theta: float = 0.15,
+        mu: float = 0.0,
+        sigma: float = 0.2,
+        dt: float = 1e-2,
+        x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
+        sigma_min: Optional[float] = None,
+        n_steps_annealing: int = 1000,
+        *,
+        action_key: Optional[NestedKey] = "action",
+        is_init_key: Optional[NestedKey] = "is_init",
+    ):
+        super().__init__()
+
+        self.ou = _OrnsteinUhlenbeckProcess(
+            theta=theta,
+            mu=mu,
+            sigma=sigma,
+            dt=dt,
+            x0=x0,
+            sigma_min=sigma_min,
+            n_steps_annealing=n_steps_annealing,
+            key=action_key,
+        )
+
+        self.register_buffer("eps_init", torch.tensor([eps_init]))
+        self.register_buffer("eps_end", torch.tensor([eps_end]))
+        if self.eps_end > self.eps_init:
+            raise ValueError(
+                "eps should decrease over time or be constant, "
+                f"got eps_init={eps_init} and eps_end={eps_end}"
+            )
+        self.annealing_num_steps = annealing_num_steps
+        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
+
+        self.in_keys = [self.ou.key]
+        self.out_keys = [self.ou.key] + self.ou.out_keys
+        self.is_init_key = is_init_key
+        noise_key = self.ou.noise_key
+        steps_key = self.ou.steps_key
+
+        if spec is not None:
+            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
+                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+            self._spec = spec
+        else:
+            raise RuntimeError("spec cannot be None.")
+        ou_specs = {
+            noise_key: None,
+            steps_key: None,
+        }
+        self._spec.update(ou_specs)
+        if len(set(self.out_keys)) != len(self.out_keys):
+            raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
+        self.register_forward_hook(_forward_hook_safe_action)
+
+    @property
+    def spec(self):
+        return self._spec
+
+    def step(self, frames: int = 1) -> None:
+        """Updates the eps noise factor.
+
+        Args:
+            frames (int): number of frames of the current batch (corresponding to the number of updates to be made).
+
+        """
+        for _ in range(frames):
+            if self.annealing_num_steps > 0:
+                self.eps.data[0] = max(
+                    self.eps_end.item(),
+                    (
+                        self.eps
+                        - (self.eps_init - self.eps_end) / self.annealing_num_steps
+                    ).item(),
+                )
+            else:
+                raise ValueError(
+                    f"{self.__class__.__name__}.step() called when "
+                    f"self.annealing_num_steps={self.annealing_num_steps}. Expected a strictly positive "
+                    f"number of frames."
+                )
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
             is_init = tensordict.get(self.is_init_key, None)
             if is_init is None:
