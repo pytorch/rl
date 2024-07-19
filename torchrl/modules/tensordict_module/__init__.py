@@ -26,6 +26,7 @@ from .exploration import (
     AdditiveGaussianWrapper,
     EGreedyModule,
     EGreedyWrapper,
+    OrnsteinUhlenbeckProcessModule,
     OrnsteinUhlenbeckProcessWrapper,
 )
 from .probabilistic import (
