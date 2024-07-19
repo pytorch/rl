@@ -72,6 +72,7 @@ other cases, the action written in the tensordict is simply the network output.
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    AdditiveGaussianModule
     AdditiveGaussianWrapper
     EGreedyModule
     EGreedyWrapper
