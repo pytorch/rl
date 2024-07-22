@@ -6,6 +6,9 @@
 from .map import (
     BinaryToDecimal,
     HashToInt,
+    MCTSChildren,
+    MCTSForest,
+    MCTSNode,
     QueryModule,
     RandomProjectionHash,
     SipHash,
