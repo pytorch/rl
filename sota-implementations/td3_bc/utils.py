@@ -5,6 +5,7 @@
 import functools
 
 import torch
+from tensordict.nn import TensorDictSequential
 
 from torch import nn, optim
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -24,7 +25,7 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
-    AdditiveGaussianWrapper,
+    AdditiveGaussianModule,
     MLP,
     SafeModule,
     SafeSequential,
@@ -174,14 +175,16 @@ def make_td3_agent(cfg, train_env, device):
     del td
 
     # Exploration wrappers:
-    actor_model_explore = AdditiveGaussianWrapper(
+    actor_model_explore = TensorDictSequential(
         model[0],
-        sigma_init=1,
-        sigma_end=1,
-        mean=0,
-        std=0.1,
-        spec=action_spec,
-    ).to(device)
+        AdditiveGaussianModule(
+            sigma_init=1,
+            sigma_end=1,
+            mean=0,
+            std=0.1,
+            spec=action_spec,
+        ).to(device),
+    )
     return model, actor_model_explore
 
 
