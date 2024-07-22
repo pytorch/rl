@@ -3319,6 +3319,24 @@ class TestCustomEnvs:
             assert r.shape[-1] < 10
             r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
             assert r.shape[-1] < 10
+        r = env.rollout(
+            100, tensordict=TensorDict(batch_size=[5]), break_when_any_done=False
+        )
+        assert r.shape == (5, 100)
+
+    def test_tictactoe_env_single(self):
+        torch.manual_seed(0)
+        env = TicTacToeEnv(single_player=True)
+        check_env_specs(env)
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape[-1] < 6
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            assert r.shape[-1] < 6
+        r = env.rollout(
+            100, tensordict=TensorDict(batch_size=[5]), break_when_any_done=False
+        )
+        assert r.shape == (5, 100)
 
     def test_pendulum_env(self):
         env = PendulumEnv(device=None)

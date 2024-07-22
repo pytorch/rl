@@ -21,7 +21,13 @@ from torchrl.envs.common import EnvBase
 class TicTacToeEnv(EnvBase):
     """A Tic-Tac-Toe implementation.
 
-    At each turn, one of the two players have to play.
+    Keyword Args:
+        single_player (bool, optional): whether one or two players have to be
+            accounted for. ``single_player=True`` means that ``"player1"`` is
+            playing randomly. If ``False`` (default), at each turn,
+            one of the two players has to play.
+        device (torch.device, optional): the device where to put the tensors.
+            Defaults to ``None`` (default device).
 
     The environment is stateless. To run it across multiple batches, call
 
@@ -163,8 +169,9 @@ class TicTacToeEnv(EnvBase):
     # batch_locked is set to False since various batch sizes can be provided to the env
     batch_locked: bool = False
 
-    def __init__(self, device=None):
-        super().__init__()
+    def __init__(self, *, single_player: bool = False, device=None):
+        super().__init__(device=device)
+        self.single_player = single_player
         self.action_spec: UnboundedDiscreteTensorSpec = DiscreteTensorSpec(
             n=9,
             shape=(),
@@ -218,7 +225,6 @@ class TicTacToeEnv(EnvBase):
         return state.update(self.full_done_spec.zero(shape))
 
     def _step(self, state: TensorDict) -> TensorDict:
-
         board = state["board"].clone()
         turn = state["turn"].clone()
         action = state["action"]
@@ -244,6 +250,18 @@ class TicTacToeEnv(EnvBase):
             },
             batch_size=state.batch_size,
         )
+        if self.single_player:
+            select = (~done & (turn == 0)).squeeze(-1)
+            if select.all():
+                state_select = state
+            elif select.any():
+                state_select = state[select]
+            else:
+                return state
+            state_select = self._step(self.rand_action(state_select))
+            if select.all():
+                return state_select
+            return torch.where(done, state, state_select)
         return state
 
     def _set_seed(self, seed: int | None):
