@@ -23,6 +23,7 @@ from .actors import (
 )
 from .common import SafeModule, VmapModule
 from .exploration import (
+    AdditiveGaussianModule,
     AdditiveGaussianWrapper,
     EGreedyModule,
     EGreedyWrapper,

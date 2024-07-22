@@ -2355,10 +2355,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is
                 called on the sub-envs that are done. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
-            tensordict (TensorDict, optional): if auto_reset is False, an initial
+            tensordict (TensorDict, optional): if ``auto_reset`` is False, an initial
                 tensordict must be provided. Rollout will check if this tensordict has done flags and reset the
-                environment in those dimensions (if needed). This normally should not occur if ``tensordict`` is the
-                output of a reset, but can occur if ``tensordict`` is the last step of a previous rollout.
+                environment in those dimensions (if needed).
+                This normally should not occur if ``tensordict`` is the output of a reset, but can occur
+                if ``tensordict`` is the last step of a previous rollout.
+                A ``tensordict`` can also be provided when ``auto_reset=True`` if metadata need to be passed
+                to the ``reset`` method, such as a batch-size or a device for stateless environments.
             set_truncated (bool, optional): if ``True``, ``"truncated"`` and ``"done"`` keys will be set to
                 ``True`` after completion of the rollout. If no ``"truncated"`` is found within the
                 ``done_spec``, an exception is raised.
@@ -2565,11 +2568,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         env_device = self.device
 
         if auto_reset:
-            if tensordict is not None:
-                raise RuntimeError(
-                    "tensordict cannot be provided when auto_reset is True"
-                )
-            tensordict = self.reset()
+            tensordict = self.reset(tensordict)
         elif tensordict is None:
             raise RuntimeError("tensordict must be provided when auto_reset is False")
         else:

@@ -79,7 +79,9 @@ from torchrl.envs import (
     EnvBase,
     EnvCreator,
     ParallelEnv,
+    PendulumEnv,
     SerialEnv,
+    TicTacToeEnv,
 )
 from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.gym_like import default_info_dict_reader
@@ -3305,6 +3307,30 @@ class TestNonTensorEnv:
         assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
         assert s_["string"] == ["0", "6"]
         assert s["next", "string"] == ["6", "6"]
+
+
+class TestCustomEnvs:
+    def test_tictactoe_env(self):
+        torch.manual_seed(0)
+        env = TicTacToeEnv()
+        check_env_specs(env)
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape[-1] < 10
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            assert r.shape[-1] < 10
+
+    def test_pendulum_env(self):
+        env = PendulumEnv(device=None)
+        assert env.device is None
+        env = PendulumEnv(device="cpu")
+        assert env.device == torch.device("cpu")
+        check_env_specs(env)
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape == torch.Size((10,))
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            assert r.shape == torch.Size((5, 10))
 
 
 if __name__ == "__main__":
