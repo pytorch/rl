@@ -345,6 +345,7 @@ TorchRL offers a series of custom built-in environments.
     :toctree: generated/
     :template: rl_template.rst
 
+    PendulumEnv
     TicTacToeEnv
 
 Multi-agent environments
