@@ -79,6 +79,7 @@ from torchrl.envs import (
     EnvBase,
     EnvCreator,
     ParallelEnv,
+    PendulumEnv,
     SerialEnv,
     TicTacToeEnv,
 )
@@ -3309,7 +3310,7 @@ class TestNonTensorEnv:
 
 
 class TestCustomEnvs:
-    def test_tictactoe(self):
+    def test_tictactoe_env(self):
         torch.manual_seed(0)
         env = TicTacToeEnv()
         check_env_specs(env)
@@ -3318,6 +3319,18 @@ class TestCustomEnvs:
             assert r.shape[-1] < 10
             r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
             assert r.shape[-1] < 10
+
+    def test_pendulum_env(self):
+        env = PendulumEnv(device=None)
+        assert env.device is None
+        env = PendulumEnv(device="cpu")
+        assert env.device == torch.device("cpu")
+        check_env_specs(env)
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape == torch.Size((10,))
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            assert r.shape == torch.Size((5, 10))
 
 
 if __name__ == "__main__":
