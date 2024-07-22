@@ -4100,7 +4100,7 @@ class CompositeSpec(TensorSpec):
             indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
         ]
         sub_str = ",\n".join(sub_str)
-        return f"CompositeSpec(\n{sub_str}, device={self._device}, shape={self.shape})"
+        return f"CompositeSpec(\n{sub_str},\n    device={self._device},\n    shape={self.shape})"
 
     def type_check(
         self,

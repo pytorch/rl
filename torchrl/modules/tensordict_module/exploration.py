@@ -23,6 +23,7 @@ from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 __all__ = [
     "EGreedyWrapper",
     "EGreedyModule",
+    "AdditiveGaussianModule",
     "AdditiveGaussianWrapper",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
@@ -300,6 +301,12 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         spec: Optional[TensorSpec] = None,
         safe: Optional[bool] = True,
     ):
+        warnings.warn(
+            "AdditiveGaussianWrapper is deprecated and will be removed "
+            "in v0.7. Please use torchrl.modules.AdditiveGaussianModule "
+            "instead.",
+            category=DeprecationWarning,
+        )
         super().__init__(policy)
         if sigma_end > sigma_init:
             raise RuntimeError("sigma should decrease over time or be constant")
@@ -376,6 +383,117 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.td_module.forward(tensordict)
+        if exploration_type() is ExplorationType.RANDOM or exploration_type() is None:
+            out = tensordict.get(self.action_key)
+            out = self._add_noise(out)
+            tensordict.set(self.action_key, out)
+        return tensordict
+
+
+class AdditiveGaussianModule(TensorDictModuleBase):
+    """Additive Gaussian PO module.
+
+    Args:
+        spec (TensorSpec): the spec used for sampling actions. The sampled
+            action will be projected onto the valid action space once explored.
+        sigma_init (scalar, optional): initial epsilon value.
+            default: 1.0
+        sigma_end (scalar, optional): final epsilon value.
+            default: 0.1
+        annealing_num_steps (int, optional): number of steps it will take for
+            sigma to reach the :obj:`sigma_end` value.
+            default: 1000
+        mean (float, optional): mean of each output element’s normal distribution.
+            default: 0.0
+        std (float, optional): standard deviation of each output element’s normal distribution.
+            default: 1.0
+
+    Keyword Args:
+        action_key (NestedKey, optional): if the policy module has more than one output key,
+            its output spec will be of type CompositeSpec. One needs to know where to
+            find the action spec.
+            default: "action"
+
+    .. note::
+        It is
+        crucial to incorporate a call to :meth:`~.step` in the training loop
+        to update the exploration factor.
+        Since it is not easy to capture this omission no warning or exception
+        will be raised if this is ommitted!
+
+
+    """
+
+    def __init__(
+        self,
+        spec: TensorSpec,
+        sigma_init: float = 1.0,
+        sigma_end: float = 0.1,
+        annealing_num_steps: int = 1000,
+        mean: float = 0.0,
+        std: float = 1.0,
+        *,
+        action_key: Optional[NestedKey] = "action",
+    ):
+        if not isinstance(sigma_init, float):
+            warnings.warn("eps_init should be a float.")
+        if sigma_end > sigma_init:
+            raise RuntimeError("sigma should decrease over time or be constant")
+        self.action_key = action_key
+        self.in_keys = [self.action_key]
+        self.out_keys = [self.action_key]
+
+        super().__init__()
+
+        self.register_buffer("sigma_init", torch.tensor([sigma_init]))
+        self.register_buffer("sigma_end", torch.tensor([sigma_end]))
+        self.annealing_num_steps = annealing_num_steps
+        self.register_buffer("mean", torch.tensor([mean]))
+        self.register_buffer("std", torch.tensor([std]))
+        self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32))
+
+        if spec is not None:
+            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
+                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+        else:
+            raise RuntimeError("spec cannot be None.")
+        self._spec = spec
+        self.register_forward_hook(_forward_hook_safe_action)
+
+    @property
+    def spec(self):
+        return self._spec
+
+    def step(self, frames: int = 1) -> None:
+        """A step of sigma decay.
+
+        After `self.annealing_num_steps` calls to this method, calls result in no-op.
+
+        Args:
+            frames (int): number of frames since last step. Defaults to ``1``.
+
+        """
+        for _ in range(frames):
+            self.sigma.data[0] = max(
+                self.sigma_end.item(),
+                (
+                    self.sigma
+                    - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
+                ).item(),
+            )
+
+    def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
+        sigma = self.sigma.item()
+        noise = torch.normal(
+            mean=torch.ones(action.shape) * self.mean.item(),
+            std=torch.ones(action.shape) * self.std.item(),
+        ).to(action.device)
+        action = action + noise * sigma
+        spec = self.spec[self.action_key]
+        action = spec.project(action)
+        return action
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if exploration_type() is ExplorationType.RANDOM or exploration_type() is None:
             out = tensordict.get(self.action_key)
             out = self._add_noise(out)
