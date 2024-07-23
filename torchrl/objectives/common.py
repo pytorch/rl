@@ -8,6 +8,7 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
@@ -137,6 +138,67 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         self.value_type = self.default_value_estimator
         self._tensor_keys = self._AcceptedKeys()
         self.register_forward_pre_hook(_updater_check_forward_prehook)
+
+    @property
+    def functional(self):
+        """Whether the module is functional.
+
+        Unless it has been specifically designed not to be functional, all losses are functional.
+        """
+        return True
+
+    def get_stateful_net(self, network_name: str, copy: bool | None = None):
+        """Returns a stateful version of the network.
+
+        This can be used to initialize parameters.
+
+        Such networks will often not be callable out-of-the-box and will require a `vmap` call
+        to be executable.
+
+        Args:
+            network_name (str): the network name to gather.
+            copy (bool, optional): if ``True``, a deepcopy of the network is made.
+                Defaults to ``True``.
+
+                .. note:: if the module is not functional, no copy is made.
+        """
+        net = getattr(self, network_name)
+        if not self.functional:
+            if copy is not None and copy:
+                raise RuntimeError("Cannot copy module in non-functional mode.")
+            return net
+        copy = True if copy is None else copy
+        if copy:
+            net = deepcopy(net)
+        params = getattr(self, network_name + "_params")
+        params.to_module(net)
+        return net
+
+    def from_stateful_net(self, network_name: str, stateful_net: nn.Module):
+        """Populates the parameters of a model given a stateful version of the network.
+
+        See :meth:`~.get_stateful_net` for details on how to gather a stateful version of the network.
+
+        Args:
+            network_name (str): the network name to reset.
+            stateful_net (nn.Module): the stateful network from which the params should be
+                gathered.
+
+        """
+        if not self.functional:
+            getattr(self, network_name).load_state_dict(stateful_net.state_dict())
+            return
+        params = TensorDict.from_module(stateful_net, as_module=True)
+        keyset0 = set(params.keys(True, True))
+        self_params = getattr(self, network_name + "_params")
+        keyset1 = set(self_params.keys(True, True))
+        if keyset0 != keyset1:
+            raise RuntimeError(
+                f"The keys of params and provided module differ: "
+                f"{keyset1-keyset0} are in self.params and not in the module, "
+                f"{keyset0-keyset1} are in the module but not in self.params."
+            )
+        self_params.data.update_(params.data)
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
         for key, value in kwargs.items():
