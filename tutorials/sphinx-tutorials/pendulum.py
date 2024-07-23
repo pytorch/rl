@@ -73,6 +73,8 @@ Key learnings:
 #   simulation graph.
 # * Finally, we will train a simple policy to solve the system we implemented.
 #
+# A built-in version of this environment can be found in class:`~torchrl.envs.PendulumEnv`.
+#
 
 # sphinx_gallery_start_ignore
 import warnings

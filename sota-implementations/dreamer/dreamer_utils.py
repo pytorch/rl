@@ -52,7 +52,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 from torchrl.modules import (
-    AdditiveGaussianWrapper,
+    AdditiveGaussianModule,
     DreamerActor,
     IndependentNormal,
     MLP,
@@ -266,13 +266,16 @@ def make_dreamer(
         test_env=test_env,
     )
     # Exploration noise to be added to the actor_realworld
-    actor_realworld = AdditiveGaussianWrapper(
+    actor_realworld = TensorDictSequential(
         actor_realworld,
-        sigma_init=1.0,
-        sigma_end=1.0,
-        annealing_num_steps=1,
-        mean=0.0,
-        std=cfg.networks.exploration_noise,
+        AdditiveGaussianModule(
+            spec=test_env.action_spec,
+            sigma_init=1.0,
+            sigma_end=1.0,
+            annealing_num_steps=1,
+            mean=0.0,
+            std=cfg.networks.exploration_noise,
+        ),
     )
 
     # Make Critic
