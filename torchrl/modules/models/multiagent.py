@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+from copy import deepcopy
 from textwrap import indent
 from typing import Optional, Sequence, Tuple, Type, Union
 
@@ -21,7 +22,13 @@ from torchrl.modules.models.utils import _reset_parameters_recursive
 
 
 class MultiAgentNetBase(nn.Module):
-    """A base class for multi-agent networks."""
+    """A base class for multi-agent networks.
+
+    .. note:: to initialize the MARL module parameters with the `torch.nn.init`
+        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        methods.
+
+    """
 
     _empty_net: nn.Module
 
@@ -142,6 +149,82 @@ class MultiAgentNetBase(nn.Module):
 
         return output
 
+    def get_stateful_net(self, copy: bool = True):
+        """Returns a stateful version of the network.
+
+        This can be used to initialize parameters.
+
+        Such networks will generally not be callable out-of-the-box and will require some `vmap`
+        execution. to work
+
+        Args:
+            copy (bool, optional): if ``True``, a deepcopy of the network is made.
+                Defaults to ``True``.
+
+        If the parameters are modified in-place (recommended) there is no need to copy the
+        parameters back into the MARL module.
+        See :meth:`~.from_stateful_net` for details on how to re-populate the MARL model with
+        parameters that have been re-initialized out-of-place.
+
+        Examples:
+            >>> from torchrl.modules import MultiAgentMLP
+            >>> import torch
+            >>> n_agents = 6
+            >>> n_agent_inputs=3
+            >>> n_agent_outputs=2
+            >>> batch = 64
+            >>> obs = torch.zeros(batch, n_agents, n_agent_inputs)
+            >>> mlp = MultiAgentMLP(
+            ...     n_agent_inputs=n_agent_inputs,
+            ...     n_agent_outputs=n_agent_outputs,
+            ...     n_agents=n_agents,
+            ...     centralized=False,
+            ...     share_params=False,
+            ...     depth=2,
+            ... )
+            >>> snet = mlp.get_stateful_net()
+            >>> def init(module):
+            ...     if hasattr(module, "weight"):
+            ...         torch.nn.init.kaiming_normal_(module.weight)
+            >>> snet.apply(init)
+            >>> # If the module has been updated out-of-place (not the case here) we can reset the params
+            >>> mlp.from_stateful_net(snet)
+
+        """
+        if copy:
+            try:
+                net = deepcopy(self._empty_net)
+            except RuntimeError as err:
+                raise RuntimeError(
+                    "Failed to deepcopy the module, consider using copy=False."
+                ) from err
+        else:
+            net = self._empty_net
+        self.params.to_module(net)
+        return net
+
+    @abc.abstractmethod
+    def from_stateful_net(self, stateful_net: nn.Module):
+        """Populates the parameters given a stateful version of the network.
+
+        See :meth:`~.get_stateful_net` for details on how to gather a stateful version of the network.
+
+        Args:
+            stateful_net (nn.Module): the stateful network from which the params should be
+                gathered.
+
+        """
+        params = TensorDict.from_module(stateful_net, as_module=True)
+        keyset0 = set(params.keys(True, True))
+        keyset1 = set(self.params.keys(True, True))
+        if keyset0 != keyset1:
+            raise RuntimeError(
+                f"The keys of params and provided module differ: "
+                f"{keyset1-keyset0} are in self.params and not in the module, "
+                f"{keyset0-keyset1} are in the module but not in self.params."
+            )
+        self.params.data.update_(params.data)
+
     def __repr__(self):
         empty_net = self.__dict__["_empty_net"]
         with self.params.to_module(empty_net):
@@ -212,6 +295,10 @@ class MultiAgentMLP(MultiAgentNetBase):
             default: nn.Tanh.
         **kwargs: for :class:`torchrl.modules.models.MLP` can be passed to customize the MLPs.
 
+    .. note:: to initialize the MARL module parameters with the `torch.nn.init`
+        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        methods.
+
     Examples:
         >>> from torchrl.modules import MultiAgentMLP
         >>> import torch
@@ -219,8 +306,8 @@ class MultiAgentMLP(MultiAgentNetBase):
         >>> n_agent_inputs=3
         >>> n_agent_outputs=2
         >>> batch = 64
-        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs
-        First let's instantiate a local network shared by all agents (e.g. a parameter-shared policy)
+        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs)
+        >>> # instantiate a local network shared by all agents (e.g. a parameter-shared policy)
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
         ...     n_agent_outputs=n_agent_outputs,
@@ -357,6 +444,10 @@ class MultiAgentConvNet(MultiAgentNetBase):
 
     It expects inputs with shape ``(*B, n_agents, channels, x, y)``.
 
+    .. note:: to initialize the MARL module parameters with the `torch.nn.init`
+        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        methods.
+
     Args:
         n_agents (int): number of agents.
         centralized (bool): If ``True``, each agent will use the inputs of all agents to compute its output, resulting in input of shape ``(*B, n_agents * channels, x, y)``. Otherwise, each agent will only use its data as input.
@@ -388,7 +479,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
         >>> n_agents = 7
         >>> channels, x, y = 3, 100, 100
         >>> obs = torch.randn(*batch, n_agents, channels, x, y)
-        >>> # First lets consider a centralized network with shared parameters.
+        >>> # Let's consider a centralized network with shared parameters.
         >>> cnn = MultiAgentConvNet(
         ...     n_agents,
         ...     centralized = True,
