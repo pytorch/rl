@@ -14549,6 +14549,62 @@ class TestBase:
         for key in ["module.1.bias", "module.1.weight"]:
             loss_module.module_b_params.flatten_keys()[key].requires_grad
 
+    def test_init_params(self):
+        class MyLoss(LossModule):
+            module_a: TensorDictModule
+            module_b: TensorDictModule
+            module_a_params: TensorDict
+            module_b_params: TensorDict
+            target_module_a_params: TensorDict
+            target_module_b_params: TensorDict
+
+            def __init__(self, expand_dim=2):
+                super().__init__()
+                module1 = nn.Linear(3, 4)
+                module2 = nn.Linear(3, 4)
+                module3 = nn.Linear(3, 4)
+                module_a = TensorDictModule(
+                    nn.Sequential(module1, module2), in_keys=["a"], out_keys=["c"]
+                )
+                module_b = TensorDictModule(
+                    nn.Sequential(module1, module3), in_keys=["b"], out_keys=["c"]
+                )
+                self.convert_to_functional(module_a, "module_a")
+                self.convert_to_functional(
+                    module_b,
+                    "module_b",
+                    compare_against=module_a.parameters(),
+                    expand_dim=expand_dim,
+                )
+
+        loss = MyLoss()
+
+        module_a = loss.get_stateful_net("module_a", copy=False)
+        assert module_a is loss.module_a
+
+        module_a = loss.get_stateful_net("module_a")
+        assert module_a is not loss.module_a
+
+        def init(mod):
+            if hasattr(mod, "weight"):
+                mod.weight.data.zero_()
+            if hasattr(mod, "bias"):
+                mod.bias.data.zero_()
+
+        module_a.apply(init)
+        assert (loss.module_a_params == 0).all()
+
+        def init(mod):
+            if hasattr(mod, "weight"):
+                mod.weight = torch.nn.Parameter(mod.weight.data + 1)
+            if hasattr(mod, "bias"):
+                mod.bias = torch.nn.Parameter(mod.bias.data + 1)
+
+        module_a.apply(init)
+        assert (loss.module_a_params == 0).all()
+        loss.from_stateful_net("module_a", module_a)
+        assert (loss.module_a_params == 1).all()
+
     def test_tensordict_keys(self):
         """Test configurable tensordict key behavior with derived classes."""
 
