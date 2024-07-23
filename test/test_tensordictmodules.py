@@ -27,7 +27,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
-    AdditiveGaussianWrapper,
+    AdditiveGaussianModule,
     DecisionTransformerInferenceWrapper,
     DTActor,
     GRUModule,
@@ -1363,17 +1363,19 @@ def test_actor_critic_specs():
         out_keys=[action_key],
     )
     original_spec = spec.clone()
-    module = AdditiveGaussianWrapper(policy_module, spec=spec, action_key=action_key)
+    module = TensorDictSequential(
+        policy_module, AdditiveGaussianModule(spec=spec, action_key=action_key)
+    )
     value_module = ValueOperator(
         module=module,
         in_keys=[("agents", "observation"), action_key],
         out_keys=[("agents", "state_action_value")],
     )
     assert original_spec == spec
-    assert module.spec == spec
+    assert module[1].spec == spec
     DDPGLoss(actor_network=module, value_network=value_module)
     assert original_spec == spec
-    assert module.spec == spec
+    assert module[1].spec == spec
 
 
 def test_vmapmodule():
