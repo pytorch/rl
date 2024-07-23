@@ -188,7 +188,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 # Later, we will see how the target parameters should be updated in TorchRL.
 #
 
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictSequential
 
 
 def _init(
@@ -722,7 +722,7 @@ from torchrl.modules import (
     ActorCriticWrapper,
     DdpgMlpActor,
     DdpgMlpQNet,
-    OrnsteinUhlenbeckProcessWrapper,
+    OrnsteinUhlenbeckProcessModule,
     ProbabilisticActor,
     TanhDelta,
     ValueOperator,
@@ -781,15 +781,18 @@ actor, qnet = make_ddpg_actor(
 # Exploration
 # ~~~~~~~~~~~
 #
-# The policy is wrapped in a :class:`~torchrl.modules.OrnsteinUhlenbeckProcessWrapper`
+# The policy is passed into a :class:`~torchrl.modules.OrnsteinUhlenbeckProcessModule`
 # exploration module, as suggested in the original paper.
 # Let's define the number of frames before OU noise reaches its minimum value
 annealing_frames = 1_000_000
 
-actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
+actor_model_explore = TensorDictSequential(
     actor,
-    annealing_num_steps=annealing_frames,
-).to(device)
+    OrnsteinUhlenbeckProcessModule(
+        spec=actor.spec.clone(),
+        annealing_num_steps=annealing_frames,
+    ).to(device),
+)
 if device == torch.device("cpu"):
     actor_model_explore.share_memory()
 
@@ -1173,7 +1176,7 @@ for i, tensordict in enumerate(collector):
         )
 
     # update the exploration strategy
-    actor_model_explore.step(current_frames)
+    actor_model_explore[1].step(current_frames)
 
 collector.shutdown()
 del collector

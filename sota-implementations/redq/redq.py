@@ -8,10 +8,11 @@ from datetime import datetime
 
 import hydra
 import torch.cuda
+from tensordict.nn import TensorDictSequential
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
+from torchrl.modules import OrnsteinUhlenbeckProcessModule
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import get_logger
 from utils import (
@@ -111,12 +112,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.exploration.ou_exploration:
         if cfg.exploration.gSDE:
             raise RuntimeError("gSDE and ou_exploration are incompatible")
-        actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
+        actor_model_explore = TensorDictSequential(
             actor_model_explore,
-            annealing_num_steps=cfg.exploration.annealing_frames,
-            sigma=cfg.exploration.ou_sigma,
-            theta=cfg.exploration.ou_theta,
-        ).to(device)
+            OrnsteinUhlenbeckProcessModule(
+                spec=actor_model_explore.spec,
+                annealing_num_steps=cfg.exploration.annealing_frames,
+                sigma=cfg.exploration.ou_sigma,
+                theta=cfg.exploration.ou_theta,
+            ).to(device),
+        )
     if device == torch.device("cpu"):
         # mostly for debugging
         actor_model_explore.share_memory()

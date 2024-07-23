@@ -191,8 +191,8 @@ with set_exploration_type(ExplorationType.RANDOM):
 # also palliate to this with its exploration modules.
 # We will take the example of the :class:`~torchrl.modules.EGreedyModule`
 # exploration module (check also
-# :class:`~torchrl.modules.AdditiveGaussianWrapper` and
-# :class:`~torchrl.modules.OrnsteinUhlenbeckProcessWrapper`).
+# :class:`~torchrl.modules.AdditiveGaussianModule` and
+# :class:`~torchrl.modules.OrnsteinUhlenbeckProcessModule`).
 # To see this module in action, let's revert to a deterministic policy:
 
 from tensordict.nn import TensorDictSequential
