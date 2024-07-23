@@ -154,8 +154,8 @@ class MultiAgentNetBase(nn.Module):
 
         This can be used to initialize parameters.
 
-        Such networks will generally not be callable out-of-the-box and will require some `vmap`
-        execution. to work
+        Such networks will often not be callable out-of-the-box and will require a `vmap` call
+        to be executable.
 
         Args:
             copy (bool, optional): if ``True``, a deepcopy of the network is made.
@@ -203,7 +203,6 @@ class MultiAgentNetBase(nn.Module):
         self.params.to_module(net)
         return net
 
-    @abc.abstractmethod
     def from_stateful_net(self, stateful_net: nn.Module):
         """Populates the parameters given a stateful version of the network.
 

@@ -29,6 +29,15 @@ The main characteristics of TorchRL losses are:
 
     >>> loss_val = sum(loss for key, loss in loss_vals.items() if key.startswith("loss_"))
 
+.. note::
+    Initializing parameters in losses can be done via a query to :meth:`~torchrl.objectives.LossModule.get_stateful_net`
+    which will return a stateful version of the network that can be initialized like any other module.
+    If the modification is done in-place, it will be downstreamed to any other module that uses the same parameter
+    set (within and outside of the loss): for instance, modifying the ``actor_network`` parameters from the loss
+    will also modify the actor in the collector.
+    If the parameters are modified out-of-place, :meth:`~torchrl.objectives.LossModule.from_stateful_net` can be
+    used to reset the parameters in the loss to the new value.
+
 Training value functions
 ------------------------
 
