@@ -15083,10 +15083,10 @@ class TestBuffer:
         assert v_p1 == v_p2
         assert v_params1 == v_params2
         assert v_buffers1 == v_buffers2
-        for p in mod.parameters():
-            assert isinstance(p, nn.Parameter)
-        for p in mod.buffers():
-            assert isinstance(p, Buffer)
+        for k, p in mod.named_parameters():
+            assert isinstance(p, nn.Parameter), k
+        for k, p in mod.named_buffers():
+            assert isinstance(p, Buffer), k
         for p in mod.actor_params.values(True, True):
             assert isinstance(p, (nn.Parameter, Buffer))
         for p in mod.value_params.values(True, True):
