@@ -125,7 +125,7 @@ from torchrl.envs import (
 )
 
 from torchrl.modules import (
-    AdditiveGaussianWrapper,
+    AdditiveGaussianModule,
     MultiAgentMLP,
     ProbabilisticActor,
     TanhDelta,
@@ -499,7 +499,7 @@ for group, _agents in env.group_map.items():
 # Since the DDPG policy is deterministic, we need a way to perform exploration during collection.
 #
 # For this purpose, we need to append an exploration layer to our policies before passing them to the collector.
-# In this case we use a :class:`~torchrl.modules.AdditiveGaussianWrapper`, which adds gaussian noise to our action
+# In this case we use a :class:`~torchrl.modules.AdditiveGaussianModule`, which adds gaussian noise to our action
 # (and clamps it if the noise makes the action out of bounds).
 #
 # This exploration wrapper uses a ``sigma`` parameter which is multiplied by the noise to determine its magnitude.
@@ -510,13 +510,16 @@ for group, _agents in env.group_map.items():
 
 exploration_policies = {}
 for group, _agents in env.group_map.items():
-    exploration_policy = AdditiveGaussianWrapper(
+    exploration_policy = TensorDictSequential(
         policies[group],
-        annealing_num_steps=total_frames
-        // 2,  # Number of frames after which sigma is sigma_end
-        action_key=(group, "action"),
-        sigma_init=0.9,  # Initial value of the sigma
-        sigma_end=0.1,  # Final value of the sigma
+        AdditiveGaussianModule(
+            spec=policies[group].spec,
+            annealing_num_steps=total_frames
+            // 2,  # Number of frames after which sigma is sigma_end
+            action_key=(group, "action"),
+            sigma_init=0.9,  # Initial value of the sigma
+            sigma_end=0.1,  # Final value of the sigma
+        ),
     )
     exploration_policies[group] = exploration_policy
 
