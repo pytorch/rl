@@ -14674,8 +14674,10 @@ class TestBase:
         class MyLoss(LossModule):
             module_a: TensorDictModule
             module_b: TensorDictModule
+
             module_a_params: TensorDict
             module_b_params: TensorDict
+
             target_module_a_params: TensorDict
             target_module_b_params: TensorDict
 
