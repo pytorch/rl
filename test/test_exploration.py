@@ -31,10 +31,10 @@ from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
 from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
-from torchrl.modules.distributions import TanhNormal
-from torchrl.modules.distributions.continuous import (
+from torchrl.modules.distributions import (
     IndependentNormal,
-    NormalParamWrapper,
+    NormalParamExtractor,
+    TanhNormal,
 )
 from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.tensordict_module.actors import (
@@ -236,7 +236,9 @@ class TestOrnsteinUhlenbeckProcess:
         self, device, interface, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
     ):
         torch.manual_seed(seed)
-        net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
+        net = nn.Sequential(nn.Linear(d_obs, 2 * d_act), NormalParamExtractor()).to(
+            device
+        )
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         action_spec = BoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
         policy = ProbabilisticActor(
@@ -308,7 +310,9 @@ class TestOrnsteinUhlenbeckProcess:
             action_spec = ContinuousActionVecMockEnv(device=device).action_spec
         d_act = action_spec.shape[-1]
         if probabilistic:
-            net = NormalParamWrapper(nn.LazyLinear(2 * d_act)).to(device)
+            net = nn.Sequential(nn.LazyLinear(2 * d_act), NormalParamExtractor()).to(
+                device
+            )
             module = SafeModule(
                 net,
                 in_keys=["observation"],
@@ -449,7 +453,9 @@ class TestAdditiveGaussian:
         if interface == "module":
             exploratory_policy = AdditiveGaussianModule(action_spec).to(device)
         else:
-            net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
+            net = nn.Sequential(nn.Linear(d_obs, 2 * d_act), NormalParamExtractor()).to(
+                device
+            )
             module = SafeModule(
                 net,
                 in_keys=["observation"],
@@ -531,7 +537,9 @@ class TestAdditiveGaussian:
             pytest.skip("module raises an error if given spec=None")
 
         torch.manual_seed(seed)
-        net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
+        net = nn.Sequential(nn.Linear(d_obs, 2 * d_act), NormalParamExtractor()).to(
+            device
+        )
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         action_spec = BoundedTensorSpec(
             -torch.ones(d_act, device=device),
@@ -593,7 +601,7 @@ class TestAdditiveGaussian:
         else:
             action_spec = ContinuousActionVecMockEnv(device=device).action_spec
         d_act = action_spec.shape[-1]
-        net = NormalParamWrapper(nn.LazyLinear(2 * d_act)).to(device)
+        net = nn.Sequential(nn.LazyLinear(2 * d_act), NormalParamExtractor()).to(device)
         module = SafeModule(
             net,
             in_keys=["observation"],
@@ -658,7 +666,7 @@ def test_gsde(
     else:
         in_keys = ["observation"]
         model = torch.nn.LazyLinear(action_dim * 2, device=device)
-        wrapper = NormalParamWrapper(model)
+        wrapper = nn.Sequential(model, NormalParamExtractor())
         module = SafeModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
         distribution_class = TanhNormal
         distribution_kwargs = {"low": -bound, "high": bound}

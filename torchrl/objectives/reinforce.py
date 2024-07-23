@@ -101,14 +101,14 @@ class ReinforceLoss(LossModule):
         >>> import torch
         >>> from torch import nn
         >>> from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
-        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.reinforce import ReinforceLoss
         >>> from tensordict import TensorDict
         >>> n_obs, n_act = 3, 5
         >>> value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
-        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor_net = ProbabilisticActor(
         ...     module,
@@ -147,13 +147,13 @@ class ReinforceLoss(LossModule):
         >>> import torch
         >>> from torch import nn
         >>> from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
-        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.reinforce import ReinforceLoss
         >>> n_obs, n_act = 3, 5
         >>> value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
-        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor_net = ProbabilisticActor(
         ...     module,

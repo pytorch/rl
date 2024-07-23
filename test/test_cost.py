@@ -72,11 +72,7 @@ from torchrl.modules import (
     SafeSequential,
     WorldModelWrapper,
 )
-from torchrl.modules.distributions.continuous import (
-    NormalParamWrapper,
-    TanhDelta,
-    TanhNormal,
-)
+from torchrl.modules.distributions.continuous import TanhDelta, TanhNormal
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -3459,7 +3455,7 @@ class TestSAC(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -4369,7 +4365,7 @@ class TestDiscreteSAC(LossModuleTestBase):
     ):
         # Actor
         action_spec = OneHotDiscreteTensorSpec(action_dim)
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
             spec=action_spec,
@@ -4957,7 +4953,7 @@ class TestCrossQ(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -5652,7 +5648,7 @@ class TestREDQ(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -5760,7 +5756,9 @@ class TestREDQ(LossModuleTestBase):
         class ActorClass(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.linear = NormalParamWrapper(nn.Linear(hidden_dim, 2 * action_dim))
+                self.linear = nn.Sequential(
+                    nn.Linear(hidden_dim, 2 * action_dim), NormalParamExtractor()
+                )
 
             def forward(self, hidden):
                 return self.linear(hidden)
@@ -6595,7 +6593,7 @@ class TestCQL(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
@@ -7488,7 +7486,7 @@ class TestPPO(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -7525,8 +7523,8 @@ class TestPPO(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         base_layer = nn.Linear(obs_dim, 5)
-        net = NormalParamWrapper(
-            nn.Sequential(base_layer, nn.Linear(5, 2 * action_dim))
+        net = nn.Sequential(
+            base_layer, nn.Linear(5, 2 * action_dim), NormalParamExtractor()
         )
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
@@ -8379,7 +8377,7 @@ class TestA2C(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -9076,7 +9074,7 @@ class TestReinforce(LossModuleTestBase):
         batch = 4
         gamma = 0.9
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
-        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
@@ -9186,7 +9184,7 @@ class TestReinforce(LossModuleTestBase):
         n_obs = 3
         n_act = 5
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
-        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
@@ -9380,7 +9378,7 @@ class TestReinforce(LossModuleTestBase):
         n_act = 5
         batch = 4
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=[observation_key])
-        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -9986,7 +9984,7 @@ class TestOnlineDT(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
@@ -10218,7 +10216,7 @@ class TestDT(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=["observation"], out_keys=["param"])
         actor = ProbabilisticActor(
             module=module,
@@ -10411,7 +10409,7 @@ class TestIQL(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -11220,7 +11218,7 @@ class TestDiscreteIQL(LossModuleTestBase):
     ):
         # Actor
         action_spec = OneHotDiscreteTensorSpec(action_dim)
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
             spec=action_spec,
@@ -13921,7 +13919,7 @@ def test_shared_params(dest, expected_dtype, expected_device):
         out_keys=["hidden"],
     )
     module_action = TensorDictModule(
-        NormalParamWrapper(torch.nn.Linear(4, 8)),
+        nn.Sequential(nn.Linear(4, 8), NormalParamExtractor()),
         in_keys=["hidden"],
         out_keys=["loc", "scale"],
     )
