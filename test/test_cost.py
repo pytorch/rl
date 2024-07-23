@@ -6854,6 +6854,71 @@ class TestCQL(LossModuleTestBase):
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
+    @pytest.mark.parametrize("delay_actor", (True,))
+    @pytest.mark.parametrize("delay_qvalue", (True,))
+    @pytest.mark.parametrize(
+        "max_q_backup",
+        [
+            True,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "deterministic_backup",
+        [
+            True,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "with_lagrange",
+        [
+            True,
+        ],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("td_est", [None])
+    def test_cql_qvalfromlist(
+        self,
+        delay_actor,
+        delay_qvalue,
+        max_q_backup,
+        deterministic_backup,
+        with_lagrange,
+        device,
+        td_est,
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue0 = self._create_mock_qvalue(device=device)
+        qvalue1 = self._create_mock_qvalue(device=device)
+
+        loss_fn_single = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue0,
+            loss_function="l2",
+            max_q_backup=max_q_backup,
+            deterministic_backup=deterministic_backup,
+            with_lagrange=with_lagrange,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+        )
+        loss_fn_mult = CQLLoss(
+            actor_network=actor,
+            qvalue_network=[qvalue0, qvalue1],
+            loss_function="l2",
+            max_q_backup=max_q_backup,
+            deterministic_backup=deterministic_backup,
+            with_lagrange=with_lagrange,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+        )
+        # Check that all params have the same shape
+        p2 = dict(loss_fn_mult.named_parameters())
+        for key, val in loss_fn_single.named_parameters():
+            assert val.shape == p2[key].shape
+        assert len(dict(loss_fn_single.named_parameters())) == len(p2)
+
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("max_q_backup", [True])
@@ -14605,6 +14670,62 @@ class TestBase:
         loss.from_stateful_net("module_a", module_a)
         assert (loss.module_a_params == 1).all()
 
+    def test_from_module_list(self):
+        class MyLoss(LossModule):
+            module_a: TensorDictModule
+            module_b: TensorDictModule
+
+            module_a_params: TensorDict
+            module_b_params: TensorDict
+
+            target_module_a_params: TensorDict
+            target_module_b_params: TensorDict
+
+            def __init__(self, module_a, module_b0, module_b1, expand_dim=2):
+                super().__init__()
+                self.convert_to_functional(module_a, "module_a")
+                self.convert_to_functional(
+                    [module_b0, module_b1],
+                    "module_b",
+                    # This will be ignored
+                    compare_against=module_a.parameters(),
+                    expand_dim=expand_dim,
+                )
+
+        module1 = nn.Linear(3, 4)
+        module2 = nn.Linear(3, 4)
+        module3a = nn.Linear(3, 4)
+        module3b = nn.Linear(3, 4)
+
+        module_a = TensorDictModule(
+            nn.Sequential(module1, module2), in_keys=["a"], out_keys=["c"]
+        )
+
+        module_b0 = TensorDictModule(
+            nn.Sequential(module1, module3a), in_keys=["b"], out_keys=["c"]
+        )
+        module_b1 = TensorDictModule(
+            nn.Sequential(module1, module3b), in_keys=["b"], out_keys=["c"]
+        )
+
+        loss = MyLoss(module_a, module_b0, module_b1)
+
+        # This should be extended
+        assert not isinstance(
+            loss.module_b_params["module", "0", "weight"], nn.Parameter
+        )
+        assert loss.module_b_params["module", "0", "weight"].shape[0] == 2
+        assert (
+            loss.module_b_params["module", "0", "weight"].data.data_ptr()
+            == loss.module_a_params["module", "0", "weight"].data.data_ptr()
+        )
+        assert isinstance(loss.module_b_params["module", "1", "weight"], nn.Parameter)
+        assert loss.module_b_params["module", "1", "weight"].shape[0] == 2
+        assert (
+            loss.module_b_params["module", "1", "weight"].data.data_ptr()
+            != loss.module_a_params["module", "1", "weight"].data.data_ptr()
+        )
+
     def test_tensordict_keys(self):
         """Test configurable tensordict key behavior with derived classes."""
 
@@ -14962,10 +15083,10 @@ class TestBuffer:
         assert v_p1 == v_p2
         assert v_params1 == v_params2
         assert v_buffers1 == v_buffers2
-        for p in mod.parameters():
-            assert isinstance(p, nn.Parameter)
-        for p in mod.buffers():
-            assert isinstance(p, Buffer)
+        for k, p in mod.named_parameters():
+            assert isinstance(p, nn.Parameter), k
+        for k, p in mod.named_buffers():
+            assert isinstance(p, Buffer), k
         for p in mod.actor_params.values(True, True):
             assert isinstance(p, (nn.Parameter, Buffer))
         for p in mod.value_params.values(True, True):

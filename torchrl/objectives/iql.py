@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
@@ -37,6 +37,14 @@ class IQLLoss(LossModule):
     Args:
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model
+            If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
+            times. If a list of modules is passed, their
+            parameters will be stacked unless they share the same identity (in which case
+            the original parameter will be expanded).
+
+            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+              and all the parameters will be considered as untied.
+
         value_network (TensorDictModule, optional): V(s) parametric model.
 
     Keyword Args:
@@ -55,7 +63,7 @@ class IQLLoss(LossModule):
             buffer usage). Default is `"td_error"`.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
-            Defaults to ``False``, ie. gradients are propagated to shared
+            Defaults to ``False``, i.e., gradients are propagated to shared
             parameters for both policy and critic losses.
         reduction (str, optional): Specifies the reduction to apply to the output:
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
@@ -247,7 +255,7 @@ class IQLLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TensorDictModule,
+        qvalue_network: TensorDictModule | List[TensorDictModule],
         value_network: Optional[TensorDictModule],
         *,
         num_qvalue_nets: int = 2,
@@ -548,7 +556,7 @@ class DiscreteIQLLoss(IQLLoss):
             buffer usage). Default is `"td_error"`.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
-            Defaults to ``False``, ie. gradients are propagated to shared
+            Defaults to ``False``, i.e., gradients are propagated to shared
             parameters for both policy and critic losses.
         reduction (str, optional): Specifies the reduction to apply to the output:
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,

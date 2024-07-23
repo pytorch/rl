@@ -317,57 +317,67 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
         sep = self.SEP
-        params = TensorDict.from_module(module, as_module=True)
-
-        for key in params.keys(True):
-            if sep in key:
-                raise KeyError(
-                    f"The key {key} contains the '_sep_' pattern which is prohibited. Consider renaming the parameter / buffer."
+        if isinstance(module, (list, tuple)):
+            if len(module) != expand_dim:
+                raise RuntimeError(
+                    "The ``expand_dim`` value must match the length of the module list/tuple "
+                    "if a single module isn't provided."
                 )
-        if compare_against is not None:
-            compare_against = set(compare_against)
+            params = TensorDict.from_modules(
+                *module, as_module=True, expand_identical=True
+            )
         else:
-            compare_against = set()
-        if expand_dim:
-            # Expands the dims of params and buffers.
-            # If the param already exist in the module, we return a simple expansion of the
-            # original one. Otherwise, we expand and resample it.
-            # For buffers, a cloned expansion (or equivalently a repeat) is returned.
+            params = TensorDict.from_module(module, as_module=True)
 
-            def _compare_and_expand(param):
-                if is_tensor_collection(param):
-                    return param._apply_nest(
+            for key in params.keys(True):
+                if sep in key:
+                    raise KeyError(
+                        f"The key {key} contains the '_sep_' pattern which is prohibited. Consider renaming the parameter / buffer."
+                    )
+            if compare_against is not None:
+                compare_against = set(compare_against)
+            else:
+                compare_against = set()
+            if expand_dim:
+                # Expands the dims of params and buffers.
+                # If the param already exist in the module, we return a simple expansion of the
+                # original one. Otherwise, we expand and resample it.
+                # For buffers, a cloned expansion (or equivalently a repeat) is returned.
+
+                def _compare_and_expand(param):
+                    if is_tensor_collection(param):
+                        return param._apply_nest(
+                            _compare_and_expand,
+                            batch_size=[expand_dim, *param.shape],
+                            filter_empty=False,
+                            call_on_nested=True,
+                        )
+                    if not isinstance(param, nn.Parameter):
+                        buffer = param.expand(expand_dim, *param.shape).clone()
+                        return buffer
+                    if param in compare_against:
+                        expanded_param = param.data.expand(expand_dim, *param.shape)
+                        # the expanded parameter must be sent to device when to()
+                        # is called:
+                        return expanded_param
+                    else:
+                        p_out = param.expand(expand_dim, *param.shape).clone()
+                        p_out = nn.Parameter(
+                            p_out.uniform_(
+                                p_out.min().item(), p_out.max().item()
+                            ).requires_grad_()
+                        )
+                        return p_out
+
+                params = TensorDictParams(
+                    params.apply(
                         _compare_and_expand,
-                        batch_size=[expand_dim, *param.shape],
+                        batch_size=[expand_dim, *params.shape],
                         filter_empty=False,
                         call_on_nested=True,
-                    )
-                if not isinstance(param, nn.Parameter):
-                    buffer = param.expand(expand_dim, *param.shape).clone()
-                    return buffer
-                if param in compare_against:
-                    expanded_param = param.data.expand(expand_dim, *param.shape)
-                    # the expanded parameter must be sent to device when to()
-                    # is called:
-                    return expanded_param
-                else:
-                    p_out = param.expand(expand_dim, *param.shape).clone()
-                    p_out = nn.Parameter(
-                        p_out.uniform_(
-                            p_out.min().item(), p_out.max().item()
-                        ).requires_grad_()
-                    )
-                    return p_out
-
-            params = TensorDictParams(
-                params.apply(
-                    _compare_and_expand,
-                    batch_size=[expand_dim, *params.shape],
-                    filter_empty=False,
-                    call_on_nested=True,
-                ),
-                no_convert=True,
-            )
+                    ),
+                    no_convert=True,
+                )
 
         param_name = module_name + "_params"
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from numbers import Number
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import torch
@@ -41,6 +41,13 @@ class REDQLoss_deprecated(LossModule):
         actor_network (TensorDictModule): the actor to be trained
         qvalue_network (TensorDictModule): a single Q-value network that will
             be multiplied as many times as needed.
+            If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
+            times. If a list of modules is passed, their
+            parameters will be stacked unless they share the same identity (in which case
+            the original parameter will be expanded).
+
+            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+              and all the parameters will be considered as untied.
 
     Keyword Args:
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained.
@@ -75,7 +82,7 @@ class REDQLoss_deprecated(LossModule):
             ``"td_error"``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
-            Defaults to ``False``, ie. gradients are propagated to shared
+            Defaults to ``False``, i.e., gradients are propagated to shared
             parameters for both policy and critic losses.
         reduction (str, optional): Specifies the reduction to apply to the output:
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
@@ -134,7 +141,7 @@ class REDQLoss_deprecated(LossModule):
     def __init__(
         self,
         actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule,
+        qvalue_network: TensorDictModule | List[TensorDictModule],
         *,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,

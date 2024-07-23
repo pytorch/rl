@@ -9,7 +9,7 @@ import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -46,8 +46,15 @@ class CQLLoss(LossModule):
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (TensorDictModule): Q(s, a) parametric model.
+        qvalue_network (TensorDictModule or list of TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
+            If a single instance of `qvalue_network` is provided, it will be duplicated ``N``
+            times (where ``N=2`` for this loss). If a list of modules is passed, their
+            parameters will be stacked unless they share the same identity (in which case
+            the original parameter will be expanded).
+
+            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+              and all the parameters will be considered as untied.
 
     Keyword args:
         loss_function (str, optional): loss function to be used with
@@ -266,7 +273,7 @@ class CQLLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TensorDictModule,
+        qvalue_network: TensorDictModule | List[TensorDictModule],
         *,
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
