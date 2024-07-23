@@ -3013,7 +3013,9 @@ class TestLazyStackedCompositeSpecs:
                     space=None,
                     device=cpu,
                     dtype=torch.float32,
-                    domain=continuous), device=cpu, shape=torch.Size([3])),
+                    domain=continuous),
+                device=cpu,
+                shape=torch.Size([3])),
         1 ->
             lidar: BoundedTensorSpec(
                 shape=torch.Size([20]),
@@ -3031,7 +3033,9 @@ class TestLazyStackedCompositeSpecs:
                         high=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
-                    domain=continuous), device=cpu, shape=torch.Size([3])),
+                    domain=continuous),
+                device=cpu,
+                shape=torch.Size([3])),
         2 ->
             individual_2_obs: CompositeSpec(
                 individual_1_obs_0: UnboundedContinuousTensorSpec(
@@ -3039,7 +3043,9 @@ class TestLazyStackedCompositeSpecs:
                     space=None,
                     device=cpu,
                     dtype=torch.float32,
-                    domain=continuous), device=cpu, shape=torch.Size([3]))}},
+                    domain=continuous),
+                device=cpu,
+                shape=torch.Size([3]))}},
     device=cpu,
     shape={torch.Size((3,))},
     stack_dim={c.stack_dim})"""
