@@ -7,7 +7,7 @@ import time
 import hydra
 import torch
 
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
@@ -18,7 +18,7 @@ from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
-    AdditiveGaussianWrapper,
+    AdditiveGaussianModule,
     ProbabilisticActor,
     TanhDelta,
     ValueOperator,
@@ -102,10 +102,13 @@ def train(cfg: "DictConfig"):  # noqa: F821
         return_log_prob=False,
     )
 
-    policy_explore = AdditiveGaussianWrapper(
+    policy_explore = TensorDictSequential(
         policy,
-        annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
-        action_key=env.action_key,
+        AdditiveGaussianModule(
+            spec=env.unbatched_action_spec,
+            annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
+            action_key=env.action_key,
+        ),
     )
 
     # Critic
@@ -200,7 +203,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
                 optim.zero_grad()
                 target_net_updater.step()
 
-        policy_explore.step(frames=current_frames)  # Update exploration annealing
+        policy_explore[1].step(frames=current_frames)  # Update exploration annealing
         collector.update_policy_weights_()
 
         training_time = time.time() - training_start
