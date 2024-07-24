@@ -221,12 +221,14 @@ class REDQLoss_deprecated(LossModule):
         self._action_spec = action_spec
         self.target_entropy_buffer = None
         self.gSDE = gSDE
+        self._make_vmap()
         self.reduction = reduction
-
-        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+
+    def _make_vmap(self):
+        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
 
     @property
     def target_entropy(self):

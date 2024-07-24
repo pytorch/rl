@@ -373,14 +373,16 @@ class CQLLoss(LossModule):
                 "log_alpha_prime",
                 torch.nn.Parameter(torch.tensor(math.log(1.0), device=device)),
             )
+        self._make_vmap()
+        self.reduction = reduction
 
+    def _make_vmap(self):
         self._vmap_qvalue_networkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
         self._vmap_qvalue_network00 = _vmap_func(
             self.qvalue_network, randomness=self.vmap_randomness
         )
-        self.reduction = reduction
 
     @property
     def target_entropy(self):

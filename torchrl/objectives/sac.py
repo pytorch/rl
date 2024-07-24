@@ -403,14 +403,17 @@ class SACLoss(LossModule):
             )
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self._make_vmap()
+        self.reduction = reduction
+
+    def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
         if self._version == 1:
             self._vmap_qnetwork00 = _vmap_func(
-                qvalue_network, randomness=self.vmap_randomness
+                self.qvalue_network, randomness=self.vmap_randomness
             )
-        self.reduction = reduction
 
     @property
     def target_entropy_buffer(self):
@@ -1101,10 +1104,13 @@ class DiscreteSACLoss(LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
+        self._make_vmap()
+        self.reduction = reduction
+
+    def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
-        self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
