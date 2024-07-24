@@ -12,7 +12,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
-import torch
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
@@ -553,16 +552,16 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         This property supports setting its value.
         """
         if self._vmap_randomness is None:
-            do_break = False
-            for val in self.__dict__.values():
-                if isinstance(val, torch.nn.Module):
-                    for module in val.modules():
-                        if isinstance(module, RANDOM_MODULE_LIST):
-                            self._vmap_randomness = "different"
-                            do_break = True
-                            break
-                if do_break:
-                    # double break
+            main_modules = list(self.__dict__.values()) + list(self.children())
+            modules = (
+                module
+                for main_module in main_modules
+                if isinstance(main_module, nn.Module)
+                for module in main_module.modules()
+            )
+            for val in modules:
+                if isinstance(val, RANDOM_MODULE_LIST):
+                    self._vmap_randomness = "different"
                     break
             else:
                 self._vmap_randomness = "error"

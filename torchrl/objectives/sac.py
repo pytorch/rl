@@ -412,7 +412,7 @@ class SACLoss(LossModule):
         )
         if self._version == 1:
             self._vmap_qnetwork00 = _vmap_func(
-                qvalue_network, randomness=self.vmap_randomness
+                self.qvalue_network, randomness=self.vmap_randomness
             )
 
     @property
