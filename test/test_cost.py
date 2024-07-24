@@ -260,6 +260,9 @@ def test_loss_vmap_random(device, vmap_randomness, dropout):
             net = nn.Sequential(*layers).to(device)
             model = TensorDictModule(net, in_keys=["obs"], out_keys=["action"])
             self.convert_to_functional(model, "model", expand_dim=4)
+            self._make_vmap()
+
+        def _make_vmap(self):
             self.vmap_model = _vmap_func(
                 self.model,
                 (None, 0),
