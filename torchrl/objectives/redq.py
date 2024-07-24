@@ -336,7 +336,9 @@ class REDQLoss(LossModule):
         self.gSDE = gSDE
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+        self._make_vmap()
 
+    def _make_vmap(self):
         self._vmap_qvalue_network00 = _vmap_func(
             self.qvalue_network, randomness=self.vmap_randomness
         )

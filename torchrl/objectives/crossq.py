@@ -338,10 +338,13 @@ class CrossQLoss(LossModule):
 
         self._target_entropy = target_entropy
         self._action_spec = action_spec
+        self._make_vmap()
+        self.reduction = reduction
+
+    def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
-        self.reduction = reduction
 
     @property
     def target_entropy_buffer(self):
