@@ -559,6 +559,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     def set_vmap_randomness(self, value):
         self._vmap_randomness = value
+        self._make_vmap()
 
     @staticmethod
     def _make_meta_params(param):
@@ -569,6 +570,11 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if is_param:
             pd = nn.Parameter(pd, requires_grad=False)
         return pd
+
+    def _make_vmap(self):
+        raise NotImplementedError(
+            f"_make_vmap has been called but is not implemented for loss of type {type(self).__name__}."
+        )
 
 
 class _make_target_param:
