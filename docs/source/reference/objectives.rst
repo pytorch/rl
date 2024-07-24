@@ -38,6 +38,22 @@ The main characteristics of TorchRL losses are:
     If the parameters are modified out-of-place, :meth:`~torchrl.objectives.LossModule.from_stateful_net` can be
     used to reset the parameters in the loss to the new value.
 
+torch.vmap and randomness
+-------------------------
+
+TorchRL loss modules have plenty of calls to :func:`~torch.vmap` to amortize the cost of calling multiple similar models
+in a loop, and instead vectorize these operations. `vmap` needs to be told explicitly what to do when random numbers
+need to be generated within the call. To do this, a randomness mode need to be set and must be one of `"error"` (default,
+errors when dealing with pseudo-random functions), `"same"` (replicates the results across the batch) or `"different"`
+(each element of the batch is treated separately).
+Relying on the default will typically result in an error such as this one:
+
+  >>> RuntimeError: vmap: called random operation while in randomness error mode.
+
+Since the calls to `vmap` are buried down the loss modules, TorchRL
+provides an interface to set that vmap mode from the outside through `loss.vmap_randomness = str_value`, see
+:meth:`~torchrl.objectives.LossModule.vmap_randomness` for more information.
+
 Training value functions
 ------------------------
 

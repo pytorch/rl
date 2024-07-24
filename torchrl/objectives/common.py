@@ -540,6 +540,18 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     @property
     def vmap_randomness(self):
+        """Vmap random mode.
+
+        The vmap randomness mode controls what :func:`~torch.vmap` should do when dealing with
+        functions with a random outcome such as :func:`~torch.randn` and :func:`~torch.rand`.
+        If `"error"`, any random function will raise an exception indicating that `vmap` does not
+        know how to handle the random call.
+
+        If `"different"`, every element of the batch along which vmap is being called will
+        behave differently. If `"same"`, vmaps will copy the same result across all elements.
+
+        This property supports setting its value.
+        """
         if self._vmap_randomness is None:
             do_break = False
             for val in self.__dict__.values():
@@ -558,6 +570,10 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         return self._vmap_randomness
 
     def set_vmap_randomness(self, value):
+        if value not in ("error", "same", "different"):
+            raise ValueError(
+                "Wrong vmap randomness, should be one of 'error', 'same' or 'different'."
+            )
         self._vmap_randomness = value
         self._make_vmap()
 
