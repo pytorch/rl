@@ -221,6 +221,7 @@ class REDQLoss_deprecated(LossModule):
         self._action_spec = action_spec
         self.target_entropy_buffer = None
         self.gSDE = gSDE
+        self._make_vmap()
         self.reduction = reduction
 
         if gamma is not None:
