@@ -571,6 +571,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         return pd
 
     def _make_vmap(self):
+        """Caches the the vmap callers to reduce the overhead at runtime."""
         raise NotImplementedError(
             f"_make_vmap has been called but is not implemented for loss of type {type(self).__name__}."
         )

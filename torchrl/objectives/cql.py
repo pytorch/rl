@@ -373,7 +373,7 @@ class CQLLoss(LossModule):
                 "log_alpha_prime",
                 torch.nn.Parameter(torch.tensor(math.log(1.0), device=device)),
             )
-
+        self._make_vmap()
         self.reduction = reduction
 
     def _make_vmap(self):
