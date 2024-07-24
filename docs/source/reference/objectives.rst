@@ -54,6 +54,10 @@ Since the calls to `vmap` are buried down the loss modules, TorchRL
 provides an interface to set that vmap mode from the outside through `loss.vmap_randomness = str_value`, see
 :meth:`~torchrl.objectives.LossModule.vmap_randomness` for more information.
 
+``LossModule.vmap_randomness`` defaults to `"error"` if no random module is detected, and to `"different"` in
+other cases. By default, only a limited number of modules are listed as random, but the list can be extended
+using the :func:`~torchrl.objectives.common.add_random_module` function.
+
 Training value functions
 ------------------------
 
