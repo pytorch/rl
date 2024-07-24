@@ -549,7 +549,12 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         If `"different"`, every element of the batch along which vmap is being called will
         behave differently. If `"same"`, vmaps will copy the same result across all elements.
 
+        ``vmap_randomness`` defaults to `"error"` if no random module is detected, and to `"different"` in
+        other cases. By default, only a limited number of modules are listed as random, but the list can be extended
+        using the :func:`~torchrl.objectives.common.add_random_module` function.
+
         This property supports setting its value.
+
         """
         if self._vmap_randomness is None:
             main_modules = list(self.__dict__.values()) + list(self.children())
@@ -603,3 +608,9 @@ class _make_target_param:
                 x.data.clone() if self.clone else x.data, requires_grad=False
             )
         return x.data.clone() if self.clone else x.data
+
+
+def add_ramdom_module(module):
+    """Adds a random module to the list of modules that will be detected by :meth:`~torchrl.objectives.LossModule.vmap_randomness` as random."""
+    global RANDOM_MODULE_LIST
+    RANDOM_MODULE_LIST = RANDOM_MODULE_LIST + (module,)
