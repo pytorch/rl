@@ -331,13 +331,16 @@ class TD3BCLoss(LossModule):
             high = high.to(device)
         self.register_buffer("max_action", high)
         self.register_buffer("min_action", low)
+        self._make_vmap()
+        self.reduction = reduction
+
+    def _make_vmap(self):
         self._vmap_qvalue_network00 = _vmap_func(
             self.qvalue_network, randomness=self.vmap_randomness
         )
         self._vmap_actor_network00 = _vmap_func(
             self.actor_network, randomness=self.vmap_randomness
         )
-        self.reduction = reduction
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
