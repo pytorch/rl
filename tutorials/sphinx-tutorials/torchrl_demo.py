@@ -605,10 +605,12 @@ from tensordict.nn import (
 ###############################################################################
 
 # Probabilistic modules
-from torchrl.modules import NormalParamWrapper, TanhNormal
+from torchrl.modules import NormalParamExtractor, TanhNormal
 
 td = TensorDict({"input": torch.randn(3, 5)}, [3])
-net = NormalParamWrapper(nn.Linear(5, 4))  # splits the output in loc and scale
+net = nn.Sequential(
+    nn.Linear(5, 4), NormalParamExtractor()
+)  # splits the output in loc and scale
 module = TensorDictModule(net, in_keys=["input"], out_keys=["loc", "scale"])
 td_module = ProbabilisticTensorDictSequential(
     module,

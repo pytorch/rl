@@ -11,6 +11,7 @@ from .distributions import (
     IndependentNormal,
     MaskedCategorical,
     MaskedOneHotCategorical,
+    NormalParamExtractor,
     NormalParamWrapper,
     OneHotCategorical,
     ReparamGradientStrategy,
