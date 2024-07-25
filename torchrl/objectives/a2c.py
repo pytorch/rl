@@ -62,7 +62,7 @@ class A2CLoss(LossModule):
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
-            Defaults to ``False``, ie. gradients are propagated to shared
+            Defaults to ``False``, i.e., gradients are propagated to shared
             parameters for both policy and critic losses.
         advantage_key (str): [Deprecated, use set_keys(advantage_key=advantage_key) instead]
             The input tensordict key where the advantage is expected to be written.  default: "advantage"

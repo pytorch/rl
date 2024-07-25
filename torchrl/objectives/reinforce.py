@@ -56,7 +56,7 @@ class ReinforceLoss(LossModule):
             value is expected to be written. Defaults to ``"value_target"``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
-            Defaults to ``False``, ie. gradients are propagated to shared
+            Defaults to ``False``, i.e., gradients are propagated to shared
             parameters for both policy and critic losses.
         functional (bool, optional): whether modules should be functionalized.
             Functionalizing permits features like meta-RL, but makes it
