@@ -240,7 +240,7 @@ class MultiAgentNetBase(nn.Module):
         self.params.data.update_(params.data)
 
     def __repr__(self):
-        empty_net = self.__dict__["_empty_net"]
+        empty_net = self._empty_net
         with self.params.to_module(empty_net):
             module_repr = indent(str(empty_net), 4 * " ")
         n_agents = indent(f"n_agents={self.n_agents}", 4 * " ")
