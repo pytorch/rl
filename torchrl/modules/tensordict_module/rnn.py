@@ -543,7 +543,6 @@ class LSTMModule(ModuleBase):
             >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
             >>>
             >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
-            >>> assert env.base_env.batch_locked
             >>> lstm_module = LSTMModule(
             ...     input_size=env.observation_spec["observation"].shape[-1],
             ...     hidden_size=64,
@@ -1294,7 +1293,6 @@ class GRUModule(ModuleBase):
             >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
             >>>
             >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
-            >>> assert env.base_env.batch_locked
             >>> gru_module = GRUModule(
             ...     input_size=env.observation_spec["observation"].shape[-1],
             ...     hidden_size=64,
