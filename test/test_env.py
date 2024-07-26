@@ -79,7 +79,9 @@ from torchrl.envs import (
     EnvBase,
     EnvCreator,
     ParallelEnv,
+    PendulumEnv,
     SerialEnv,
+    TicTacToeEnv,
 )
 from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.gym_like import default_info_dict_reader
@@ -309,6 +311,62 @@ def test_rollout_predictability(device):
         torch.arange(first, first + 100, device=device)
         == td_out.get("action").squeeze()
     ).all()
+
+
+# Check that the "terminated" key is filled in automatically if only the "done"
+# key is provided in `_step`.
+def test_done_key_completion_done():
+    class DoneEnv(CountingEnv):
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            self.count += 1
+            tensordict = TensorDict(
+                source={
+                    "observation": self.count.clone(),
+                    "done": self.count > self.max_steps,
+                    "reward": torch.zeros_like(self.count, dtype=torch.float),
+                },
+                batch_size=self.batch_size,
+                device=self.device,
+            )
+            return tensordict
+
+    env = DoneEnv(max_steps=torch.tensor([[0], [1]]), batch_size=(2,))
+    td = env.reset()
+    env.rand_action(td)
+    td = env.step(td)
+    assert torch.equal(td[("next", "done")], torch.tensor([[True], [False]]))
+    assert torch.equal(td[("next", "terminated")], torch.tensor([[True], [False]]))
+
+
+# Check that the "done" key is filled in automatically if only the "terminated"
+# key is provided in `_step`.
+def test_done_key_completion_terminated():
+    class TerminatedEnv(CountingEnv):
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            self.count += 1
+            tensordict = TensorDict(
+                source={
+                    "observation": self.count.clone(),
+                    "terminated": self.count > self.max_steps,
+                    "reward": torch.zeros_like(self.count, dtype=torch.float),
+                },
+                batch_size=self.batch_size,
+                device=self.device,
+            )
+            return tensordict
+
+    env = TerminatedEnv(max_steps=torch.tensor([[0], [1]]), batch_size=(2,))
+    td = env.reset()
+    env.rand_action(td)
+    td = env.step(td)
+    assert torch.equal(td[("next", "done")], torch.tensor([[True], [False]]))
+    assert torch.equal(td[("next", "terminated")], torch.tensor([[True], [False]]))
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -3249,6 +3307,48 @@ class TestNonTensorEnv:
         assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
         assert s_["string"] == ["0", "6"]
         assert s["next", "string"] == ["6", "6"]
+
+
+class TestCustomEnvs:
+    def test_tictactoe_env(self):
+        torch.manual_seed(0)
+        env = TicTacToeEnv()
+        check_env_specs(env)
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape[-1] < 10
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            assert r.shape[-1] < 10
+        r = env.rollout(
+            100, tensordict=TensorDict(batch_size=[5]), break_when_any_done=False
+        )
+        assert r.shape == (5, 100)
+
+    def test_tictactoe_env_single(self):
+        torch.manual_seed(0)
+        env = TicTacToeEnv(single_player=True)
+        check_env_specs(env)
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape[-1] < 6
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            assert r.shape[-1] < 6
+        r = env.rollout(
+            100, tensordict=TensorDict(batch_size=[5]), break_when_any_done=False
+        )
+        assert r.shape == (5, 100)
+
+    def test_pendulum_env(self):
+        env = PendulumEnv(device=None)
+        assert env.device is None
+        env = PendulumEnv(device="cpu")
+        assert env.device == torch.device("cpu")
+        check_env_specs(env)
+        for _ in range(10):
+            r = env.rollout(10)
+            assert r.shape == torch.Size((10,))
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            assert r.shape == torch.Size((5, 10))
 
 
 if __name__ == "__main__":

@@ -869,11 +869,13 @@ def _sort_keys(element):
     return element
 
 
-def make_composite_from_td(data):
+def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
     """Creates a CompositeSpec instance from a tensordict, assuming all values are unbounded.
 
     Args:
         data (tensordict.TensorDict): a tensordict to be mapped onto a CompositeSpec.
+        unsqueeze_null_shapes (bool, optional): if ``True``, every empty shape will be
+            unsqueezed to (1,). Defaults to ``True``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -905,7 +907,9 @@ def make_composite_from_td(data):
             else UnboundedContinuousTensorSpec(
                 dtype=tensor.dtype,
                 device=tensor.device,
-                shape=tensor.shape if tensor.shape else [1],
+                shape=tensor.shape
+                if tensor.shape or not unsqueeze_null_shapes
+                else [1],
             )
             for key, tensor in data.items()
         },
