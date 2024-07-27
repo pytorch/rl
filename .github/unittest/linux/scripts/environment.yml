@@ -31,3 +31,4 @@ dependencies:
     - ray
     - transformers
     - ninja
+    - timm
