@@ -22,6 +22,7 @@ import tensordict.tensordict
 import torch
 
 from _utils_internal import (  # noqa
+    BREAKOUT_VERSIONED,
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
@@ -248,7 +249,10 @@ class TestBinarizeReward(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -257,7 +261,10 @@ class TestBinarizeReward(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
@@ -267,7 +274,10 @@ class TestBinarizeReward(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
@@ -572,7 +582,10 @@ class TestClipTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_serial_trans_env_check(self):
         def make_env():
@@ -604,7 +617,10 @@ class TestClipTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = ContinuousActionVecMockEnv()
@@ -650,7 +666,10 @@ class TestCatFrames(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -674,7 +693,10 @@ class TestCatFrames(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.skipif(not _has_gym, reason="Test executed on gym")
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
@@ -1621,7 +1643,10 @@ class TestStepCounter(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_serial_trans_env_check(self):
         def make_env():
@@ -1637,7 +1662,10 @@ class TestStepCounter(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), StepCounter(10))
@@ -1921,7 +1949,10 @@ class TestCatTensors(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         ct = CatTensors(
@@ -1946,7 +1977,10 @@ class TestCatTensors(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
@@ -2298,7 +2332,10 @@ class TestCenterCrop(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         keys = ["pixels"]
@@ -2313,7 +2350,10 @@ class TestCenterCrop(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.skipif(not _has_gym, reason="No Gym detected")
     @pytest.mark.parametrize("out_key", [None, ["outkey"], [("out", "key")]])
@@ -2360,7 +2400,10 @@ class TestDiscreteActionProjection(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -2377,7 +2420,10 @@ class TestDiscreteActionProjection(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("action_key", ["action", ("nested", "stuff")])
     def test_transform_no_env(self, action_key):
@@ -2605,7 +2651,10 @@ class TestDoubleToFloat(TransformBase):
             env = ParallelEnv(1, make_env)
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
             del env
 
     def test_trans_serial_env_check(self, dtype_fixture):  # noqa: F811
@@ -2623,7 +2672,10 @@ class TestDoubleToFloat(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_no_env(self, dtype_fixture):  # noqa: F811
         t = DoubleToFloat(in_keys=["observation"], in_keys_inv=["action"])
@@ -2778,7 +2830,10 @@ class TestExcludeTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         t = Compose(
@@ -2801,7 +2856,10 @@ class TestExcludeTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_env(self):
         base_env = TestExcludeTransform.EnvWithManyKeys()
@@ -3010,7 +3068,10 @@ class TestSelectTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         t = Compose(
@@ -3033,7 +3094,10 @@ class TestSelectTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_env(self):
         base_env = TestExcludeTransform.EnvWithManyKeys()
@@ -3203,7 +3267,10 @@ class TestFlattenObservation(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -3226,7 +3293,10 @@ class TestFlattenObservation(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize("nchannels", [1, 3])
@@ -3381,7 +3451,10 @@ class TestFrameSkipTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -3396,7 +3469,10 @@ class TestFrameSkipTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_no_env(self):
         t = FrameSkipTransform(2)
@@ -3622,7 +3698,10 @@ class TestGrayScale(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         out_keys = None
@@ -3641,7 +3720,10 @@ class TestGrayScale(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     def test_transform_env(self, out_keys):
@@ -3717,7 +3799,10 @@ class TestNoop(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), NoopResetEnv())
@@ -3890,7 +3975,10 @@ class TestObservationNorm(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(
         self,
@@ -3919,7 +4007,10 @@ class TestObservationNorm(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("standard_normal", [True, False])
     @pytest.mark.parametrize("in_key", ["observation", ("some_other", "observation")])
@@ -4473,7 +4564,10 @@ class TestResize(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -4490,7 +4584,10 @@ class TestResize(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.skipif(not _has_gym, reason="No gym")
     @pytest.mark.parametrize("out_key", ["pixels", ("agents", "pixels")])
@@ -4549,7 +4646,10 @@ class TestRewardClipping(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -4564,7 +4664,10 @@ class TestRewardClipping(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("reward_key", ["reward", ("agents", "reward")])
     def test_transform_no_env(self, reward_key):
@@ -4684,7 +4787,10 @@ class TestRewardScaling(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -4699,7 +4805,10 @@ class TestRewardScaling(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("standard_normal", [True, False])
     def test_transform_no_env(self, standard_normal):
@@ -4817,7 +4926,10 @@ class TestRewardSum(TransformBase):
             r = env.rollout(4)
             assert r["next", "episode_reward"].unique().numel() > 1
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -4838,7 +4950,10 @@ class TestRewardSum(TransformBase):
             r = env.rollout(4)
             assert r["next", "episode_reward"].unique().numel() > 1
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("has_in_keys,", [True, False])
     @pytest.mark.parametrize("reset_keys,", [None, ["_reset"] * 3])
@@ -5491,7 +5606,10 @@ class TestUnsqueezeTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -5508,7 +5626,10 @@ class TestUnsqueezeTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
@@ -5796,7 +5917,10 @@ class TestSqueezeTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -5805,7 +5929,10 @@ class TestSqueezeTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_parallel_env_check(self):
         env = TransformedEnv(
@@ -5814,7 +5941,10 @@ class TestSqueezeTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("squeeze_dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
@@ -6007,7 +6137,10 @@ class TestTargetReturn(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -6020,7 +6153,10 @@ class TestTargetReturn(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -6033,7 +6169,10 @@ class TestTargetReturn(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.skipif(not _has_gym, reason="Test executed on gym")
     @pytest.mark.parametrize("batched_class", [SerialEnv, ParallelEnv])
@@ -6242,7 +6381,10 @@ class TestToTensorImage(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -6259,7 +6401,10 @@ class TestToTensorImage(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("out_keys", [None, ["stuff"], [("nested", "stuff")]])
     @pytest.mark.parametrize("default_dtype", [torch.float32, torch.float64])
@@ -6392,7 +6537,10 @@ class TestTensorDictPrimer(TransformBase):
             assert "mykey" in env.reset().keys()
             assert ("next", "mykey") in env.rollout(3).keys(True)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_serial_trans_env_check(self):
         def make_env():
@@ -6407,7 +6555,10 @@ class TestTensorDictPrimer(TransformBase):
             assert "mykey" in env.reset().keys()
             assert ("next", "mykey") in env.rollout(3).keys(True)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_parallel_env_check(self):
         env = TransformedEnv(
@@ -6421,7 +6572,10 @@ class TestTensorDictPrimer(TransformBase):
             assert ("next", "mykey") in r.keys(True)
             assert r["next", "mykey"].shape == torch.Size([2, 3, 4])
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("spec_shape", [[4], [2, 4]])
     def test_trans_serial_env_check(self, spec_shape):
@@ -6684,7 +6838,10 @@ class TestTimeMaxPool(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -6707,7 +6864,10 @@ class TestTimeMaxPool(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.skipif(not _has_gym, reason="Test executed on gym")
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
@@ -6871,7 +7031,10 @@ class TestgSDE(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("shape", [(), (2,)])
     def test_trans_serial_env_check(self, shape):
@@ -6884,7 +7047,10 @@ class TestgSDE(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_parallel_env_check(self):
         state_dim = 7
@@ -6896,7 +7062,10 @@ class TestgSDE(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_no_env(self):
         state_dim = 7
@@ -8748,7 +8917,10 @@ class TestRenameTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
         def make_env():
             return TransformedEnv(
@@ -8766,7 +8938,10 @@ class TestRenameTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self, create_copy):
         def make_env():
@@ -8808,7 +8983,10 @@ class TestRenameTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
         env = TransformedEnv(
             ParallelEnv(2, make_env),
             RenameTransform(
@@ -8822,7 +9000,10 @@ class TestRenameTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("mode", ["forward", "_call"])
     @pytest.mark.parametrize(
@@ -9021,7 +9202,10 @@ class TestInitTracker(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         def make_env():
@@ -9033,7 +9217,10 @@ class TestInitTracker(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_parallel_env_check(self):
         def make_env():
@@ -9045,7 +9232,10 @@ class TestInitTracker(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_no_env(self):
         with pytest.raises(ValueError, match="init_key can only be of type str"):
@@ -9315,7 +9505,10 @@ class TestKLRewardTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         out_key = "reward"
@@ -9324,7 +9517,10 @@ class TestKLRewardTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_parallel_env_check(self):
         out_key = "reward"
@@ -9333,7 +9529,10 @@ class TestKLRewardTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_model(self):
         actor = self._make_actor()
@@ -9472,21 +9671,30 @@ class TestActionMask(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(SerialEnv(2, self._env_class), ActionMask())
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_parallel_env_check(self):
         env = TransformedEnv(ParallelEnv(2, self._env_class), ActionMask())
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_no_env(self):
         t = ActionMask()
@@ -9603,7 +9811,10 @@ class TestDeviceCastTransformPart(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("in_keys", ["observation"])
     @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
@@ -9654,7 +9865,10 @@ class TestDeviceCastTransformPart(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_no_env(self):
         t = DeviceCastTransform("cpu:1", "cpu:0", in_keys=["a"], out_keys=["b"])
@@ -9794,7 +10008,10 @@ class TestDeviceCastTransformWhole(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         def make_env():
@@ -9813,7 +10030,10 @@ class TestDeviceCastTransformWhole(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_no_env(self):
         t = DeviceCastTransform("cpu:1", "cpu:0")
@@ -9905,7 +10125,10 @@ class TestPermuteTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -9915,7 +10138,10 @@ class TestPermuteTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_parallel_env_check(self):
         env = TransformedEnv(
@@ -9925,7 +10151,10 @@ class TestPermuteTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     def test_transform_compose(self, batch):
@@ -10022,7 +10251,7 @@ class TestEndOfLife(TransformBase):
     def test_trans_parallel_env_check(self):
         def make():
             with set_gym_backend("gymnasium"):
-                return GymEnv("ALE/Breakout-v5")
+                return GymEnv(BREAKOUT_VERSIONED())
 
         with pytest.warns(UserWarning, match="The base_env is not a gym env"):
             with pytest.raises(AttributeError):
@@ -10034,7 +10263,7 @@ class TestEndOfLife(TransformBase):
     def test_trans_serial_env_check(self):
         def make():
             with set_gym_backend("gymnasium"):
-                return GymEnv("ALE/Breakout-v5")
+                return GymEnv(BREAKOUT_VERSIONED())
 
         with pytest.warns(UserWarning, match="The base_env is not a gym env"):
             env = TransformedEnv(SerialEnv(2, make), transform=EndOfLifeTransform())
@@ -10045,7 +10274,7 @@ class TestEndOfLife(TransformBase):
     def test_single_trans_env_check(self, eol_key, lives_key):
         with set_gym_backend("gymnasium"):
             env = TransformedEnv(
-                GymEnv("ALE/Breakout-v5"),
+                GymEnv(BREAKOUT_VERSIONED()),
                 transform=EndOfLifeTransform(eol_key=eol_key, lives_key=lives_key),
             )
         check_env_specs(env)
@@ -10056,7 +10285,7 @@ class TestEndOfLife(TransformBase):
         def make():
             with set_gym_backend("gymnasium"):
                 return TransformedEnv(
-                    GymEnv("ALE/Breakout-v5"),
+                    GymEnv(BREAKOUT_VERSIONED()),
                     transform=EndOfLifeTransform(eol_key=eol_key, lives_key=lives_key),
                 )
 
@@ -10069,7 +10298,7 @@ class TestEndOfLife(TransformBase):
         def make():
             with set_gym_backend("gymnasium"):
                 return TransformedEnv(
-                    GymEnv("ALE/Breakout-v5"),
+                    GymEnv(BREAKOUT_VERSIONED()),
                     transform=EndOfLifeTransform(eol_key=eol_key, lives_key=lives_key),
                 )
 
@@ -10077,7 +10306,10 @@ class TestEndOfLife(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_transform_no_env(self):
         t = EndOfLifeTransform()
@@ -10098,7 +10330,7 @@ class TestEndOfLife(TransformBase):
 
         with set_gym_backend("gymnasium"):
             env = TransformedEnv(
-                GymEnv("ALE/Breakout-v5"),
+                GymEnv(BREAKOUT_VERSIONED()),
                 transform=EndOfLifeTransform(eol_key=eol_key, lives_key=lives_key),
             )
         check_env_specs(env)
@@ -10480,7 +10712,10 @@ class TestSignTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_serial_trans_env_check(self):
         def make_env():
@@ -10507,7 +10742,10 @@ class TestSignTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
@@ -10520,7 +10758,10 @@ class TestSignTransform(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
 
 class TestRemoveEmptySpecs(TransformBase):
@@ -10581,7 +10822,10 @@ class TestRemoveEmptySpecs(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            env.close()
+            try:
+                env.close()
+            except RuntimeError:
+                pass
 
     def test_trans_serial_env_check(self):
         with pytest.raises(
