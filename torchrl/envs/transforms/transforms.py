@@ -4579,7 +4579,7 @@ class TensorDictPrimer(Transform):
         self.reset_key = reset_key
 
         # sanity check
-        for spec in self.primers.values():
+        for spec in self.primers.values(True, True):
             if not isinstance(spec, TensorSpec):
                 raise ValueError(
                     "The values of the primers must be a subtype of the TensorSpec class. "
@@ -4642,9 +4642,16 @@ class TensorDictPrimer(Transform):
             device = observation_spec.device
         except RuntimeError:
             device = self.device
-        if self.primers.shape[: len(observation_spec.shape)] != observation_spec.shape:
-            self.primers = self._expand_shape(self.primers)
-        observation_spec.update(self.primers.to(device))
+        primers = self.primers.clone()
+        if self.primers.shape != observation_spec.shape:
+            try:
+                # We try to set the primer shape to the observation spec shape
+                primers.shape = observation_spec.shape
+            except ValueError:
+                # If we fail, we expnad them to that shape
+                primers = self._expand_shape(primers)
+
+        observation_spec.update(primers.to(device))
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
