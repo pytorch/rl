@@ -4638,15 +4638,13 @@ class TensorDictPrimer(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-        for key, spec in self.primers.items():
-            if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
-                expanded_spec = self._expand_shape(spec)
-                spec = expanded_spec
-            try:
-                device = observation_spec.device
-            except RuntimeError:
-                device = self.device
-            observation_spec[key] = self.primers[key] = spec.to(device)
+        try:
+            device = observation_spec.device
+        except RuntimeError:
+            device = self.device
+        if self.primers.shape[: len(observation_spec.shape)] != observation_spec.shape:
+            self.primers = self._expand_shape(self.primers)
+        observation_spec.update(self.primers.to(device))
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
