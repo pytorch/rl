@@ -1122,7 +1122,9 @@ class SyncDataCollector(DataCollectorBase):
             truncated[last_step] = True
             final_rollout["next", truncated_key] = truncated
             done = final_rollout["next", _replace_last(truncated_key, "done")]
-            final_rollout["next", _replace_last(truncated_key, "done")] = done | truncated
+            final_rollout["next", _replace_last(truncated_key, "done")] = (
+                done | truncated
+            )
         return final_rollout
 
     @torch.no_grad()
