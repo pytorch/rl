@@ -4642,16 +4642,16 @@ class TensorDictPrimer(Transform):
             device = observation_spec.device
         except RuntimeError:
             device = self.device
-        primers = self.primers.clone()
+
         if self.primers.shape != observation_spec.shape:
             try:
                 # We try to set the primer shape to the observation spec shape
-                primers.shape = observation_spec.shape
+                self.primers.shape = observation_spec.shape
             except ValueError:
                 # If we fail, we expnad them to that shape
-                primers = self._expand_shape(primers)
+                self.primers = self._expand_shape(self.primers)
 
-        observation_spec.update(primers.to(device))
+        observation_spec.update(self.primers.to(device))
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
@@ -4720,9 +4720,6 @@ class TensorDictPrimer(Transform):
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
-                if spec.shape[: len(tensordict.batch_size)] != tensordict.batch_size:
-                    expanded_spec = self._expand_shape(spec)
-                    self.primers[key] = spec = expanded_spec
                 if self.random:
                     shape = (
                         ()
