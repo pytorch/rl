@@ -1913,6 +1913,73 @@ class Resize(ObservationTransform):
         return tensordict_reset
 
 
+class Crop(ObservationTransform):
+    """Crops the input image at the specified location and output size.
+
+    Args:
+        w (int): resulting width
+        h (int, optional): resulting height. If None, then w is used (square crop).
+        top (int, optional): top pixel coordinate to start cropping. Default is 0, i.e. top of the image.
+        left (int, optional): left pixel coordinate to start cropping. Default is 0, i.e. left of the image.
+        in_keys (sequence of NestedKey, optional): the entries to crop. If none is provided,
+            ``["pixels"]`` is assumed.
+        out_keys (sequence of NestedKey, optional): the cropped images keys. If none is
+            provided, ``in_keys`` is assumed.
+
+    """
+
+    def __init__(
+        self,
+        w: int,
+        h: int = None,
+        top: int = 0,
+        left: int = 0,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+    ):
+        if in_keys is None:
+            in_keys = IMAGE_KEYS  # default
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self.w = w
+        self.h = h if h else w
+        self.top = top
+        self.left = left
+
+    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        from torchvision.transforms.functional import crop
+
+        observation = crop(observation, self.top, self.left, self.w, self.h)
+        return observation
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        space = observation_spec.space
+        if isinstance(space, ContinuousBox):
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
+            observation_spec.shape = space.low.shape
+        else:
+            observation_spec.shape = self._apply_transform(
+                torch.zeros(observation_spec.shape)
+            ).shape
+        return observation_spec
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, top={float(self.top):4.4f}, left={float(self.left):4.4f}, "
+        )
+
+
 class CenterCrop(ObservationTransform):
     """Crops the center of an image.
 

@@ -70,6 +70,7 @@ from torchrl.envs import (
     CenterCrop,
     ClipTransform,
     Compose,
+    Crop,
     DeviceCastTransform,
     DiscreteActionProjection,
     DMControlEnv,
@@ -2133,6 +2134,213 @@ class TestCatTensors(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for CatTensors")
+
+
+@pytest.mark.skipif(not _has_tv, reason="no torchvision")
+class TestCrop(TransformBase):
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("h", [None, 21])
+    @pytest.mark.parametrize(
+        "keys", [["observation", ("some_other", "nested_key")], ["observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_transform_no_env(self, keys, h, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        crop = Crop(w=20, h=h, in_keys=keys)
+        if h is None:
+            h = 20
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        crop(td)
+        for key in keys:
+            assert td.get(key).shape[-2:] == torch.Size([20, h])
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = BoundedTensorSpec(-1, 1, (nchannels, 16, 16))
+            observation_spec = crop.transform_observation_spec(observation_spec)
+            assert observation_spec.shape == torch.Size([nchannels, 20, h])
+        else:
+            observation_spec = CompositeSpec(
+                {key: BoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
+            )
+            observation_spec = crop.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].shape == torch.Size([nchannels, 20, h])
+
+    @pytest.mark.parametrize("nchannels", [3])
+    @pytest.mark.parametrize("batch", [[2]])
+    @pytest.mark.parametrize("h", [None])
+    @pytest.mark.parametrize("keys", [["observation_pixels"]])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_transform_model(self, keys, h, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        crop = Crop(w=20, h=h, in_keys=keys)
+        if h is None:
+            h = 20
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        model = nn.Sequential(crop, nn.Identity())
+        model(td)
+        for key in keys:
+            assert td.get(key).shape[-2:] == torch.Size([20, h])
+        assert (td.get("dont touch") == dont_touch).all()
+
+    @pytest.mark.parametrize("nchannels", [3])
+    @pytest.mark.parametrize("batch", [[2]])
+    @pytest.mark.parametrize("h", [None])
+    @pytest.mark.parametrize("keys", [["observation_pixels"]])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_transform_compose(self, keys, h, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        crop = Crop(w=20, h=h, in_keys=keys)
+        if h is None:
+            h = 20
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+            device=device,
+        )
+        td.set("dont touch", dont_touch.clone())
+        model = Compose(crop)
+        tdc = model(td.clone())
+        for key in keys:
+            assert tdc.get(key).shape[-2:] == torch.Size([20, h])
+        assert (tdc.get("dont touch") == dont_touch).all()
+        tdc = model._call(td.clone())
+        for key in keys:
+            assert tdc.get(key).shape[-2:] == torch.Size([20, h])
+        assert (tdc.get("dont touch") == dont_touch).all()
+
+    @pytest.mark.parametrize("nchannels", [3])
+    @pytest.mark.parametrize("batch", [[2]])
+    @pytest.mark.parametrize("h", [None])
+    @pytest.mark.parametrize("keys", [["observation_pixels"]])
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(
+        self,
+        rbclass,
+        keys,
+        h,
+        nchannels,
+        batch,
+    ):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(
+            *batch,
+            nchannels,
+            16,
+            16,
+        )
+        crop = Crop(w=20, h=h, in_keys=keys)
+        if h is None:
+            h = 20
+        td = TensorDict(
+            {
+                key: torch.randn(
+                    *batch,
+                    nchannels,
+                    16,
+                    16,
+                )
+                for key in keys
+            },
+            batch,
+        )
+        td.set("dont touch", dont_touch.clone())
+        rb = rbclass(storage=LazyTensorStorage(10))
+        rb.append_transform(crop)
+        rb.extend(td)
+        td = rb.sample(10)
+        for key in keys:
+            assert td.get(key).shape[-2:] == torch.Size([20, h])
+
+    def test_single_trans_env_check(self):
+        keys = ["pixels"]
+        ct = Compose(ToTensorImage(), Crop(w=20, h=20, in_keys=keys))
+        env = TransformedEnv(DiscreteActionConvMockEnvNumpy(), ct)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        keys = ["pixels"]
+
+        def make_env():
+            ct = Compose(ToTensorImage(), Crop(w=20, h=20, in_keys=keys))
+            return TransformedEnv(DiscreteActionConvMockEnvNumpy(), ct)
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        keys = ["pixels"]
+
+        def make_env():
+            ct = Compose(ToTensorImage(), Crop(w=20, h=20, in_keys=keys))
+            return TransformedEnv(DiscreteActionConvMockEnvNumpy(), ct)
+
+        env = ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        keys = ["pixels"]
+        ct = Compose(ToTensorImage(), Crop(w=20, h=20, in_keys=keys))
+        env = TransformedEnv(SerialEnv(2, DiscreteActionConvMockEnvNumpy), ct)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        keys = ["pixels"]
+        ct = Compose(ToTensorImage(), Crop(w=20, h=20, in_keys=keys))
+        env = TransformedEnv(ParallelEnv(2, DiscreteActionConvMockEnvNumpy), ct)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    @pytest.mark.skipif(not _has_gym, reason="No Gym detected")
+    @pytest.mark.parametrize("out_key", [None, ["outkey"], [("out", "key")]])
+    def test_transform_env(self, out_key):
+        keys = ["pixels"]
+        ct = Compose(ToTensorImage(), Crop(out_keys=out_key, w=20, h=20, in_keys=keys))
+        env = TransformedEnv(GymEnv(PONG_VERSIONED()), ct)
+        td = env.reset()
+        if out_key is None:
+            assert td["pixels"].shape == torch.Size([3, 20, 20])
+        else:
+            assert td[out_key[0]].shape == torch.Size([3, 20, 20])
+        check_env_specs(env)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("Crop does not have an inverse method.")
 
 
 @pytest.mark.skipif(not _has_tv, reason="no torchvision")
