@@ -2257,8 +2257,8 @@ class TestCrop(TransformBase):
     @pytest.mark.parametrize(
         "batch",
         [
-            [2],
-        ],
+            [2]
+        ]
     )
     @pytest.mark.parametrize(
         "h",
