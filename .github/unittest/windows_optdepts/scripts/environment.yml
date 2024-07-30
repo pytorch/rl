@@ -16,4 +16,3 @@ dependencies:
     - pyyaml
     - scipy
     - coverage
-    - numpy<2.0
