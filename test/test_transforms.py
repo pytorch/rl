@@ -2178,18 +2178,8 @@ class TestCrop(TransformBase):
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, h])
 
     @pytest.mark.parametrize("nchannels", [3])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            [2]
-        ]
-    )
-    @pytest.mark.parametrize(
-        "h",
-        [
-            None
-        ]
-    )
+    @pytest.mark.parametrize("batch", [[2]])
+    @pytest.mark.parametrize("h", [None])
     @pytest.mark.parametrize("keys", [["observation_pixels"]])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_model(self, keys, h, nchannels, batch, device):
@@ -2214,18 +2204,8 @@ class TestCrop(TransformBase):
         assert (td.get("dont touch") == dont_touch).all()
 
     @pytest.mark.parametrize("nchannels", [3])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            [2]
-        ]
-    )
-    @pytest.mark.parametrize(
-        "h",
-        [
-            None
-        ]
-    )
+    @pytest.mark.parametrize("batch", [[2]])
+    @pytest.mark.parametrize("h", [None])
     @pytest.mark.parametrize("keys", [["observation_pixels"]])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(self, keys, h, nchannels, batch, device):
@@ -2254,18 +2234,8 @@ class TestCrop(TransformBase):
         assert (tdc.get("dont touch") == dont_touch).all()
 
     @pytest.mark.parametrize("nchannels", [3])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            [2]
-        ]
-    )
-    @pytest.mark.parametrize(
-        "h",
-        [
-            None
-        ]
-    )
+    @pytest.mark.parametrize("batch", [[2]])
+    @pytest.mark.parametrize("h", [None])
     @pytest.mark.parametrize("keys", [["observation_pixels"]])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(
