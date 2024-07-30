@@ -4651,7 +4651,7 @@ class TensorDictPrimer(Transform):
                 # If we fail, we expnad them to that shape
                 self.primers = self._expand_shape(self.primers)
 
-        observation_spec.update(self.primers.to(device))
+        observation_spec.update(self.primers.clone().to(device))
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
