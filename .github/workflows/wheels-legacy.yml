@@ -1,0 +1,103 @@
+name: Wheels
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - release/*
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+
+  build-wheel-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python_version[1] }}
+      - name: Checkout torchrl
+        uses: actions/checkout@v2
+      - name: Install PyTorch RC
+        shell: bash
+        run: |
+          python3 -mpip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Build wheel
+        shell: bash
+        run: |
+            python3 -mpip install wheel
+            TORCHRL_BUILD_VERSION=0.5.0 python3 setup.py bdist_wheel
+      - name: Upload wheel for the test-wheel job
+        uses: actions/upload-artifact@v2
+        with:
+          name: torchrl-win-${{ matrix.python_version[0] }}.whl
+          path: dist/torchrl-*.whl
+      - name: Upload wheel for download
+        uses: actions/upload-artifact@v2
+        with:
+          name: torchrl-batch.whl
+          path: dist/*.whl
+
+  test-wheel-windows:
+    needs: build-wheel-windows
+    strategy:
+      matrix:
+        python_version: [ "3.8", "3.9", "3.10", "3.11" ]
+    runs-on: windows-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python_version }}
+      - name: Checkout torchrl
+        uses: actions/checkout@v2
+      - name: Install PyTorch RC
+        shell: bash
+        run: |
+          python3 -mpip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      - name: Upgrade pip
+        shell: bash
+        run: |
+          python3 -mpip install --upgrade pip
+      - name: Install tensordict
+        shell: bash
+        run: |
+          python3 -mpip install git+https://github.com/pytorch/tensordict.git
+      - name: Install test dependencies
+        shell: bash
+        run: |
+          python3 -mpip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml
+      - name: Download built wheels
+        uses: actions/download-artifact@v2
+        with:
+          name: torchrl-win-${{ matrix.python_version }}.whl
+          path: wheels
+      - name: Install built wheels
+        shell: bash
+        run: |
+          python3 -mpip install wheels/*
+      - name: Log version string
+        shell: bash
+        run: |
+          # Avoid ambiguity of "import torchrl" by deleting the source files.
+          rm -rf torchrl/
+          python -c "import torchrl; print(torchrl.__version__)"
+      - name: Run tests
+        shell: bash
+        run: |
+          set -e
+          export IN_CI=1
+          mkdir test-reports
+          python -m torch.utils.collect_env
+          python -c "import torchrl; print(torchrl.__version__)"
+          EXIT_STATUS=0
+          pytest test/smoke_test.py -v --durations 200
+          exit $EXIT_STATUS
