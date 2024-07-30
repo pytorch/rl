@@ -1922,7 +1922,7 @@ class Crop(ObservationTransform):
         top (int, optional): top pixel coordinate to start cropping. Default is 0, i.e. top of the image.
         left (int, optional): left pixel coordinate to start cropping. Default is 0, i.e. left of the image.
         in_keys (sequence of NestedKey, optional): the entries to crop. If none is provided,
-            :obj:`["pixels"]` is assumed.
+            ``["pixels"]`` is assumed.
         out_keys (sequence of NestedKey, optional): the cropped images keys. If none is
             provided, ``in_keys`` is assumed.
 
