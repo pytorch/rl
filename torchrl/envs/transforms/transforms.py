@@ -1924,7 +1924,7 @@ class Crop(ObservationTransform):
         in_keys (sequence of NestedKey, optional): the entries to crop. If none is provided,
             :obj:`["pixels"]` is assumed.
         out_keys (sequence of NestedKey, optional): the cropped images keys. If none is
-            provided, :obj:`in_keys` is assumed.
+            provided, ``in_keys`` is assumed.
 
     """
 
