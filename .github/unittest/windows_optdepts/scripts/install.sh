@@ -37,6 +37,7 @@ fi
 
 # submodules
 git submodule sync && git submodule update --init --recursive
+python -m pip install "numpy<2.0"
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then

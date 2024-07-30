@@ -27,14 +27,14 @@ from torchrl.envs import (
 )
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
-    AdditiveGaussianWrapper,
+    AdditiveGaussianModule,
     DecisionTransformerInferenceWrapper,
     DTActor,
     GRUModule,
     LSTMModule,
     MLP,
     MultiStepActorWrapper,
-    NormalParamWrapper,
+    NormalParamExtractor,
     OnlineDTActor,
     ProbabilisticActor,
     SafeModule,
@@ -201,7 +201,7 @@ class TestTDModule:
 
         in_keys = ["in"]
         net = SafeModule(
-            module=NormalParamWrapper(net),
+            module=nn.Sequential(net, NormalParamExtractor()),
             spec=None,
             in_keys=in_keys,
             out_keys=out_keys,
@@ -363,7 +363,7 @@ class TestTDSequence:
             net1 = nn.Linear(3, 4)
             dummy_net = nn.Linear(4, 4)
             net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
+        net2 = nn.Sequential(net2, NormalParamExtractor())
 
         if spec_type is None:
             spec = None
@@ -474,11 +474,11 @@ class TestTDSequence:
         net1 = nn.Linear(3, 4)
 
         net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
+        net2 = nn.Sequential(net2, NormalParamExtractor())
         net2 = SafeModule(net2, in_keys=["b"], out_keys=["loc", "scale"])
 
         net3 = nn.Linear(4, 4 * param_multiplier)
-        net3 = NormalParamWrapper(net3)
+        net3 = nn.Sequential(net3, NormalParamExtractor())
         net3 = SafeModule(net3, in_keys=["c"], out_keys=["loc", "scale"])
 
         spec = BoundedTensorSpec(-0.1, 0.1, 4)
@@ -1363,17 +1363,19 @@ def test_actor_critic_specs():
         out_keys=[action_key],
     )
     original_spec = spec.clone()
-    module = AdditiveGaussianWrapper(policy_module, spec=spec, action_key=action_key)
+    module = TensorDictSequential(
+        policy_module, AdditiveGaussianModule(spec=spec, action_key=action_key)
+    )
     value_module = ValueOperator(
         module=module,
         in_keys=[("agents", "observation"), action_key],
         out_keys=[("agents", "state_action_value")],
     )
     assert original_spec == spec
-    assert module.spec == spec
+    assert module[1].spec == spec
     DDPGLoss(actor_network=module, value_network=value_module)
     assert original_spec == spec
-    assert module.spec == spec
+    assert module[1].spec == spec
 
 
 def test_vmapmodule():

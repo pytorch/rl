@@ -72,9 +72,11 @@ other cases, the action written in the tensordict is simply the network output.
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    AdditiveGaussianModule
     AdditiveGaussianWrapper
     EGreedyModule
     EGreedyWrapper
+    OrnsteinUhlenbeckProcessModule
     OrnsteinUhlenbeckProcessWrapper
 
 Probabilistic actors
@@ -353,13 +355,18 @@ algorithms, such as DQN, DDPG or Dreamer.
 Multi-agent-specific modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-These networks implement models that can be used in
-multi-agent contexts.
+These networks implement models that can be used in multi-agent contexts.
+They use :func:`~torch.vmap` to execute multiple networks all at once on the
+network inputs. Because the parameters are batched, initialization may differ
+from what is usually done with other PyTorch modules, see
+:meth:`~torchrl.modules.MultiAgentNetBase.get_stateful_net`
+for more information.
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    MultiAgentNetBase
     MultiAgentMLP
     MultiAgentConvNet
     QMixer

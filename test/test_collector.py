@@ -92,7 +92,7 @@ from torchrl.envs.utils import (
     PARTIAL_MISSING_ERR,
     RandomPolicy,
 )
-from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper, SafeModule
+from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"
@@ -1291,8 +1291,13 @@ def test_excluded_keys(collector_class, exclude, out_key):
         policy_module, in_keys=["observation"], out_keys=["action"]
     )
     copier = TensorDictModule(lambda x: x, in_keys=["observation"], out_keys=[out_key])
-    policy = TensorDictSequential(policy, copier)
-    policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
+    policy_explore = TensorDictSequential(
+        policy,
+        copier,
+        OrnsteinUhlenbeckProcessModule(
+            spec=CompositeSpec({key: None for key in policy.out_keys})
+        ),
+    )
 
     collector_kwargs = {
         "create_env_fn": make_env,
@@ -2472,7 +2477,9 @@ def test_collector_reloading(collector_class):
     obs_spec = dummy_env.observation_spec["observation"]
     policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
     policy = Actor(policy_module, spec=dummy_env.action_spec)
-    policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
+    policy_explore = TensorDictSequential(
+        policy, OrnsteinUhlenbeckProcessModule(spec=policy.spec)
+    )
 
     collector_kwargs = {
         "create_env_fn": make_env,
