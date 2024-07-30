@@ -51,6 +51,7 @@ from .transforms import (
     CenterCrop,
     ClipTransform,
     Compose,
+    Crop,
     DeviceCastTransform,
     DiscreteActionProjection,
     DoubleToFloat,

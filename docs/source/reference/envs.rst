@@ -790,6 +790,7 @@ to be able to create this other composition:
     BurnInTransform
     CatFrames
     CatTensors
+    Crop
     CenterCrop
     ClipTransform
     Compose
