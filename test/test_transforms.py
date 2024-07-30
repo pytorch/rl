@@ -2263,8 +2263,8 @@ class TestCrop(TransformBase):
     @pytest.mark.parametrize(
         "h",
         [
-            None,
-        ],
+            None
+        ]
     )
     @pytest.mark.parametrize("keys", [["observation_pixels"]])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
