@@ -4705,10 +4705,6 @@ class TensorDictPrimer(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-        try:
-            device = observation_spec.device
-        except RuntimeError:
-            device = self.device
 
         if self.primers.shape != observation_spec.shape:
             try:
@@ -4717,7 +4713,7 @@ class TensorDictPrimer(Transform):
             except ValueError:
                 # If we fail, we expnad them to that shape
                 self.primers = self._expand_shape(self.primers)
-
+        device = observation_spec.device
         observation_spec.update(self.primers.clone().to(device))
         return observation_spec
 
@@ -4768,8 +4764,8 @@ class TensorDictPrimer(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for key in self.primers.keys():
-            if key not in next_tensordict.keys(True):
+        for key in self.primers.keys(True, True):
+            if key not in next_tensordict.keys(True, True):
                 prev_val = tensordict.get(key)
                 next_tensordict.set(key, prev_val)
         return next_tensordict
