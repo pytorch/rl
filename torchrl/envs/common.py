@@ -1515,7 +1515,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             shape = (*leading_dim, *item.shape)
             if val is not None:
                 if val.shape != shape:
-                    data.set(key, val.reshape(shape))
+                    val = val.reshape(shape)
+                    data.set(key, val)
                 vals[key] = val
 
         if len(vals) < i + 1:
@@ -1535,6 +1536,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                             "Cannot infer the value of terminated when only done and truncated are present."
                         )
                     data.set("terminated", val)
+                    data_keys.add("terminated")
                 elif (
                     key == "terminated"
                     and val is not None
@@ -1542,11 +1544,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     and "done" not in data_keys
                 ):
                     if "truncated" in data_keys:
-                        done = val | data.get("truncated")
-                        data.set("done", done)
-                    else:
-                        data.set("done", val)
-                elif val is None:
+                        val = val | data.get("truncated")
+                    data.set("done", val)
+                    data_keys.add("done")
+                elif val is None and key not in data_keys:
                     # we must keep this here: we only want to fill with 0s if we're sure
                     # done should not be copied to terminated or terminated to done
                     # in this case, just fill with 0s
@@ -2354,10 +2355,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is
                 called on the sub-envs that are done. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
-            tensordict (TensorDict, optional): if auto_reset is False, an initial
+            tensordict (TensorDict, optional): if ``auto_reset`` is False, an initial
                 tensordict must be provided. Rollout will check if this tensordict has done flags and reset the
-                environment in those dimensions (if needed). This normally should not occur if ``tensordict`` is the
-                output of a reset, but can occur if ``tensordict`` is the last step of a previous rollout.
+                environment in those dimensions (if needed).
+                This normally should not occur if ``tensordict`` is the output of a reset, but can occur
+                if ``tensordict`` is the last step of a previous rollout.
+                A ``tensordict`` can also be provided when ``auto_reset=True`` if metadata need to be passed
+                to the ``reset`` method, such as a batch-size or a device for stateless environments.
             set_truncated (bool, optional): if ``True``, ``"truncated"`` and ``"done"`` keys will be set to
                 ``True`` after completion of the rollout. If no ``"truncated"`` is found within the
                 ``done_spec``, an exception is raised.
@@ -2564,11 +2568,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         env_device = self.device
 
         if auto_reset:
-            if tensordict is not None:
-                raise RuntimeError(
-                    "tensordict cannot be provided when auto_reset is True"
-                )
-            tensordict = self.reset()
+            tensordict = self.reset(tensordict)
         elif tensordict is None:
             raise RuntimeError("tensordict must be provided when auto_reset is False")
         else:

@@ -6,6 +6,8 @@ import functools
 
 import torch
 
+from tensordict.nn import TensorDictSequential
+
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
@@ -25,9 +27,9 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
-    AdditiveGaussianWrapper,
+    AdditiveGaussianModule,
     MLP,
-    OrnsteinUhlenbeckProcessWrapper,
+    OrnsteinUhlenbeckProcessModule,
     SafeModule,
     SafeSequential,
     TanhModule,
@@ -227,18 +229,24 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
 
     # Exploration wrappers:
     if cfg.network.noise_type == "ou":
-        actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
+        actor_model_explore = TensorDictSequential(
             model[0],
-            annealing_num_steps=1_000_000,
-        ).to(device)
+            OrnsteinUhlenbeckProcessModule(
+                spec=action_spec,
+                annealing_num_steps=1_000_000,
+            ).to(device),
+        )
     elif cfg.network.noise_type == "gaussian":
-        actor_model_explore = AdditiveGaussianWrapper(
+        actor_model_explore = TensorDictSequential(
             model[0],
-            sigma_end=1.0,
-            sigma_init=1.0,
-            mean=0.0,
-            std=0.1,
-        ).to(device)
+            AdditiveGaussianModule(
+                spec=action_spec,
+                sigma_end=1.0,
+                sigma_init=1.0,
+                mean=0.0,
+                std=0.1,
+            ).to(device),
+        )
     else:
         raise NotImplementedError
 

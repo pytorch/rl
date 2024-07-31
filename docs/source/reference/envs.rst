@@ -335,6 +335,19 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
     ParallelEnv
     EnvCreator
 
+
+Custom native TorchRL environments
+----------------------------------
+
+TorchRL offers a series of custom built-in environments.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    PendulumEnv
+    TicTacToeEnv
+
 Multi-agent environments
 ------------------------
 
@@ -780,6 +793,7 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    Crop
     DTypeCastTransform
     DeviceCastTransform
     DiscreteActionProjection

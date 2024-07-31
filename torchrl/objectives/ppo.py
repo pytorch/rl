@@ -82,7 +82,7 @@ class PPOLoss(LossModule):
             before being used. Defaults to ``False``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
-            Defaults to ``False``, ie. gradients are propagated to shared
+            Defaults to ``False``, i.e., gradients are propagated to shared
             parameters for both policy and critic losses.
         advantage_key (str, optional): [Deprecated, use set_keys(advantage_key=advantage_key) instead]
             The input tensordict key where the advantage is
@@ -152,7 +152,7 @@ class PPOLoss(LossModule):
         >>> import torch
         >>> from torch import nn
         >>> from torchrl.data.tensor_specs import BoundedTensorSpec
-        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.ppo import PPOLoss
@@ -160,7 +160,7 @@ class PPOLoss(LossModule):
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> base_layer = nn.Linear(n_obs, 5)
-        >>> net = NormalParamWrapper(nn.Sequential(base_layer, nn.Linear(5, 2 * n_act)))
+        >>> net = nn.Sequential(base_layer, nn.Linear(5, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
         ...     module=module,
@@ -205,14 +205,14 @@ class PPOLoss(LossModule):
         >>> import torch
         >>> from torch import nn
         >>> from torchrl.data.tensor_specs import BoundedTensorSpec
-        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.ppo import PPOLoss
         >>> n_act, n_obs = 4, 3
         >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> base_layer = nn.Linear(n_obs, 5)
-        >>> net = NormalParamWrapper(nn.Sequential(base_layer, nn.Linear(5, 2 * n_act)))
+        >>> net = nn.Sequential(base_layer, nn.Linear(5, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
         ...     module=module,
@@ -657,7 +657,7 @@ class ClipPPOLoss(PPOLoss):
             before being used. Defaults to ``False``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
-            Defaults to ``False``, ie. gradients are propagated to shared
+            Defaults to ``False``, i.e., gradients are propagated to shared
             parameters for both policy and critic losses.
         advantage_key (str, optional): [Deprecated, use set_keys(advantage_key=advantage_key) instead]
             The input tensordict key where the advantage is
@@ -896,7 +896,7 @@ class KLPENPPOLoss(PPOLoss):
             before being used. Defaults to ``False``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
-            Defaults to ``False``, ie. gradients are propagated to shared
+            Defaults to ``False``, i.e., gradients are propagated to shared
             parameters for both policy and critic losses.
         advantage_key (str, optional): [Deprecated, use set_keys(advantage_key=advantage_key) instead]
             The input tensordict key where the advantage is

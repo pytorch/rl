@@ -279,7 +279,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
 
-        policy.step(current_frames)
+        policy[1].step(current_frames)
         collector.update_policy_weights_()
         # Evaluation
         if (i % eval_iter) == 0:

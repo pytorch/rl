@@ -108,7 +108,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     for _, tensordict in enumerate(collector):
         sampling_time = time.time() - sampling_start
         # Update exploration policy
-        exploration_policy.step(tensordict.numel())
+        exploration_policy[1].step(tensordict.numel())
 
         # Update weights of the inference policy
         collector.update_policy_weights_()
