@@ -206,9 +206,9 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
   logger.mode=offline \
   logger.backend=
   python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/gail/gail.py \
-  collector.total_frames=48 \
-  loss.mini_batch_size=10 \
-  collector.frames_per_batch=16 \
+  ppo.collector.total_frames=48 \
+  ppo.loss.mini_batch_size=10 \
+  ppo.collector.frames_per_batch=16 \
   logger.mode=offline \
   logger.backend=
 
