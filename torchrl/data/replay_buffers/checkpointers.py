@@ -176,6 +176,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
 
                 if (
                     isinstance(storage, LazyMemmapStorage)
+                    and storage.scratch_dir
                     and Path(storage.scratch_dir).absolute() == Path(path).absolute()
                 ):
                     storage._storage = TensorDict.load_memmap(path)
