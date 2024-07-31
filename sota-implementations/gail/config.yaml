@@ -3,8 +3,6 @@ env:
   seed: 42
   backend: gym
 
-
-# logger
 logger:
   backend: wandb
   project_name: gail
@@ -16,18 +14,15 @@ logger:
   mode: online
 
 ppo:
-  # collector
   collector:
     frames_per_batch: 2048
     total_frames: 1_000_000
 
-  # Optim
   optim:
     lr: 3e-4
     weight_decay: 0.0
     anneal_lr: True
 
-  # loss
   loss:
     gamma: 0.99
     mini_batch_size: 64
@@ -44,6 +39,7 @@ gail:
   lr: 3e-4
   use_grad_penalty: False
   gp_lambda: 10.0
+  device: null
 
 replay_buffer:
   dataset: halfcheetah-expert-v2
