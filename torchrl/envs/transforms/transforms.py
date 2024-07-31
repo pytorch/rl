@@ -4646,7 +4646,7 @@ class TensorDictPrimer(Transform):
         self.reset_key = reset_key
 
         # sanity check
-        for spec in self.primers.values():
+        for spec in self.primers.values(True, True):
             if not isinstance(spec, TensorSpec):
                 raise ValueError(
                     "The values of the primers must be a subtype of the TensorSpec class. "
@@ -4705,15 +4705,16 @@ class TensorDictPrimer(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-        for key, spec in self.primers.items():
-            if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
-                expanded_spec = self._expand_shape(spec)
-                spec = expanded_spec
+
+        if self.primers.shape != observation_spec.shape:
             try:
-                device = observation_spec.device
-            except RuntimeError:
-                device = self.device
-            observation_spec[key] = self.primers[key] = spec.to(device)
+                # We try to set the primer shape to the observation spec shape
+                self.primers.shape = observation_spec.shape
+            except ValueError:
+                # If we fail, we expnad them to that shape
+                self.primers = self._expand_shape(self.primers)
+        device = observation_spec.device
+        observation_spec.update(self.primers.clone().to(device))
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
@@ -4763,8 +4764,8 @@ class TensorDictPrimer(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for key in self.primers.keys():
-            if key not in next_tensordict.keys(True):
+        for key in self.primers.keys(True, True):
+            if key not in next_tensordict.keys(True, True):
                 prev_val = tensordict.get(key)
                 next_tensordict.set(key, prev_val)
         return next_tensordict
@@ -4782,9 +4783,6 @@ class TensorDictPrimer(Transform):
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
-                if spec.shape[: len(tensordict.batch_size)] != tensordict.batch_size:
-                    expanded_spec = self._expand_shape(spec)
-                    self.primers[key] = spec = expanded_spec
                 if self.random:
                     shape = (
                         ()
