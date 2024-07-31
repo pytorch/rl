@@ -1098,6 +1098,8 @@ the following function will return ``1`` when queried:
     MultiThreadedEnv
     MultiThreadedEnvWrapper
     OpenMLEnv
+    OpenSpielWrapper
+    OpenSpielEnv
     PettingZooEnv
     PettingZooWrapper
     RoboHiveEnv

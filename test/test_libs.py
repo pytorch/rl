@@ -107,6 +107,7 @@ from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
+from torchrl.envs.libs.openspiel import _has_pyspiel, OpenSpielEnv, OpenSpielWrapper
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
@@ -3810,6 +3811,52 @@ class TestSmacv2:
         for _ in collector:
             break
         collector.shutdown()
+
+
+@pytest.mark.skipif(not _has_pyspiel, reason="open_spiel not found")
+class TestOpenSpiel:
+    # TODO: For some of the game states in OpenSpiel,
+    # `len(State.legal_actions())` can actually be greater than
+    # `Game.num_distinct_actions()`, and we get an error since I'm using
+    # `Game.num_distinct_actions()` for the size of the action spec. So I will
+    # probably need to give the action spec a variable size in order to support
+    # those.
+    # @pytest.mark.parametrize("game_string", OpenSpielWrapper.available_envs)
+    @pytest.mark.parametrize("game_string", ["chess", "tic_tac_toe"])
+    def test_all_envs(self, game_string):
+        env = OpenSpielEnv(game_string=game_string)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("game_string", ["chess", "tic_tac_toe"])
+    def test_wrapper(self, game_string):
+        import pyspiel
+
+        base_env = pyspiel.load_game(game_string).new_initial_state()
+        env_torchrl = OpenSpielWrapper(env=base_env)
+        env_torchrl.rollout(max_steps=5)
+
+    @pytest.mark.parametrize("game_string", ["chess", "tic_tac_toe"])
+    def test_reset_state(self, game_string):
+        env = OpenSpielEnv(game_string)
+        td = env.reset()
+
+        # Perform an action
+        td["action"] = env.action_spec.rand()
+        td = env.step(td)
+
+        # Save the current state for reset
+        td_reset = td["next"].clone()
+
+        # Perform a second action
+        td["action"] = env.action_spec.rand()
+        td = env.step(td)
+
+        # Check that current state is not the same as the previous state
+        assert (td["next"] != td_reset).any()
+
+        # Reset to the saved state and check that it was reset properly
+        td = env.reset(td_reset)
+        assert (td == td_reset).all()
 
 
 @pytest.mark.skipif(not _has_meltingpot, reason="Meltingpot not found")
