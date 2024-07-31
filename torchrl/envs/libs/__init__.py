@@ -19,6 +19,7 @@ from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
 from .meltingpot import MeltingpotEnv, MeltingpotWrapper
 from .openml import OpenMLEnv
+from .openspiel import OpenSpielEnv, OpenSpielWrapper
 from .pettingzoo import PettingZooEnv, PettingZooWrapper
 from .robohive import RoboHiveEnv
 from .smacv2 import SMACv2Env, SMACv2Wrapper

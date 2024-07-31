@@ -28,6 +28,8 @@ from .libs import (
     MultiThreadedEnv,
     MultiThreadedEnvWrapper,
     OpenMLEnv,
+    OpenSpielEnv,
+    OpenSpielWrapper,
     PettingZooEnv,
     PettingZooWrapper,
     RoboHiveEnv,
