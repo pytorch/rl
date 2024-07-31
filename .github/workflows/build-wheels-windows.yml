@@ -47,3 +47,4 @@ jobs:
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
       pre-script: .github/scripts/td_script.sh
+      env-script: .github/scripts/version_script.bat
