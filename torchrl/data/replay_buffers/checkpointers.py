@@ -19,6 +19,7 @@ from tensordict import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
+
 from torchrl.data.replay_buffers.utils import (
     _save_pytree,
     Flat2TED,
@@ -93,6 +94,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
         if is_tensor_collection(_storage):
             if (
                 _storage.is_memmap()
+                and _storage.saved_path
                 and Path(_storage.saved_path).absolute() == Path(path).absolute()
             ):
                 _storage.memmap_refresh_()
@@ -170,9 +172,27 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             for hook in self._load_hooks:
                 _storage = hook(_storage, out=dest)
             if not storage.initialized:
-                # this should not be reached if is_pytree=True
-                storage._init(_storage[0])
-                storage._storage.update_(_storage)
+                from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+
+                if (
+                    isinstance(storage, LazyMemmapStorage)
+                    and Path(storage.scratch_dir).absolute() == Path(path).absolute()
+                ):
+                    storage._storage = TensorDict.load_memmap(path)
+                    storage.initialized = True
+                else:
+                    # this should not be reached if is_pytree=True
+                    storage._init(_storage[0])
+                    storage._storage.update_(_storage)
+            elif (
+                storage._storage.is_memmap()
+                and storage._storage.saved_path
+                and Path(storage._storage.saved_path).absolute()
+                == Path(path).absolute()
+            ):
+                # If the storage is already where it should be, we don't need to load anything.
+                storage._storage.memmap_refresh_()
+
             else:
                 storage._storage.copy_(_storage)
         storage._len = _len
