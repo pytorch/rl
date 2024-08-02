@@ -141,7 +141,7 @@ class PPOLoss(LossModule):
         >>> actor_head = SomeActor(in_keys=["hidden"])
         >>> value_head = SomeValue(in_keys=["hidden"])
         >>> # first option, with 2 calls on the common module
-        >>> model = ActorCriticOperator(common, actor_head, value_head)
+        >>> model = ActorValueOperator(common, actor_head, value_head)
         >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
         >>> # second option, with a single call to the common module
         >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
@@ -718,10 +718,10 @@ class ClipPPOLoss(PPOLoss):
         >>> actor_head = SomeActor(in_keys=["hidden"])
         >>> value_head = SomeValue(in_keys=["hidden"])
         >>> # first option, with 2 calls on the common module
-        >>> model = ActorCriticOperator(common, actor_head, value_head)
-        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+        >>> model = ActorValueOperator(common, actor_head, value_head)
+        >>> loss_module = ClipPPOLoss(model.get_policy_operator(), model.get_value_operator())
         >>> # second option, with a single call to the common module
-        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+        >>> loss_module = ClipPPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
 
       This will work regardless of whether separate_losses is activated or not.
 
@@ -955,10 +955,10 @@ class KLPENPPOLoss(PPOLoss):
         >>> actor_head = SomeActor(in_keys=["hidden"])
         >>> value_head = SomeValue(in_keys=["hidden"])
         >>> # first option, with 2 calls on the common module
-        >>> model = ActorCriticOperator(common, actor_head, value_head)
-        >>> loss_module = PPOLoss(model.get_policy_operator(), model.get_value_operator())
+        >>> model = ActorValueOperator(common, actor_head, value_head)
+        >>> loss_module = KLPENPPOLoss(model.get_policy_operator(), model.get_value_operator())
         >>> # second option, with a single call to the common module
-        >>> loss_module = PPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
+        >>> loss_module = KLPENPPOLoss(ProbabilisticTensorDictSequential(model, actor_head), value_head)
 
       This will work regardless of whether separate_losses is activated or not.
 
