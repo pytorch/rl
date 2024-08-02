@@ -43,7 +43,8 @@ class SegmentTree {
  public:
   SegmentTree(int64_t size, const T& identity_element)
       : size_(size), identity_element_(identity_element) {
-    for (capacity_ = 1; capacity_ <= size; capacity_ <<= 1);
+    for (capacity_ = 1; capacity_ <= size; capacity_ <<= 1)
+      ;
     values_.assign(2 * capacity_, identity_element_);
   }
 
