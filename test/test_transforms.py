@@ -6676,6 +6676,36 @@ class TestTensorDictPrimer(TransformBase):
         assert "mykey" in env.reset().keys()
         assert ("next", "mykey") in env.rollout(3).keys(True)
 
+    def test_nested_key_env(self):
+        env = MultiKeyCountingEnv()
+        env_obs_spec_prior_primer = env.observation_spec.clone()
+        env = TransformedEnv(
+            env,
+            TensorDictPrimer(
+                CompositeSpec(
+                    {
+                        "nested_1": CompositeSpec(
+                            {
+                                "mykey": UnboundedContinuousTensorSpec(
+                                    (env.nested_dim_1, 4)
+                                )
+                            },
+                            shape=(env.nested_dim_1,),
+                        )
+                    }
+                ),
+                reset_key="_reset",
+            ),
+        )
+        check_env_specs(env)
+        env_obs_spec_post_primer = env.observation_spec.clone()
+        assert ("nested_1", "mykey") in env_obs_spec_post_primer.keys(True, True)
+        del env_obs_spec_post_primer[("nested_1", "mykey")]
+        assert env_obs_spec_post_primer == env_obs_spec_prior_primer
+
+        assert ("nested_1", "mykey") in env.reset().keys(True, True)
+        assert ("next", "nested_1", "mykey") in env.rollout(3).keys(True, True)
+
     def test_transform_no_env(self):
         t = TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([3]))
         td = TensorDict({"a": torch.zeros(())}, [])
