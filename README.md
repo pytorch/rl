@@ -559,7 +559,7 @@ On certain Windows machines (Windows 11), one should install the library locally
 
 The **nightly build** can be installed via
 ```bash
-pip3install torchrl-nightly
+pip3 install torchrl-nightly
 ```
 which we currently only ship for Linux and OsX (Intel) machines.
 Importantly, the nightly builds require the nightly builds of PyTorch too.
@@ -590,7 +590,7 @@ Go to the directory where you have cloned the torchrl repo and install it (after
 installing `ninja`)
 ```bash
 cd /path/to/torchrl/
-pip3install ninja -U
+pip3 install ninja -U
 python setup.py develop
 ```
 
