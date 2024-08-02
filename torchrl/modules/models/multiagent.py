@@ -318,6 +318,11 @@ class MultiAgentMLP(MultiAgentNetBase):
             default: 32.
         activation_class (Type[nn.Module]): activation class to be used.
             default: nn.Tanh.
+        use_td_params (bool, optional): if ``True``, the parameters can be found in `self.params` which is a
+            :class:`~tensordict.nn.TensorDictParams` object (which inherits both from `TensorDict` and `nn.Module`).
+            If ``False``, parameters are contained in `self._empty_net`. All things considered, these two approaches
+            should be roughly identical but not interchangeable: for instance, a ``state_dict`` created with
+            ``use_td_params=True`` cannot be used when ``use_td_params=False``.
         **kwargs: for :class:`torchrl.modules.models.MLP` can be passed to customize the MLPs.
 
     .. note:: to initialize the MARL module parameters with the `torch.nn.init`
@@ -497,6 +502,11 @@ class MultiAgentConvNet(MultiAgentNetBase):
             Defaults to ``2``.
         activation_class (Type[nn.Module]): activation class to be used.
             Default to :class:`torch.nn.ELU`.
+        use_td_params (bool, optional): if ``True``, the parameters can be found in `self.params` which is a
+            :class:`~tensordict.nn.TensorDictParams` object (which inherits both from `TensorDict` and `nn.Module`).
+            If ``False``, parameters are contained in `self._empty_net`. All things considered, these two approaches
+            should be roughly identical but not interchangeable: for instance, a ``state_dict`` created with
+            ``use_td_params=True`` cannot be used when ``use_td_params=False``.
         **kwargs: for :class:`~torchrl.modules.models.ConvNet` can be passed to customize the ConvNet.
 
 
