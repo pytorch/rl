@@ -898,6 +898,51 @@ class TestMultiAgent:
         mlp.from_stateful_net(snet)
         assert (mlp.params == 1).all()
 
+    @retry(AssertionError, 5)
+    @pytest.mark.parametrize("n_agents", [3])
+    @pytest.mark.parametrize("share_params", [True])
+    @pytest.mark.parametrize("centralized", [True])
+    @pytest.mark.parametrize("n_agent_inputs", [6])
+    @pytest.mark.parametrize("batch", [(4,)])
+    @pytest.mark.parametrize("tdparams", [True, False])
+    def test_multiagent_mlp_tdparams(
+        self,
+        n_agents,
+        centralized,
+        share_params,
+        batch,
+        n_agent_inputs,
+        tdparams,
+        n_agent_outputs=2,
+    ):
+        torch.manual_seed(1)
+        mlp = MultiAgentMLP(
+            n_agent_inputs=n_agent_inputs,
+            n_agent_outputs=n_agent_outputs,
+            n_agents=n_agents,
+            centralized=centralized,
+            share_params=share_params,
+            depth=2,
+            use_td_params=tdparams,
+        )
+        if tdparams:
+            assert list(mlp._empty_net.parameters()) == []
+            assert list(mlp.params.parameters()) == list(mlp.parameters())
+        else:
+            assert list(mlp._empty_net.parameters()) == list(mlp.parameters())
+            assert not hasattr(mlp.params, "parameters")
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            return
+        mlp = nn.Sequential(mlp)
+        mlp_device = mlp.to(device)
+        param_set = set(mlp.parameters())
+        for p in mlp[0].params.values(True, True):
+            assert p in param_set
+
     def test_multiagent_mlp_lazy(self):
         mlp = MultiAgentMLP(
             n_agent_inputs=None,
