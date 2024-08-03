@@ -40,6 +40,7 @@ class MultiAgentNetBase(nn.Module):
         share_params: bool | None = None,
         agent_dim: int | None = None,
         vmap_randomness: str = "different",
+        use_td_params: bool = True,
         **kwargs,
     ):
         super().__init__()
@@ -53,6 +54,7 @@ class MultiAgentNetBase(nn.Module):
         if agent_dim is None:
             raise TypeError("agent_dim arg must be passed.")
 
+        self.use_td_params = use_td_params
         self.n_agents = n_agents
         self.share_params = share_params
         self.centralized = centralized
@@ -70,6 +72,7 @@ class MultiAgentNetBase(nn.Module):
                 break
         self.initialized = initialized
         self._make_params(agent_networks)
+
         # We make sure all params and buffers are on 'meta' device
         #  To do this, we set the device keyword arg to 'meta', we also temporarily change
         #  the default device. Finally, we convert all params to 'meta' tensors that are not params.
@@ -87,6 +90,8 @@ class MultiAgentNetBase(nn.Module):
             TensorDict.from_module(self._empty_net).data.to("meta").to_module(
                 self._empty_net
             )
+        if not self.use_td_params:
+            self.params.to_module(self._empty_net)
 
     @property
     def vmap_randomness(self):
@@ -100,9 +105,13 @@ class MultiAgentNetBase(nn.Module):
 
     def _make_params(self, agent_networks):
         if self.share_params:
-            self.params = TensorDict.from_module(agent_networks[0], as_module=True)
+            self.params = TensorDict.from_module(
+                agent_networks[0], as_module=self.use_td_params
+            )
         else:
-            self.params = TensorDict.from_modules(*agent_networks, as_module=True)
+            self.params = TensorDict.from_modules(
+                *agent_networks, as_module=self.use_td_params
+            )
 
     @abc.abstractmethod
     def _build_single_net(self, *, device, **kwargs):
@@ -289,6 +298,8 @@ class MultiAgentMLP(MultiAgentNetBase):
             the number of inputs is lazily instantiated during the first call.
         n_agent_outputs (int): number of outputs for each agent.
         n_agents (int): number of agents.
+
+    Keyword Args:
         centralized (bool): If `centralized` is True, each agent will use the inputs of all agents to compute its output
             (n_agent_inputs * n_agents will be the number of inputs for one agent).
             Otherwise, each agent will only use its data as input.
@@ -307,6 +318,11 @@ class MultiAgentMLP(MultiAgentNetBase):
             default: 32.
         activation_class (Type[nn.Module]): activation class to be used.
             default: nn.Tanh.
+        use_td_params (bool, optional): if ``True``, the parameters can be found in `self.params` which is a
+            :class:`~tensordict.nn.TensorDictParams` object (which inherits both from `TensorDict` and `nn.Module`).
+            If ``False``, parameters are contained in `self._empty_net`. All things considered, these two approaches
+            should be roughly identical but not interchangeable: for instance, a ``state_dict`` created with
+            ``use_td_params=True`` cannot be used when ``use_td_params=False``.
         **kwargs: for :class:`torchrl.modules.models.MLP` can be passed to customize the MLPs.
 
     .. note:: to initialize the MARL module parameters with the `torch.nn.init`
@@ -399,12 +415,14 @@ class MultiAgentMLP(MultiAgentNetBase):
         n_agent_inputs: int | None,
         n_agent_outputs: int,
         n_agents: int,
+        *,
         centralized: bool | None = None,
         share_params: bool | None = None,
         device: Optional[DEVICE_TYPING] = None,
         depth: Optional[int] = None,
         num_cells: Optional[Union[Sequence, int]] = None,
         activation_class: Optional[Type[nn.Module]] = nn.Tanh,
+        use_td_params: bool = True,
         **kwargs,
     ):
         self.n_agents = n_agents
@@ -422,6 +440,7 @@ class MultiAgentMLP(MultiAgentNetBase):
             share_params=share_params,
             device=device,
             agent_dim=-2,
+            use_td_params=use_td_params,
             **kwargs,
         )
 
@@ -483,6 +502,11 @@ class MultiAgentConvNet(MultiAgentNetBase):
             Defaults to ``2``.
         activation_class (Type[nn.Module]): activation class to be used.
             Default to :class:`torch.nn.ELU`.
+        use_td_params (bool, optional): if ``True``, the parameters can be found in `self.params` which is a
+            :class:`~tensordict.nn.TensorDictParams` object (which inherits both from `TensorDict` and `nn.Module`).
+            If ``False``, parameters are contained in `self._empty_net`. All things considered, these two approaches
+            should be roughly identical but not interchangeable: for instance, a ``state_dict`` created with
+            ``use_td_params=True`` cannot be used when ``use_td_params=False``.
         **kwargs: for :class:`~torchrl.modules.models.ConvNet` can be passed to customize the ConvNet.
 
 
@@ -611,6 +635,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
         strides: Union[Sequence, int] = 2,
         paddings: Union[Sequence, int] = 0,
         activation_class: Type[nn.Module] = nn.ELU,
+        use_td_params: bool = True,
         **kwargs,
     ):
         self.in_features = in_features
@@ -625,6 +650,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
             share_params=share_params,
             device=device,
             agent_dim=-4,
+            use_td_params=use_td_params,
             **kwargs,
         )
 
