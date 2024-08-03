@@ -1913,6 +1913,73 @@ class Resize(ObservationTransform):
         return tensordict_reset
 
 
+class Crop(ObservationTransform):
+    """Crops the input image at the specified location and output size.
+
+    Args:
+        w (int): resulting width
+        h (int, optional): resulting height. If None, then w is used (square crop).
+        top (int, optional): top pixel coordinate to start cropping. Default is 0, i.e. top of the image.
+        left (int, optional): left pixel coordinate to start cropping. Default is 0, i.e. left of the image.
+        in_keys (sequence of NestedKey, optional): the entries to crop. If none is provided,
+            ``["pixels"]`` is assumed.
+        out_keys (sequence of NestedKey, optional): the cropped images keys. If none is
+            provided, ``in_keys`` is assumed.
+
+    """
+
+    def __init__(
+        self,
+        w: int,
+        h: int = None,
+        top: int = 0,
+        left: int = 0,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+    ):
+        if in_keys is None:
+            in_keys = IMAGE_KEYS  # default
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self.w = w
+        self.h = h if h else w
+        self.top = top
+        self.left = left
+
+    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        from torchvision.transforms.functional import crop
+
+        observation = crop(observation, self.top, self.left, self.w, self.h)
+        return observation
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        space = observation_spec.space
+        if isinstance(space, ContinuousBox):
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
+            observation_spec.shape = space.low.shape
+        else:
+            observation_spec.shape = self._apply_transform(
+                torch.zeros(observation_spec.shape)
+            ).shape
+        return observation_spec
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, top={float(self.top):4.4f}, left={float(self.left):4.4f}, "
+        )
+
+
 class CenterCrop(ObservationTransform):
     """Crops the center of an image.
 
@@ -4579,7 +4646,7 @@ class TensorDictPrimer(Transform):
         self.reset_key = reset_key
 
         # sanity check
-        for spec in self.primers.values():
+        for spec in self.primers.values(True, True):
             if not isinstance(spec, TensorSpec):
                 raise ValueError(
                     "The values of the primers must be a subtype of the TensorSpec class. "
@@ -4638,15 +4705,16 @@ class TensorDictPrimer(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-        for key, spec in self.primers.items():
-            if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
-                expanded_spec = self._expand_shape(spec)
-                spec = expanded_spec
+
+        if self.primers.shape != observation_spec.shape:
             try:
-                device = observation_spec.device
-            except RuntimeError:
-                device = self.device
-            observation_spec[key] = self.primers[key] = spec.to(device)
+                # We try to set the primer shape to the observation spec shape
+                self.primers.shape = observation_spec.shape
+            except ValueError:
+                # If we fail, we expnad them to that shape
+                self.primers = self._expand_shape(self.primers)
+        device = observation_spec.device
+        observation_spec.update(self.primers.clone().to(device))
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
@@ -4696,8 +4764,8 @@ class TensorDictPrimer(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for key in self.primers.keys():
-            if key not in next_tensordict.keys(True):
+        for key in self.primers.keys(True, True):
+            if key not in next_tensordict.keys(True, True):
                 prev_val = tensordict.get(key)
                 next_tensordict.set(key, prev_val)
         return next_tensordict
@@ -4715,9 +4783,6 @@ class TensorDictPrimer(Transform):
         _reset = _get_reset(self.reset_key, tensordict)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
-                if spec.shape[: len(tensordict.batch_size)] != tensordict.batch_size:
-                    expanded_spec = self._expand_shape(spec)
-                    self.primers[key] = spec = expanded_spec
                 if self.random:
                     shape = (
                         ()
@@ -6420,6 +6485,7 @@ class InitTracker(Transform):
 
     Args:
          init_key (NestedKey, optional): the key to be used for the tracker entry.
+            In case of multiple _reset flags, this key is used as the leaf replacement for each.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -6433,11 +6499,12 @@ class InitTracker(Transform):
 
     """
 
-    def __init__(self, init_key: NestedKey = "is_init"):
+    def __init__(self, init_key: str = "is_init"):
         if not isinstance(init_key, str):
-            raise ValueError("init_key can only be of type str.")
+            raise ValueError(
+                "init_key can only be of type str as it will be the leaf key associated to each reset flag."
+            )
         self.init_key = init_key
-        self.reset_key = "_reset"
         super().__init__()
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:

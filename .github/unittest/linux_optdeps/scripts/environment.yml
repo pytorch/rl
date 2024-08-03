@@ -17,4 +17,4 @@ dependencies:
     - pyyaml
     - scipy
     - coverage
-    - ray<2.8.0
+    - ray

@@ -502,7 +502,7 @@ class TD0Estimator(ValueEstimatorBase):
 
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
-            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            Defaults to ``None``, i.e., the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
         advantage_key (str or tuple of str, optional): [Deprecated] the key of
             the advantage entry.  Defaults to ``"advantage"``.
@@ -701,7 +701,7 @@ class TD1Estimator(ValueEstimatorBase):
 
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
-            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            Defaults to ``None``, i.e., the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
         advantage_key (str or tuple of str, optional): [Deprecated] the key of
             the advantage entry.  Defaults to ``"advantage"``.
@@ -922,7 +922,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             lambda return. Default is `True`.
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
-            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            Defaults to ``None``, i.e., the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
         advantage_key (str or tuple of str, optional): [Deprecated] the key of
             the advantage entry.  Defaults to ``"advantage"``.
@@ -1164,7 +1164,7 @@ class GAE(ValueEstimatorBase):
             lambda return. Default is `True`.
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
-            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            Defaults to ``None``, i.e., the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
             Defaults to "state_value".
         advantage_key (str or tuple of str, optional): [Deprecated] the key of
@@ -1476,7 +1476,7 @@ class VTrace(ValueEstimatorBase):
               pass detached parameters for functional modules.
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
-            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            Defaults to ``None``, i.e., the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
             Defaults to "state_value".
         advantage_key (str or tuple of str, optional): [Deprecated] the key of
