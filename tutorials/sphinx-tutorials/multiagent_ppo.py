@@ -55,7 +55,7 @@ Key learnings:
 # the foundational policy-optimization algorithm. For more information, see the
 # `Proximal Policy Optimization Algorithms <https://arxiv.org/abs/1707.06347>`_ paper.
 #
-# This type of sota-implementations is usually trained *on-policy*. This means that, at every learning iteration, we have a
+# This type of algorithms is usually trained *on-policy*. This means that, at every learning iteration, we have a
 # **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
 # form agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
 # In the **training** phase, all the collected rollouts are immediately fed to the training process to perform
@@ -551,7 +551,7 @@ collector = SyncDataCollector(
 # Replay buffer
 # -------------
 #
-# Replay buffers are a common building piece of off-policy RL sota-implementations.
+# Replay buffers are a common building piece of off-policy RL algorithms.
 # In on-policy contexts, a replay buffer is refilled every time a batch of
 # data is collected, and its data is repeatedly consumed for a certain number
 # of epochs.
@@ -780,7 +780,7 @@ plt.show()
 #
 # Now that you are proficient with multi-agent DDPG, you can check out all the TorchRL multi-agent implementations in the
 # GitHub repository.
-# These are code-only scripts of many popular MARL sota-implementations such as the ones seen in this tutorial,
+# These are code-only scripts of many popular MARL algorithms such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
 # You can also check out our other multi-agent tutorial on how to train competitive

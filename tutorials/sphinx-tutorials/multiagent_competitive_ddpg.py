@@ -651,7 +651,7 @@ collector = SyncDataCollector(
 # Replay buffer
 # -------------
 #
-# Replay buffers are a common building piece of off-policy RL sota-implementations.
+# Replay buffers are a common building piece of off-policy RL algorithms.
 # There are many types of buffers, in this tutorial we use a basic buffer to store and sample tensordict
 # data randomly.
 #
@@ -925,7 +925,7 @@ if use_vmas and not is_sphinx:
 #
 # Now that you are proficient with multi-agent DDPG, you can check out all the TorchRL multi-agent implementations in the
 # GitHub repository.
-# These are code-only scripts of many MARL sota-implementations such as the ones seen in this tutorial,
+# These are code-only scripts of many MARL algorithms such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
 # Also do remember to check out our tutorial: :doc:`/tutorials/multiagent_ppo`.

@@ -8,10 +8,10 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
-import torch
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
@@ -138,6 +138,67 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         self._tensor_keys = self._AcceptedKeys()
         self.register_forward_pre_hook(_updater_check_forward_prehook)
 
+    @property
+    def functional(self):
+        """Whether the module is functional.
+
+        Unless it has been specifically designed not to be functional, all losses are functional.
+        """
+        return True
+
+    def get_stateful_net(self, network_name: str, copy: bool | None = None):
+        """Returns a stateful version of the network.
+
+        This can be used to initialize parameters.
+
+        Such networks will often not be callable out-of-the-box and will require a `vmap` call
+        to be executable.
+
+        Args:
+            network_name (str): the network name to gather.
+            copy (bool, optional): if ``True``, a deepcopy of the network is made.
+                Defaults to ``True``.
+
+                .. note:: if the module is not functional, no copy is made.
+        """
+        net = getattr(self, network_name)
+        if not self.functional:
+            if copy is not None and copy:
+                raise RuntimeError("Cannot copy module in non-functional mode.")
+            return net
+        copy = True if copy is None else copy
+        if copy:
+            net = deepcopy(net)
+        params = getattr(self, network_name + "_params")
+        params.to_module(net)
+        return net
+
+    def from_stateful_net(self, network_name: str, stateful_net: nn.Module):
+        """Populates the parameters of a model given a stateful version of the network.
+
+        See :meth:`~.get_stateful_net` for details on how to gather a stateful version of the network.
+
+        Args:
+            network_name (str): the network name to reset.
+            stateful_net (nn.Module): the stateful network from which the params should be
+                gathered.
+
+        """
+        if not self.functional:
+            getattr(self, network_name).load_state_dict(stateful_net.state_dict())
+            return
+        params = TensorDict.from_module(stateful_net, as_module=True)
+        keyset0 = set(params.keys(True, True))
+        self_params = getattr(self, network_name + "_params")
+        keyset1 = set(self_params.keys(True, True))
+        if keyset0 != keyset1:
+            raise RuntimeError(
+                f"The keys of params and provided module differ: "
+                f"{keyset1-keyset0} are in self.params and not in the module, "
+                f"{keyset0-keyset1} are in the module but not in self.params."
+            )
+        self_params.data.update_(params.data)
+
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
         for key, value in kwargs.items():
             if value is not None:
@@ -255,57 +316,67 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
         sep = self.SEP
-        params = TensorDict.from_module(module, as_module=True)
-
-        for key in params.keys(True):
-            if sep in key:
-                raise KeyError(
-                    f"The key {key} contains the '_sep_' pattern which is prohibited. Consider renaming the parameter / buffer."
+        if isinstance(module, (list, tuple)):
+            if len(module) != expand_dim:
+                raise RuntimeError(
+                    "The ``expand_dim`` value must match the length of the module list/tuple "
+                    "if a single module isn't provided."
                 )
-        if compare_against is not None:
-            compare_against = set(compare_against)
+            params = TensorDict.from_modules(
+                *module, as_module=True, expand_identical=True
+            )
         else:
-            compare_against = set()
-        if expand_dim:
-            # Expands the dims of params and buffers.
-            # If the param already exist in the module, we return a simple expansion of the
-            # original one. Otherwise, we expand and resample it.
-            # For buffers, a cloned expansion (or equivalently a repeat) is returned.
+            params = TensorDict.from_module(module, as_module=True)
 
-            def _compare_and_expand(param):
-                if is_tensor_collection(param):
-                    return param._apply_nest(
+            for key in params.keys(True):
+                if sep in key:
+                    raise KeyError(
+                        f"The key {key} contains the '_sep_' pattern which is prohibited. Consider renaming the parameter / buffer."
+                    )
+            if compare_against is not None:
+                compare_against = set(compare_against)
+            else:
+                compare_against = set()
+            if expand_dim:
+                # Expands the dims of params and buffers.
+                # If the param already exist in the module, we return a simple expansion of the
+                # original one. Otherwise, we expand and resample it.
+                # For buffers, a cloned expansion (or equivalently a repeat) is returned.
+
+                def _compare_and_expand(param):
+                    if is_tensor_collection(param):
+                        return param._apply_nest(
+                            _compare_and_expand,
+                            batch_size=[expand_dim, *param.shape],
+                            filter_empty=False,
+                            call_on_nested=True,
+                        )
+                    if not isinstance(param, nn.Parameter):
+                        buffer = param.expand(expand_dim, *param.shape).clone()
+                        return buffer
+                    if param in compare_against:
+                        expanded_param = param.data.expand(expand_dim, *param.shape)
+                        # the expanded parameter must be sent to device when to()
+                        # is called:
+                        return expanded_param
+                    else:
+                        p_out = param.expand(expand_dim, *param.shape).clone()
+                        p_out = nn.Parameter(
+                            p_out.uniform_(
+                                p_out.min().item(), p_out.max().item()
+                            ).requires_grad_()
+                        )
+                        return p_out
+
+                params = TensorDictParams(
+                    params.apply(
                         _compare_and_expand,
-                        batch_size=[expand_dim, *param.shape],
+                        batch_size=[expand_dim, *params.shape],
                         filter_empty=False,
                         call_on_nested=True,
-                    )
-                if not isinstance(param, nn.Parameter):
-                    buffer = param.expand(expand_dim, *param.shape).clone()
-                    return buffer
-                if param in compare_against:
-                    expanded_param = param.data.expand(expand_dim, *param.shape)
-                    # the expanded parameter must be sent to device when to()
-                    # is called:
-                    return expanded_param
-                else:
-                    p_out = param.expand(expand_dim, *param.shape).clone()
-                    p_out = nn.Parameter(
-                        p_out.uniform_(
-                            p_out.min().item(), p_out.max().item()
-                        ).requires_grad_()
-                    )
-                    return p_out
-
-            params = TensorDictParams(
-                params.apply(
-                    _compare_and_expand,
-                    batch_size=[expand_dim, *params.shape],
-                    filter_empty=False,
-                    call_on_nested=True,
-                ),
-                no_convert=True,
-            )
+                    ),
+                    no_convert=True,
+                )
 
         param_name = module_name + "_params"
 
@@ -468,17 +539,34 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     @property
     def vmap_randomness(self):
+        """Vmap random mode.
+
+        The vmap randomness mode controls what :func:`~torch.vmap` should do when dealing with
+        functions with a random outcome such as :func:`~torch.randn` and :func:`~torch.rand`.
+        If `"error"`, any random function will raise an exception indicating that `vmap` does not
+        know how to handle the random call.
+
+        If `"different"`, every element of the batch along which vmap is being called will
+        behave differently. If `"same"`, vmaps will copy the same result across all elements.
+
+        ``vmap_randomness`` defaults to `"error"` if no random module is detected, and to `"different"` in
+        other cases. By default, only a limited number of modules are listed as random, but the list can be extended
+        using the :func:`~torchrl.objectives.common.add_random_module` function.
+
+        This property supports setting its value.
+
+        """
         if self._vmap_randomness is None:
-            do_break = False
-            for val in self.__dict__.values():
-                if isinstance(val, torch.nn.Module):
-                    for module in val.modules():
-                        if isinstance(module, RANDOM_MODULE_LIST):
-                            self._vmap_randomness = "different"
-                            do_break = True
-                            break
-                if do_break:
-                    # double break
+            main_modules = list(self.__dict__.values()) + list(self.children())
+            modules = (
+                module
+                for main_module in main_modules
+                if isinstance(main_module, nn.Module)
+                for module in main_module.modules()
+            )
+            for val in modules:
+                if isinstance(val, RANDOM_MODULE_LIST):
+                    self._vmap_randomness = "different"
                     break
             else:
                 self._vmap_randomness = "error"
@@ -486,7 +574,12 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         return self._vmap_randomness
 
     def set_vmap_randomness(self, value):
+        if value not in ("error", "same", "different"):
+            raise ValueError(
+                "Wrong vmap randomness, should be one of 'error', 'same' or 'different'."
+            )
         self._vmap_randomness = value
+        self._make_vmap()
 
     @staticmethod
     def _make_meta_params(param):
@@ -497,6 +590,12 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if is_param:
             pd = nn.Parameter(pd, requires_grad=False)
         return pd
+
+    def _make_vmap(self):
+        """Caches the the vmap callers to reduce the overhead at runtime."""
+        raise NotImplementedError(
+            f"_make_vmap has been called but is not implemented for loss of type {type(self).__name__}."
+        )
 
 
 class _make_target_param:
@@ -509,3 +608,9 @@ class _make_target_param:
                 x.data.clone() if self.clone else x.data, requires_grad=False
             )
         return x.data.clone() if self.clone else x.data
+
+
+def add_ramdom_module(module):
+    """Adds a random module to the list of modules that will be detected by :meth:`~torchrl.objectives.LossModule.vmap_randomness` as random."""
+    global RANDOM_MODULE_LIST
+    RANDOM_MODULE_LIST = RANDOM_MODULE_LIST + (module,)
