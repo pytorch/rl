@@ -34,7 +34,7 @@ from torchrl.modules import (
     LSTMModule,
     MLP,
     MultiStepActorWrapper,
-    NormalParamWrapper,
+    NormalParamExtractor,
     OnlineDTActor,
     ProbabilisticActor,
     SafeModule,
@@ -201,7 +201,7 @@ class TestTDModule:
 
         in_keys = ["in"]
         net = SafeModule(
-            module=NormalParamWrapper(net),
+            module=nn.Sequential(net, NormalParamExtractor()),
             spec=None,
             in_keys=in_keys,
             out_keys=out_keys,
@@ -363,7 +363,7 @@ class TestTDSequence:
             net1 = nn.Linear(3, 4)
             dummy_net = nn.Linear(4, 4)
             net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
+        net2 = nn.Sequential(net2, NormalParamExtractor())
 
         if spec_type is None:
             spec = None
@@ -474,11 +474,11 @@ class TestTDSequence:
         net1 = nn.Linear(3, 4)
 
         net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
+        net2 = nn.Sequential(net2, NormalParamExtractor())
         net2 = SafeModule(net2, in_keys=["b"], out_keys=["loc", "scale"])
 
         net3 = nn.Linear(4, 4 * param_multiplier)
-        net3 = NormalParamWrapper(net3)
+        net3 = nn.Sequential(net3, NormalParamExtractor())
         net3 = SafeModule(net3, in_keys=["c"], out_keys=["loc", "scale"])
 
         spec = BoundedTensorSpec(-0.1, 0.1, 4)

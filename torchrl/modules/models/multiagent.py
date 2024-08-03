@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+from copy import deepcopy
 from textwrap import indent
 from typing import Optional, Sequence, Tuple, Type, Union
 
@@ -21,7 +22,13 @@ from torchrl.modules.models.utils import _reset_parameters_recursive
 
 
 class MultiAgentNetBase(nn.Module):
-    """A base class for multi-agent networks."""
+    """A base class for multi-agent networks.
+
+    .. note:: to initialize the MARL module parameters with the `torch.nn.init`
+        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        methods.
+
+    """
 
     _empty_net: nn.Module
 
@@ -33,6 +40,7 @@ class MultiAgentNetBase(nn.Module):
         share_params: bool | None = None,
         agent_dim: int | None = None,
         vmap_randomness: str = "different",
+        use_td_params: bool = True,
         **kwargs,
     ):
         super().__init__()
@@ -46,6 +54,7 @@ class MultiAgentNetBase(nn.Module):
         if agent_dim is None:
             raise TypeError("agent_dim arg must be passed.")
 
+        self.use_td_params = use_td_params
         self.n_agents = n_agents
         self.share_params = share_params
         self.centralized = centralized
@@ -63,8 +72,26 @@ class MultiAgentNetBase(nn.Module):
                 break
         self.initialized = initialized
         self._make_params(agent_networks)
+
+        # We make sure all params and buffers are on 'meta' device
+        #  To do this, we set the device keyword arg to 'meta', we also temporarily change
+        #  the default device. Finally, we convert all params to 'meta' tensors that are not params.
         kwargs["device"] = "meta"
-        self.__dict__["_empty_net"] = self._build_single_net(**kwargs)
+        with torch.device("meta"):
+            try:
+                self._empty_net = self._build_single_net(**kwargs)
+            except NotImplementedError as err:
+                if "Cannot copy out of meta tensor" in str(err):
+                    raise RuntimeError(
+                        "The network was built using `factory().to(device), build the network directly "
+                        "on device using `factory(device=device)` instead."
+                    )
+            # Remove all parameters
+            TensorDict.from_module(self._empty_net).data.to("meta").to_module(
+                self._empty_net
+            )
+        if not self.use_td_params:
+            self.params.to_module(self._empty_net)
 
     @property
     def vmap_randomness(self):
@@ -78,9 +105,13 @@ class MultiAgentNetBase(nn.Module):
 
     def _make_params(self, agent_networks):
         if self.share_params:
-            self.params = TensorDict.from_module(agent_networks[0], as_module=True)
+            self.params = TensorDict.from_module(
+                agent_networks[0], as_module=self.use_td_params
+            )
         else:
-            self.params = TensorDict.from_modules(*agent_networks, as_module=True)
+            self.params = TensorDict.from_modules(
+                *agent_networks, as_module=self.use_td_params
+            )
 
     @abc.abstractmethod
     def _build_single_net(self, *, device, **kwargs):
@@ -142,8 +173,83 @@ class MultiAgentNetBase(nn.Module):
 
         return output
 
+    def get_stateful_net(self, copy: bool = True):
+        """Returns a stateful version of the network.
+
+        This can be used to initialize parameters.
+
+        Such networks will often not be callable out-of-the-box and will require a `vmap` call
+        to be executable.
+
+        Args:
+            copy (bool, optional): if ``True``, a deepcopy of the network is made.
+                Defaults to ``True``.
+
+        If the parameters are modified in-place (recommended) there is no need to copy the
+        parameters back into the MARL module.
+        See :meth:`~.from_stateful_net` for details on how to re-populate the MARL model with
+        parameters that have been re-initialized out-of-place.
+
+        Examples:
+            >>> from torchrl.modules import MultiAgentMLP
+            >>> import torch
+            >>> n_agents = 6
+            >>> n_agent_inputs=3
+            >>> n_agent_outputs=2
+            >>> batch = 64
+            >>> obs = torch.zeros(batch, n_agents, n_agent_inputs)
+            >>> mlp = MultiAgentMLP(
+            ...     n_agent_inputs=n_agent_inputs,
+            ...     n_agent_outputs=n_agent_outputs,
+            ...     n_agents=n_agents,
+            ...     centralized=False,
+            ...     share_params=False,
+            ...     depth=2,
+            ... )
+            >>> snet = mlp.get_stateful_net()
+            >>> def init(module):
+            ...     if hasattr(module, "weight"):
+            ...         torch.nn.init.kaiming_normal_(module.weight)
+            >>> snet.apply(init)
+            >>> # If the module has been updated out-of-place (not the case here) we can reset the params
+            >>> mlp.from_stateful_net(snet)
+
+        """
+        if copy:
+            try:
+                net = deepcopy(self._empty_net)
+            except RuntimeError as err:
+                raise RuntimeError(
+                    "Failed to deepcopy the module, consider using copy=False."
+                ) from err
+        else:
+            net = self._empty_net
+        self.params.to_module(net)
+        return net
+
+    def from_stateful_net(self, stateful_net: nn.Module):
+        """Populates the parameters given a stateful version of the network.
+
+        See :meth:`~.get_stateful_net` for details on how to gather a stateful version of the network.
+
+        Args:
+            stateful_net (nn.Module): the stateful network from which the params should be
+                gathered.
+
+        """
+        params = TensorDict.from_module(stateful_net, as_module=True)
+        keyset0 = set(params.keys(True, True))
+        keyset1 = set(self.params.keys(True, True))
+        if keyset0 != keyset1:
+            raise RuntimeError(
+                f"The keys of params and provided module differ: "
+                f"{keyset1-keyset0} are in self.params and not in the module, "
+                f"{keyset0-keyset1} are in the module but not in self.params."
+            )
+        self.params.data.update_(params.data)
+
     def __repr__(self):
-        empty_net = self.__dict__["_empty_net"]
+        empty_net = self._empty_net
         with self.params.to_module(empty_net):
             module_repr = indent(str(empty_net), 4 * " ")
         n_agents = indent(f"n_agents={self.n_agents}", 4 * " ")
@@ -192,6 +298,8 @@ class MultiAgentMLP(MultiAgentNetBase):
             the number of inputs is lazily instantiated during the first call.
         n_agent_outputs (int): number of outputs for each agent.
         n_agents (int): number of agents.
+
+    Keyword Args:
         centralized (bool): If `centralized` is True, each agent will use the inputs of all agents to compute its output
             (n_agent_inputs * n_agents will be the number of inputs for one agent).
             Otherwise, each agent will only use its data as input.
@@ -210,7 +318,16 @@ class MultiAgentMLP(MultiAgentNetBase):
             default: 32.
         activation_class (Type[nn.Module]): activation class to be used.
             default: nn.Tanh.
+        use_td_params (bool, optional): if ``True``, the parameters can be found in `self.params` which is a
+            :class:`~tensordict.nn.TensorDictParams` object (which inherits both from `TensorDict` and `nn.Module`).
+            If ``False``, parameters are contained in `self._empty_net`. All things considered, these two approaches
+            should be roughly identical but not interchangeable: for instance, a ``state_dict`` created with
+            ``use_td_params=True`` cannot be used when ``use_td_params=False``.
         **kwargs: for :class:`torchrl.modules.models.MLP` can be passed to customize the MLPs.
+
+    .. note:: to initialize the MARL module parameters with the `torch.nn.init`
+        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        methods.
 
     Examples:
         >>> from torchrl.modules import MultiAgentMLP
@@ -219,8 +336,8 @@ class MultiAgentMLP(MultiAgentNetBase):
         >>> n_agent_inputs=3
         >>> n_agent_outputs=2
         >>> batch = 64
-        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs
-        First let's instantiate a local network shared by all agents (e.g. a parameter-shared policy)
+        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs)
+        >>> # instantiate a local network shared by all agents (e.g. a parameter-shared policy)
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
         ...     n_agent_outputs=n_agent_outputs,
@@ -298,12 +415,14 @@ class MultiAgentMLP(MultiAgentNetBase):
         n_agent_inputs: int | None,
         n_agent_outputs: int,
         n_agents: int,
+        *,
         centralized: bool | None = None,
         share_params: bool | None = None,
         device: Optional[DEVICE_TYPING] = None,
         depth: Optional[int] = None,
         num_cells: Optional[Union[Sequence, int]] = None,
         activation_class: Optional[Type[nn.Module]] = nn.Tanh,
+        use_td_params: bool = True,
         **kwargs,
     ):
         self.n_agents = n_agents
@@ -321,6 +440,7 @@ class MultiAgentMLP(MultiAgentNetBase):
             share_params=share_params,
             device=device,
             agent_dim=-2,
+            use_td_params=use_td_params,
             **kwargs,
         )
 
@@ -357,6 +477,10 @@ class MultiAgentConvNet(MultiAgentNetBase):
 
     It expects inputs with shape ``(*B, n_agents, channels, x, y)``.
 
+    .. note:: to initialize the MARL module parameters with the `torch.nn.init`
+        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        methods.
+
     Args:
         n_agents (int): number of agents.
         centralized (bool): If ``True``, each agent will use the inputs of all agents to compute its output, resulting in input of shape ``(*B, n_agents * channels, x, y)``. Otherwise, each agent will only use its data as input.
@@ -378,6 +502,11 @@ class MultiAgentConvNet(MultiAgentNetBase):
             Defaults to ``2``.
         activation_class (Type[nn.Module]): activation class to be used.
             Default to :class:`torch.nn.ELU`.
+        use_td_params (bool, optional): if ``True``, the parameters can be found in `self.params` which is a
+            :class:`~tensordict.nn.TensorDictParams` object (which inherits both from `TensorDict` and `nn.Module`).
+            If ``False``, parameters are contained in `self._empty_net`. All things considered, these two approaches
+            should be roughly identical but not interchangeable: for instance, a ``state_dict`` created with
+            ``use_td_params=True`` cannot be used when ``use_td_params=False``.
         **kwargs: for :class:`~torchrl.modules.models.ConvNet` can be passed to customize the ConvNet.
 
 
@@ -388,7 +517,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
         >>> n_agents = 7
         >>> channels, x, y = 3, 100, 100
         >>> obs = torch.randn(*batch, n_agents, channels, x, y)
-        >>> # First lets consider a centralized network with shared parameters.
+        >>> # Let's consider a centralized network with shared parameters.
         >>> cnn = MultiAgentConvNet(
         ...     n_agents,
         ...     centralized = True,
@@ -506,6 +635,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
         strides: Union[Sequence, int] = 2,
         paddings: Union[Sequence, int] = 0,
         activation_class: Type[nn.Module] = nn.ELU,
+        use_td_params: bool = True,
         **kwargs,
     ):
         self.in_features = in_features
@@ -520,6 +650,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
             share_params=share_params,
             device=device,
             agent_dim=-4,
+            use_td_params=use_td_params,
             **kwargs,
         )
 
