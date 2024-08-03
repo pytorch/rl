@@ -965,6 +965,23 @@ class LazyMemmapStorage(LazyTensorStorage):
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
 
+    .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is
+        already stored to avoid executing long copies of data that is already stored on disk.
+        This will only work if the default :class:`~torchrl.data.TensorStorageCheckpointer` checkpointer is used.
+        Example:
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import TensorStorage, LazyMemmapStorage, ReplayBuffer
+            >>> import tempfile
+            >>> from pathlib import Path
+            >>> import time
+            >>> td = TensorDict(a=0, b=1).expand(1000).clone()
+            >>> # We pass a path that is <main_ckpt_dir>/storage to LazyMemmapStorage
+            >>> rb_memmap = ReplayBuffer(storage=LazyMemmapStorage(10_000_000, scratch_dir="dump/storage"))
+            >>> rb_memmap.extend(td);
+            >>> # Checkpointing in `dump` is a zero-copy, as the data is already in `dump/storage`
+            >>> rb_memmap.dumps(Path("./dump"))
+
+
     Examples:
         >>> data = TensorDict({
         ...     "some data": torch.randn(10, 11),

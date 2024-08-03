@@ -206,11 +206,11 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.data import BoundedTensorSpec
-        >>> from torchrl.modules import ProbabilisticActor, NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules import ProbabilisticActor, NormalParamExtractor, TanhNormal
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> action_spec = BoundedTensorSpec(shape=torch.Size([4]),
         ...    low=-1, high=1)
-        >>> module = NormalParamWrapper(torch.nn.Linear(4, 8))
+        >>> module = nn.Sequential(torch.nn.Linear(4, 8), NormalParamExtractor())
         >>> tensordict_module = TensorDictModule(module, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticActor(
         ...    module=tensordict_module,
@@ -1379,7 +1379,7 @@ class ActorValueOperator(SafeSequential):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import ProbabilisticActor, SafeModule
-        >>> from torchrl.modules import ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
+        >>> from torchrl.modules import ValueOperator, TanhNormal, ActorValueOperator, NormalParamExtractor
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
@@ -1387,7 +1387,7 @@ class ActorValueOperator(SafeSequential):
         ...    out_keys=["hidden"],
         ...    )
         >>> module_action = TensorDictModule(
-        ...     NormalParamWrapper(torch.nn.Linear(4, 8)),
+        ...     nn.Sequential(torch.nn.Linear(4, 8), NormalParamExtractor()),
         ...     in_keys=["hidden"],
         ...     out_keys=["loc", "scale"],
         ...     )
@@ -1531,14 +1531,14 @@ class ActorCriticOperator(ActorValueOperator):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import ProbabilisticActor
-        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
+        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamExtractor, MLP
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = SafeModule(
         ...    module=module_hidden,
         ...    in_keys=["observation"],
         ...    out_keys=["hidden"],
         ...    )
-        >>> module_action = NormalParamWrapper(torch.nn.Linear(4, 8))
+        >>> module_action = nn.Sequential(torch.nn.Linear(4, 8), NormalParamExtractor())
         >>> module_action = TensorDictModule(module_action, in_keys=["hidden"], out_keys=["loc", "scale"])
         >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
@@ -1677,12 +1677,12 @@ class ActorCriticWrapper(SafeSequential):
         >>> from torchrl.modules import (
         ...      ActorCriticWrapper,
         ...      ProbabilisticActor,
-        ...      NormalParamWrapper,
+        ...      NormalParamExtractor,
         ...      TanhNormal,
         ...      ValueOperator,
         ...  )
         >>> action_module = TensorDictModule(
-        ...        NormalParamWrapper(torch.nn.Linear(4, 8)),
+        ...        nn.Sequential(torch.nn.Linear(4, 8), NormalParamExtractor()),
         ...        in_keys=["observation"],
         ...        out_keys=["loc", "scale"],
         ...    )
