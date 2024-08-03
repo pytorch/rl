@@ -839,6 +839,110 @@ class TestMultiAgent:
     agent_dim={-2}\)"""
         assert re.match(pattern, str(mlp), re.DOTALL)
 
+    @retry(AssertionError, 5)
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralized", [True, False])
+    @pytest.mark.parametrize("n_agent_inputs", [6, None])
+    @pytest.mark.parametrize("batch", [(4,), (4, 3), ()])
+    def test_multiagent_mlp_init(
+        self,
+        n_agents,
+        centralized,
+        share_params,
+        batch,
+        n_agent_inputs,
+        n_agent_outputs=2,
+    ):
+        torch.manual_seed(1)
+        mlp = MultiAgentMLP(
+            n_agent_inputs=n_agent_inputs,
+            n_agent_outputs=n_agent_outputs,
+            n_agents=n_agents,
+            centralized=centralized,
+            share_params=share_params,
+            depth=2,
+        )
+        for m in mlp.modules():
+            if isinstance(m, nn.Linear):
+                assert not isinstance(m.weight, nn.Parameter)
+                assert m.weight.device == torch.device("meta")
+                break
+        else:
+            raise RuntimeError("could not find a Linear module")
+        if n_agent_inputs is None:
+            n_agent_inputs = 6
+        td = self._get_mock_input_td(n_agents, n_agent_inputs, batch=batch)
+        obs = td.get(("agents", "observation"))
+        mlp(obs)
+        snet = mlp.get_stateful_net()
+        assert snet is not mlp._empty_net
+
+        def zero_inplace(mod):
+            if hasattr(mod, "weight"):
+                mod.weight.data *= 0
+            if hasattr(mod, "bias"):
+                mod.bias.data *= 0
+
+        snet.apply(zero_inplace)
+        assert (mlp.params == 0).all()
+
+        def one_outofplace(mod):
+            if hasattr(mod, "weight"):
+                mod.weight = nn.Parameter(torch.ones_like(mod.weight.data))
+            if hasattr(mod, "bias"):
+                mod.bias = nn.Parameter(torch.ones_like(mod.bias.data))
+
+        snet.apply(one_outofplace)
+        assert (mlp.params == 0).all()
+        mlp.from_stateful_net(snet)
+        assert (mlp.params == 1).all()
+
+    @retry(AssertionError, 5)
+    @pytest.mark.parametrize("n_agents", [3])
+    @pytest.mark.parametrize("share_params", [True])
+    @pytest.mark.parametrize("centralized", [True])
+    @pytest.mark.parametrize("n_agent_inputs", [6])
+    @pytest.mark.parametrize("batch", [(4,)])
+    @pytest.mark.parametrize("tdparams", [True, False])
+    def test_multiagent_mlp_tdparams(
+        self,
+        n_agents,
+        centralized,
+        share_params,
+        batch,
+        n_agent_inputs,
+        tdparams,
+        n_agent_outputs=2,
+    ):
+        torch.manual_seed(1)
+        mlp = MultiAgentMLP(
+            n_agent_inputs=n_agent_inputs,
+            n_agent_outputs=n_agent_outputs,
+            n_agents=n_agents,
+            centralized=centralized,
+            share_params=share_params,
+            depth=2,
+            use_td_params=tdparams,
+        )
+        if tdparams:
+            assert list(mlp._empty_net.parameters()) == []
+            assert list(mlp.params.parameters()) == list(mlp.parameters())
+        else:
+            assert list(mlp._empty_net.parameters()) == list(mlp.parameters())
+            assert not hasattr(mlp.params, "parameters")
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            return
+        mlp = nn.Sequential(mlp)
+        mlp_device = mlp.to(device)
+        param_set = set(mlp.parameters())
+        for p in mlp[0].params.values(True, True):
+            assert p in param_set
+
     def test_multiagent_mlp_lazy(self):
         mlp = MultiAgentMLP(
             n_agent_inputs=None,
