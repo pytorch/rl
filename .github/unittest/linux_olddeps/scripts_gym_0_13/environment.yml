@@ -24,5 +24,5 @@ dependencies:
     - dm_control -e git+https://github.com/deepmind/dm_control.git@c053360edea6170acfd9c8f65446703307d9d352#egg={dm_control}
     - patchelf
     - pyopengl==3.1.4
-    - ray<2.8.0
+    - ray
     - av

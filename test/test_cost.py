@@ -72,11 +72,7 @@ from torchrl.modules import (
     SafeSequential,
     WorldModelWrapper,
 )
-from torchrl.modules.distributions.continuous import (
-    NormalParamWrapper,
-    TanhDelta,
-    TanhNormal,
-)
+from torchrl.modules.distributions.continuous import TanhDelta, TanhNormal
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -260,6 +256,9 @@ def test_loss_vmap_random(device, vmap_randomness, dropout):
             net = nn.Sequential(*layers).to(device)
             model = TensorDictModule(net, in_keys=["obs"], out_keys=["action"])
             self.convert_to_functional(model, "model", expand_dim=4)
+            self._make_vmap()
+
+        def _make_vmap(self):
             self.vmap_model = _vmap_func(
                 self.model,
                 (None, 0),
@@ -3459,7 +3458,7 @@ class TestSAC(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -4369,7 +4368,7 @@ class TestDiscreteSAC(LossModuleTestBase):
     ):
         # Actor
         action_spec = OneHotDiscreteTensorSpec(action_dim)
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
             spec=action_spec,
@@ -4957,7 +4956,7 @@ class TestCrossQ(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -5652,7 +5651,7 @@ class TestREDQ(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -5760,7 +5759,9 @@ class TestREDQ(LossModuleTestBase):
         class ActorClass(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.linear = NormalParamWrapper(nn.Linear(hidden_dim, 2 * action_dim))
+                self.linear = nn.Sequential(
+                    nn.Linear(hidden_dim, 2 * action_dim), NormalParamExtractor()
+                )
 
             def forward(self, hidden):
                 return self.linear(hidden)
@@ -6595,7 +6596,7 @@ class TestCQL(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
@@ -6853,6 +6854,71 @@ class TestCQL(LossModuleTestBase):
                 assert (
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+
+    @pytest.mark.parametrize("delay_actor", (True,))
+    @pytest.mark.parametrize("delay_qvalue", (True,))
+    @pytest.mark.parametrize(
+        "max_q_backup",
+        [
+            True,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "deterministic_backup",
+        [
+            True,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "with_lagrange",
+        [
+            True,
+        ],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("td_est", [None])
+    def test_cql_qvalfromlist(
+        self,
+        delay_actor,
+        delay_qvalue,
+        max_q_backup,
+        deterministic_backup,
+        with_lagrange,
+        device,
+        td_est,
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue0 = self._create_mock_qvalue(device=device)
+        qvalue1 = self._create_mock_qvalue(device=device)
+
+        loss_fn_single = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue0,
+            loss_function="l2",
+            max_q_backup=max_q_backup,
+            deterministic_backup=deterministic_backup,
+            with_lagrange=with_lagrange,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+        )
+        loss_fn_mult = CQLLoss(
+            actor_network=actor,
+            qvalue_network=[qvalue0, qvalue1],
+            loss_function="l2",
+            max_q_backup=max_q_backup,
+            deterministic_backup=deterministic_backup,
+            with_lagrange=with_lagrange,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+        )
+        # Check that all params have the same shape
+        p2 = dict(loss_fn_mult.named_parameters())
+        for key, val in loss_fn_single.named_parameters():
+            assert val.shape == p2[key].shape
+        assert len(dict(loss_fn_single.named_parameters())) == len(p2)
 
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -7488,7 +7554,7 @@ class TestPPO(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -7525,8 +7591,8 @@ class TestPPO(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         base_layer = nn.Linear(obs_dim, 5)
-        net = NormalParamWrapper(
-            nn.Sequential(base_layer, nn.Linear(5, 2 * action_dim))
+        net = nn.Sequential(
+            base_layer, nn.Linear(5, 2 * action_dim), NormalParamExtractor()
         )
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
@@ -8379,7 +8445,7 @@ class TestA2C(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -9076,7 +9142,7 @@ class TestReinforce(LossModuleTestBase):
         batch = 4
         gamma = 0.9
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
-        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
@@ -9186,7 +9252,7 @@ class TestReinforce(LossModuleTestBase):
         n_obs = 3
         n_act = 5
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
-        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
@@ -9380,7 +9446,7 @@ class TestReinforce(LossModuleTestBase):
         n_act = 5
         batch = 4
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=[observation_key])
-        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -9986,7 +10052,7 @@ class TestOnlineDT(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
@@ -10218,7 +10284,7 @@ class TestDT(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=["observation"], out_keys=["param"])
         actor = ProbabilisticActor(
             module=module,
@@ -10411,7 +10477,7 @@ class TestIQL(LossModuleTestBase):
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(
             net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
@@ -11220,7 +11286,7 @@ class TestDiscreteIQL(LossModuleTestBase):
     ):
         # Actor
         action_spec = OneHotDiscreteTensorSpec(action_dim)
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
             spec=action_spec,
@@ -13921,7 +13987,7 @@ def test_shared_params(dest, expected_dtype, expected_device):
         out_keys=["hidden"],
     )
     module_action = TensorDictModule(
-        NormalParamWrapper(torch.nn.Linear(4, 8)),
+        nn.Sequential(nn.Linear(4, 8), NormalParamExtractor()),
         in_keys=["hidden"],
         out_keys=["loc", "scale"],
     )
@@ -14549,6 +14615,118 @@ class TestBase:
         for key in ["module.1.bias", "module.1.weight"]:
             loss_module.module_b_params.flatten_keys()[key].requires_grad
 
+    def test_init_params(self):
+        class MyLoss(LossModule):
+            module_a: TensorDictModule
+            module_b: TensorDictModule
+            module_a_params: TensorDict
+            module_b_params: TensorDict
+            target_module_a_params: TensorDict
+            target_module_b_params: TensorDict
+
+            def __init__(self, expand_dim=2):
+                super().__init__()
+                module1 = nn.Linear(3, 4)
+                module2 = nn.Linear(3, 4)
+                module3 = nn.Linear(3, 4)
+                module_a = TensorDictModule(
+                    nn.Sequential(module1, module2), in_keys=["a"], out_keys=["c"]
+                )
+                module_b = TensorDictModule(
+                    nn.Sequential(module1, module3), in_keys=["b"], out_keys=["c"]
+                )
+                self.convert_to_functional(module_a, "module_a")
+                self.convert_to_functional(
+                    module_b,
+                    "module_b",
+                    compare_against=module_a.parameters(),
+                    expand_dim=expand_dim,
+                )
+
+        loss = MyLoss()
+
+        module_a = loss.get_stateful_net("module_a", copy=False)
+        assert module_a is loss.module_a
+
+        module_a = loss.get_stateful_net("module_a")
+        assert module_a is not loss.module_a
+
+        def init(mod):
+            if hasattr(mod, "weight"):
+                mod.weight.data.zero_()
+            if hasattr(mod, "bias"):
+                mod.bias.data.zero_()
+
+        module_a.apply(init)
+        assert (loss.module_a_params == 0).all()
+
+        def init(mod):
+            if hasattr(mod, "weight"):
+                mod.weight = torch.nn.Parameter(mod.weight.data + 1)
+            if hasattr(mod, "bias"):
+                mod.bias = torch.nn.Parameter(mod.bias.data + 1)
+
+        module_a.apply(init)
+        assert (loss.module_a_params == 0).all()
+        loss.from_stateful_net("module_a", module_a)
+        assert (loss.module_a_params == 1).all()
+
+    def test_from_module_list(self):
+        class MyLoss(LossModule):
+            module_a: TensorDictModule
+            module_b: TensorDictModule
+
+            module_a_params: TensorDict
+            module_b_params: TensorDict
+
+            target_module_a_params: TensorDict
+            target_module_b_params: TensorDict
+
+            def __init__(self, module_a, module_b0, module_b1, expand_dim=2):
+                super().__init__()
+                self.convert_to_functional(module_a, "module_a")
+                self.convert_to_functional(
+                    [module_b0, module_b1],
+                    "module_b",
+                    # This will be ignored
+                    compare_against=module_a.parameters(),
+                    expand_dim=expand_dim,
+                )
+
+        module1 = nn.Linear(3, 4)
+        module2 = nn.Linear(3, 4)
+        module3a = nn.Linear(3, 4)
+        module3b = nn.Linear(3, 4)
+
+        module_a = TensorDictModule(
+            nn.Sequential(module1, module2), in_keys=["a"], out_keys=["c"]
+        )
+
+        module_b0 = TensorDictModule(
+            nn.Sequential(module1, module3a), in_keys=["b"], out_keys=["c"]
+        )
+        module_b1 = TensorDictModule(
+            nn.Sequential(module1, module3b), in_keys=["b"], out_keys=["c"]
+        )
+
+        loss = MyLoss(module_a, module_b0, module_b1)
+
+        # This should be extended
+        assert not isinstance(
+            loss.module_b_params["module", "0", "weight"], nn.Parameter
+        )
+        assert loss.module_b_params["module", "0", "weight"].shape[0] == 2
+        assert (
+            loss.module_b_params["module", "0", "weight"].data.data_ptr()
+            == loss.module_a_params["module", "0", "weight"].data.data_ptr()
+        )
+        assert isinstance(loss.module_b_params["module", "1", "weight"], nn.Parameter)
+        assert loss.module_b_params["module", "1", "weight"].shape[0] == 2
+        assert (
+            loss.module_b_params["module", "1", "weight"].data.data_ptr()
+            != loss.module_a_params["module", "1", "weight"].data.data_ptr()
+        )
+
     def test_tensordict_keys(self):
         """Test configurable tensordict key behavior with derived classes."""
 
@@ -14906,10 +15084,10 @@ class TestBuffer:
         assert v_p1 == v_p2
         assert v_params1 == v_params2
         assert v_buffers1 == v_buffers2
-        for p in mod.parameters():
-            assert isinstance(p, nn.Parameter)
-        for p in mod.buffers():
-            assert isinstance(p, Buffer)
+        for k, p in mod.named_parameters():
+            assert isinstance(p, nn.Parameter), k
+        for k, p in mod.named_buffers():
+            assert isinstance(p, Buffer), k
         for p in mod.actor_params.values(True, True):
             assert isinstance(p, (nn.Parameter, Buffer))
         for p in mod.value_params.values(True, True):

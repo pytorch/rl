@@ -57,7 +57,7 @@ from torchrl.modules import (
     ActorCriticOperator,
     ActorValueOperator,
     NoisyLinear,
-    NormalParamWrapper,
+    NormalParamExtractor,
     SafeModule,
     SafeSequential,
 )
@@ -483,10 +483,12 @@ def make_redq_model(
     }
 
     if not gSDE:
-        actor_net = NormalParamWrapper(
+        actor_net = nn.Sequential(
             actor_net,
-            scale_mapping=f"biased_softplus_{default_policy_scale}",
-            scale_lb=cfg.network.scale_lb,
+            NormalParamExtractor(
+                scale_mapping=f"biased_softplus_{default_policy_scale}",
+                scale_lb=cfg.network.scale_lb,
+            ),
         )
         actor_module = SafeModule(
             actor_net,
