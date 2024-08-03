@@ -117,7 +117,7 @@ rollout = env.rollout(max_steps=10, policy=policy)
 # Probabilistic policies
 # ----------------------
 #
-# Policy-optimization sota-implementations like
+# Policy-optimization algorithms like
 # `PPO <https://arxiv.org/abs/1707.06347>`_ require the policy to be
 # stochastic: unlike in the examples above, the module now encodes a map from
 # the observation space to a parameter space encoding a distribution over the
@@ -161,7 +161,7 @@ print(rollout)
 #
 # - Since we asked for it during the construction of the actor, the
 #   log-probability of the actions given the distribution at that time is
-#   also written. This is necessary for sota-implementations like PPO.
+#   also written. This is necessary for algorithms like PPO.
 # - The parameters of the distribution are returned within the output
 #   tensordict too under the ``"loc"`` and ``"scale"`` entries.
 #

@@ -793,6 +793,7 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    Crop
     DTypeCastTransform
     DeviceCastTransform
     DiscreteActionProjection
