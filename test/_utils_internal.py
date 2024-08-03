@@ -56,9 +56,30 @@ def HALFCHEETAH_VERSIONED():
 
 def PONG_VERSIONED():
     # load gym
+    # Gymnasium says that the ale_py behaviour changes from 1.0
+    # but with python 3.12 it is already the case with 0.29.1
+    try:
+        import ale_py  # noqa
+    except ImportError:
+        pass
+
     if gym_backend() is not None:
         _set_gym_environments()
         return _PONG_VERSIONED
+
+
+def BREAKOUT_VERSIONED():
+    # load gym
+    # Gymnasium says that the ale_py behaviour changes from 1.0
+    # but with python 3.12 it is already the case with 0.29.1
+    try:
+        import ale_py  # noqa
+    except ImportError:
+        pass
+
+    if gym_backend() is not None:
+        _set_gym_environments()
+        return _BREAKOUT_VERSIONED
 
 
 def PENDULUM_VERSIONED():
@@ -69,42 +90,46 @@ def PENDULUM_VERSIONED():
 
 
 def _set_gym_environments():
-    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
 
     _CARTPOLE_VERSIONED = None
     _HALFCHEETAH_VERSIONED = None
     _PENDULUM_VERSIONED = None
     _PONG_VERSIONED = None
+    _BREAKOUT_VERSIONED = None
 
 
 @implement_for("gym", None, "0.21.0")
 def _set_gym_environments():  # noqa: F811
-    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
 
     _CARTPOLE_VERSIONED = "CartPole-v0"
     _HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
     _PENDULUM_VERSIONED = "Pendulum-v0"
     _PONG_VERSIONED = "Pong-v4"
+    _BREAKOUT_VERSIONED = "Breakout-v4"
 
 
 @implement_for("gym", "0.21.0", None)
 def _set_gym_environments():  # noqa: F811
-    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
 
     _CARTPOLE_VERSIONED = "CartPole-v1"
     _HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
     _PENDULUM_VERSIONED = "Pendulum-v1"
     _PONG_VERSIONED = "ALE/Pong-v5"
+    _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
 @implement_for("gymnasium")
 def _set_gym_environments():  # noqa: F811
-    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
 
     _CARTPOLE_VERSIONED = "CartPole-v1"
     _HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
     _PENDULUM_VERSIONED = "Pendulum-v1"
     _PONG_VERSIONED = "ALE/Pong-v5"
+    _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
 if _has_gym:
