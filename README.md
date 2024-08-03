@@ -23,20 +23,32 @@
 
 **TorchRL** is an open-source Reinforcement Learning (RL) library for PyTorch.
 
-It provides pytorch and **python-first**, low and high level abstractions for RL that are intended to be **efficient**, **modular**, **documented** and properly **tested**.
-The code is aimed at supporting research in RL. Most of it is written in python in a highly modular way, such that researchers can easily swap components, transform them or write new ones with little effort.
+## Key features
 
-This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](https://github.com/pytorch/rl/blob/main/torchrl/envs)), [transforms](https://github.com/pytorch/rl/blob/main/torchrl/envs/transforms), [models](https://github.com/pytorch/rl/blob/main/torchrl/modules), data utilities (e.g. collectors and containers), etc.
-TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch). Common environment libraries (e.g. OpenAI gym) are only optional.
+- 🐍 **Python-first**: Designed with Python as the primary language for ease of use and flexibility
+- ⏱️ **Efficient**: Optimized for performance to support demanding RL research applications
+- 🧮 **Modular, customizable, extensible**: Highly modular architecture allows for easy swapping, transformation, or creation of new components
+- 📚 **Documented**: Thorough documentation ensures that users can quickly understand and utilize the library
+- ✅ **Tested**: Rigorously tested to ensure reliability and stability
+- ⚙️ **Reusable functionals**: Provides a set of highly reusable functions for cost functions, returns, and data processing
 
-On the low-level end, torchrl comes with a set of highly re-usable functionals for cost functions, returns and data processing.
+### Design Principles
 
-TorchRL aims at (1) a high modularity and (2) good runtime performance. Read the [full paper](https://arxiv.org/abs/2306.00577) for a more curated description of the library.
+- 🔥 **Aligns with PyTorch ecosystem**: Follows the structure and conventions of popular PyTorch libraries
+  (e.g., dataset pillar, transforms, models, data utilities)
+- ➖ Minimal dependencies: Only requires Python standard library, NumPy, and PyTorch; optional dependencies for
+  common environment libraries (e.g., OpenAI Gym) and datasets (D4RL, OpenX...)
+
+Read the [full paper](https://arxiv.org/abs/2306.00577) for a more curated description of the library.
 
 ## Getting started
 
 Check our [Getting Started tutorials](https://pytorch.org/rl/stable/index.html#getting-started) for quickly ramp up with the basic 
 features of the library!
+
+<p align="center">
+  <img src="docs/ppo.png"  width="800" >
+</p>
 
 ## Documentation and knowledge base
 
@@ -48,8 +60,22 @@ learn the basics of RL. Check it out [here](https://pytorch.org/rl/stable/refere
 
 We have some introductory videos for you to get to know the library better, check them out:
 
+- [TalkRL podcast](https://www.talkrl.com/episodes/vincent-moens-on-torchrl)
 - [TorchRL intro at PyTorch day 2022](https://youtu.be/cIKMhZoykEE)
 - [PyTorch 2.0 Q&A: TorchRL](https://www.youtube.com/live/myEfUoYrbts?feature=share)
+
+## Spotlight publications
+
+TorchRL being domain-agnostic, you can use it across many different fields. Here are a few examples:
+
+- [ACEGEN](https://pubs.acs.org/doi/10.1021/acs.jcim.4c00895): Reinforcement Learning of Generative Chemical Agents
+  for Drug Discovery
+- [BenchMARL](https://www.jmlr.org/papers/v25/23-1612.html): Benchmarking Multi-Agent Reinforcement Learning
+- [BricksRL](https://arxiv.org/abs/2406.17490): A Platform for Democratizing Robotics and Reinforcement Learning
+  Research and Education with LEGO
+- [OmniDrones](https://ieeexplore.ieee.org/abstract/document/10409589): An Efficient and Flexible Platform for Reinforcement Learning in Drone Control
+- [RL4CO](https://arxiv.org/abs/2306.17100): an Extensive Reinforcement Learning for Combinatorial Optimization Benchmark
+- [Robohive](https://proceedings.neurips.cc/paper_files/paper/2023/file/8a84a4341c375b8441b36836bb343d4e-Paper-Datasets_and_Benchmarks.pdf): A unified framework for robot learning
 
 ## Writing simplified and portable RL codebase with `TensorDict`
 
