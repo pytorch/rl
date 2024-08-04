@@ -7,9 +7,17 @@ from __future__ import annotations
 from typing import List
 
 import torch
-from tensordict import LazyStackedTensorDict, NestedKey, tensorclass, TensorDict
-from torchrl.data import ListStorage, TensorDictMap
-from torchrl.envs import EnvBase
+from tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    tensorclass,
+    TensorDict,
+    TensorDictBase,
+)
+from torchrl.data.map.tdstorage import TensorDictMap
+from torchrl.data.replay_buffers.storages import ListStorage
+from torchrl.envs.common import EnvBase
+from torchrl.modules.mcts.scores import MCTSScores
 
 
 @tensorclass
@@ -85,6 +93,7 @@ class MCTSForest:
         reward_keys: List[NestedKey] = None,
         observation_keys: List[NestedKey] = None,
         action_keys: List[NestedKey] = None,
+        mcts_score: MCTSScores = MCTSScores.PUCT,
     ):
 
         self.data_map = data_map
@@ -95,6 +104,7 @@ class MCTSForest:
         self.action_keys = action_keys
         self.reward_keys = reward_keys
         self.observation_keys = observation_keys
+        self.mcts_score = mcts_score
 
     @property
     def done_keys(self):
@@ -198,7 +208,7 @@ class MCTSForest:
             write_fn=self._write_fn_stack,
         )
 
-    def extend(self, rollout):
+    def extend(self, rollout: TensorDictBase):
         source, dest = rollout, rollout.get("next")
         if self.data_map is None:
             self._make_storage(source, dest)
@@ -211,7 +221,10 @@ class MCTSForest:
         value = source
         if self.node_map is None:
             self._make_storage_branches(source, dest)
-        self.node_map[source] = TensorDict.lazy_stack(value.unbind(0))
+        if source.ndim and source.names[0] == "time":
+            self.node_map[source] = TensorDict.lazy_stack(value.unbind(0))
+        else:
+            self.node_map[source] = value
 
     def get_child(self, root):
         return self.data_map[root]
@@ -445,3 +458,40 @@ class MCTSForest:
             extend(_tree, labels[-1])
             fig = go.Figure(go.Treemap(labels=labels, parents=parents))
             fig.show()
+
+    def maybe_make_mcts_score(self, criterion: MCTSScores, **kwargs):
+        """Makes the MCTS score function if not already done."""
+        if criterion == self.mcts_score:
+            return
+        self.mcts_score_fn = self.mcts_score.value(**kwargs)
+        self.mcts_score = criterion
+
+    @property
+    def mcts_score_fn(self):
+        score_fn = getattr(self, "_mcts_score_fn", None)
+        if score_fn is None:
+            score_fn = self._mcts_score_fn = self.maybe_make_mcts_score(self.mcts_score)
+        return score_fn
+
+    @mcts_score_fn.setter
+    def mcts_score_fn(self, value):
+        self._mcts_score_fn = value
+
+    def select_node(self, root, criterion: MCTSScores, as_tensordict: bool = False):
+        if self.data_map is None or not len(self.data_map):
+            return root
+        self.maybe_make_mcts_score(criterion)
+        # Recursively selects a node by using a given criterion
+        if root.ndim:
+            raise RuntimeError
+        while root in self.node_map:
+            branches = self.node_map[root]
+            # Each branch has an action and the resulting state
+            scored_branches = self.mcts_score_fn(branches)
+            # Now we take the argmax of the scored_branches
+            argmax_score = scored_branches.get(self.mcts_score_fn.score_key).argmax()
+            root = branches[argmax_score]
+
+        if as_tensordict:
+            return TensorDict({"data_content": root})
+        return MCTSNode(root)
