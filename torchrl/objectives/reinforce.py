@@ -398,32 +398,17 @@ class ReinforceLoss(LossModule):
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
 
         if self.clip_value:
-            try:
-                old_state_value = tensordict.get(self.tensor_keys.value).clone()
-            except KeyError:
+            old_state_value = tensordict.get(self.tensor_keys.value)
+            if old_state_value is None:
                 raise KeyError(
                     f"clip_value is set to {self.clip_value}, but "
                     f"the key {self.tensor_keys.value} was not found in the input tensordict. "
                     f"Make sure that the value_key passed to Reinforce exists in the input tensordict."
                 )
+            old_state_value = old_state_value.clone()
 
-        try:
-            target_return = tensordict.get(self.tensor_keys.value_target)
-            tensordict_select = tensordict.select(
-                *self.critic_network.in_keys, strict=False
-            )
-            with self.critic_network_params.to_module(
-                self.critic_network
-            ) if self.functional else contextlib.nullcontext():
-                state_value = self.critic_network(tensordict_select).get(
-                    self.tensor_keys.value
-                )
-            loss_value = distance_loss(
-                target_return,
-                state_value,
-                loss_function=self.loss_critic_type,
-            )
-        except KeyError:
+        target_return = tensordict.get(self.tensor_keys.value_target)
+        if target_return is None:
             raise KeyError(
                 f"the key {self.tensor_keys.value_target} was not found in the input tensordict. "
                 f"Make sure you provided the right key and the value_target (i.e. the target "
@@ -432,6 +417,20 @@ class ReinforceLoss(LossModule):
                 f"can be used for the value loss."
             )
 
+        tensordict_select = tensordict.select(
+            *self.critic_network.in_keys, strict=False
+        )
+        with self.critic_network_params.to_module(
+            self.critic_network
+        ) if self.functional else contextlib.nullcontext():
+            state_value = self.critic_network(tensordict_select).get(
+                self.tensor_keys.value
+            )
+        loss_value = distance_loss(
+            target_return,
+            state_value,
+            loss_function=self.loss_critic_type,
+        )
         clip_fraction = None
         if self.clip_value:
             loss_value, clip_fraction = _clip_value_loss(

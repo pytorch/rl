@@ -1085,12 +1085,10 @@ class SliceSampler(Sampler):
             # We first try with the traj_key
             try:
                 if isinstance(storage, TensorStorage):
-                    trajectory = storage[:].get(self._used_traj_key)
+                    trajectory = storage[:][self._used_traj_key]
                 else:
                     try:
-                        trajectory = storage[:].get(self.traj_key)
-                    except KeyError:
-                        raise
+                        trajectory = storage[:][self.traj_key]
                     except Exception:
                         raise RuntimeError(
                             "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
@@ -1112,9 +1110,7 @@ class SliceSampler(Sampler):
         else:
             try:
                 try:
-                    done = storage[:].get(self.end_key)
-                except KeyError:
-                    raise
+                    done = storage[:][self.end_key]
                 except Exception:
                     raise RuntimeError(
                         "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
