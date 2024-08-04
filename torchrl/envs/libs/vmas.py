@@ -12,16 +12,16 @@ import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
+    Bounded,
+    Categorical,
+    Composite,
     DEVICE_TYPING,
-    DiscreteTensorSpec,
-    LazyStackedCompositeSpec,
-    MultiDiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
+    MultiCategorical,
+    MultiOneHot,
+    OneHot,
+    StackedComposite,
     TensorSpec,
-    UnboundedContinuousTensorSpec,
+    Unbounded,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.common import _EnvWrapper, EnvBase
@@ -57,11 +57,7 @@ def _vmas_to_torchrl_spec_transform(
 ) -> TensorSpec:
     gym_spaces = gym_backend("spaces")
     if isinstance(spec, gym_spaces.discrete.Discrete):
-        action_space_cls = (
-            DiscreteTensorSpec
-            if categorical_action_encoding
-            else OneHotDiscreteTensorSpec
-        )
+        action_space_cls = Categorical if categorical_action_encoding else OneHot
         dtype = (
             numpy_to_torch_dtype_dict[spec.dtype]
             if categorical_action_encoding
@@ -75,9 +71,9 @@ def _vmas_to_torchrl_spec_transform(
             else torch.long
         )
         return (
-            MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+            MultiCategorical(spec.nvec, device=device, dtype=dtype)
             if categorical_action_encoding
-            else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+            else MultiOneHot(spec.nvec, device=device, dtype=dtype)
         )
     elif isinstance(spec, gym_spaces.Box):
         shape = spec.shape
@@ -88,9 +84,9 @@ def _vmas_to_torchrl_spec_transform(
         high = torch.tensor(spec.high, device=device, dtype=dtype)
         is_unbounded = low.isinf().all() and high.isinf().all()
         return (
-            UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
+            Unbounded(shape, device=device, dtype=dtype)
             if is_unbounded
-            else BoundedTensorSpec(
+            else Bounded(
                 low,
                 high,
                 shape,
@@ -322,9 +318,9 @@ class VmasWrapper(_EnvWrapper):
             self.group_map = self.group_map.get_group_map(self.agent_names)
         check_marl_grouping(self.group_map, self.agent_names)
 
-        self.unbatched_action_spec = CompositeSpec(device=self.device)
-        self.unbatched_observation_spec = CompositeSpec(device=self.device)
-        self.unbatched_reward_spec = CompositeSpec(device=self.device)
+        self.unbatched_action_spec = Composite(device=self.device)
+        self.unbatched_observation_spec = Composite(device=self.device)
+        self.unbatched_reward_spec = Composite(device=self.device)
 
         self.het_specs = False
         self.het_specs_map = {}
@@ -341,14 +337,14 @@ class VmasWrapper(_EnvWrapper):
             if group_info_spec is not None:
                 self.unbatched_observation_spec[(group, "info")] = group_info_spec
             group_het_specs = isinstance(
-                group_observation_spec, LazyStackedCompositeSpec
-            ) or isinstance(group_action_spec, LazyStackedCompositeSpec)
+                group_observation_spec, StackedComposite
+            ) or isinstance(group_action_spec, StackedComposite)
             self.het_specs_map[group] = group_het_specs
             self.het_specs = self.het_specs or group_het_specs
 
-        self.unbatched_done_spec = CompositeSpec(
+        self.unbatched_done_spec = Composite(
             {
-                "done": DiscreteTensorSpec(
+                "done": Categorical(
                     n=2,
                     shape=torch.Size((1,)),
                     dtype=torch.bool,
@@ -380,7 +376,7 @@ class VmasWrapper(_EnvWrapper):
             agent_index = self.agent_names_to_indices_map[agent_name]
             agent = self.agents[agent_index]
             action_specs.append(
-                CompositeSpec(
+                Composite(
                     {
                         "action": _vmas_to_torchrl_spec_transform(
                             self.action_space[agent_index],
@@ -391,7 +387,7 @@ class VmasWrapper(_EnvWrapper):
                 )
             )
             observation_specs.append(
-                CompositeSpec(
+                Composite(
                     {
                         "observation": _vmas_to_torchrl_spec_transform(
                             self.observation_space[agent_index],
@@ -402,9 +398,9 @@ class VmasWrapper(_EnvWrapper):
                 )
             )
             reward_specs.append(
-                CompositeSpec(
+                Composite(
                     {
-                        "reward": UnboundedContinuousTensorSpec(
+                        "reward": Unbounded(
                             shape=torch.Size((1,)),
                             device=self.device,
                         )  # shape = (1,)
@@ -414,9 +410,9 @@ class VmasWrapper(_EnvWrapper):
             agent_info = self.scenario.info(agent)
             if len(agent_info):
                 info_specs.append(
-                    CompositeSpec(
+                    Composite(
                         {
-                            key: UnboundedContinuousTensorSpec(
+                            key: Unbounded(
                                 shape=_selective_unsqueeze(
                                     value, batch_size=self.batch_size
                                 ).shape[1:],

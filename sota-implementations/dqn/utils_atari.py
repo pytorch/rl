@@ -5,7 +5,7 @@
 
 import torch.nn
 import torch.optim
-from torchrl.data import CompositeSpec
+from torchrl.data import Composite
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
@@ -84,7 +84,7 @@ def make_dqn_modules_pixels(proof_environment):
     )
     qvalue_module = QValueActor(
         module=torch.nn.Sequential(cnn, mlp),
-        spec=CompositeSpec(action=action_spec),
+        spec=Composite(action=action_spec),
         in_keys=["pixels"],
     )
     return qvalue_module

@@ -14,9 +14,9 @@ import torch
 from tensordict import make_tensordict, TensorDictBase
 from torch.utils import dlpack as torch_dlpack
 from torchrl.data.tensor_specs import (
-    CompositeSpec,
+    Composite,
     TensorSpec,
-    UnboundedContinuousTensorSpec,
+    Unbounded,
     UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
@@ -155,15 +155,13 @@ def _extract_spec(data: Union[torch.Tensor, TensorDictBase], key=None) -> Tensor
         if key in ("reward", "done"):
             shape = (*shape, 1)
         if data.dtype in (torch.float, torch.double, torch.half):
-            return UnboundedContinuousTensorSpec(
-                shape=shape, dtype=data.dtype, device=data.device
-            )
+            return Unbounded(shape=shape, dtype=data.dtype, device=data.device)
         else:
             return UnboundedDiscreteTensorSpec(
                 shape=shape, dtype=data.dtype, device=data.device
             )
     elif isinstance(data, TensorDictBase):
-        return CompositeSpec(
+        return Composite(
             {key: _extract_spec(value, key=key) for key, value in data.items()}
         )
     else:

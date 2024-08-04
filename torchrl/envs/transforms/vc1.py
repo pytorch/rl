@@ -14,12 +14,7 @@ from tensordict import TensorDictBase
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    DEVICE_TYPING,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Composite, DEVICE_TYPING, TensorSpec, Unbounded
 from torchrl.envs.transforms.transforms import (
     CenterCrop,
     Compose,
@@ -198,7 +193,7 @@ class VC1Transform(Transform):
         return out
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if not isinstance(observation_spec, CompositeSpec):
+        if not isinstance(observation_spec, Composite):
             raise ValueError("VC1Transform can only infer CompositeSpec")
 
         keys = [key for key in observation_spec.keys(True, True) if key in self.in_keys]
@@ -211,7 +206,7 @@ class VC1Transform(Transform):
                 del observation_spec[in_key]
 
         for out_key in self.out_keys:
-            observation_spec[out_key] = UnboundedContinuousTensorSpec(
+            observation_spec[out_key] = Unbounded(
                 shape=torch.Size([*dim, self.embd_size]), device=device
             )
 

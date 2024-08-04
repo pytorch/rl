@@ -11,11 +11,7 @@ import torch
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.jax_utils import (
     _extract_spec,
@@ -255,7 +251,7 @@ class BraxWrapper(_EnvWrapper):
         return state_spec
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
-        self.action_spec = BoundedTensorSpec(
+        self.action_spec = Bounded(
             low=-1,
             high=1,
             shape=(
@@ -264,15 +260,15 @@ class BraxWrapper(_EnvWrapper):
             ),
             device=self.device,
         )
-        self.reward_spec = UnboundedContinuousTensorSpec(
+        self.reward_spec = Unbounded(
             shape=[
                 *self.batch_size,
                 1,
             ],
             device=self.device,
         )
-        self.observation_spec = CompositeSpec(
-            observation=UnboundedContinuousTensorSpec(
+        self.observation_spec = Composite(
+            observation=Unbounded(
                 shape=(
                     *self.batch_size,
                     env.observation_size,

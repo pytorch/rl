@@ -15,11 +15,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.envs.common import _EnvWrapper, EnvBase
 
 
@@ -72,10 +68,7 @@ class default_info_dict_reader(BaseInfoDictReader):
     def __init__(
         self,
         keys: List[str] | None = None,
-        spec: Sequence[TensorSpec]
-        | Dict[str, TensorSpec]
-        | CompositeSpec
-        | None = None,
+        spec: Sequence[TensorSpec] | Dict[str, TensorSpec] | Composite | None = None,
         ignore_private: bool = True,
     ):
         self.ignore_private = ignore_private
@@ -87,19 +80,17 @@ class default_info_dict_reader(BaseInfoDictReader):
         if spec is None and keys is None:
             _info_spec = None
         elif spec is None:
-            _info_spec = CompositeSpec(
-                {key: UnboundedContinuousTensorSpec(()) for key in keys}, shape=[]
-            )
-        elif not isinstance(spec, CompositeSpec):
+            _info_spec = Composite({key: Unbounded(()) for key in keys}, shape=[])
+        elif not isinstance(spec, Composite):
             if self.keys is not None and len(spec) != len(self.keys):
                 raise ValueError(
                     "If specifying specs for info keys with a sequence, the "
                     "length of the sequence must match the number of keys"
                 )
             if isinstance(spec, dict):
-                _info_spec = CompositeSpec(spec, shape=[])
+                _info_spec = Composite(spec, shape=[])
             else:
-                _info_spec = CompositeSpec(
+                _info_spec = Composite(
                     {key: spec for key, spec in zip(keys, spec)}, shape=[]
                 )
         else:
@@ -121,7 +112,7 @@ class default_info_dict_reader(BaseInfoDictReader):
                 keys = [key for key in keys if not key.startswith("_")]
             self.keys = keys
         # create an info_spec only if there is none
-        info_spec = None if self.info_spec is not None else CompositeSpec()
+        info_spec = None if self.info_spec is not None else Composite()
         for key in keys:
             if key in info_dict:
                 val = info_dict[key]
@@ -130,7 +121,7 @@ class default_info_dict_reader(BaseInfoDictReader):
                 tensordict.set(key, val)
                 if info_spec is not None:
                     val = tensordict.get(key)
-                    info_spec[key] = UnboundedContinuousTensorSpec(
+                    info_spec[key] = Unbounded(
                         val.shape, device=val.device, dtype=val.dtype
                     )
             elif self.info_spec is not None:

@@ -16,7 +16,7 @@ from tensordict.utils import expand_as_right, prod, set_lazy_legacy
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
 
-from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import Unbounded
 from torchrl.objectives.value.functional import (
     _inv_pad_sequence,
     _split_and_pad_sequence,
@@ -581,12 +581,8 @@ class LSTMModule(ModuleBase):
             )
         return TensorDictPrimer(
             {
-                in_key1: UnboundedContinuousTensorSpec(
-                    shape=(self.lstm.num_layers, self.lstm.hidden_size)
-                ),
-                in_key2: UnboundedContinuousTensorSpec(
-                    shape=(self.lstm.num_layers, self.lstm.hidden_size)
-                ),
+                in_key1: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
+                in_key2: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
             }
         )
 
@@ -1329,9 +1325,7 @@ class GRUModule(ModuleBase):
             )
         return TensorDictPrimer(
             {
-                in_key1: UnboundedContinuousTensorSpec(
-                    shape=(self.gru.num_layers, self.gru.hidden_size)
-                ),
+                in_key1: Unbounded(shape=(self.gru.num_layers, self.gru.hidden_size)),
             }
         )
 

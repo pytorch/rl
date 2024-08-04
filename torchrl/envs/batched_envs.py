@@ -36,7 +36,7 @@ from torchrl._utils import (
     logger as torchrl_logger,
     VERBOSE,
 )
-from torchrl.data.tensor_specs import CompositeSpec, NonTensorSpec
+from torchrl.data.tensor_specs import Composite, NonTensor
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 from torchrl.envs.env_creator import get_env_metadata
@@ -550,7 +550,7 @@ class BatchedEnvBase(EnvBase):
 
         cls = type(self)
 
-        def _check_for_empty_spec(specs: CompositeSpec):
+        def _check_for_empty_spec(specs: Composite):
             for subspec in (
                 "full_state_spec",
                 "full_action_spec",
@@ -559,9 +559,9 @@ class BatchedEnvBase(EnvBase):
                 "full_observation_spec",
             ):
                 for key, spec in reversed(
-                    list(specs.get(subspec, default=CompositeSpec()).items(True))
+                    list(specs.get(subspec, default=Composite()).items(True))
                 ):
-                    if isinstance(spec, CompositeSpec) and spec.is_empty():
+                    if isinstance(spec, Composite) and spec.is_empty():
                         raise RuntimeError(
                             f"The environment passed to {cls.__name__} has empty specs in {key}. Consider using "
                             f"torchrl.envs.transforms.RemoveEmptySpecs to remove the empty specs."
@@ -675,7 +675,7 @@ class BatchedEnvBase(EnvBase):
             self.full_done_spec,
         ):
             for key, _spec in spec.items(True, True):
-                if isinstance(_spec, NonTensorSpec):
+                if isinstance(_spec, NonTensor):
                     non_tensor_keys.append(key)
         self._non_tensor_keys = non_tensor_keys
 

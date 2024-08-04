@@ -23,15 +23,15 @@ from torch.utils._pytree import tree_map
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
     _minmax_dtype,
-    BinaryDiscreteTensorSpec,
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    MultiDiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
+    Binary,
+    Bounded,
+    Categorical,
+    Composite,
+    MultiCategorical,
+    MultiOneHot,
+    OneHot,
     TensorSpec,
-    UnboundedContinuousTensorSpec,
+    Unbounded,
     UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
@@ -259,11 +259,7 @@ def _gym_to_torchrl_spec_transform(
         )
         return result
     if isinstance(spec, gym_spaces.discrete.Discrete):
-        action_space_cls = (
-            DiscreteTensorSpec
-            if categorical_action_encoding
-            else OneHotDiscreteTensorSpec
-        )
+        action_space_cls = Categorical if categorical_action_encoding else OneHot
         dtype = (
             numpy_to_torch_dtype_dict[spec.dtype]
             if categorical_action_encoding
@@ -271,7 +267,7 @@ def _gym_to_torchrl_spec_transform(
         )
         return action_space_cls(spec.n, device=device, dtype=dtype)
     elif isinstance(spec, gym_spaces.multi_binary.MultiBinary):
-        return BinaryDiscreteTensorSpec(
+        return Binary(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
     # a spec type cannot be a string, so we're sure that versions of gym that don't have Sequence will just skip through this
@@ -300,11 +296,9 @@ def _gym_to_torchrl_spec_transform(
             )
 
             return (
-                MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+                MultiCategorical(spec.nvec, device=device, dtype=dtype)
                 if categorical_action_encoding
-                else MultiOneHotDiscreteTensorSpec(
-                    spec.nvec, device=device, dtype=dtype
-                )
+                else MultiOneHot(spec.nvec, device=device, dtype=dtype)
             )
 
         return torch.stack(
@@ -337,9 +331,9 @@ def _gym_to_torchrl_spec_transform(
             and torch.isclose(high, torch.as_tensor(maxval, dtype=dtype)).all()
         )
         return (
-            UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
+            Unbounded(shape, device=device, dtype=dtype)
             if is_unbounded
-            else BoundedTensorSpec(
+            else Bounded(
                 low,
                 high,
                 shape,
@@ -368,7 +362,7 @@ def _gym_to_torchrl_spec_transform(
                 remap_state_to_observation=remap_state_to_observation,
             )
         # the batch-size must be set later
-        return CompositeSpec(spec_out, device=device)
+        return Composite(spec_out, device=device)
     elif isinstance(spec, gym_spaces.dict.Dict):
         return _gym_to_torchrl_spec_transform(
             spec.spaces,
@@ -445,19 +439,19 @@ def _torchrl_to_gym_spec_transform(
             return gym_spaces.Tuple(
                 tuple(_torchrl_to_gym_spec_transform(spec) for spec in spec.unbind(0))
             )
-    if isinstance(spec, MultiDiscreteTensorSpec):
+    if isinstance(spec, MultiCategorical):
         return _multidiscrete_convert(gym_spaces, spec)
-    if isinstance(spec, MultiOneHotDiscreteTensorSpec):
+    if isinstance(spec, MultiOneHot):
         return gym_spaces.multi_discrete.MultiDiscrete(spec.nvec)
-    if isinstance(spec, BinaryDiscreteTensorSpec):
+    if isinstance(spec, Binary):
         return gym_spaces.multi_binary.MultiBinary(spec.shape[-1])
-    if isinstance(spec, DiscreteTensorSpec):
+    if isinstance(spec, Categorical):
         return gym_spaces.discrete.Discrete(
             spec.n
         )  # dtype=torch_to_numpy_dtype_dict[spec.dtype])
-    if isinstance(spec, OneHotDiscreteTensorSpec):
+    if isinstance(spec, OneHot):
         return gym_spaces.discrete.Discrete(spec.n)
-    if isinstance(spec, UnboundedContinuousTensorSpec):
+    if isinstance(spec, Unbounded):
         minval, maxval = _minmax_dtype(spec.dtype)
         return gym_spaces.Box(
             low=minval,
@@ -473,9 +467,9 @@ def _torchrl_to_gym_spec_transform(
             shape=shape,
             dtype=torch_to_numpy_dtype_dict[spec.dtype],
         )
-    if isinstance(spec, BoundedTensorSpec):
+    if isinstance(spec, Bounded):
         return _box_convert(spec, gym_spaces, shape)
-    if isinstance(spec, CompositeSpec):
+    if isinstance(spec, Composite):
         # remove batch size
         while spec.shape:
             spec = spec[0]
@@ -865,10 +859,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     def read_action(self, action):
         action = super().read_action(action)
-        if (
-            isinstance(self.action_spec, (OneHotDiscreteTensorSpec, DiscreteTensorSpec))
-            and action.size == 1
-        ):
+        if isinstance(self.action_spec, (OneHot, Categorical)) and action.size == 1:
             # some envs require an integer for indexing
             action = int(action)
         return action
@@ -1012,13 +1003,13 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        if not isinstance(observation_spec, CompositeSpec):
+        if not isinstance(observation_spec, Composite):
             if self.from_pixels:
-                observation_spec = CompositeSpec(
+                observation_spec = Composite(
                     pixels=observation_spec, shape=cur_batch_size
                 )
             else:
-                observation_spec = CompositeSpec(
+                observation_spec = Composite(
                     observation=observation_spec, shape=cur_batch_size
                 )
         elif observation_spec.shape[: len(cur_batch_size)] != cur_batch_size:
@@ -1032,7 +1023,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 categorical_action_encoding=self._categorical_action_encoding,
             )
         else:
-            reward_spec = UnboundedContinuousTensorSpec(
+            reward_spec = Unbounded(
                 shape=[1],
                 device=self.device,
             )
@@ -1053,15 +1044,15 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gym", None, "0.26")
     def _make_done_spec(self):  # noqa: F811
-        return CompositeSpec(
+        return Composite(
             {
-                "done": DiscreteTensorSpec(
+                "done": Categorical(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "terminated": DiscreteTensorSpec(
+                "terminated": Categorical(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "truncated": DiscreteTensorSpec(
+                "truncated": Categorical(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
             },
@@ -1070,15 +1061,15 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gym", "0.26", None)
     def _make_done_spec(self):  # noqa: F811
-        return CompositeSpec(
+        return Composite(
             {
-                "done": DiscreteTensorSpec(
+                "done": Categorical(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "terminated": DiscreteTensorSpec(
+                "terminated": Categorical(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "truncated": DiscreteTensorSpec(
+                "truncated": Categorical(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
             },
@@ -1087,15 +1078,15 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gymnasium", "0.27", None)
     def _make_done_spec(self):  # noqa: F811
-        return CompositeSpec(
+        return Composite(
             {
-                "done": DiscreteTensorSpec(
+                "done": Categorical(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "terminated": DiscreteTensorSpec(
+                "terminated": Categorical(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "truncated": DiscreteTensorSpec(
+                "truncated": Categorical(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
             },
@@ -1567,7 +1558,7 @@ class terminal_obs_reader(default_info_dict_reader):
     replaced.
 
     Args:
-        observation_spec (CompositeSpec): The observation spec of the gym env.
+        observation_spec (Composite): The observation spec of the gym env.
         backend (str, optional): the backend of the env. One of `"sb3"` for
             stable-baselines3 or `"gym"` for gym/gymnasium.
 
@@ -1585,7 +1576,7 @@ class terminal_obs_reader(default_info_dict_reader):
         "gym": "final_info",
     }
 
-    def __init__(self, observation_spec: CompositeSpec, backend, name="final"):
+    def __init__(self, observation_spec: Composite, backend, name="final"):
         super().__init__()
         self.name = name
         self._obs_spec = observation_spec.clone()

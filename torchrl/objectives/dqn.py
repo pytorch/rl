@@ -68,10 +68,10 @@ class DQNLoss(LossModule):
 
     Examples:
         >>> from torchrl.modules import MLP
-        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.data import OneHot
         >>> n_obs, n_act = 4, 3
         >>> value_net = MLP(in_features=n_obs, out_features=n_act)
-        >>> spec = OneHotDiscreteTensorSpec(n_act)
+        >>> spec = OneHot(n_act)
         >>> actor = QValueActor(value_net, in_keys=["observation"], action_space=spec)
         >>> loss = DQNLoss(actor, action_space=spec)
         >>> batch = [10,]
@@ -99,12 +99,12 @@ class DQNLoss(LossModule):
 
     Examples:
         >>> from torchrl.objectives import DQNLoss
-        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.data import OneHot
         >>> from torch import nn
         >>> import torch
         >>> n_obs = 3
         >>> n_action = 4
-        >>> action_spec = OneHotDiscreteTensorSpec(n_action)
+        >>> action_spec = OneHot(n_action)
         >>> value_network = nn.Linear(n_obs, n_action) # a simple value model
         >>> dqn_loss = DQNLoss(value_network, action_space=action_spec)
         >>> # define data
