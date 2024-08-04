@@ -482,7 +482,9 @@ class PPOLoss(LossModule):
         # overhead that we could easily reduce.
         if self.separate_losses:
             tensordict = tensordict.detach()
-        target_return = tensordict.get(self.tensor_keys.value_target)
+        target_return = tensordict.get(
+            self.tensor_keys.value_target, None
+        )  # TODO: None soon to be removed
         if target_return is None:
             raise KeyError(
                 f"the key {self.tensor_keys.value_target} was not found in the input tensordict. "
@@ -493,7 +495,9 @@ class PPOLoss(LossModule):
             )
 
         if self.clip_value:
-            old_state_value = tensordict.get(self.tensor_keys.value)
+            old_state_value = tensordict.get(
+                self.tensor_keys.value, None
+            )  # TODO: None soon to be removed
             if old_state_value is None:
                 raise KeyError(
                     f"clip_value is set to {self.clip_value}, but "
@@ -506,7 +510,9 @@ class PPOLoss(LossModule):
         ) if self.functional else contextlib.nullcontext():
             state_value_td = self.critic_network(tensordict)
 
-        state_value = state_value_td.get(self.tensor_keys.value)
+        state_value = state_value_td.get(
+            self.tensor_keys.value, None
+        )  # TODO: None soon to be removed
         if state_value is None:
             raise KeyError(
                 f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "

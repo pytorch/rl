@@ -150,7 +150,7 @@ class EndOfLifeTransform(Transform):
         end_of_life = torch.as_tensor(
             tensordict.get(self.lives_key) > lives, device=self.parent.device
         )
-        done = next_tensordict.get(self.done_key)
+        done = next_tensordict.get(self.done_key, None)  # TODO: None soon to be removed
         if done is None:
             raise KeyError(
                 f"The done value pointed by {self.done_key} cannot be found in tensordict with keys {tensordict.keys(True, True)}. "

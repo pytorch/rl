@@ -408,7 +408,9 @@ class A2CLoss(LossModule):
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         if self.clip_value:
-            old_state_value = tensordict.get(self.tensor_keys.value)
+            old_state_value = tensordict.get(
+                self.tensor_keys.value, None
+            )  # TODO: None soon to be removed
             if old_state_value is None:
                 raise KeyError(
                     f"clip_value is set to {self.clip_value}, but "
@@ -419,7 +421,9 @@ class A2CLoss(LossModule):
 
         # TODO: if the advantage is gathered by forward, this introduces an
         # overhead that we could easily reduce.
-        target_return = tensordict.get(self.tensor_keys.value_target)
+        target_return = tensordict.get(
+            self.tensor_keys.value_target, None
+        )  # TODO: None soon to be removed
         if target_return is None:
             raise KeyError(
                 f"the key {self.tensor_keys.value_target} was not found in the input tensordict. "
