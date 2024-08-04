@@ -237,6 +237,12 @@ class TesttTensorDictMap:
         assert contains[: rollout.shape[-1]].all()
         assert not contains[rollout.shape[-1] :].any()
 
+class TestMCTSForest:
+    def test_forest_build(self):
+        ...
+    def test_forest_extend_and_get(self):
+        ...
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
