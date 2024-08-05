@@ -665,7 +665,7 @@ class LSTMModule(ModuleBase):
         else:
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
 
-        is_init = tensordict_shaped.get("is_init").squeeze(-1)
+        is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
         if self.recurrent_mode and is_init[..., 1:].any():
             # if we have consecutive trajectories, things get a little more complicated
@@ -679,7 +679,7 @@ class LSTMModule(ModuleBase):
             tensordict_shaped = _split_and_pad_sequence(
                 tensordict_shaped.select(*self.in_keys, strict=False), splits
             )
-            is_init = tensordict_shaped.get("is_init").squeeze(-1)
+            is_init = tensordict_shaped["is_init"].squeeze(-1)
 
         value, hidden0, hidden1 = (
             tensordict_shaped.get(key, default)
@@ -1410,7 +1410,7 @@ class GRUModule(ModuleBase):
         else:
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
 
-        is_init = tensordict_shaped.get("is_init").squeeze(-1)
+        is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
         if self.recurrent_mode and is_init[..., 1:].any():
             # if we have consecutive trajectories, things get a little more complicated
@@ -1424,7 +1424,7 @@ class GRUModule(ModuleBase):
             tensordict_shaped = _split_and_pad_sequence(
                 tensordict_shaped.select(*self.in_keys, strict=False), splits
             )
-            is_init = tensordict_shaped.get("is_init").squeeze(-1)
+            is_init = tensordict_shaped["is_init"].squeeze(-1)
 
         value, hidden = (
             tensordict_shaped.get(key, default)
