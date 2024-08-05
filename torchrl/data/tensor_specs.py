@@ -38,6 +38,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
+from tensordict.base import NO_DEFAULT
 from tensordict.utils import _getitem_batch_size, NestedKey
 from torchrl._utils import _make_ordinal_device, get_binary_env_var
 
@@ -78,8 +79,6 @@ NOT_IMPLEMENTED_ERROR = NotImplementedError(
     " If you are interested in this feature please submit"
     " an issue at https://github.com/pytorch/rl/issues"
 )
-
-NO_DEFAULT = object()
 
 
 def _default_dtype_and_device(
@@ -4121,7 +4120,7 @@ class CompositeSpec(TensorSpec):
         for key, item in self._specs.items():
             if item is None or (isinstance(item, CompositeSpec) and item.is_empty()):
                 continue
-            val_item = val[key]
+            val_item = val.get(key, NO_DEFAULT)
             if not item.is_in(val_item):
                 return False
         return True
