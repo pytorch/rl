@@ -21,7 +21,7 @@ from tensordict.utils import NestedKey
 from torch import nn
 from torch.nn import functional as F
 
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import Composite, TensorSpec
 
 from torchrl.data.utils import DEVICE_TYPING
 
@@ -59,12 +59,12 @@ def _check_all_str(list_of_str, first_level=True):
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
     try:
         spec = module.spec
-        if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
+        if len(module.out_keys) > 1 and not isinstance(spec, Composite):
             raise RuntimeError(
                 "safe TensorDictModules with multiple out_keys require a CompositeSpec with matching keys. Got "
                 f"keys {module.out_keys}."
             )
-        elif not isinstance(spec, CompositeSpec):
+        elif not isinstance(spec, Composite):
             out_key = module.out_keys[0]
             keys = [out_key]
             values = [spec]
@@ -138,10 +138,10 @@ class SafeModule(TensorDictModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import UnboundedContinuousTensorSpec
+        >>> from torchrl.data import Unbounded
         >>> from torchrl.modules import TensorDictModule
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
-        >>> spec = UnboundedContinuousTensorSpec(8)
+        >>> spec = Unbounded(8)
         >>> module = torch.nn.GRUCell(4, 8)
         >>> td_fmodule = TensorDictModule(
         ...    module=module,
@@ -216,18 +216,18 @@ class SafeModule(TensorDictModule):
             spec = spec.clone()
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
-        elif spec is not None and not isinstance(spec, CompositeSpec):
+        elif spec is not None and not isinstance(spec, Composite):
             if len(self.out_keys) > 1:
                 raise RuntimeError(
                     f"got more than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
-            spec = CompositeSpec({self.out_keys[0]: spec})
-        elif spec is not None and isinstance(spec, CompositeSpec):
+            spec = Composite({self.out_keys[0]: spec})
+        elif spec is not None and isinstance(spec, Composite):
             if "_" in spec.keys() and spec["_"] is not None:
                 warnings.warn('got a spec with key "_": it will be ignored')
         elif spec is None:
-            spec = CompositeSpec()
+            spec = Composite()
 
         # unravel_key_list(self.out_keys) can be removed once 473 is merged in tensordict
         spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
@@ -247,7 +247,7 @@ class SafeModule(TensorDictModule):
         self.safe = safe
         if safe:
             if spec is None or (
-                isinstance(spec, CompositeSpec)
+                isinstance(spec, Composite)
                 and all(_spec is None for _spec in spec.values())
             ):
                 raise RuntimeError(
@@ -257,12 +257,12 @@ class SafeModule(TensorDictModule):
             self.register_forward_hook(_forward_hook_safe_action)
 
     @property
-    def spec(self) -> CompositeSpec:
+    def spec(self) -> Composite:
         return self._spec
 
     @spec.setter
-    def spec(self, spec: CompositeSpec) -> None:
-        if not isinstance(spec, CompositeSpec):
+    def spec(self, spec: Composite) -> None:
+        if not isinstance(spec, Composite):
             raise RuntimeError(
                 f"Trying to set an object of type {type(spec)} as a tensorspec but expected a CompositeSpec instance."
             )

@@ -9,7 +9,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
-from torchrl.data.tensor_specs import CompositeSpec
+from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
@@ -39,7 +39,7 @@ class DreamerEnv(ModelBasedEnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
         super().set_specs_from_env(env)
         self.action_spec = self.action_spec.to(self.device)
-        self.state_spec = CompositeSpec(
+        self.state_spec = Composite(
             state=self.observation_spec["state"],
             belief=self.observation_spec["belief"],
             shape=env.batch_size,

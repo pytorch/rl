@@ -16,7 +16,7 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 from torch.nn import functional as F
-from torchrl.data.tensor_specs import BoundedTensorSpec, UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import Bounded, Unbounded
 from torchrl.modules import MLP, QValueActor, TanhNormal
 from torchrl.objectives import (
     A2CLoss,
@@ -253,9 +253,7 @@ def test_sac_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
     value = Seq(common, value_head)
     value(actor(td))
 
-    loss = SACLoss(
-        actor, value, action_spec=UnboundedContinuousTensorSpec(shape=(n_act,))
-    )
+    loss = SACLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
     benchmark(loss, td)
@@ -312,9 +310,7 @@ def test_redq_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden
     value = Seq(common, value_head)
     value(actor(td))
 
-    loss = REDQLoss(
-        actor, value, action_spec=UnboundedContinuousTensorSpec(shape=(n_act,))
-    )
+    loss = REDQLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
     benchmark(loss, td)
@@ -373,9 +369,7 @@ def test_redq_deprec_speed(
     value = Seq(common, value_head)
     value(actor(td))
 
-    loss = REDQLoss_deprecated(
-        actor, value, action_spec=UnboundedContinuousTensorSpec(shape=(n_act,))
-    )
+    loss = REDQLoss_deprecated(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
     benchmark(loss, td)
@@ -435,7 +429,7 @@ def test_td3_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
     loss = TD3Loss(
         actor,
         value,
-        action_spec=BoundedTensorSpec(shape=(n_act,), low=-1, high=1),
+        action_spec=Bounded(shape=(n_act,), low=-1, high=1),
     )
 
     loss(td)
@@ -490,9 +484,7 @@ def test_cql_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
     value = Seq(common, value_head)
     value(actor(td))
 
-    loss = CQLLoss(
-        actor, value, action_spec=UnboundedContinuousTensorSpec(shape=(n_act,))
-    )
+    loss = CQLLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
     benchmark(loss, td)

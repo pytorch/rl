@@ -11,11 +11,7 @@ from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
 from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms.transforms import (
     CatTensors,
@@ -103,7 +99,7 @@ class _R3MNet(Transform):
         return out
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if not isinstance(observation_spec, CompositeSpec):
+        if not isinstance(observation_spec, Composite):
             raise ValueError("_R3MNet can only infer CompositeSpec")
 
         keys = [key for key in observation_spec.keys(True, True) if key in self.in_keys]
@@ -116,7 +112,7 @@ class _R3MNet(Transform):
                 del observation_spec[in_key]
 
         for out_key in self.out_keys:
-            observation_spec[out_key] = UnboundedContinuousTensorSpec(
+            observation_spec[out_key] = Unbounded(
                 shape=torch.Size([*dim, self.outdim]), device=device
             )
 

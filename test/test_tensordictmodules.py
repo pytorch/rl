@@ -11,11 +11,7 @@ from mocking_classes import CountingEnv, DiscreteActionVecMockEnv
 from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from torch import nn
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs import (
     CatFrames,
     Compose,
@@ -119,8 +115,8 @@ class TestTDModule:
                 return self.linear_1(x), self.linear_2(x)
 
         spec_dict = {
-            "_": UnboundedContinuousTensorSpec((4,)),
-            "out_2": UnboundedContinuousTensorSpec((3,)),
+            "_": Unbounded((4,)),
+            "out_2": Unbounded((3,)),
         }
 
         # warning due to "_" in spec keys
@@ -129,7 +125,7 @@ class TestTDModule:
                 MultiHeadLinear(5, 4, 3),
                 in_keys=["input"],
                 out_keys=["_", "out_2"],
-                spec=CompositeSpec(**spec_dict),
+                spec=Composite(**spec_dict),
             )
 
     @pytest.mark.parametrize("safe", [True, False])
@@ -146,9 +142,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = BoundedTensorSpec(-0.1, 0.1, 4)
+            spec = Bounded(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = UnboundedContinuousTensorSpec(4)
+            spec = Unbounded(4)
 
         if safe and spec is None:
             with pytest.raises(
@@ -210,9 +206,9 @@ class TestTDModule:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = BoundedTensorSpec(-0.1, 0.1, 4)
+            spec = Bounded(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = UnboundedContinuousTensorSpec(4)
+            spec = Unbounded(4)
         else:
             raise NotImplementedError
 
@@ -291,9 +287,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = BoundedTensorSpec(-0.1, 0.1, 4)
+            spec = Bounded(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = UnboundedContinuousTensorSpec(4)
+            spec = Unbounded(4)
 
         kwargs = {}
 
@@ -368,9 +364,9 @@ class TestTDSequence:
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = BoundedTensorSpec(-0.1, 0.1, 4)
+            spec = Bounded(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
-            spec = UnboundedContinuousTensorSpec(4)
+            spec = Unbounded(4)
         else:
             raise NotImplementedError
 
@@ -481,7 +477,7 @@ class TestTDSequence:
         net3 = nn.Sequential(net3, NormalParamExtractor())
         net3 = SafeModule(net3, in_keys=["c"], out_keys=["loc", "scale"])
 
-        spec = BoundedTensorSpec(-0.1, 0.1, 4)
+        spec = Bounded(-0.1, 0.1, 4)
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -1340,7 +1336,7 @@ class TestGRUModule:
 def test_safe_specs():
 
     out_key = ("a", "b")
-    spec = CompositeSpec(CompositeSpec({out_key: UnboundedContinuousTensorSpec()}))
+    spec = Composite(Composite({out_key: Unbounded()}))
     original_spec = spec.clone()
     mod = SafeModule(
         module=nn.Linear(3, 1),
@@ -1354,9 +1350,7 @@ def test_safe_specs():
 
 def test_actor_critic_specs():
     action_key = ("agents", "action")
-    spec = CompositeSpec(
-        CompositeSpec({action_key: UnboundedContinuousTensorSpec(shape=(3,))})
-    )
+    spec = Composite(Composite({action_key: Unbounded(shape=(3,))}))
     policy_module = TensorDictModule(
         nn.Linear(3, 1),
         in_keys=[("agents", "observation")],

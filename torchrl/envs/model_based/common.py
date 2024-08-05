@@ -27,18 +27,18 @@ class ModelBasedEnvBase(EnvBase):
     Example:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
+        >>> from torchrl.data import Composite, Unbounded
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
-        ...         self.observation_spec = CompositeSpec(
-        ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
+        ...         self.observation_spec = Composite(
+        ...             hidden_observation=Unbounded((4,))
         ...         )
-        ...         self.state_spec = CompositeSpec(
-        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
+        ...         self.state_spec = Composite(
+        ...             hidden_observation=Unbounded((4,)),
         ...         )
-        ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
-        ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
+        ...         self.action_spec = Unbounded((1,))
+        ...         self.reward_spec = Unbounded((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
         ...         tensordict = TensorDict({},

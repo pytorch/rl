@@ -16,12 +16,12 @@ import torch
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 
 from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
+    Bounded,
+    Categorical,
+    Composite,
+    OneHot,
     TensorSpec,
-    UnboundedContinuousTensorSpec,
+    Unbounded,
     UnboundedDiscreteTensorSpec,
 )
 
@@ -57,14 +57,10 @@ def _dmcontrol_to_torchrl_spec_transform(
             )
             for k, item in spec.items()
         }
-        return CompositeSpec(**spec)
+        return Composite(**spec)
     elif isinstance(spec, dm_env.specs.DiscreteArray):
         # DiscreteArray is a type of BoundedArray so this block needs to go first
-        action_space_cls = (
-            DiscreteTensorSpec
-            if categorical_discrete_encoding
-            else OneHotDiscreteTensorSpec
-        )
+        action_space_cls = Categorical if categorical_discrete_encoding else OneHot
         if dtype is None:
             dtype = (
                 numpy_to_torch_dtype_dict[spec.dtype]
@@ -78,7 +74,7 @@ def _dmcontrol_to_torchrl_spec_transform(
         shape = spec.shape
         if not len(shape):
             shape = torch.Size([1])
-        return BoundedTensorSpec(
+        return Bounded(
             shape=shape,
             low=spec.minimum,
             high=spec.maximum,
@@ -92,9 +88,7 @@ def _dmcontrol_to_torchrl_spec_transform(
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
-            return UnboundedContinuousTensorSpec(
-                shape=shape, dtype=dtype, device=device
-            )
+            return Unbounded(shape=shape, dtype=dtype, device=device)
         else:
             return UnboundedDiscreteTensorSpec(shape=shape, dtype=dtype, device=device)
     else:
@@ -254,10 +248,10 @@ class DMControlWrapper(GymLikeEnv):
             reward_spec.shape = torch.Size([1])
         self.reward_spec = reward_spec
         # populate default done spec
-        done_spec = DiscreteTensorSpec(
+        done_spec = Categorical(
             n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
         )
-        self.done_spec = CompositeSpec(
+        self.done_spec = Composite(
             done=done_spec.clone(),
             truncated=done_spec.clone(),
             terminated=done_spec.clone(),
