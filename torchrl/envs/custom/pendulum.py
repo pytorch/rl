@@ -6,11 +6,7 @@ import numpy as np
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import make_composite_from_td
 
@@ -240,14 +236,14 @@ class PendulumEnv(EnvBase):
 
     def _make_spec(self, td_params):
         # Under the hood, this will populate self.output_spec["observation"]
-        self.observation_spec = CompositeSpec(
-            th=BoundedTensorSpec(
+        self.observation_spec = Composite(
+            th=Bounded(
                 low=-torch.pi,
                 high=torch.pi,
                 shape=(),
                 dtype=torch.float32,
             ),
-            thdot=BoundedTensorSpec(
+            thdot=Bounded(
                 low=-td_params["params", "max_speed"],
                 high=td_params["params", "max_speed"],
                 shape=(),
@@ -265,22 +261,22 @@ class PendulumEnv(EnvBase):
         self.state_spec = self.observation_spec.clone()
         # action-spec will be automatically wrapped in input_spec when
         # `self.action_spec = spec` will be called supported
-        self.action_spec = BoundedTensorSpec(
+        self.action_spec = Bounded(
             low=-td_params["params", "max_torque"],
             high=td_params["params", "max_torque"],
             shape=(1,),
             dtype=torch.float32,
         )
-        self.reward_spec = UnboundedContinuousTensorSpec(shape=(*td_params.shape, 1))
+        self.reward_spec = Unbounded(shape=(*td_params.shape, 1))
 
     def make_composite_from_td(td):
         # custom function to convert a ``tensordict`` in a similar spec structure
         # of unbounded values.
-        composite = CompositeSpec(
+        composite = Composite(
             {
                 key: make_composite_from_td(tensor)
                 if isinstance(tensor, TensorDictBase)
-                else UnboundedContinuousTensorSpec(
+                else Unbounded(
                     dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
                 )
                 for key, tensor in td.items()

@@ -16,7 +16,7 @@ from tensordict.nn import (
 )
 from tensordict.utils import expand_as_right, expand_right, NestedKey
 
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
@@ -64,9 +64,9 @@ class EGreedyModule(TensorDictModuleBase):
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictSequential
         >>> from torchrl.modules import EGreedyModule, Actor
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> torch.manual_seed(0)
-        >>> spec = BoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> spec = Bounded(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
         >>> policy = Actor(spec=spec, module=module)
         >>> explorative_policy = TensorDictSequential(policy,  EGreedyModule(eps_init=0.2))
@@ -115,8 +115,8 @@ class EGreedyModule(TensorDictModuleBase):
         self.register_buffer("eps", torch.as_tensor([eps_init], dtype=torch.float32))
 
         if spec is not None:
-            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
-                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+            if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
+                spec = Composite({action_key: spec}, shape=spec.shape[:-1])
         self._spec = spec
 
     @property
@@ -155,7 +155,7 @@ class EGreedyModule(TensorDictModuleBase):
             cond = expand_as_right(cond, out)
             spec = self.spec
             if spec is not None:
-                if isinstance(spec, CompositeSpec):
+                if isinstance(spec, Composite):
                     spec = spec[self.action_key]
                 if spec.shape != out.shape:
                     # In batched envs if the spec is passed unbatched, the rand() will not
@@ -214,9 +214,9 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.modules import EGreedyWrapper, Actor
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> torch.manual_seed(0)
-        >>> spec = BoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> spec = Bounded(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
         >>> policy = Actor(spec=spec, module=module)
         >>> explorative_policy = EGreedyWrapper(policy, eps_init=0.2)
@@ -323,8 +323,8 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
                 f"The action key {action_key} was not found in the td_module out_keys {self.td_module.out_keys}."
             )
         if spec is not None:
-            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
-                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+            if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
+                spec = Composite({action_key: spec}, shape=spec.shape[:-1])
             self._spec = spec
         elif hasattr(self.td_module, "_spec"):
             self._spec = self.td_module._spec.clone()
@@ -335,7 +335,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             if action_key not in self._spec.keys(True, True):
                 self._spec[action_key] = None
         else:
-            self._spec = CompositeSpec({key: None for key in policy.out_keys})
+            self._spec = Composite({key: None for key in policy.out_keys})
 
         self.safe = safe
         if self.safe:
@@ -453,8 +453,8 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32))
 
         if spec is not None:
-            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
-                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+            if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
+                spec = Composite({action_key: spec}, shape=spec.shape[:-1])
         else:
             raise RuntimeError("spec cannot be None.")
         self._spec = spec
@@ -570,10 +570,10 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
         >>> torch.manual_seed(0)
-        >>> spec = BoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> spec = Bounded(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
         >>> policy = Actor(module=module, spec=spec)
         >>> explorative_policy = OrnsteinUhlenbeckProcessWrapper(policy)
@@ -647,8 +647,8 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         steps_key = self.ou.steps_key
 
         if spec is not None:
-            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
-                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+            if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
+                spec = Composite({action_key: spec}, shape=spec.shape[:-1])
             self._spec = spec
         elif hasattr(self.td_module, "_spec"):
             self._spec = self.td_module._spec.clone()
@@ -659,7 +659,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             if action_key not in self._spec.keys(True, True):
                 self._spec[action_key] = None
         else:
-            self._spec = CompositeSpec({key: None for key in policy.out_keys})
+            self._spec = Composite({key: None for key in policy.out_keys})
         ou_specs = {
             noise_key: None,
             steps_key: None,
@@ -783,10 +783,10 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictSequential
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules import OrnsteinUhlenbeckProcessModule, Actor
         >>> torch.manual_seed(0)
-        >>> spec = BoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> spec = Bounded(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
         >>> policy = Actor(module=module, spec=spec)
         >>> ou = OrnsteinUhlenbeckProcessModule(spec=spec)
@@ -851,8 +851,8 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         steps_key = self.ou.steps_key
 
         if spec is not None:
-            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
-                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+            if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
+                spec = Composite({action_key: spec}, shape=spec.shape[:-1])
             self._spec = spec
         else:
             raise RuntimeError("spec cannot be None.")

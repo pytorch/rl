@@ -10,13 +10,7 @@ from typing import Dict, Optional
 import torch
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Bounded, Categorical, Composite, OneHot, Unbounded
 from torchrl.envs.common import _EnvWrapper
 
 from torchrl.envs.utils import _classproperty, ACTION_MASK_ERROR
@@ -224,11 +218,11 @@ class SMACv2Wrapper(_EnvWrapper):
 
     def _make_specs(self, env: "smacv2.env.StarCraft2Env") -> None:  # noqa: F821
         self.group_map = {"agents": [str(i) for i in range(self.n_agents)]}
-        self.reward_spec = UnboundedContinuousTensorSpec(
+        self.reward_spec = Unbounded(
             shape=torch.Size((1,)),
             device=self.device,
         )
-        self.done_spec = DiscreteTensorSpec(
+        self.done_spec = Categorical(
             n=2,
             shape=torch.Size((1,)),
             dtype=torch.bool,
@@ -241,54 +235,50 @@ class SMACv2Wrapper(_EnvWrapper):
         self._env.reset()
         self._update_action_mask()
 
-    def _make_action_spec(self) -> CompositeSpec:
+    def _make_action_spec(self) -> Composite:
         if self.categorical_actions:
-            action_spec = DiscreteTensorSpec(
+            action_spec = Categorical(
                 self.n_actions,
                 shape=torch.Size((self.n_agents,)),
                 device=self.device,
                 dtype=torch.long,
             )
         else:
-            action_spec = OneHotDiscreteTensorSpec(
+            action_spec = OneHot(
                 self.n_actions,
                 shape=torch.Size((self.n_agents, self.n_actions)),
                 device=self.device,
                 dtype=torch.long,
             )
-        spec = CompositeSpec(
+        spec = Composite(
             {
-                "agents": CompositeSpec(
+                "agents": Composite(
                     {"action": action_spec}, shape=torch.Size((self.n_agents,))
                 )
             }
         )
         return spec
 
-    def _make_observation_spec(self) -> CompositeSpec:
-        obs_spec = BoundedTensorSpec(
+    def _make_observation_spec(self) -> Composite:
+        obs_spec = Bounded(
             low=-1.0,
             high=1.0,
             shape=torch.Size([self.n_agents, self.get_obs_size()]),
             device=self.device,
             dtype=torch.float32,
         )
-        info_spec = CompositeSpec(
+        info_spec = Composite(
             {
-                "battle_won": DiscreteTensorSpec(
-                    2, dtype=torch.bool, device=self.device
-                ),
-                "episode_limit": DiscreteTensorSpec(
-                    2, dtype=torch.bool, device=self.device
-                ),
-                "dead_allies": BoundedTensorSpec(
+                "battle_won": Categorical(2, dtype=torch.bool, device=self.device),
+                "episode_limit": Categorical(2, dtype=torch.bool, device=self.device),
+                "dead_allies": Bounded(
                     low=0,
                     high=self.n_agents,
                     dtype=torch.long,
                     device=self.device,
                     shape=(),
                 ),
-                "dead_enemies": BoundedTensorSpec(
+                "dead_enemies": Bounded(
                     low=0,
                     high=self.n_enemies,
                     dtype=torch.long,
@@ -297,19 +287,19 @@ class SMACv2Wrapper(_EnvWrapper):
                 ),
             }
         )
-        mask_spec = DiscreteTensorSpec(
+        mask_spec = Categorical(
             2,
             torch.Size([self.n_agents, self.n_actions]),
             device=self.device,
             dtype=torch.bool,
         )
-        spec = CompositeSpec(
+        spec = Composite(
             {
-                "agents": CompositeSpec(
+                "agents": Composite(
                     {"observation": obs_spec, "action_mask": mask_spec},
                     shape=torch.Size((self.n_agents,)),
                 ),
-                "state": BoundedTensorSpec(
+                "state": Bounded(
                     low=-1.0,
                     high=1.0,
                     shape=torch.Size((self.get_state_size(),)),
