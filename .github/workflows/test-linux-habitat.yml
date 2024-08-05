@@ -46,5 +46,6 @@ jobs:
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_habitat/run_all.sh

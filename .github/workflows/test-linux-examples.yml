@@ -49,6 +49,7 @@ jobs:
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         ## setup_env.sh
         bash .github/unittest/linux_examples/scripts/run_all.sh

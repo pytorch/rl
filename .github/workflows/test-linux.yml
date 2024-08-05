@@ -38,6 +38,39 @@ jobs:
           export RELEASE=0
           export TORCH_VERSION=nightly
         fi
+        export TD_GET_DEFAULTS_TO_NONE=1
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CU_VERSION="cpu"
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+
+        ## setup_env.sh
+        bash .github/unittest/linux/scripts/run_all.sh
+
+  tests-cpu-oldget:
+    # Tests that TD_GET_DEFAULTS_TO_NONE=0 works fine as this will be the default for TD up to 0.7
+    strategy:
+      matrix:
+        python_version: ["3.12"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: linux.12xlarge
+      repository: pytorch/rl
+      docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
+      timeout: 90
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+        export TD_GET_DEFAULTS_TO_NONE=0
+
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
@@ -75,6 +108,8 @@ jobs:
           export RELEASE=0
           export TORCH_VERSION=nightly
         fi
+        export TD_GET_DEFAULTS_TO_NONE=1
+
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
 
@@ -110,6 +145,7 @@ jobs:
           export TORCH_VERSION=nightly
         fi
         export TF_CPP_MIN_LOG_LEVEL=0
+        export TD_GET_DEFAULTS_TO_NONE=1
 
 
         bash .github/unittest/linux_olddeps/scripts_gym_0_13/setup_env.sh
@@ -149,6 +185,7 @@ jobs:
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         ## setup_env.sh
         bash .github/unittest/linux_optdeps/scripts/run_all.sh
@@ -187,6 +224,7 @@ jobs:
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         ## setup_env.sh
         bash .github/unittest/linux/scripts/run_all.sh
