@@ -32,7 +32,13 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 def main(cfg: "DictConfig"):  # noqa: F821
     set_gym_backend(cfg.env.backend).set()
 
-    device = "cpu" if not torch.cuda.device_count() else "cuda"
+    device = cfg.gail.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+    device = torch.device(device)
     num_mini_batches = (
         cfg.ppo.collector.frames_per_batch // cfg.ppo.loss.mini_batch_size
     )
