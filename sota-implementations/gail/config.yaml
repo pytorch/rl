@@ -1,7 +1,7 @@
 env:
   env_name: HalfCheetah-v4
   seed: 42
-  backend: gym
+  backend: gymnasium
 
 logger:
   backend: wandb
