@@ -4118,10 +4118,11 @@ class CompositeSpec(TensorSpec):
                 self._specs[_key].type_check(value[_key], _key)
 
     def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
+        print(val)
         for key, item in self._specs.items():
             if item is None or (isinstance(item, CompositeSpec) and item.is_empty()):
                 continue
-            val_item = val[key]
+            val_item = val.get(key, NO_DEFAULT)
             if not item.is_in(val_item):
                 return False
         return True
