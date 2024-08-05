@@ -7,7 +7,7 @@ import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
 from torchrl.data import Composite
-from torchrl.data.tensor_specs import DiscreteBox
+from torchrl.data.tensor_specs import CategoricalBox
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
@@ -92,7 +92,7 @@ def make_ppo_modules_pixels(proof_environment):
     input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs
-    if isinstance(proof_environment.action_spec.space, DiscreteBox):
+    if isinstance(proof_environment.action_spec.space, CategoricalBox):
         num_outputs = proof_environment.action_spec.space.n
         distribution_class = OneHotCategorical
         distribution_kwargs = {}
