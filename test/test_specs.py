@@ -24,6 +24,7 @@ from torchrl.data.tensor_specs import (
     Categorical,
     Composite,
     CompositeSpec,
+    ContinuousBox,
     DiscreteTensorSpec,
     MultiCategorical,
     MultiDiscreteTensorSpec,
@@ -496,7 +497,7 @@ class TestComposite:
     def test_repr(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
         output = repr(ts)
-        assert output.startswith("CompositeSpec")
+        assert output.startswith("Composite")
         assert "obs: " in output
         assert "act: " in output
 
@@ -845,6 +846,10 @@ class TestEquality:
         ts_other = TestEquality._ts_make_all_fields_equal(
             Bounded(0, 1, torch.Size((1,)), device, dtype), ts
         )
+        ts_other.space = ContinuousBox(
+            ts_other.space.low * 0, ts_other.space.high * 0 + 1
+        )
+        assert ts.space != ts_other.space, (ts.space, ts_other.space)
         assert ts != ts_other
 
     def test_equality_ndbounded(self):
@@ -926,7 +931,7 @@ class TestEquality:
         ts_same = Unbounded(shape=shape, device=device, dtype=dtype)
         assert ts == ts_same
 
-        other_shape = 13 if type(shape) == int else torch.Size(np.array(shape) + 10)
+        other_shape = 13 if isinstance(shape, int) else torch.Size(np.array(shape) + 10)
         ts_other = Unbounded(shape=other_shape, device=device, dtype=dtype)
         assert ts != ts_other
 
@@ -2870,12 +2875,11 @@ class TestLazyStackedCompositeSpecs:
 
     def test_repr(self):
         c = self._get_heterogeneous_specs()
-
-        expected = f"""LazyStackedCompositeSpec(
+        expected = f"""StackedComposite(
     fields={{
-        hetero: LazyStackedUnboundedContinuousTensorSpec(
+        hetero: StackedUnbounded(
             shape=torch.Size([3, -1]), device=cpu, dtype=torch.float32, domain=continuous),
-        shared: BoundedTensorSpec(
+        shared: Bounded(
             shape=torch.Size([3, 32, 32, 3]),
             space=ContinuousBox(
                 low=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
@@ -2885,7 +2889,7 @@ class TestLazyStackedCompositeSpecs:
             domain=continuous)}},
     exclusive_fields={{
         0 ->
-            lidar: BoundedTensorSpec(
+            lidar: Bounded(
                 shape=torch.Size([20]),
                 space=ContinuousBox(
                     low=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
@@ -2893,17 +2897,19 @@ class TestLazyStackedCompositeSpecs:
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous),
-            individual_0_obs: CompositeSpec(
-                individual_0_obs_0: UnboundedContinuousTensorSpec(
+            individual_0_obs: Composite(
+                individual_0_obs_0: Unbounded(
                     shape=torch.Size([3, 1]),
-                    space=None,
+                    space=ContinuousBox(
+                        low=Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
                 shape=torch.Size([3])),
         1 ->
-            lidar: BoundedTensorSpec(
+            lidar: Bounded(
                 shape=torch.Size([20]),
                 space=ContinuousBox(
                     low=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
@@ -2911,8 +2917,8 @@ class TestLazyStackedCompositeSpecs:
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous),
-            individual_1_obs: CompositeSpec(
-                individual_1_obs_0: BoundedTensorSpec(
+            individual_1_obs: Composite(
+                individual_1_obs_0: Bounded(
                     shape=torch.Size([3, 1, 2]),
                     space=ContinuousBox(
                         low=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True),
@@ -2923,10 +2929,12 @@ class TestLazyStackedCompositeSpecs:
                 device=cpu,
                 shape=torch.Size([3])),
         2 ->
-            individual_2_obs: CompositeSpec(
-                individual_1_obs_0: UnboundedContinuousTensorSpec(
+            individual_2_obs: Composite(
+                individual_1_obs_0: Unbounded(
                     shape=torch.Size([3, 1, 2, 3]),
-                    space=None,
+                    space=ContinuousBox(
+                        low=Tensor(shape=torch.Size([3, 1, 2, 3]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([3, 1, 2, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous),
@@ -2940,11 +2948,11 @@ class TestLazyStackedCompositeSpecs:
         c = c[0:2]
         del c["individual_0_obs"]
         del c["individual_1_obs"]
-        expected = f"""LazyStackedCompositeSpec(
+        expected = f"""StackedComposite(
     fields={{
-        hetero: LazyStackedUnboundedContinuousTensorSpec(
+        hetero: StackedUnbounded(
             shape=torch.Size([2, -1]), device=cpu, dtype=torch.float32, domain=continuous),
-        lidar: BoundedTensorSpec(
+        lidar: Bounded(
             shape=torch.Size([2, 20]),
             space=ContinuousBox(
                 low=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True),
@@ -2952,7 +2960,7 @@ class TestLazyStackedCompositeSpecs:
             device=cpu,
             dtype=torch.float32,
             domain=continuous),
-        shared: BoundedTensorSpec(
+        shared: Bounded(
             shape=torch.Size([2, 32, 32, 3]),
             space=ContinuousBox(
                 low=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),

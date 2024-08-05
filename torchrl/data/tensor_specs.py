@@ -1172,7 +1172,7 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
         dtype_str = "dtype=" + str(self.dtype)
         domain_str = "domain=" + str(self._specs[0].domain)
         sub_string = ", ".join([shape_str, device_str, dtype_str, domain_str])
-        string = f"LazyStacked{self._specs[0].__class__.__name__}(\n    {sub_string})"
+        string = f"Stacked{self._specs[0].__class__.__name__}(\n    {sub_string})"
         return string
 
     @property
@@ -2227,19 +2227,25 @@ class Unbounded(TensorSpec):
         if dtype == torch.bool:
             min_value = False
             max_value = True
+            default_domain = "discrete"
         else:
             if dtype.is_floating_point:
                 min_value = torch.finfo(dtype).min
                 max_value = torch.finfo(dtype).max
+                default_domain = "continuous"
             else:
                 min_value = torch.iinfo(dtype).min
                 max_value = torch.iinfo(dtype).max
+                default_domain = "discrete"
         box = ContinuousBox(
-            torch.full(_remove_neg_shapes(shape), min_value, device=device),
-            torch.full(_remove_neg_shapes(shape), max_value, device=device),
+            torch.full(
+                _remove_neg_shapes(shape), min_value, device=device, dtype=dtype
+            ),
+            torch.full(
+                _remove_neg_shapes(shape), max_value, device=device, dtype=dtype
+            ),
         )
 
-        default_domain = "continuous" if dtype.is_floating_point else "discrete"
         domain = kwargs.pop("domain", default_domain)
         super().__init__(
             shape=shape, space=box, device=device, dtype=dtype, domain=domain, **kwargs
@@ -2327,15 +2333,6 @@ class Unbounded(TensorSpec):
 
     def __eq__(self, other):
         # those specs are equivalent to a discrete spec
-        if isinstance(other, UnboundedDiscreteTensorSpec):
-            return (
-                UnboundedDiscreteTensorSpec(
-                    shape=self.shape,
-                    device=self.device,
-                    dtype=self.dtype,
-                )
-                == other
-            )
         if isinstance(other, Bounded):
             minval, maxval = _minmax_dtype(self.dtype)
             minval = torch.as_tensor(minval).to(self.device, self.dtype)
@@ -2351,6 +2348,14 @@ class Unbounded(TensorSpec):
                 )
                 == other
             )
+        elif isinstance(other, Unbounded):
+            if self.dtype != other.dtype:
+                return False
+            if self.shape != other.shape:
+                return False
+            if self.device != other.device:
+                return False
+            return True
         return super().__eq__(other)
 
 
@@ -3927,7 +3932,7 @@ class Composite(TensorSpec):
             indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
         ]
         sub_str = ",\n".join(sub_str)
-        return f"CompositeSpec(\n{sub_str},\n    device={self._device},\n    shape={self.shape})"
+        return f"Composite(\n{sub_str},\n    device={self._device},\n    shape={self.shape})"
 
     def type_check(
         self,
@@ -4967,7 +4972,10 @@ def _minmax_dtype(dtype):
 
 def _remove_neg_shapes(*shape):
     if len(shape) == 1 and not isinstance(shape[0], int):
-        return _remove_neg_shapes(*shape[0])
+        shape = shape[0]
+        if isinstance(shape, np.integer):
+            shape = (int(shape),)
+        return _remove_neg_shapes(*shape)
     return torch.Size([int(d) if d >= 0 else 1 for d in shape])
 
 
