@@ -5601,7 +5601,7 @@ class RewardSum(Transform):
             )
         time_dim = time_dim[0] - 1
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            reward = tensordict.get(in_key)
+            reward = tensordict[in_key]
             cumsum = reward.cumsum(time_dim)
             tensordict.set(out_key, cumsum)
         return tensordict
