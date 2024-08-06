@@ -205,6 +205,13 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
   env.train_num_envs=2 \
   logger.mode=offline \
   logger.backend=
+  python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/gail/gail.py \
+  ppo.collector.total_frames=48 \
+  replay_buffer.batch_size=16 \
+  ppo.loss.mini_batch_size=10 \
+  ppo.collector.frames_per_batch=16 \
+  logger.mode=offline \
+  logger.backend=
 
 # With single envs
 python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
