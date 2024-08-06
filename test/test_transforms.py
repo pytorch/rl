@@ -8463,8 +8463,14 @@ class TestTransformedEnv:
         assert t2_reward_spec.space.low == -2
         assert t2_reward_spec.space.high == 2
 
-        assert base_env.reward_spec.space.low == -np.inf
-        assert base_env.reward_spec.space.high == np.inf
+        assert (
+            base_env.reward_spec.space.low
+            == torch.finfo(base_env.reward_spec.dtype).low
+        )
+        assert (
+            base_env.reward_spec.space.high
+            == torch.finfo(base_env.reward_spec.dtype).high
+        )
 
     def test_allow_done_after_reset(self):
         base_env = ContinuousActionVecMockEnv(allow_done_after_reset=True)

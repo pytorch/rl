@@ -1723,6 +1723,7 @@ class _BoundedMeta(abc.ABCMeta):
             instance.__class__ = BoundedDiscrete
         return instance
 
+
 @dataclass(repr=False)
 class Bounded(TensorSpec, metaclass=_BoundedMeta):
     """A bounded continuous tensor spec.
@@ -2095,6 +2096,7 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             dtype=self.dtype,
         )
 
+
 class BoundedContinuous(Bounded):
     """A specialized version of :class:`torchrl.data.Bounded` with continuous space."""
 
@@ -2105,9 +2107,12 @@ class BoundedContinuous(Bounded):
         shape: Optional[Union[torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[torch.dtype, str]] = None,
-            domain: str="continuous",
+        domain: str = "continuous",
     ):
-        super().__init__(low=low, high=high, shape=shape, device=device, dtype=dtype, domain=domain)
+        super().__init__(
+            low=low, high=high, shape=shape, device=device, dtype=dtype, domain=domain
+        )
+
 
 class BoundedDiscrete(Bounded):
     """A specialized version of :class:`torchrl.data.Bounded` with discrete space."""
@@ -2119,9 +2124,16 @@ class BoundedDiscrete(Bounded):
         shape: Optional[Union[torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[torch.dtype, str]] = None,
-            domain: str="discrete",
+        domain: str = "discrete",
     ):
-        super().__init__(low=low, high=high, shape=shape, device=device, dtype=dtype, domain=domain, )
+        super().__init__(
+            low=low,
+            high=high,
+            shape=shape,
+            device=device,
+            dtype=dtype,
+            domain=domain,
+        )
 
 
 def _is_nested_list(index, notuple=False):
@@ -2252,6 +2264,7 @@ class NonTensor(TensorSpec):
             for i in range(self.shape[dim])
         )
 
+
 class _UnboundedMeta(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
@@ -2260,6 +2273,7 @@ class _UnboundedMeta(abc.ABCMeta):
         else:
             instance.__class__ = UnboundedDiscrete
         return instance
+
 
 @dataclass(repr=False)
 class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
@@ -2419,11 +2433,11 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         return super().__eq__(other)
 
 
-
 class UnboundedContinuous(Unbounded):
     """A specialized version of :class:`torchrl.data.Unbounded` with continuous space."""
 
     ...
+
 
 class UnboundedDiscrete(Unbounded):
     """A specialized version of :class:`torchrl.data.Unbounded` with discrete space."""
@@ -2436,6 +2450,7 @@ class UnboundedDiscrete(Unbounded):
         **kwargs,
     ):
         super().__init__(shape=shape, device=device, dtype=dtype, **kwargs)
+
 
 @dataclass(repr=False)
 class MultiOneHot(OneHot):
@@ -5141,7 +5156,9 @@ class BinaryDiscreteTensorSpec(Binary, metaclass=_LegacySpecMeta):
 
     ...
 
+
 _BoundedLegacyMeta = type("_BoundedLegacyMeta", (_LegacySpecMeta, _BoundedMeta), {})
+
 
 class BoundedTensorSpec(Bounded, metaclass=_BoundedLegacyMeta):
     """Deprecated version of :class:`torchrl.data.Bounded`."""
@@ -5161,8 +5178,9 @@ _LegacyUnboundedContinuousMetaclass = type(
 )
 
 
-
-class UnboundedContinuousTensorSpec(Unbounded, metaclass=_LegacyUnboundedContinuousMetaclass):
+class UnboundedContinuousTensorSpec(
+    Unbounded, metaclass=_LegacyUnboundedContinuousMetaclass
+):
     """Deprecated version of :class:`torchrl.data.Unbounded` with continuous space."""
 
     ...
@@ -5171,7 +5189,6 @@ class UnboundedContinuousTensorSpec(Unbounded, metaclass=_LegacyUnboundedContinu
 class _UnboundedDiscreteMetaclass(_UnboundedMeta):
     def __instancecheck__(cls, instance):
         return isinstance(instance, Unbounded) and instance.domain == "discrete"
-
 
 
 _LegacyUnboundedDiscreteMetaclass = type(

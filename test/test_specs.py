@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import contextlib
+import warnings
 
 import numpy as np
 import pytest
@@ -3681,7 +3682,7 @@ class TestLegacy:
         assert isinstance(unbounded_continuous, UnboundedContinuousTensorSpec)
         assert not isinstance(unbounded_continuous, UnboundedDiscreteTensorSpec)
 
-        with pytest.warns(None):
+        with warnings.catch_warnings():
             unbounded_continuous = UnboundedContinuous()
 
         with pytest.warns(
@@ -3694,18 +3695,20 @@ class TestLegacy:
         assert isinstance(unbounded_discrete, UnboundedDiscreteTensorSpec)
         assert not isinstance(unbounded_discrete, UnboundedContinuousTensorSpec)
 
-        with pytest.warns(None):
+        with warnings.catch_warnings():
             unbounded_discrete = UnboundedDiscrete()
 
         # What if we mess with dtypes?
-        unbounded_continuous_fake = UnboundedContinuousTensorSpec(dtype=torch.int32)
+        with pytest.warns(DeprecationWarning):
+            unbounded_continuous_fake = UnboundedContinuousTensorSpec(dtype=torch.int32)
         assert isinstance(unbounded_continuous_fake, Unbounded)
         assert not isinstance(unbounded_continuous_fake, UnboundedContinuous)
         assert not isinstance(unbounded_continuous_fake, UnboundedContinuousTensorSpec)
         assert isinstance(unbounded_continuous_fake, UnboundedDiscrete)
         assert isinstance(unbounded_continuous_fake, UnboundedDiscreteTensorSpec)
 
-        unbounded_discrete_fake = UnboundedDiscreteTensorSpec(dtype=torch.float32)
+        with pytest.warns(DeprecationWarning):
+            unbounded_discrete_fake = UnboundedDiscreteTensorSpec(dtype=torch.float32)
         assert isinstance(unbounded_discrete_fake, Unbounded)
         assert isinstance(unbounded_discrete_fake, UnboundedContinuous)
         assert isinstance(unbounded_discrete_fake, UnboundedContinuousTensorSpec)
