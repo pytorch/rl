@@ -889,13 +889,17 @@ function.
 
 Specs fall in two main categories, numerical and categorical.
 
-+-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
-| Numerical                                                                     | Categorical                                                      |                                                                                        |
-+=================+===================+===================+=====================+========+=============+=============+==================+==========+
-| Bounded                             | Unbounded                               | OneHot | MultiOneHot | Categorical | MultiCategorical | Discrete |
-+-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
-| BoundedDiscrete | BoundedContinuous | UnboundedDiscrete | UnboundedContinuous |                                                                  |
-+-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
+.. _table-label:
+
+.. table:: TensorSpec subclasses.
+
+  +-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
+  | Numerical                                                                     | Categorical                                                      |                                                                                        |
+  +=================+===================+===================+=====================+========+=============+=============+==================+==========+
+  | Bounded                             | Unbounded                               | OneHot | MultiOneHot | Categorical | MultiCategorical | Discrete |
+  +-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
+  | BoundedDiscrete | BoundedContinuous | UnboundedDiscrete | UnboundedContinuous |                                                                  |
+  +-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
 
 Whenever a :class:`~torchrl.data.Bounded` instance is created, its domain (defined either implicitly by its dtype or
 explicitly by the `"domain"` keyword argument) will determine if the instantiated class will be of :class:`~torchrl.data.BoundedContinuous`
