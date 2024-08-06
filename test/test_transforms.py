@@ -8464,11 +8464,11 @@ class TestTransformedEnv:
 
         assert (
             base_env.reward_spec.space.low
-            == torch.finfo(base_env.reward_spec.dtype).low
+            == torch.finfo(base_env.reward_spec.dtype).min
         )
         assert (
             base_env.reward_spec.space.high
-            == torch.finfo(base_env.reward_spec.dtype).high
+            == torch.finfo(base_env.reward_spec.dtype).max
         )
 
     def test_allow_done_after_reset(self):
