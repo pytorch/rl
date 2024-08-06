@@ -891,15 +891,15 @@ I am writing docs in sphinx. I want to write a table.
 
 Here is the approximate content, help me clean it up and make it appear nicely:
 
-Specs fall in two main categories, numerical and categorical:
+Specs fall in two main categories, numerical and categorical.
 
-+-------------------------------------------------------------------------------+------------------------------------------------------------------+
++-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
 | Numerical                                                                     | Categorical                                                      |                                                                                        |
-+=====================================+=========================================+========+=============+=============+==================+==========+
++=================+===================+===================+=====================+========+=============+=============+==================+==========+
 | Bounded                             | Unbounded                               | OneHot | MultiOneHot | Categorical | MultiCategorical | Discrete |
 +-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
 | BoundedDiscrete | BoundedContinuous | UnboundedDiscrete | UnboundedContinuous |                                                                  |
-+-----------------+-------------------+-------------------+---------------------+------------------------------------------------------------------+
++-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
 
 Whenever a :class:`~torchrl.data.Bounded` instance is created, its domain (defined either implicitly by its dtype or
 explicitly by the `"domain"` keyword argument) will determine if the instantiated class will be of :class:`~torchrl.data.BoundedContinuous`
