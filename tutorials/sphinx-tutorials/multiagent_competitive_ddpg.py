@@ -817,7 +817,7 @@ for iteration, batch in enumerate(collector):
             target_updaters[group].step()
 
         # Exploration sigma anneal update
-        exploration_policies[group].step(current_frames)
+        exploration_policies[group][-1].step(current_frames)
 
     # Stop training a certain group when a condition is met (e.g., number of training iterations)
     if iteration == iteration_when_stop_training_evaders:
@@ -903,7 +903,7 @@ if use_vmas and not is_sphinx:
         env_with_render = env_with_render.append_transform(
             VideoRecorder(logger=video_logger, tag="vmas_rendered")
         )
-        with set_exploration_type(ExplorationType.MODE):
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
             print("Rendering rollout...")
             env_with_render.rollout(100, policy=agents_exploration_policy)
         print("Saving the video...")

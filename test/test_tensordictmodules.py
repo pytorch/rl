@@ -189,7 +189,7 @@ class TestTDModule:
     @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize(
-        "exp_mode", [InteractionType.MODE, InteractionType.RANDOM, None]
+        "exp_mode", [InteractionType.DETERMINISTIC, InteractionType.RANDOM, None]
     )
     def test_stateful_probabilistic(self, safe, spec_type, lazy, exp_mode, out_keys):
         torch.manual_seed(0)

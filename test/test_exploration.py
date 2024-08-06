@@ -644,7 +644,7 @@ class TestAdditiveGaussian:
 @pytest.mark.parametrize("safe", [True, False])
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize(
-    "exploration_type", [InteractionType.RANDOM, InteractionType.MODE]
+    "exploration_type", [InteractionType.RANDOM, InteractionType.DETERMINISTIC]
 )
 def test_gsde(
     state_dim, action_dim, gSDE, device, safe, exploration_type, batch=16, bound=0.1
@@ -708,7 +708,10 @@ def test_gsde(
         with set_exploration_type(exploration_type):
             action1 = module(td).get("action")
         action2 = actor(td.exclude("action")).get("action")
-        if gSDE or exploration_type == InteractionType.MODE:
+        if gSDE or exploration_type in (
+            InteractionType.DETERMINISTIC,
+            InteractionType.MODE,
+        ):
             torch.testing.assert_close(action1, action2)
         else:
             with pytest.raises(AssertionError):

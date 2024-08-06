@@ -652,7 +652,7 @@ with set_exploration_type(ExplorationType.RANDOM):
     td_module(td)
     print("random:", td["action"])
 
-with set_exploration_type(ExplorationType.MODE):
+with set_exploration_type(ExplorationType.DETERMINISTIC):
     td_module(td)
     print("mode:", td["action"])
 
