@@ -21,7 +21,7 @@ dependencies:
     - scipy
     - hydra-core
     - imageio==2.26.0
-    - dm_control
+    - dm_control<1.0.21
     - mujoco<3.2.1
     - mlflow
     - av

@@ -18,6 +18,6 @@ dependencies:
     - expecttest
     - pyyaml
     - scipy
-    - dm_control
+    - dm_control<1.0.21
     - mujoco<3.2.1
     - coverage
