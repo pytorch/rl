@@ -157,7 +157,7 @@ CrossQ
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    CrossQ
+    CrossQLoss
 
 IQL
 ----

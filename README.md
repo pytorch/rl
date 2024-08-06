@@ -478,7 +478,7 @@ And it is `functorch` and `torch.compile` compatible!
   policy_explore = EGreedyWrapper(policy)
   with set_exploration_type(ExplorationType.RANDOM):
       tensordict = policy_explore(tensordict)  # will use eps-greedy
-  with set_exploration_type(ExplorationType.MODE):
+  with set_exploration_type(ExplorationType.DETERMINISTIC):
       tensordict = policy_explore(tensordict)  # will not use eps-greedy
   ```
   </details>

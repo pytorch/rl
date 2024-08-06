@@ -20,6 +20,7 @@ from .distributions import (
     TruncatedNormal,
 )
 from .models import (
+    BatchRenorm1d,
     Conv3dNet,
     ConvNet,
     DdpgCnnActor,
