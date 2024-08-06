@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import enum
 import math
 import warnings
 from collections.abc import Iterable
@@ -79,6 +80,15 @@ NOT_IMPLEMENTED_ERROR = NotImplementedError(
     " If you are interested in this feature please submit"
     " an issue at https://github.com/pytorch/rl/issues"
 )
+
+
+# Akin to TD's NO_DEFAULT but won't raise a KeyError when found in a TD or used as default
+class _NoDefault(enum.IntEnum):
+    ZERO = 0
+    ONE = 1
+
+
+NO_DEFAULT_RL = _NoDefault.ONE
 
 
 def _default_dtype_and_device(
