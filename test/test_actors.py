@@ -187,7 +187,7 @@ class TestQValue:
         ):
             _process_action_space_spec(OneHot(3), spec)
         with pytest.raises(
-            ValueError, match="action_space cannot be of type CompositeSpec"
+            ValueError, match="action_space cannot be of type Composite"
         ):
             _process_action_space_spec(Composite(), spec)
         with pytest.raises(KeyError, match="action could not be found in the spec"):
@@ -240,7 +240,7 @@ class TestQValue:
             _process_action_space_spec(Binary(n=1), action_spec)
             _process_action_space_spec(Binary(n=1), leaf_action_spec)
         with pytest.raises(
-            ValueError, match="action_space cannot be of type CompositeSpec"
+            ValueError, match="action_space cannot be of type Composite"
         ):
             _process_action_space_spec(action_spec, None)
 

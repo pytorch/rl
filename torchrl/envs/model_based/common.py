@@ -84,10 +84,10 @@ class ModelBasedEnvBase(EnvBase):
 
 
     Properties:
-        - observation_spec (CompositeSpec): sampling spec of the observations;
+        - observation_spec (Composite): sampling spec of the observations;
         - action_spec (TensorSpec): sampling spec of the actions;
         - reward_spec (TensorSpec): sampling spec of the rewards;
-        - input_spec (CompositeSpec): sampling spec of the inputs;
+        - input_spec (Composite): sampling spec of the inputs;
         - batch_size (torch.Size): batch_size to be used by the env. If not set, the env accept tensordicts of all batch sizes.
         - device (torch.device): device where the env input and output are expected to live
 

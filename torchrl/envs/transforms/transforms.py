@@ -4524,9 +4524,9 @@ class TensorDictPrimer(Transform):
     tensordict with the desired features.
 
     Args:
-        primers (dict or CompositeSpec, optional): a dictionary containing
+        primers (dict or Composite, optional): a dictionary containing
             key-spec pairs which will be used to populate the input tensordict.
-            :class:`~torchrl.data.CompositeSpec` instances are supported too.
+            :class:`~torchrl.data.Composite` instances are supported too.
         random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
@@ -4699,7 +4699,7 @@ class TensorDictPrimer(Transform):
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         if not isinstance(observation_spec, Composite):
             raise ValueError(
-                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+                f"observation_spec was expected to be of type Composite. Got {type(observation_spec)} instead."
             )
 
         if self.primers.shape != observation_spec.shape:
@@ -5843,7 +5843,7 @@ class StepCounter(Transform):
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         if not isinstance(observation_spec, Composite):
             raise ValueError(
-                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+                f"observation_spec was expected to be of type Composite. Got {type(observation_spec)} instead."
             )
         full_done_spec = self.parent.output_spec["full_done_spec"]
         for step_count_key in self.step_count_keys:
@@ -5928,7 +5928,7 @@ class StepCounter(Transform):
     def transform_input_spec(self, input_spec: Composite) -> Composite:
         if not isinstance(input_spec, Composite):
             raise ValueError(
-                f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
+                f"input_spec was expected to be of type Composite. Got {type(input_spec)} instead."
             )
         if input_spec["full_state_spec"] is None:
             input_spec["full_state_spec"] = Composite(
@@ -7512,23 +7512,23 @@ class RemoveEmptySpecs(Transform):
         >>> class DummyEnv(EnvBase):
         ...     def __init__(self, *args, **kwargs):
         ...         super().__init__(*args, **kwargs)
-        ...         self.observation_spec = CompositeSpec(
-        ...             observation=UnboundedContinuousTensorSpec((*self.batch_size, 3)),
-        ...             other=CompositeSpec(
-        ...                 another_other=CompositeSpec(shape=self.batch_size),
+        ...         self.observation_spec = Composite(
+        ...             observation=UnboundedContinuous((*self.batch_size, 3)),
+        ...             other=Composite(
+        ...                 another_other=Composite(shape=self.batch_size),
         ...                 shape=self.batch_size,
         ...             ),
         ...             shape=self.batch_size,
         ...         )
-        ...         self.action_spec = UnboundedContinuousTensorSpec((*self.batch_size, 3))
+        ...         self.action_spec = UnboundedContinuous((*self.batch_size, 3))
         ...         self.done_spec = DiscreteTensorSpec(
         ...             2, (*self.batch_size, 1), dtype=torch.bool
         ...         )
         ...         self.full_done_spec["truncated"] = self.full_done_spec[
         ...             "terminated"].clone()
-        ...         self.reward_spec = CompositeSpec(
-        ...             reward=UnboundedContinuousTensorSpec(*self.batch_size, 1),
-        ...             other_reward=CompositeSpec(shape=self.batch_size),
+        ...         self.reward_spec = Composite(
+        ...             reward=UnboundedContinuous(*self.batch_size, 1),
+        ...             other_reward=Composite(shape=self.batch_size),
         ...             shape=self.batch_size
         ...             )
         ...

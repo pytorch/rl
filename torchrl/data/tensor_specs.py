@@ -533,7 +533,7 @@ class TensorSpec:
     TensorSpecs are dataclasses that always share the following fields: `shape`, `space, `dtype` and `device`.
 
     As such, TensorSpecs possess some common behavior with :class:`~torch.Tensor` and :class:`~tensordict.TensorDict`:
-    they can be reshaped, indexed, squeezed, unqueezed, moved to another device etc.
+    they can be reshaped, indexed, squeezed, unsqueezed, moved to another device etc.
 
     Args:
         shape (torch.Size): size of the tensor. The shape includes the batch dimensions as well as the feature

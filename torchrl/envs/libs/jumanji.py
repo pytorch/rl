@@ -132,8 +132,8 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
     Args:
         env (jumanji.env.Environment): the env to wrap.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:
@@ -673,8 +673,8 @@ class JumanjiEnv(JumanjiWrapper):
     Args:
         env_name (str): the name of the environment to wrap. Must be part of :attr:`~.available_envs`.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:

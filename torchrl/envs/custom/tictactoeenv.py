@@ -39,9 +39,9 @@ class TicTacToeEnv(EnvBase):
     output entry).
 
     Specs:
-        CompositeSpec(
-            output_spec: CompositeSpec(
-                full_observation_spec: CompositeSpec(
+        Composite(
+            output_spec: Composite(
+                full_observation_spec: Composite(
                     board: DiscreteTensorSpec(
                         shape=torch.Size([3, 3]),
                         space=DiscreteBox(n=2),
@@ -58,9 +58,9 @@ class TicTacToeEnv(EnvBase):
                         dtype=torch.bool,
                         domain=discrete),
                     shape=torch.Size([])),
-                full_reward_spec: CompositeSpec(
-                    player0: CompositeSpec(
-                        reward: UnboundedContinuousTensorSpec(
+                full_reward_spec: Composite(
+                    player0: Composite(
+                        reward: UnboundedContinuous(
                             shape=torch.Size([1]),
                             space=ContinuousBox(
                                 low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
@@ -68,8 +68,8 @@ class TicTacToeEnv(EnvBase):
                             dtype=torch.float32,
                             domain=continuous),
                         shape=torch.Size([])),
-                    player1: CompositeSpec(
-                        reward: UnboundedContinuousTensorSpec(
+                    player1: Composite(
+                        reward: UnboundedContinuous(
                             shape=torch.Size([1]),
                             space=ContinuousBox(
                                 low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
@@ -78,7 +78,7 @@ class TicTacToeEnv(EnvBase):
                             domain=continuous),
                         shape=torch.Size([])),
                     shape=torch.Size([])),
-                full_done_spec: CompositeSpec(
+                full_done_spec: Composite(
                     done: DiscreteTensorSpec(
                         shape=torch.Size([1]),
                         space=DiscreteBox(n=2),
@@ -96,8 +96,8 @@ class TicTacToeEnv(EnvBase):
                         domain=discrete),
                     shape=torch.Size([])),
                 shape=torch.Size([])),
-            input_spec: CompositeSpec(
-                full_state_spec: CompositeSpec(
+            input_spec: Composite(
+                full_state_spec: Composite(
                     board: DiscreteTensorSpec(
                         shape=torch.Size([3, 3]),
                         space=DiscreteBox(n=2),
@@ -113,7 +113,7 @@ class TicTacToeEnv(EnvBase):
                         space=DiscreteBox(n=2),
                         dtype=torch.bool,
                         domain=discrete), shape=torch.Size([])),
-                full_action_spec: CompositeSpec(
+                full_action_spec: Composite(
                     action: DiscreteTensorSpec(
                         shape=torch.Size([1]),
                         space=DiscreteBox(n=9),

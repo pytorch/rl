@@ -100,7 +100,7 @@ class _R3MNet(Transform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if not isinstance(observation_spec, Composite):
-            raise ValueError("_R3MNet can only infer CompositeSpec")
+            raise ValueError("_R3MNet can only infer Composite")
 
         keys = [key for key in observation_spec.keys(True, True) if key in self.in_keys]
         device = observation_spec[keys[0]].device

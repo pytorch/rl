@@ -30,8 +30,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     Args:
         env (envpool.python.envpool.EnvPoolMixin): the envpool to wrap.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:
@@ -330,8 +330,8 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         create_env_kwargs (Dict[str, Any], optional): kwargs to be passed to envpool
             environment constructor.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
         disable_env_checker (bool, optional): for gym > 0.24 only. If ``True`` (default
             for these versions), the environment checker won't be run.

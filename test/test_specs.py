@@ -414,7 +414,7 @@ class TestComposite:
             contextlib.nullcontext()
             if (device == dest) or (device is None)
             else pytest.raises(
-                RuntimeError, match="All devices of CompositeSpec must match"
+                RuntimeError, match="All devices of Composite must match"
             )
         )
         with cm:
@@ -725,15 +725,15 @@ def test_lock(recurse):
     assert not spec.locked
     spec.lock_(recurse=recurse)
     assert spec.locked
-    with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+    with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
         spec["a"] = spec["a"].clone()
-    with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+    with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
         spec.set("a", spec["a"].clone())
     if recurse:
         assert spec["a"].locked
-        with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+        with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
             spec["a"].set("b", spec["a", "b"].clone())
-        with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+        with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
             spec["a", "b"] = spec["a", "b"].clone()
     else:
         assert not spec["a"].locked
@@ -1830,7 +1830,7 @@ class TestUnbind:
                 2,
             ),
         )
-        with pytest.raises(KeyError, match="The CompositeSpec instance with keys"):
+        with pytest.raises(KeyError, match="The Composite instance with keys"):
             c.encode({"c": 0})
         with pytest.raises(
             RuntimeError, match="raised a RuntimeError. Scroll up to know more"
@@ -2374,7 +2374,7 @@ class TestStack:
             torch.stack([c1, c2], stack_dim)
 
 
-class TestDenseStackedCompositeSpecs:
+class TestDenseStackedComposite:
     def test_stack(self):
         c1 = Composite(a=Unbounded())
         c2 = c1.clone()
@@ -2382,7 +2382,7 @@ class TestDenseStackedCompositeSpecs:
         assert isinstance(c, Composite)
 
 
-class TestLazyStackedCompositeSpecs:
+class TestLazyStackedComposite:
     def _get_heterogeneous_specs(
         self,
         batch_size=(),
@@ -3283,7 +3283,6 @@ def test_valid_indexing(spec_class):
         assert spec_3d[None, 1, ..., None].shape == torch.Size([1, 3, 1, 4])
         assert spec_4d[:, None, ..., None, :].shape == torch.Size([5, 1, 3, 1, 4, 6])
 
-    # BoundedTensorSpec, DiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec, CompositeSpec
     else:
         # Integers
         assert spec_2d[0, 1].shape == torch.Size([])

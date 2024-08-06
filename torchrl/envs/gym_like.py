@@ -40,10 +40,10 @@ class default_info_dict_reader(BaseInfoDictReader):
     Args:
         keys (list of keys, optional): If provided, the list of keys to get from
             the info dictionary. Defaults to all keys.
-        spec (List[TensorSpec], Dict[str, TensorSpec] or CompositeSpec, optional):
+        spec (List[TensorSpec], Dict[str, TensorSpec] or Composite, optional):
             If a list of specs is provided, each spec will be matched to its
-            correspondent key to form a :class:`torchrl.data.CompositeSpec`.
-            If not provided, a composite spec with :class:`~torchrl.data.UnboundedContinuousTensorSpec`
+            correspondent key to form a :class:`torchrl.data.Composite`.
+            If not provided, a composite spec with :class:`~torchrl.data.Unbounded`
             specs will lazyly be created.
         ignore_private (bool, optional): If ``True``, private infos (starting with
             an underscore) will be ignored. Defaults to ``True``.
