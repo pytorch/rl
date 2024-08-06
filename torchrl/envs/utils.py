@@ -48,7 +48,7 @@ from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logg
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
-    NO_DEFAULT,
+    NO_DEFAULT_RL as NO_DEFAULT,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
