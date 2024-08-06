@@ -131,6 +131,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_metrics(logger, to_log, i)
 
     pbar.close()
+    if not test_env.is_closed:
+        test_env.close()
     torchrl_logger.info(f"Training time: {time.time() - start_time}")
 
 
