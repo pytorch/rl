@@ -46,7 +46,7 @@ from torch import nn as nn
 from torch.utils._pytree import tree_map
 from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logger
 
-from torchrl.data.tensor_specs import Composite, NO_DEFAULT, TensorSpec, Unbounded
+from torchrl.data.tensor_specs import Composite, NO_DEFAULT_RL as NO_DEFAULT, TensorSpec, Unbounded
 from torchrl.data.utils import check_no_exclusive_keys
 
 __all__ = [
