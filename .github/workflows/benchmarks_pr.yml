@@ -34,7 +34,7 @@ jobs:
           python3 setup.py develop
           python3 -m pip install pytest pytest-benchmark
           python3 -m pip install "gym[accept-rom-license,atari]"
-          python3 -m pip install dm_control
+          python3 -m pip install "dm_control<1.0.21" "mujoco<3.2.1"
           export TD_GET_DEFAULTS_TO_NONE=1
       - name: Setup benchmarks
         run: |
@@ -108,7 +108,7 @@ jobs:
           python3 setup.py develop
           python3 -m pip install pytest pytest-benchmark
           python3 -m pip install "gym[accept-rom-license,atari]"
-          python3 -m pip install dm_control
+          python3 -m pip install "dm_control<1.0.21" "mujoco<3.2.1"
           export TD_GET_DEFAULTS_TO_NONE=1
       - name: check GPU presence
         run: |
