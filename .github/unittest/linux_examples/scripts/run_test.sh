@@ -207,6 +207,7 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iq
   logger.backend=
   python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/gail/gail.py \
   ppo.collector.total_frames=48 \
+  replay_buffer.batch_size=16 \
   ppo.loss.mini_batch_size=10 \
   ppo.collector.frames_per_batch=16 \
   logger.mode=offline \
