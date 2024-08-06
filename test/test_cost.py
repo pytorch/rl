@@ -105,6 +105,7 @@ from torchrl.objectives import (
     DreamerModelLoss,
     DreamerValueLoss,
     DTLoss,
+    GAILLoss,
     IQLLoss,
     KLPENPPOLoss,
     OnlineDTLoss,
@@ -10455,6 +10456,227 @@ class TestDT(LossModuleTestBase):
         loss = loss_fn(td)
         if reduction == "none":
             assert loss["loss"].shape == td["action"].shape
+        else:
+            assert loss["loss"].shape == torch.Size([])
+
+
+class TestGAIL(LossModuleTestBase):
+    seed = 0
+
+    def _create_mock_discriminator(
+        self, batch=2, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # Discriminator
+        body = TensorDictModule(
+            MLP(
+                in_features=obs_dim + action_dim,
+                out_features=32,
+                depth=1,
+                num_cells=32,
+                activation_class=torch.nn.ReLU,
+                activate_last_layer=True,
+            ),
+            in_keys=["observation", "action"],
+            out_keys="hidden",
+        )
+        head = TensorDictModule(
+            MLP(
+                in_features=32,
+                out_features=1,
+                depth=0,
+                num_cells=32,
+                activation_class=torch.nn.Sigmoid,
+                activate_last_layer=True,
+            ),
+            in_keys="hidden",
+            out_keys="d_logits",
+        )
+        discriminator = TensorDictSequential(body, head)
+
+        return discriminator.to(device)
+
+    def _create_mock_data_gail(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "action": action,
+                "collector_action": action,
+                "collector_observation": obs,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_gail(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, T, obs_dim, device=device)
+        action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs,
+                "action": action,
+                "collector_action": action,
+                "collector_observation": obs,
+            },
+            device=device,
+        )
+        return td
+
+    def test_gail_tensordict_keys(self):
+        discriminator = self._create_mock_discriminator()
+        loss_fn = GAILLoss(discriminator)
+
+        default_keys = {
+            "expert_action": "action",
+            "expert_observation": "observation",
+            "collector_action": "collector_action",
+            "collector_observation": "collector_observation",
+            "discriminator_pred": "d_logits",
+        }
+
+        self.tensordict_keys_test(
+            loss_fn,
+            default_keys=default_keys,
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_gail_notensordict(self, device, use_grad_penalty, gp_lambda):
+        torch.manual_seed(self.seed)
+        discriminator = self._create_mock_discriminator(device=device)
+        loss_fn = GAILLoss(
+            discriminator, use_grad_penalty=use_grad_penalty, gp_lambda=gp_lambda
+        )
+
+        tensordict = self._create_mock_data_gail(device=device)
+
+        in_keys = self._flatten_in_keys(loss_fn.in_keys)
+        kwargs = dict(tensordict.flatten_keys("_").select(*in_keys))
+
+        loss_val_td = loss_fn(tensordict)
+        if use_grad_penalty:
+            loss_val, _ = loss_fn(**kwargs)
+        else:
+            loss_val = loss_fn(**kwargs)
+
+        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
+        # test select
+        loss_fn.select_out_keys("loss")
+        if torch.__version__ >= "2.0.0":
+            loss_discriminator = loss_fn(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_discriminator = loss_fn(**kwargs)
+            return
+        assert loss_discriminator == loss_val_td["loss"]
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_gail(self, device, use_grad_penalty, gp_lambda):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_gail(device=device)
+
+        discriminator = self._create_mock_discriminator(device=device)
+
+        loss_fn = GAILLoss(
+            discriminator, use_grad_penalty=use_grad_penalty, gp_lambda=gp_lambda
+        )
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "discriminator" in name
+            if p.grad is None:
+                assert "discriminator" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_gail_state_dict(self, device):
+        torch.manual_seed(self.seed)
+
+        discriminator = self._create_mock_discriminator(device=device)
+
+        loss_fn = GAILLoss(discriminator)
+        sd = loss_fn.state_dict()
+        loss_fn2 = GAILLoss(discriminator)
+        loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_seq_gail(self, device, use_grad_penalty, gp_lambda):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_gail(device=device)
+
+        discriminator = self._create_mock_discriminator(device=device)
+
+        loss_fn = GAILLoss(
+            discriminator, use_grad_penalty=use_grad_penalty, gp_lambda=gp_lambda
+        )
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "discriminator" in name
+            if p.grad is None:
+                assert "discriminator" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_gail_reduction(self, reduction, use_grad_penalty, gp_lambda):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_gail(device=device)
+        discriminator = self._create_mock_discriminator(device=device)
+        loss_fn = GAILLoss(discriminator, reduction=reduction)
+        loss = loss_fn(td)
+        if reduction == "none":
+            assert loss["loss"].shape == (td["observation"].shape[0], 1)
         else:
             assert loss["loss"].shape == torch.Size([])
 
