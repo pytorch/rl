@@ -887,10 +887,6 @@ Check the :func:`torchrl.envs.utils.check_env_specs` method for a sanity check.
 If needed, specs can be automacially generated from data using the :func:`~torchrl.envs.utils.make_composite_from_td`
 function.
 
-I am writing docs in sphinx. I want to write a table.
-
-Here is the approximate content, help me clean it up and make it appear nicely:
-
 Specs fall in two main categories, numerical and categorical.
 
 +-----------------+-------------------+-------------------+---------------------+--------+-------------+-------------+------------------+----------+
