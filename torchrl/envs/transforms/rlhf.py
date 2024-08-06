@@ -9,7 +9,7 @@ from tensordict import TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import ProbabilisticTensorDictModule, TensorDictParams
 from tensordict.utils import is_seq_of_nested_key
 from torch import nn
-from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import Composite, Unbounded
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
 
@@ -186,7 +186,7 @@ class KLRewardTransform(Transform):
 
     forward = _call
 
-    def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
         output_spec = super().transform_output_spec(output_spec)
         # todo: here we'll need to use the reward_key once it's implemented
         # parent = self.parent
@@ -195,17 +195,17 @@ class KLRewardTransform(Transform):
 
         if in_key == "reward" and out_key == "reward":
             parent = self.parent
-            reward_spec = UnboundedContinuousTensorSpec(
+            reward_spec = Unbounded(
                 device=output_spec.device,
                 shape=output_spec["full_reward_spec"][parent.reward_key].shape,
             )
-            output_spec["full_reward_spec"] = CompositeSpec(
+            output_spec["full_reward_spec"] = Composite(
                 {parent.reward_key: reward_spec},
                 shape=output_spec["full_reward_spec"].shape,
             )
         elif in_key == "reward":
             parent = self.parent
-            reward_spec = UnboundedContinuousTensorSpec(
+            reward_spec = Unbounded(
                 device=output_spec.device,
                 shape=output_spec["full_reward_spec"][parent.reward_key].shape,
             )
@@ -214,7 +214,7 @@ class KLRewardTransform(Transform):
             observation_spec[out_key] = reward_spec
         else:
             observation_spec = output_spec["full_observation_spec"]
-            reward_spec = UnboundedContinuousTensorSpec(
+            reward_spec = Unbounded(
                 device=output_spec.device, shape=observation_spec[in_key].shape
             )
             # then we need to populate the output keys

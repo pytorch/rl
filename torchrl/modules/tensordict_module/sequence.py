@@ -8,7 +8,7 @@ from __future__ import annotations
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 
-from torchrl.data.tensor_specs import CompositeSpec
+from torchrl.data.tensor_specs import Composite
 from torchrl.modules.tensordict_module.common import SafeModule
 
 
@@ -33,11 +33,11 @@ class SafeSequential(TensorDictSequential, SafeModule):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
+        >>> from torchrl.data import Composite, Unbounded
         >>> from torchrl.modules import TanhNormal, SafeSequential, TensorDictModule, NormalParamExtractor
         >>> from torchrl.modules.tensordict_module import SafeProbabilisticModule
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
-        >>> spec1 = CompositeSpec(hidden=UnboundedContinuousTensorSpec(4), loc=None, scale=None)
+        >>> spec1 = Composite(hidden=Unbounded(4), loc=None, scale=None)
         >>> net1 = nn.Sequential(torch.nn.Linear(4, 8), NormalParamExtractor())
         >>> module1 = TensorDictModule(net1, in_keys=["input"], out_keys=["loc", "scale"])
         >>> td_module1 = SafeProbabilisticModule(
@@ -48,7 +48,7 @@ class SafeSequential(TensorDictSequential, SafeModule):
         ...     distribution_class=TanhNormal,
         ...     return_log_prob=True,
         ... )
-        >>> spec2 = UnboundedContinuousTensorSpec(8)
+        >>> spec2 = Unbounded(8)
         >>> module2 = torch.nn.Linear(4, 8)
         >>> td_module2 = TensorDictModule(
         ...    module=module2,
@@ -112,12 +112,12 @@ class SafeSequential(TensorDictSequential, SafeModule):
 
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
 
-        spec = CompositeSpec()
+        spec = Composite()
         for module in modules:
             try:
                 spec.update(module.spec)
             except AttributeError:
-                spec.update(CompositeSpec({key: None for key in module.out_keys}))
+                spec.update(Composite({key: None for key in module.out_keys}))
 
         super(TensorDictSequential, self).__init__(
             spec=spec,

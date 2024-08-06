@@ -683,7 +683,7 @@ parallel_env = parallel_env_constructor(
 )
 
 
-from torchrl.data import CompositeSpec
+from torchrl.data import Composite
 
 ###############################################################################
 # Building the model
@@ -756,7 +756,7 @@ def make_ddpg_actor(
         actor,
         distribution_class=TanhDelta,
         in_keys=["param"],
-        spec=CompositeSpec(action=proof_environment.action_spec),
+        spec=Composite(action=proof_environment.action_spec),
     ).to(device)
 
     q_net = DdpgMlpQNet()

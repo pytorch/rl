@@ -890,19 +890,40 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     :template: rl_template.rst
 
     TensorSpec
+    Binary
+    Bounded
+    Categorical
+    Composite
+    MultiCategorical
+    MultiOneHot
+    NonTensor
+    OneHotDiscrete
+    Stacked
+    StackedComposite
+    Unbounded
+    UnboundedContinuous
+    UnboundedDiscrete
+
+The following classes are deprecated and just point to the classes above:
+
+.. currentmodule:: torchrl.data
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
     BinaryDiscreteTensorSpec
     BoundedTensorSpec
     CompositeSpec
     DiscreteTensorSpec
+    LazyStackedCompositeSpec
+    LazyStackedTensorSpec
     MultiDiscreteTensorSpec
     MultiOneHotDiscreteTensorSpec
     NonTensorSpec
     OneHotDiscreteTensorSpec
     UnboundedContinuousTensorSpec
     UnboundedDiscreteTensorSpec
-    LazyStackedTensorSpec
-    LazyStackedCompositeSpec
-    NonTensorSpec
 
 Reinforcement Learning From Human Feedback (RLHF)
 -------------------------------------------------
