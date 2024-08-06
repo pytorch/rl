@@ -891,7 +891,6 @@ I am writing docs in sphinx. I want to write a table.
 
 Here is the approximate content, help me clean it up and make it appear nicely:
 
-```
 Specs fall in two main categories, numerical and categorical:
 
 +-------------------------------------------------------------------------------+------------------------------------------------------------------+
