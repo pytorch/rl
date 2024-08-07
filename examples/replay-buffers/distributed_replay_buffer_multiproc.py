@@ -40,7 +40,7 @@ def main(rank):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    str_init_method = "tcp://localhost:10000"
+    str_init_method = "tcp://localhost:10001"
 
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16, init_method=str_init_method
