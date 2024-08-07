@@ -28,9 +28,9 @@ Each env will have the following attributes:
   This is especially useful for transforms (see below). For parametric environments (e.g.
   model-based environments), the device does represent the hardware that will be used to
   compute the operations.
-- :obj:`env.observation_spec`: a :class:`~torchrl.data.CompositeSpec` object
+- :obj:`env.observation_spec`: a :class:`~torchrl.data.Composite` object
   containing all the observation key-spec pairs.
-- :obj:`env.state_spec`: a :class:`~torchrl.data.CompositeSpec` object
+- :obj:`env.state_spec`: a :class:`~torchrl.data.Composite` object
   containing all the input key-spec pairs (except action). For most stateful
   environments, this container will be empty.
 - :obj:`env.action_spec`: a :class:`~torchrl.data.TensorSpec` object
@@ -39,10 +39,10 @@ Each env will have the following attributes:
   the reward spec.
 - :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
   the done-flag spec. See the section on trajectory termination below.
-- :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
+- :obj:`env.input_spec`: a :class:`~torchrl.data.Composite` object containing
   all the input keys (:obj:`"full_action_spec"` and :obj:`"full_state_spec"`).
   It is locked and should not be modified directly.
-- :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
+- :obj:`env.output_spec`: a :class:`~torchrl.data.Composite` object containing
   all the output keys (:obj:`"full_observation_spec"`, :obj:`"full_reward_spec"` and :obj:`"full_done_spec"`).
   It is locked and should not be modified directly.
 
@@ -433,28 +433,28 @@ only the done flag is shared across agents (as in VMAS):
         ...    action_specs.append(agent_i_action_spec)
         ...    reward_specs.append(agent_i_reward_spec)
         ...    observation_specs.append(agent_i_observation_spec)
-        >>> env.action_spec = CompositeSpec(
+        >>> env.action_spec = Composite(
         ...    {
-        ...        "agents": CompositeSpec(
+        ...        "agents": Composite(
         ...            {"action": torch.stack(action_specs)}, shape=(env.n_agents,)
         ...        )
         ...    }
         ...)
-        >>> env.reward_spec = CompositeSpec(
+        >>> env.reward_spec = Composite(
         ...    {
-        ...        "agents": CompositeSpec(
+        ...        "agents": Composite(
         ...            {"reward": torch.stack(reward_specs)}, shape=(env.n_agents,)
         ...        )
         ...    }
         ...)
-        >>> env.observation_spec = CompositeSpec(
+        >>> env.observation_spec = Composite(
         ...    {
-        ...        "agents": CompositeSpec(
+        ...        "agents": Composite(
         ...            {"observation": torch.stack(observation_specs)}, shape=(env.n_agents,)
         ...        )
         ...    }
         ...)
-        >>> env.done_spec = DiscreteTensorSpec(
+        >>> env.done_spec = Categorical(
         ...    n=2,
         ...    shape=torch.Size((1,)),
         ...    dtype=torch.bool,
@@ -582,23 +582,23 @@ the ``return_contiguous=False`` argument.
 Here is a working example:
 
     >>> from torchrl.envs import EnvBase
-    >>> from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, BoundedTensorSpec, BinaryDiscreteTensorSpec
+    >>> from torchrl.data import Unbounded, Composite, Bounded, Binary
     >>> import torch
     >>> from tensordict import TensorDict, TensorDictBase
     >>>
     >>> class EnvWithDynamicSpec(EnvBase):
     ...     def __init__(self, max_count=5):
     ...         super().__init__(batch_size=())
-    ...         self.observation_spec = CompositeSpec(
-    ...             observation=UnboundedContinuousTensorSpec(shape=(3, -1, 2)),
+    ...         self.observation_spec = Composite(
+    ...             observation=Unbounded(shape=(3, -1, 2)),
     ...         )
-    ...         self.action_spec = BoundedTensorSpec(low=-1, high=1, shape=(2,))
-    ...         self.full_done_spec = CompositeSpec(
-    ...             done=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
-    ...             terminated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
-    ...             truncated=BinaryDiscreteTensorSpec(1, shape=(1,), dtype=torch.bool),
+    ...         self.action_spec = Bounded(low=-1, high=1, shape=(2,))
+    ...         self.full_done_spec = Composite(
+    ...             done=Binary(1, shape=(1,), dtype=torch.bool),
+    ...             terminated=Binary(1, shape=(1,), dtype=torch.bool),
+    ...             truncated=Binary(1, shape=(1,), dtype=torch.bool),
     ...         )
-    ...         self.reward_spec = UnboundedContinuousTensorSpec((1,), dtype=torch.float)
+    ...         self.reward_spec = Unbounded((1,), dtype=torch.float)
     ...         self.count = 0
     ...         self.max_count = max_count
     ...

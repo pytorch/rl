@@ -73,14 +73,14 @@ class IQLLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import IQLLoss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
@@ -136,14 +136,14 @@ class IQLLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import IQLLoss
         >>> _ = torch.manual_seed(42)
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
@@ -541,9 +541,9 @@ class DiscreteIQLLoss(IQLLoss):
     Keyword Args:
         action_space (str or TensorSpec): Action space. Must be one of
                 ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-                or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-                :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-                :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+                or an instance of the corresponding specs (:class:`torchrl.data.OneHot`,
+                :class:`torchrl.data.MultiOneHot`,
+                :class:`torchrl.data.Binary` or :class:`torchrl.data.Categorical`).
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
@@ -569,14 +569,14 @@ class DiscreteIQLLoss(IQLLoss):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+        >>> from torchrl.data.tensor_specs import OneHot
         >>> from torchrl.modules.distributions.discrete import OneHotCategorical
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import DiscreteIQLLoss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
-        >>> spec = OneHotDiscreteTensorSpec(n_act)
+        >>> spec = OneHot(n_act)
         >>> module = SafeModule(nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["logits"])
         >>> actor = ProbabilisticActor(
         ...     module=module,
@@ -627,14 +627,14 @@ class DiscreteIQLLoss(IQLLoss):
         >>> import torch
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+        >>> from torchrl.data.tensor_specs import OneHot
         >>> from torchrl.modules.distributions.discrete import OneHotCategorical
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import DiscreteIQLLoss
         >>> _ = torch.manual_seed(42)
         >>> n_act, n_obs = 4, 3
-        >>> spec = OneHotDiscreteTensorSpec(n_act)
+        >>> spec = OneHot(n_act)
         >>> module = SafeModule(nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["logits"])
         >>> actor = ProbabilisticActor(
         ...     module=module,

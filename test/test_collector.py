@@ -68,12 +68,12 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
-    CompositeSpec,
+    Composite,
     LazyTensorStorage,
-    NonTensorSpec,
+    NonTensor,
     ReplayBuffer,
     TensorSpec,
-    UnboundedContinuousTensorSpec,
+    Unbounded,
 )
 from torchrl.envs import (
     EnvBase,
@@ -210,22 +210,16 @@ class TestCollectorDevices:
         def __init__(self, default_device):
             self.default_device = default_device
             super().__init__(device=None)
-            self.observation_spec = CompositeSpec(
-                observation=UnboundedContinuousTensorSpec((), device=default_device)
+            self.observation_spec = Composite(
+                observation=Unbounded((), device=default_device)
             )
-            self.reward_spec = UnboundedContinuousTensorSpec(1, device=default_device)
-            self.full_done_spec = CompositeSpec(
-                done=UnboundedContinuousTensorSpec(
-                    1, dtype=torch.bool, device=self.default_device
-                ),
-                truncated=UnboundedContinuousTensorSpec(
-                    1, dtype=torch.bool, device=self.default_device
-                ),
-                terminated=UnboundedContinuousTensorSpec(
-                    1, dtype=torch.bool, device=self.default_device
-                ),
+            self.reward_spec = Unbounded(1, device=default_device)
+            self.full_done_spec = Composite(
+                done=Unbounded(1, dtype=torch.bool, device=self.default_device),
+                truncated=Unbounded(1, dtype=torch.bool, device=self.default_device),
+                terminated=Unbounded(1, dtype=torch.bool, device=self.default_device),
             )
-            self.action_spec = UnboundedContinuousTensorSpec((), device=None)
+            self.action_spec = Unbounded((), device=None)
             assert self.device is None
             assert self.full_observation_spec is not None
             assert self.full_done_spec is not None
@@ -268,29 +262,17 @@ class TestCollectorDevices:
         def __init__(self, default_device):
             self.default_device = default_device
             super().__init__(device=self.default_device)
-            self.observation_spec = CompositeSpec(
-                observation=UnboundedContinuousTensorSpec(
-                    (), device=self.default_device
-                )
+            self.observation_spec = Composite(
+                observation=Unbounded((), device=self.default_device)
             )
-            self.reward_spec = UnboundedContinuousTensorSpec(
-                1, device=self.default_device
-            )
-            self.full_done_spec = CompositeSpec(
-                done=UnboundedContinuousTensorSpec(
-                    1, dtype=torch.bool, device=self.default_device
-                ),
-                truncated=UnboundedContinuousTensorSpec(
-                    1, dtype=torch.bool, device=self.default_device
-                ),
-                terminated=UnboundedContinuousTensorSpec(
-                    1, dtype=torch.bool, device=self.default_device
-                ),
+            self.reward_spec = Unbounded(1, device=self.default_device)
+            self.full_done_spec = Composite(
+                done=Unbounded(1, dtype=torch.bool, device=self.default_device),
+                truncated=Unbounded(1, dtype=torch.bool, device=self.default_device),
+                terminated=Unbounded(1, dtype=torch.bool, device=self.default_device),
                 device=self.default_device,
             )
-            self.action_spec = UnboundedContinuousTensorSpec(
-                (), device=self.default_device
-            )
+            self.action_spec = Unbounded((), device=self.default_device)
             assert self.device == _make_ordinal_device(
                 torch.device(self.default_device)
             )
@@ -1295,7 +1277,7 @@ def test_excluded_keys(collector_class, exclude, out_key):
         policy,
         copier,
         OrnsteinUhlenbeckProcessModule(
-            spec=CompositeSpec({key: None for key in policy.out_keys})
+            spec=Composite({key: None for key in policy.out_keys})
         ),
     )
 
@@ -1368,12 +1350,12 @@ def test_collector_output_keys(
         ],
     }
     if explicit_spec:
-        hidden_spec = UnboundedContinuousTensorSpec((1, hidden_size))
-        policy_kwargs["spec"] = CompositeSpec(
-            action=UnboundedContinuousTensorSpec(),
+        hidden_spec = Unbounded((1, hidden_size))
+        policy_kwargs["spec"] = Composite(
+            action=Unbounded(),
             hidden1=hidden_spec,
             hidden2=hidden_spec,
-            next=CompositeSpec(hidden1=hidden_spec, hidden2=hidden_spec),
+            next=Composite(hidden1=hidden_spec, hidden2=hidden_spec),
         )
 
     policy = SafeModule(**policy_kwargs)
@@ -2170,15 +2152,9 @@ class TestUpdateParams:
         def __init__(self, device, batch_size=[]):  # noqa: B006
             super().__init__(batch_size=batch_size, device=device)
             self.state = torch.zeros(self.batch_size, device=device)
-            self.observation_spec = CompositeSpec(
-                state=UnboundedContinuousTensorSpec(shape=(), device=device)
-            )
-            self.action_spec = UnboundedContinuousTensorSpec(
-                shape=batch_size, device=device
-            )
-            self.reward_spec = UnboundedContinuousTensorSpec(
-                shape=(*batch_size, 1), device=device
-            )
+            self.observation_spec = Composite(state=Unbounded(shape=(), device=device))
+            self.action_spec = Unbounded(shape=batch_size, device=device)
+            self.reward_spec = Unbounded(shape=(*batch_size, 1), device=device)
 
         def _step(
             self,
@@ -2685,7 +2661,7 @@ class TestCollectorsNonTensor:
         def transform_observation_spec(
             self, observation_spec: TensorSpec
         ) -> TensorSpec:
-            observation_spec["nt"] = NonTensorSpec(shape=())
+            observation_spec["nt"] = NonTensor(shape=())
             return observation_spec
 
     @classmethod

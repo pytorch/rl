@@ -14,14 +14,7 @@ from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import distributions as dist, nn
-from torchrl.data import (
-    BinaryDiscreteTensorSpec,
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-)
+from torchrl.data import Binary, Bounded, Categorical, Composite, MultiOneHot, OneHot
 from torchrl.data.rlhf.dataset import _has_transformers
 from torchrl.modules import MLP, SafeModule, TanhDelta, TanhNormal
 from torchrl.modules.tensordict_module.actors import (
@@ -50,9 +43,7 @@ from torchrl.modules.tensordict_module.actors import (
 )
 def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=3):
     env = NestedCountingEnv(nested_dim=nested_dim)
-    action_spec = BoundedTensorSpec(
-        shape=torch.Size((nested_dim, n_actions)), high=1, low=-1
-    )
+    action_spec = Bounded(shape=torch.Size((nested_dim, n_actions)), high=1, low=-1)
     policy_module = TensorDictModule(
         nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
     )
@@ -111,9 +102,7 @@ def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=
 )
 def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions=3):
     env = NestedCountingEnv(nested_dim=nested_dim)
-    action_spec = BoundedTensorSpec(
-        shape=torch.Size((nested_dim, n_actions)), high=1, low=-1
-    )
+    action_spec = Bounded(shape=torch.Size((nested_dim, n_actions)), high=1, low=-1)
     actor_net = nn.Sequential(
         nn.Linear(1, 2),
         NormalParamExtractor(),
@@ -181,7 +170,7 @@ class TestQValue:
             DistributionalQValueHook(action_space="wrong_value", support=None)
 
     def test_distributional_qvalue_hook_conflicting_spec(self):
-        spec = OneHotDiscreteTensorSpec(3)
+        spec = OneHot(3)
         _process_action_space_spec("one-hot", spec)
         _process_action_space_spec("one_hot", spec)
         _process_action_space_spec("one_hot", None)
@@ -190,19 +179,19 @@ class TestQValue:
             ValueError, match="The action spec and the action space do not match"
         ):
             _process_action_space_spec("multi-one-hot", spec)
-        spec = MultiOneHotDiscreteTensorSpec([3, 3])
+        spec = MultiOneHot([3, 3])
         _process_action_space_spec("multi-one-hot", spec)
         _process_action_space_spec(spec, spec)
         with pytest.raises(
             ValueError, match="Passing an action_space as a TensorSpec and a spec"
         ):
-            _process_action_space_spec(OneHotDiscreteTensorSpec(3), spec)
+            _process_action_space_spec(OneHot(3), spec)
         with pytest.raises(
-            ValueError, match="action_space cannot be of type CompositeSpec"
+            ValueError, match="action_space cannot be of type Composite"
         ):
-            _process_action_space_spec(CompositeSpec(), spec)
+            _process_action_space_spec(Composite(), spec)
         with pytest.raises(KeyError, match="action could not be found in the spec"):
-            _process_action_space_spec(None, CompositeSpec())
+            _process_action_space_spec(None, Composite())
         with pytest.raises(
             ValueError, match="Neither action_space nor spec was defined"
         ):
@@ -248,10 +237,10 @@ class TestQValue:
             ValueError,
             match="Passing an action_space as a TensorSpec and a spec isn't allowed, unless they match.",
         ):
-            _process_action_space_spec(BinaryDiscreteTensorSpec(n=1), action_spec)
-            _process_action_space_spec(BinaryDiscreteTensorSpec(n=1), leaf_action_spec)
+            _process_action_space_spec(Binary(n=1), action_spec)
+            _process_action_space_spec(Binary(n=1), leaf_action_spec)
         with pytest.raises(
-            ValueError, match="action_space cannot be of type CompositeSpec"
+            ValueError, match="action_space cannot be of type Composite"
         ):
             _process_action_space_spec(action_spec, None)
 
@@ -652,7 +641,7 @@ def test_value_based_policy(device):
     torch.manual_seed(0)
     obs_dim = 4
     action_dim = 5
-    action_spec = OneHotDiscreteTensorSpec(action_dim)
+    action_spec = OneHot(action_dim)
 
     def make_net():
         net = MLP(in_features=obs_dim, out_features=action_dim, depth=2, device=device)
@@ -681,9 +670,7 @@ def test_value_based_policy(device):
         assert (action.sum(-1) == 1).all()
 
 
-@pytest.mark.parametrize(
-    "spec", [None, OneHotDiscreteTensorSpec(3), MultiOneHotDiscreteTensorSpec([3, 2])]
-)
+@pytest.mark.parametrize("spec", [None, OneHot(3), MultiOneHot([3, 2])])
 @pytest.mark.parametrize(
     "action_space", [None, "one-hot", "one_hot", "mult-one-hot", "mult_one_hot"]
 )
@@ -706,12 +693,9 @@ def test_qvalactor_construct(
             QValueActor(**kwargs)
         return
     if (
-        type(spec) is MultiOneHotDiscreteTensorSpec
+        type(spec) is MultiOneHot
         and action_space not in ("mult-one-hot", "mult_one_hot", None)
-    ) or (
-        type(spec) is OneHotDiscreteTensorSpec
-        and action_space not in ("one-hot", "one_hot", None)
-    ):
+    ) or (type(spec) is OneHot and action_space not in ("one-hot", "one_hot", None)):
         with pytest.raises(
             ValueError, match="The action spec and the action space do not match"
         ):
@@ -725,7 +709,7 @@ def test_value_based_policy_categorical(device):
     torch.manual_seed(0)
     obs_dim = 4
     action_dim = 5
-    action_spec = DiscreteTensorSpec(action_dim)
+    action_spec = Categorical(action_dim)
 
     def make_net():
         net = MLP(in_features=obs_dim, out_features=action_dim, depth=2, device=device)

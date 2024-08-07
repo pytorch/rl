@@ -163,11 +163,91 @@ resulting action in the input tensordict along with the list of action values.
     >>> from tensordict import TensorDict
     >>> from tensordict.nn.functional_modules import make_functional
     >>> from torch import nn
-    >>> from torchrl.data import OneHotDiscreteTensorSpec
+    >>> from torchrl.data import OneHot
     >>> from torchrl.modules.tensordict_module.actors import QValueActor
     >>> td = TensorDict({'observation': torch.randn(5, 3)}, [5])
     >>> # we have 4 actions to choose from
-    >>> action_spec = OneHotDiscreteTensorSpec(4)
+    >>> action_spec = OneHot(4)
+    >>> # the model reads a state of dimension 3 and outputs 4 values, one for each action available
+    >>> module = nn.Linear(3, 4)
+    >>> qvalue_actor = QValueActor(module=module, spec=action_spec)
+    >>> qvalue_actor(td)
+    >>> print(td)
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),
+            action_value: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+            chosen_action_value: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            observation: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([5]),
+        device=None,
+        is_shared=False)
+
+Distributional Q-learning is slightly different: in this case, the value network
+does not output a scalar value for each state-action value.
+Instead, the value space is divided in a an arbitrary number of "bins". The
+value network outputs a probability that the state-action value belongs to one bin
+or another.
+Hence, for a state space of dimension M, an action space of dimension N and a number of bins B,
+the value network encodes a
+of a (s,a) -> v map. This map can be a table or a function.
+For discrete action spaces with continuous (or near-continuous such as pixels)
+states, it is customary to use a non-linear model such as a neural network for
+the map.
+The semantic of the Q-Value network is hopefully quite simple: we just need to
+feed a tensor-to-tensor map that given a certain state (the input tensor),
+outputs a list of action values to choose from. The wrapper will write the
+resulting action in the input tensordict along with the list of action values.
+
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> from tensordict.nn.functional_modules import make_functional
+    >>> from torch import nn
+    >>> from torchrl.data import OneHot
+    >>> from torchrl.modules.tensordict_module.actors import QValueActor
+    >>> td = TensorDict({'observation': torch.randn(5, 3)}, [5])
+    >>> # we have 4 actions to choose from
+    >>> action_spec = OneHot(4)
+    >>> # the model reads a state of dimension 3 and outputs 4 values, one for each action available
+    >>> module = nn.Linear(3, 4)
+    >>> qvalue_actor = QValueActor(module=module, spec=action_spec)
+    >>> qvalue_actor(td)
+    >>> print(td)
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),
+            action_value: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+            chosen_action_value: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            observation: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([5]),
+        device=None,
+        is_shared=False)
+
+Distributional Q-learning is slightly different: in this case, the value network
+does not output a scalar value for each state-action value.
+Instead, the value space is divided in a an arbitrary number of "bins". The
+value network outputs a probability that the state-action value belongs to one bin
+or another.
+Hence, for a state space of dimension M, an action space of dimension N and a number of bins B,
+the value network encodes a
+of a (s,a) -> v map. This map can be a table or a function.
+For discrete action spaces with continuous (or near-continuous such as pixels)
+states, it is customary to use a non-linear model such as a neural network for
+the map.
+The semantic of the Q-Value network is hopefully quite simple: we just need to
+feed a tensor-to-tensor map that given a certain state (the input tensor),
+outputs a list of action values to choose from. The wrapper will write the
+resulting action in the input tensordict along with the list of action values.
+
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> from tensordict.nn.functional_modules import make_functional
+    >>> from torch import nn
+    >>> from torchrl.data import OneHot
+    >>> from torchrl.modules.tensordict_module.actors import QValueActor
+    >>> td = TensorDict({'observation': torch.randn(5, 3)}, [5])
+    >>> # we have 4 actions to choose from
+    >>> action_spec = OneHot(4)
     >>> # the model reads a state of dimension 3 and outputs 4 values, one for each action available
     >>> module = nn.Linear(3, 4)
     >>> qvalue_actor = QValueActor(module=module, spec=action_spec)
@@ -196,13 +276,57 @@ class:
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torch import nn
-        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.data import OneHot
         >>> from torchrl.modules import DistributionalQValueActor, MLP
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> nbins = 3
         >>> # our model reads the observation and outputs a stack of 4 logits (one for each action) of size nbins=3
         >>> module = MLP(out_features=(nbins, 4), depth=2)
-        >>> action_spec = OneHotDiscreteTensorSpec(4)
+        >>> action_spec = OneHot(4)
+        >>> qvalue_actor = DistributionalQValueActor(module=module, spec=action_spec, support=torch.arange(nbins))
+        >>> td = qvalue_actor(td)
+        >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),
+                action_value: Tensor(shape=torch.Size([5, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([5]),
+            device=None,
+            is_shared=False)
+
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torch import nn
+        >>> from torchrl.data import OneHot
+        >>> from torchrl.modules import DistributionalQValueActor, MLP
+        >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
+        >>> nbins = 3
+        >>> # our model reads the observation and outputs a stack of 4 logits (one for each action) of size nbins=3
+        >>> module = MLP(out_features=(nbins, 4), depth=2)
+        >>> action_spec = OneHot(4)
+        >>> qvalue_actor = DistributionalQValueActor(module=module, spec=action_spec, support=torch.arange(nbins))
+        >>> td = qvalue_actor(td)
+        >>> print(td)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),
+                action_value: Tensor(shape=torch.Size([5, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([5]),
+            device=None,
+            is_shared=False)
+
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torch import nn
+        >>> from torchrl.data import OneHot
+        >>> from torchrl.modules import DistributionalQValueActor, MLP
+        >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
+        >>> nbins = 3
+        >>> # our model reads the observation and outputs a stack of 4 logits (one for each action) of size nbins=3
+        >>> module = MLP(out_features=(nbins, 4), depth=2)
+        >>> action_spec = OneHot(4)
         >>> qvalue_actor = DistributionalQValueActor(module=module, spec=action_spec, support=torch.arange(nbins))
         >>> td = qvalue_actor(td)
         >>> print(td)

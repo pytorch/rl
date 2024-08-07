@@ -226,6 +226,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collector.update_policy_weights_()
         sampling_start = time.time()
 
+    collector.shutdown()
+    if not test_env.is_closed:
+        test_env.close()
     end_time = time.time()
     execution_time = end_time - start_time
     torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")

@@ -12,7 +12,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
@@ -83,14 +83,14 @@ class TD3Loss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import Actor, ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.td3 import TD3Loss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> module = nn.Linear(n_obs, n_act)
         >>> actor = Actor(
         ...     module=module,
@@ -139,11 +139,11 @@ class TD3Loss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
         >>> from torchrl.objectives.td3 import TD3Loss
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> module = nn.Linear(n_obs, n_act)
         >>> actor = Actor(
         ...     module=module,
@@ -283,7 +283,7 @@ class TD3Loss(LossModule):
                 f"but not both or none. Got bounds={bounds} and action_spec={action_spec}."
             )
         elif action_spec is not None:
-            if isinstance(action_spec, CompositeSpec):
+            if isinstance(action_spec, Composite):
                 if (
                     isinstance(self.tensor_keys.action, tuple)
                     and len(self.tensor_keys.action) > 1
@@ -296,9 +296,9 @@ class TD3Loss(LossModule):
                 action_spec = action_spec[self.tensor_keys.action][
                     (0,) * len(action_container_shape)
                 ]
-            if not isinstance(action_spec, BoundedTensorSpec):
+            if not isinstance(action_spec, Bounded):
                 raise ValueError(
-                    f"action_spec is not of type BoundedTensorSpec but {type(action_spec)}."
+                    f"action_spec is not of type Bounded but {type(action_spec)}."
                 )
             low = action_spec.space.low
             high = action_spec.space.high

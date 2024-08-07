@@ -572,10 +572,10 @@ print(tensordict_exp)
 # ------------------------------
 
 torch.manual_seed(0)
-from torchrl.data import BoundedTensorSpec
+from torchrl.data import Bounded
 from torchrl.modules import SafeModule
 
-spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
+spec = Bounded(-torch.ones(3), torch.ones(3))
 base_module = nn.Linear(5, 3)
 module = SafeModule(
     module=base_module, spec=spec, in_keys=["obs"], out_keys=["action"], safe=True

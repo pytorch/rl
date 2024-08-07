@@ -66,12 +66,7 @@ from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    DiscreteTensorSpec,
-    NonTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
 from torchrl.envs import (
     CatFrames,
     CatTensors,
@@ -1908,18 +1903,12 @@ class TestInfoDict:
         env.set_info_dict_reader(
             default_info_dict_reader(
                 ["x_position"],
-                spec=CompositeSpec(
-                    x_position=UnboundedContinuousTensorSpec(
-                        dtype=torch.float64, shape=()
-                    )
-                ),
+                spec=Composite(x_position=Unbounded(dtype=torch.float64, shape=())),
             )
         )
 
         assert "x_position" in env.observation_spec.keys()
-        assert isinstance(
-            env.observation_spec["x_position"], UnboundedContinuousTensorSpec
-        )
+        assert isinstance(env.observation_spec["x_position"], Unbounded)
 
         tensordict = env.reset()
         tensordict = env.rand_step(tensordict)
@@ -1932,13 +1921,13 @@ class TestInfoDict:
         )
 
         for spec in (
-            {"x_position": UnboundedContinuousTensorSpec((), dtype=torch.float64)},
+            {"x_position": Unbounded((), dtype=torch.float64)},
             # None,
-            CompositeSpec(
-                x_position=UnboundedContinuousTensorSpec((), dtype=torch.float64),
+            Composite(
+                x_position=Unbounded((), dtype=torch.float64),
                 shape=[],
             ),
-            [UnboundedContinuousTensorSpec((), dtype=torch.float64)],
+            [Unbounded((), dtype=torch.float64)],
         ):
             env2 = GymWrapper(gym.make("HalfCheetah-v4"))
             env2.set_info_dict_reader(
@@ -2079,7 +2068,7 @@ class TestConcurrentEnvs:
             ],
         )
         spec = env_p.action_spec
-        policy = TestConcurrentEnvs.Policy(CompositeSpec(action=spec.to(device)))
+        policy = TestConcurrentEnvs.Policy(Composite(action=spec.to(device)))
         N = 10
         r_p = []
         r_s = []
@@ -2113,7 +2102,7 @@ class TestConcurrentEnvs:
             lambda i=i: CountingEnv(i, device=device) for i in range(j, j + n_workers)
         ]
         spec = make_envs[0]().action_spec
-        policy = TestConcurrentEnvs.Policy(CompositeSpec(action=spec))
+        policy = TestConcurrentEnvs.Policy(Composite(action=spec))
         collector = MultiSyncDataCollector(
             make_envs,
             policy,
@@ -2225,7 +2214,7 @@ class TestNestedSpecs:
         else:
             raise NotImplementedError
         reset = env.reset()
-        assert not isinstance(env.reward_spec, CompositeSpec)
+        assert not isinstance(env.reward_spec, Composite)
         for done_key in env.done_keys:
             assert (
                 env.full_done_spec[done_key]
@@ -2496,8 +2485,8 @@ def test_mocking_envs(envclass):
 class TestTerminatedOrTruncated:
     @pytest.mark.parametrize("done_key", ["done", "terminated", "truncated"])
     def test_root_prevail(self, done_key):
-        _spec = DiscreteTensorSpec(2, shape=(), dtype=torch.bool)
-        spec = CompositeSpec({done_key: _spec, ("agent", done_key): _spec})
+        _spec = Categorical(2, shape=(), dtype=torch.bool)
+        spec = Composite({done_key: _spec, ("agent", done_key): _spec})
         data = TensorDict({done_key: [False], ("agent", done_key): [True, False]}, [])
         assert not _terminated_or_truncated(data)
         assert not _terminated_or_truncated(data, full_done_spec=spec)
@@ -2560,8 +2549,8 @@ class TestTerminatedOrTruncated:
     def test_terminated_or_truncated_spec(self):
         done_shape = (2, 1)
         nested_done_shape = (2, 3, 1)
-        spec = CompositeSpec(
-            done=DiscreteTensorSpec(2, shape=done_shape, dtype=torch.bool),
+        spec = Composite(
+            done=Categorical(2, shape=done_shape, dtype=torch.bool),
             shape=[
                 2,
             ],
@@ -2578,12 +2567,12 @@ class TestTerminatedOrTruncated:
         )
         assert data.get("_reset", None) is None
 
-        spec = CompositeSpec(
+        spec = Composite(
             {
-                ("agent", "done"): DiscreteTensorSpec(
+                ("agent", "done"): Categorical(
                     2, shape=nested_done_shape, dtype=torch.bool
                 ),
-                ("nested", "done"): DiscreteTensorSpec(
+                ("nested", "done"): Categorical(
                     2, shape=nested_done_shape, dtype=torch.bool
                 ),
             },
@@ -2618,11 +2607,11 @@ class TestTerminatedOrTruncated:
         assert data["agent", "_reset"].shape == nested_done_shape
         assert data["nested", "_reset"].shape == nested_done_shape
 
-        spec = CompositeSpec(
+        spec = Composite(
             {
-                "truncated": DiscreteTensorSpec(2, shape=done_shape, dtype=torch.bool),
-                "terminated": DiscreteTensorSpec(2, shape=done_shape, dtype=torch.bool),
-                ("nested", "terminated"): DiscreteTensorSpec(
+                "truncated": Categorical(2, shape=done_shape, dtype=torch.bool),
+                "terminated": Categorical(2, shape=done_shape, dtype=torch.bool),
+                ("nested", "terminated"): Categorical(
                     2, shape=nested_done_shape, dtype=torch.bool
                 ),
             },
@@ -2774,15 +2763,15 @@ def test_backprop(device, maybe_fork_ParallelEnv, share_individual_td):
     class DifferentiableEnv(EnvBase):
         def __init__(self, device):
             super().__init__(device=device)
-            self.observation_spec = CompositeSpec(
-                observation=UnboundedContinuousTensorSpec(3, device=device),
+            self.observation_spec = Composite(
+                observation=Unbounded(3, device=device),
                 device=device,
             )
-            self.action_spec = CompositeSpec(
-                action=UnboundedContinuousTensorSpec(3, device=device), device=device
+            self.action_spec = Composite(
+                action=Unbounded(3, device=device), device=device
             )
-            self.reward_spec = CompositeSpec(
-                reward=UnboundedContinuousTensorSpec(1, device=device), device=device
+            self.reward_spec = Composite(
+                reward=Unbounded(1, device=device), device=device
             )
             self.seed = 0
 
@@ -3283,7 +3272,7 @@ class TestNonTensorEnv:
             return tensordict_reset
 
         def transform_observation_spec(self, observation_spec):
-            observation_spec["string"] = NonTensorSpec(())
+            observation_spec["string"] = NonTensor(())
             return observation_spec
 
     @pytest.mark.parametrize("batched", ["serial", "parallel"])

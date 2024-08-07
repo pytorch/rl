@@ -46,8 +46,8 @@ def get_primers_from_module(module):
         >>> primers = get_primers_from_module(model)
         >>> print(primers)
 
-        TensorDictPrimer(primers=CompositeSpec(
-            recurrent_state: UnboundedContinuousTensorSpec(
+        TensorDictPrimer(primers=Composite(
+            recurrent_state: UnboundedContinuous(
                 shape=torch.Size([1, 10]),
                 space=None,
                 device=cpu,

@@ -27,18 +27,18 @@ class ModelBasedEnvBase(EnvBase):
     Example:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
+        >>> from torchrl.data import Composite, Unbounded
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
-        ...         self.observation_spec = CompositeSpec(
-        ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
+        ...         self.observation_spec = Composite(
+        ...             hidden_observation=Unbounded((4,))
         ...         )
-        ...         self.state_spec = CompositeSpec(
-        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
+        ...         self.state_spec = Composite(
+        ...             hidden_observation=Unbounded((4,)),
         ...         )
-        ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
-        ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
+        ...         self.action_spec = Unbounded((1,))
+        ...         self.reward_spec = Unbounded((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
         ...         tensordict = TensorDict({},
@@ -84,10 +84,10 @@ class ModelBasedEnvBase(EnvBase):
 
 
     Properties:
-        - observation_spec (CompositeSpec): sampling spec of the observations;
+        - observation_spec (Composite): sampling spec of the observations;
         - action_spec (TensorSpec): sampling spec of the actions;
         - reward_spec (TensorSpec): sampling spec of the rewards;
-        - input_spec (CompositeSpec): sampling spec of the inputs;
+        - input_spec (Composite): sampling spec of the inputs;
         - batch_size (torch.Size): batch_size to be used by the env. If not set, the env accept tensordicts of all batch sizes.
         - device (torch.device): device where the env input and output are expected to live
 
