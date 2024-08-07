@@ -229,6 +229,7 @@ def _main(argv):
             "pillow",
         ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"],
+        "open_spiel": ["open_spiel>=1.5"],
     }
     extra_requires["all"] = set()
     for key in list(extra_requires.keys()):
