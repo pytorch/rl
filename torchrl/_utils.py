@@ -488,7 +488,7 @@ def accept_remote_rref_udf_invocation(decorated_class):
     # ignores private methods
     for name in dir(decorated_class):
         method = getattr(decorated_class, name)
-        if callable(method) and name.startswith("__") or not name.startswith("_"):
+        if callable(method) and (name.startswith("__") or not name.startswith("_")):
             setattr(decorated_class, name, accept_remote_rref_invocation(method))
     return decorated_class
 
