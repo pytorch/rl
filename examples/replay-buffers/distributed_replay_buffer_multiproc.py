@@ -88,7 +88,7 @@ def main(rank):
     rpc.shutdown()
 
 if __name__ == "__main__":
-    ctx = mp.get_context()
+    ctx = mp.get_context("spawn")
     procs = []
     for i in range(3):
         procs.append(ctx.Process(target=main, args=(i,)))
