@@ -71,7 +71,7 @@ class CollectorNode:
         """Function that collects data and populates the replay buffer."""
         # Replace this by a call to next() over the data collector
         done = torch.zeros(self.frames_per_batch, 1, dtype=torch.bool)
-        done[..., -1, 1] = True
+        done[..., -1, 0] = True
         td = TensorDict(
             {
                 "action": torch.randint(
