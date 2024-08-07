@@ -88,7 +88,7 @@ def main(rank):
     rpc.shutdown()
 
 if __name__ == "__main__":
-    ctx = mp.current_context()
+    ctx = mp.get_context()
     procs = []
     for i in range(3):
         procs.append(ctx.Process(target=main, args=(i,)))
