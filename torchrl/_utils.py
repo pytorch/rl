@@ -486,9 +486,18 @@ def accept_remote_rref_invocation(func):
 def accept_remote_rref_udf_invocation(decorated_class):
     """Class decorator that applies `accept_remote_rref_invocation` to all public methods."""
     # ignores private methods
+    __allowed_methods__ = {
+    "__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__", "__mod__", "__pow__",
+    "__iadd__", "__isub__", "__imul__", "__itruediv__", "__ifloordiv__", "__imod__", "__ipow__",
+    "__and__", "__or__", "__xor__", "__lshift__", "__rshift__", "__invert__",
+    "__iand__", "__ior__", "__ixor__", "__ilshift__", "__irshift__",
+    "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__",
+    "__bool__", "__iter__", "__len__",
+}
+
     for name in dir(decorated_class):
         method = getattr(decorated_class, name)
-        if callable(method) and (name.startswith("__") or not name.startswith("_")):
+        if callable(method) and (not name.startswith("_") or name in __allowed_methods__):
             setattr(decorated_class, name, accept_remote_rref_invocation(method))
     return decorated_class
 
