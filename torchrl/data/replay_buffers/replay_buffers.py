@@ -1454,7 +1454,9 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
         return super().update_tensordict_priority(data)
 
     def __len__(self):
-        return super().__len__()
+        return self._len()
+    def _len(self):
+        return super()._len()
 
     def __iter__(self):
         return super().__iter__()
