@@ -27,19 +27,12 @@ $ python examples/replay-buffers/distributed_replay_buffer.py --rank=2
 
 import argparse
 import os
-import random
 import sys
-import time
 
-import torch
 import torch.distributed.rpc as rpc
-from distributed_rb_utils import CollectorNode, ReplayBufferNode, TrainerNode
-from tensordict import TensorDict
-from torchrl._utils import accept_remote_rref_invocation, logger as torchrl_logger
-from torchrl.data.replay_buffers import RemoteReplayBuffer
-from torchrl.data.replay_buffers.samplers import SliceSampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.data.replay_buffers.writers import RoundRobinWriter
+
+from distributed_rb_utils import TrainerNode
+from torchrl._utils import logger as torchrl_logger
 
 REPLAY_BUFFER_NODE = "ReplayBuffer"
 TRAINER_NODE = "Trainer"
