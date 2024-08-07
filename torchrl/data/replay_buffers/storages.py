@@ -54,6 +54,7 @@ class Storage:
     ndim = 1
     max_size: int
     _default_checkpointer: StorageCheckpointerBase = StorageCheckpointerBase
+    _rng: torch.Generator | None = None
 
     def __init__(
         self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
@@ -142,7 +143,7 @@ class Storage:
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
-            return torch.randint(0, len(self), (batch_size,))
+            return torch.randint(0, len(self), (batch_size,), generator=self._rng)
         raise RuntimeError(
             f"Random number generation is not implemented for storage of type {type(self)} with ndim {self.ndim}. "
             f"Please report this exception as well as the use case (incl. buffer construction) on github."
@@ -497,7 +498,9 @@ class TensorStorage(Storage):
         if self.ndim == 1:
             return super()._rand_given_ndim(batch_size)
         shape = self.shape
-        return tuple(torch.randint(_dim, (batch_size,)) for _dim in shape)
+        return tuple(
+            torch.randint(_dim, (batch_size,), generator=self._rng) for _dim in shape
+        )
 
     def flatten(self):
         if self.ndim == 1:
@@ -1142,12 +1145,23 @@ class StorageEnsemble(Storage):
         *storages: Storage,
         transforms: List["Transform"] = None,  # noqa: F821
     ):
+        self._rng_private = None
         self._storages = storages
         self._transforms = transforms
         if transforms is not None and len(transforms) != len(storages):
             raise TypeError(
                 "transforms must have the same length as the storages " "provided."
             )
+
+    @property
+    def _rng(self):
+        return self._rng_private
+
+    @_rng.setter
+    def _rng(self, value):
+        self._rng_private = value
+        for storage in self._storages:
+            storage._rng = value
 
     @property
     def _attached_entities(self):

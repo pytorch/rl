@@ -38,6 +38,7 @@ class Writer(ABC):
     """A ReplayBuffer base Writer class."""
 
     _storage: Storage
+    _rng: torch.Generator | None = None
 
     def __init__(self) -> None:
         self._storage = None
@@ -582,7 +583,18 @@ class WriterEnsemble(Writer):
     """
 
     def __init__(self, *writers):
+        self._rng_private = None
         self._writers = writers
+
+    @property
+    def _rng(self):
+        return self._rng_private
+
+    @_rng.setter
+    def _rng(self, value):
+        self._rng_private = value
+        for writer in self._writers:
+            writer._rng = value
 
     def _empty(self):
         raise NotImplementedError

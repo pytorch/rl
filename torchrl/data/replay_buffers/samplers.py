@@ -46,6 +46,9 @@ class Sampler(ABC):
     # need to keep track of the number of remaining batches
     _remaining_batches = int(torch.iinfo(torch.int64).max)
 
+    # The RNG is set by the replay buffer
+    _rng: torch.Generator | None = None
+
     @abstractmethod
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         ...
@@ -192,7 +195,9 @@ class SamplerWithoutReplacement(Sampler):
             device = storage.device if hasattr(storage, "device") else None
 
         if self.shuffle:
-            _sample_list = torch.randperm(len_storage, device=device)
+            _sample_list = torch.randperm(
+                len_storage, device=device, generator=self._rng
+            )
         else:
             _sample_list = torch.arange(len_storage, device=device)
         self._sample_list = _sample_list
@@ -473,7 +478,11 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError("non-positive p_min")
         # For some undefined reason, only np.random works here.
         # All PT attempts fail, even when subsequently transformed into numpy
-        mass = np.random.uniform(0.0, p_sum, size=batch_size)
+        if self._rng is None:
+            mass = np.random.uniform(0.0, p_sum, size=batch_size)
+        else:
+            mass = torch.rand(batch_size, generator=self._rng) * p_sum
+
         # mass = torch.zeros(batch_size, dtype=torch.double).uniform_(0.0, p_sum)
         # mass = torch.rand(batch_size).mul_(p_sum)
         index = self._sum_tree.scan_lower_bound(mass)
@@ -1187,7 +1196,9 @@ class SliceSampler(Sampler):
         # start_idx and stop_idx are 2d tensors organized like a non-zero
 
         def get_traj_idx(maxval):
-            return torch.randint(maxval, (num_slices,), device=lengths.device)
+            return torch.randint(
+                maxval, (num_slices,), device=lengths.device, generator=self._rng
+            )
 
         if (lengths < seq_length).any():
             if self.strict_length:
@@ -1290,7 +1301,8 @@ class SliceSampler(Sampler):
             start_point = -span_right
 
         relative_starts = (
-            torch.rand(num_slices, device=lengths.device) * (end_point - start_point)
+            torch.rand(num_slices, device=lengths.device, generator=self._rng)
+            * (end_point - start_point)
         ).floor().to(start_idx.dtype) + start_point
 
         if self.span[0]:
@@ -2033,6 +2045,7 @@ class SamplerEnsemble(Sampler):
     def __init__(
         self, *samplers, p=None, sample_from_all=False, num_buffer_sampled=None
     ):
+        self._rng_private = None
         self._samplers = samplers
         self.sample_from_all = sample_from_all
         if sample_from_all and p is not None:
@@ -2041,6 +2054,16 @@ class SamplerEnsemble(Sampler):
             )
         self.p = p
         self.num_buffer_sampled = num_buffer_sampled
+
+    @property
+    def _rng(self):
+        return self._rng_private
+
+    @_rng.setter
+    def _rng(self, value):
+        self._rng_private = value
+        for sampler in self._samplers:
+            sampler._rng = value
 
     @property
     def p(self):
@@ -2082,7 +2105,9 @@ class SamplerEnsemble(Sampler):
         else:
             if self.p is None:
                 buffer_ids = torch.randint(
-                    len(self._samplers), (self.num_buffer_sampled,)
+                    len(self._samplers),
+                    (self.num_buffer_sampled,),
+                    generator=self._rng,
                 )
             else:
                 buffer_ids = torch.multinomial(self.p, self.num_buffer_sampled, True)
