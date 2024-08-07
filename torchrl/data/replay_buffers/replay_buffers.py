@@ -331,9 +331,12 @@ class ReplayBuffer:
         self._sampler = sampler
         return prev_sampler
 
-    def __len__(self) -> int:
+    def _len(self):
         with self._replay_lock:
             return len(self._storage)
+
+    def __len__(self) -> int:
+        return self._len()
 
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose
@@ -1466,11 +1469,10 @@ class RemoteReplayBuffer(ReplayBuffer):
     def sample(
         self,
         batch_size: int | None = None,
-        include_info: bool = None,
         return_info: bool = False,
     ) -> TensorDictBase:
         return super().sample(
-            batch_size=batch_size, include_info=include_info, return_info=return_info
+            batch_size=batch_size, return_info=return_info
         )
 
     def add(self, data: TensorDictBase) -> int:
@@ -1488,7 +1490,9 @@ class RemoteReplayBuffer(ReplayBuffer):
         return super().update_tensordict_priority(data)
 
     def __len__(self):
-        return super().__len__()
+        return self._len()
+    def _len(self):
+        return super()._len()
 
     def __iter__(self):
         return super().__iter__()

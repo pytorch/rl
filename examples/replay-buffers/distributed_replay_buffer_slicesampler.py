@@ -136,12 +136,12 @@ class TrainerNode:
             torchrl_logger.info(f"[{self.id}] Training Iteration: {iteration}")
             # # Wait until the buffer has elements
             time.sleep(3)
-            # while not rpc.rpc_sync(
-            #     self.replay_buffer.owner(),
-            #     ReplayBufferNode.__len__,
-            #     args=(self.replay_buffer,)
-            # ):
-            #     continue
+            while not rpc.rpc_sync(
+                self.replay_buffer.owner(),
+                ReplayBufferNode.__len__,
+                args=(self.replay_buffer,)
+            ):
+                continue
 
             batch = rpc.rpc_sync(
                 self.replay_buffer.owner(),
