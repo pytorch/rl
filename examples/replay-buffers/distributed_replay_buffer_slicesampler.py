@@ -6,11 +6,11 @@ To launch this script, run
 
 ```bash
 $ # In terminal0: Trainer node
-$ python examples/replay-buffers/distributed_replay_buffer_slicesampler.py -- rank=0
+$ python examples/replay-buffers/distributed_replay_buffer_slicesampler.py --rank=0
 $ # In terminal1: Replay buffer node
-$ python examples/replay-buffers/distributed_replay_buffer_slicesampler.py -- rank=1
+$ python examples/replay-buffers/distributed_replay_buffer_slicesampler.py --rank=1
 $ # In terminal2 to N: Collector nodes
-$ python examples/replay-buffers/distributed_replay_buffer_slicesampler.py -- rank=2
+$ python examples/replay-buffers/distributed_replay_buffer_slicesampler.py --rank=2
 
 ```
 """
@@ -138,6 +138,7 @@ class TrainerNode:
             while not rpc.rpc_sync(
                 self.replay_buffer.owner(),
                 ReplayBufferNode.__len__,
+                args=(self.replay_buffer,)
             ):
                 continue
 
