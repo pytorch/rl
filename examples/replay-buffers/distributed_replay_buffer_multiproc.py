@@ -55,7 +55,7 @@ def main(rank):
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
-        torchrl_logger.info(f"Initialised Trainer Node {rank}")
+        torchrl_logger.info(f"Initialised {TRAINER_NODE}")
         trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
         trainer.train(100)
     elif rank == 1:
@@ -68,18 +68,18 @@ def main(rank):
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
-        torchrl_logger.info(f"Initialised RB Node {rank}")
+        torchrl_logger.info(f"Initialised {REPLAY_BUFFER_NODE}")
     else:
         # rank 2+ is a new data collector node
         # data collectors also wait passively for construction instructions from trainer node
-        torchrl_logger.info(f"Init RPC on {rank} collector node")
+        torchrl_logger.info(f"Init RPC on DataCollector{rank}")
         rpc.init_rpc(
             f"DataCollector{rank}",
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
-        torchrl_logger.info(f"Initialised DC Node {rank}")
+        torchrl_logger.info(f"Initialised DataCollector{rank}")
     rpc.shutdown()
 
 if __name__ == "__main__":
