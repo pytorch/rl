@@ -33,14 +33,13 @@ from torch import multiprocessing as mp
 REPLAY_BUFFER_NODE = "ReplayBuffer"
 TRAINER_NODE = "Trainer"
 
-
 def main(rank):
     torchrl_logger.info(f"Rank: {rank}")
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29501"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    str_init_method = "tcp://localhost:10001"
+    str_init_method = "tcp://localhost:10000"
 
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16, init_method=str_init_method
@@ -71,7 +70,7 @@ def main(rank):
         )
         torchrl_logger.info(f"Initialised RB Node {rank}")
         breakpoint()
-    elif rank >= 2:
+    else:
         # rank 2+ is a new data collector node
         # data collectors also wait passively for construction instructions from trainer node
         torchrl_logger.info(f"Init RPC on {rank} collector node")
@@ -83,8 +82,6 @@ def main(rank):
         )
         torchrl_logger.info(f"Initialised DC Node {rank}")
         breakpoint()
-    else:
-        sys.exit(1)
     rpc.shutdown()
 
 if __name__ == "__main__":
@@ -93,5 +90,6 @@ if __name__ == "__main__":
     for i in range(3):
         procs.append(ctx.Process(target=main, args=(i,)))
         procs[-1].start()
+
     for p in procs:
         p.join()
