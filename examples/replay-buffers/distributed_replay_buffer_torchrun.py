@@ -15,17 +15,11 @@ updates to any required models.
 To launch this script, run
 
 ```bash
-$ # In terminal0: Trainer node
-$ python examples/replay-buffers/distributed_replay_buffer.py --rank=0
-$ # In terminal1: Replay buffer node
-$ python examples/replay-buffers/distributed_replay_buffer.py --rank=1
-$ # In terminal2 to N: Collector nodes
-$ python examples/replay-buffers/distributed_replay_buffer.py --rank=2
-
+$ torchrun examples/replay-buffers/distributed_replay_buffer_torchrun.py --nnodes=1
 ```
+
 """
 
-from distributed_rb_utils import TrainerNode, CollectorNode, ReplayBufferNode
 import argparse
 import os
 import random
@@ -43,28 +37,14 @@ from torchrl.data.replay_buffers import RemoteReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from distributed_rb_utils import TrainerNode, CollectorNode, ReplayBufferNode
 
 REPLAY_BUFFER_NODE = "ReplayBuffer"
 TRAINER_NODE = "Trainer"
 
-parser = argparse.ArgumentParser(
-    description="RPC Replay Buffer Example",
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-)
-
-parser.add_argument(
-    "--rank",
-    type=int,
-    default=-1,
-    help="Node Rank [0 = Replay Buffer, 1 = Dummy Trainer, 2+ = Dummy Data Collector]",
-)
-
-
-
 if __name__ == "__main__":
 
-    args = parser.parse_args()
-    rank = args.rank
+    rank = int(os.environ["LOCAL_RANK"])
     torchrl_logger.info(f"Rank: {rank}")
 
     os.environ["MASTER_ADDR"] = "localhost"
@@ -74,6 +54,7 @@ if __name__ == "__main__":
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16, init_method=str_init_method
     )
+
     if rank == 0:
         # rank 0 is the trainer
         rpc.init_rpc(

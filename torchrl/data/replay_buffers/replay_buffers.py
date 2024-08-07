@@ -1456,6 +1456,7 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
     def __iter__(self):
         return super().__iter__()
 
+
 @accept_remote_rref_udf_invocation
 class RemoteReplayBuffer(ReplayBuffer):
     """A remote invocation friendly ReplayBuffer class. Public methods can be invoked by remote agents using `torch.rpc` or called locally as normal."""
@@ -1468,9 +1469,7 @@ class RemoteReplayBuffer(ReplayBuffer):
         batch_size: int | None = None,
         return_info: bool = False,
     ) -> TensorDictBase:
-        return super().sample(
-            batch_size=batch_size, return_info=return_info
-        )
+        return super().sample(batch_size=batch_size, return_info=return_info)
 
     def add(self, data: TensorDictBase) -> int:
         return super().add(data)
@@ -1491,6 +1490,7 @@ class RemoteReplayBuffer(ReplayBuffer):
 
     def __iter__(self):
         return super().__iter__()
+
 
 class InPlaceSampler:
     """A sampler to write tennsordicts in-place.

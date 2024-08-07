@@ -14,10 +14,11 @@ from .checkpointers import (
 )
 from .replay_buffers import (
     PrioritizedReplayBuffer,
+    RemoteReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
-    TensorDictPrioritizedReplayBuffer,RemoteReplayBuffer,
+    TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
 from .samplers import (
