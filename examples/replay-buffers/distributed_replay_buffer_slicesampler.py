@@ -138,7 +138,7 @@ class TrainerNode:
             time.sleep(3)
             while not rpc.rpc_sync(
                 self.replay_buffer.owner(),
-                ReplayBufferNode.__len__,
+                ReplayBufferNode._len,
                 args=(self.replay_buffer,)
             ):
                 continue
