@@ -166,11 +166,14 @@ class TrainerNode:
             for retry in range(RETRY_LIMIT):
                 try:
                     connect(n, retry)
+                    break
                 except Exception as e:
                     torchrl_logger.info(
                         f"Failed to connect to DataCollector{n} with {retry} retries (err={e})"
                     )
                     time.sleep(RETRY_DELAY_SECS)
+            else:
+                raise Exception
 
 
 class ReplayBufferNode(RemoteReplayBuffer):

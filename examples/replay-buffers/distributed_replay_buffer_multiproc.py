@@ -60,6 +60,7 @@ def main(rank):
         torchrl_logger.info(f"Initialised {TRAINER_NODE}")
         trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
         trainer.train(100)
+        rpc.shutdown()
     elif rank == 1:
         # rank 1 is the replay buffer
         # replay buffer waits passively for construction instructions from trainer node
@@ -72,6 +73,7 @@ def main(rank):
             world_size=3,
         )
         torchrl_logger.info(f"Initialised {REPLAY_BUFFER_NODE}")
+        rpc.shutdown()
     else:
         # rank 2+ is a new data collector node
         # data collectors also wait passively for construction instructions from trainer node
@@ -84,8 +86,7 @@ def main(rank):
             world_size=3,
         )
         torchrl_logger.info(f"Initialised DataCollector{rank}")
-    time.sleep(10)
-    rpc.shutdown()
+        rpc.shutdown()
 
 if __name__ == "__main__":
     ctx = mp.get_context("spawn")
