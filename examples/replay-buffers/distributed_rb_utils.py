@@ -128,14 +128,17 @@ class TrainerNode:
             # Process the sample here: forward, backward, ...
 
     def _create_replay_buffer(self) -> rpc.RRef:
+        def connect():
+            replay_buffer_info = rpc.get_worker_info(self.replay_buffer_node)
+            buffer_rref = rpc.remote(
+                replay_buffer_info, ReplayBufferNode, args=(10000,)
+            )
+            torchrl_logger.info(f"Connected to replay buffer {replay_buffer_info}")
+            return buffer_rref
+
         while True:
             try:
-                replay_buffer_info = rpc.get_worker_info(self.replay_buffer_node)
-                buffer_rref = rpc.remote(
-                    replay_buffer_info, ReplayBufferNode, args=(10000,)
-                )
-                torchrl_logger.info(f"Connected to replay buffer {replay_buffer_info}")
-                return buffer_rref
+                return connect()
             except Exception as e:
                 torchrl_logger.info(f"Failed to connect to replay buffer: {e}")
                 time.sleep(RETRY_DELAY_SECS)
@@ -146,11 +149,11 @@ class TrainerNode:
         data_collectors = []
         data_collector_infos = []
         # discover launched data collector nodes (with retry to allow collectors to dynamically join)
-        def connect(n):
+        def connect(n, retry):
             data_collector_info = rpc.get_worker_info(
                 f"DataCollector{n + 2}"  # 2, 3, 4, ...
             )
-            torchrl_logger.info(f"Data collector info: {data_collector_info}")
+            torchrl_logger.info(f"Data collector info: {data_collector_info}-retry={retry}")
             dc_ref = rpc.remote(
                 data_collector_info,
                 CollectorNode,
@@ -162,10 +165,10 @@ class TrainerNode:
         for n in range(data_collector_number):
             for retry in range(RETRY_LIMIT):
                 try:
-                    connect(n)
-                except Exception:
+                    connect(n, retry)
+                except Exception as e:
                     torchrl_logger.info(
-                        f"Failed to connect to DataCollector{n} with {retry} retries"
+                        f"Failed to connect to DataCollector{n} with {retry} retries (err={e})"
                     )
                     time.sleep(RETRY_DELAY_SECS)
 

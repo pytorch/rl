@@ -22,6 +22,7 @@ python examples/replay-buffers/distributed_replay_buffer_multiproc.py
 
 import os
 import sys
+import time
 
 import torch.distributed.rpc as rpc
 
@@ -80,6 +81,7 @@ def main(rank):
             rpc_backend_options=options,
         )
         torchrl_logger.info(f"Initialised DataCollector{rank}")
+    time.sleep(10)
     rpc.shutdown()
 
 if __name__ == "__main__":
