@@ -839,6 +839,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         env,
         from_pixels: bool = False,
         pixels_only: bool = False,
+        convert_actions_to_numpy: bool = True,
     ) -> "gym.core.Env":  # noqa: F821
         self.batch_size = self._get_batch_size(env)
 
