@@ -26,68 +26,12 @@ import time
 
 import torch.distributed.rpc as rpc
 
-from distributed_rb_utils import TrainerNode
-from torchrl._utils import logger as torchrl_logger
+from distributed_rb_utils import main
 from torch import multiprocessing as mp
 
 
 REPLAY_BUFFER_NODE = "ReplayBuffer"
 TRAINER_NODE = "Trainer"
-
-def main(rank, world_size):
-    torchrl_logger.info(f"Rank: {rank}")
-
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "29501"
-    os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    str_init_method = "tcp://localhost:10000"
-
-    options = rpc.TensorPipeRpcBackendOptions(
-        num_worker_threads=16,
-        # init_method=str_init_method
-    )
-
-    if rank == 0:
-        # rank 0 is the trainer
-        torchrl_logger.info(f"Init RPC on {TRAINER_NODE}...")
-        rpc.init_rpc(
-            TRAINER_NODE,
-            rank=rank,
-            backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
-            world_size=world_size,
-        )
-        torchrl_logger.info(f"Initialised {TRAINER_NODE}")
-        trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
-        trainer.train(100)
-        rpc.shutdown()
-    elif rank == 1:
-        # rank 1 is the replay buffer
-        # replay buffer waits passively for construction instructions from trainer node
-        torchrl_logger.info(f"Init RPC on {REPLAY_BUFFER_NODE}...")
-        rpc.init_rpc(
-            REPLAY_BUFFER_NODE,
-            rank=rank,
-            backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
-            world_size=world_size,
-        )
-        torchrl_logger.info(f"Initialised {REPLAY_BUFFER_NODE}")
-        rpc.shutdown()
-    else:
-        # rank 2+ is a new data collector node
-        # data collectors also wait passively for construction instructions from trainer node
-        torchrl_logger.info(f"Init RPC on DataCollector{rank}")
-        rpc.init_rpc(
-            f"DataCollector{rank}",
-            rank=rank,
-            backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
-            world_size=world_size,
-        )
-        torchrl_logger.info(f"Initialised DataCollector{rank}")
-        rpc.shutdown()
-    print('exiting', rank)
 
 if __name__ == "__main__":
     ctx = mp.get_context("spawn")

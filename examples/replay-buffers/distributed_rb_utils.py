@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import os
 import random
 import time
 
@@ -20,6 +21,9 @@ from torchrl.data.replay_buffers.writers import RoundRobinWriter
 
 RETRY_LIMIT = 2
 RETRY_DELAY_SECS = 3
+
+REPLAY_BUFFER_NODE = "ReplayBuffer"
+TRAINER_NODE = "Trainer"
 
 
 class CollectorNode:
@@ -145,7 +149,7 @@ class TrainerNode:
                 time.sleep(RETRY_DELAY_SECS)
 
     def _create_and_launch_data_collectors(self) -> None:
-        data_collector_number = self.world_size-2
+        data_collector_number = self.world_size - 2
         self.data_collectors = []
         self.data_collector_infos = []
         # discover launched data collector nodes (with retry to allow collectors to dynamically join)
@@ -153,7 +157,9 @@ class TrainerNode:
             data_collector_info = rpc.get_worker_info(
                 f"DataCollector{n + 2}"  # 2, 3, 4, ...
             )
-            torchrl_logger.info(f"Data collector info: {data_collector_info}-retry={retry}")
+            torchrl_logger.info(
+                f"Data collector info: {data_collector_info}-retry={retry}"
+            )
             dc_ref = rpc.remote(
                 data_collector_info,
                 CollectorNode,
@@ -174,7 +180,9 @@ class TrainerNode:
                     time.sleep(RETRY_DELAY_SECS)
             else:
                 raise Exception
-        for collector, data_collector_info in zip(self.data_collectors, self.data_collector_infos):
+        for collector, data_collector_info in zip(
+            self.data_collectors, self.data_collector_infos
+        ):
             rpc.remote(
                 data_collector_info,
                 CollectorNode.collect,
@@ -201,3 +209,58 @@ class ReplayBufferNode(RemoteReplayBuffer):
             writer=RoundRobinWriter(),
             batch_size=32,
         )
+
+
+def main(rank, world_size, **tensorpipe_kwargs):
+    torchrl_logger.info(f"Rank: {rank}")
+
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "29500"
+    os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
+    #
+
+    options = rpc.TensorPipeRpcBackendOptions(
+        num_worker_threads=16, **tensorpipe_kwargs
+    )
+
+    if rank == 0:
+        # rank 0 is the trainer
+        torchrl_logger.info(f"Init RPC on {TRAINER_NODE}...")
+        rpc.init_rpc(
+            TRAINER_NODE,
+            rank=rank,
+            backend=rpc.BackendType.TENSORPIPE,
+            rpc_backend_options=options,
+            world_size=world_size,
+        )
+        torchrl_logger.info(f"Initialised {TRAINER_NODE}")
+        trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
+        trainer.train(100)
+        rpc.shutdown()
+    elif rank == 1:
+        # rank 1 is the replay buffer
+        #  replay buffer waits passively for construction instructions from trainer node
+        torchrl_logger.info(f"Init RPC on {REPLAY_BUFFER_NODE}...")
+        rpc.init_rpc(
+            REPLAY_BUFFER_NODE,
+            rank=rank,
+            backend=rpc.BackendType.TENSORPIPE,
+            rpc_backend_options=options,
+            world_size=world_size,
+        )
+        torchrl_logger.info(f"Initialised {REPLAY_BUFFER_NODE}")
+        rpc.shutdown()
+    else:
+        # rank 2+ is a new data collector node
+        # data collectors also wait passively for construction instructions from trainer node
+        torchrl_logger.info(f"Init RPC on DataCollector{rank}")
+        rpc.init_rpc(
+            f"DataCollector{rank}",
+            rank=rank,
+            backend=rpc.BackendType.TENSORPIPE,
+            rpc_backend_options=options,
+            world_size=world_size,
+        )
+        torchrl_logger.info(f"Initialised DataCollector{rank}")
+        rpc.shutdown()
+    print("exiting", rank)

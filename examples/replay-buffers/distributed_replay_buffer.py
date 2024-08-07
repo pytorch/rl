@@ -26,13 +26,8 @@ $ python examples/replay-buffers/distributed_replay_buffer.py --rank=2
 """
 
 import argparse
-import os
-import sys
 
-import torch.distributed.rpc as rpc
-
-from distributed_rb_utils import TrainerNode
-from torchrl._utils import logger as torchrl_logger
+from distributed_rb_utils import main
 
 REPLAY_BUFFER_NODE = "ReplayBuffer"
 TRAINER_NODE = "Trainer"
@@ -48,60 +43,13 @@ parser.add_argument(
     default=-1,
     help="Node Rank [0 = Replay Buffer, 1 = Dummy Trainer, 2+ = Dummy Data Collector]",
 )
+parser.add_argument("--world_size", type=int, default=3, help="Number of nodes/workers")
 
 
 if __name__ == "__main__":
 
     args = parser.parse_args()
     rank = args.rank
-    torchrl_logger.info(f"Rank: {rank}")
+    world_size = args.world_size
 
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "29500"
-    os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    str_init_method = "tcp://localhost:10000"
-
-    options = rpc.TensorPipeRpcBackendOptions(
-        num_worker_threads=16, init_method=str_init_method
-    )
-
-    if rank == 0:
-        # rank 0 is the trainer
-        torchrl_logger.info(f"Init RPC on {TRAINER_NODE}...")
-        rpc.init_rpc(
-            TRAINER_NODE,
-            rank=rank,
-            backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
-        )
-        torchrl_logger.info(f"Initialised Trainer Node {rank}")
-        trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
-        trainer.train(100)
-        breakpoint()
-    elif rank == 1:
-        # rank 1 is the replay buffer
-        # replay buffer waits passively for construction instructions from trainer node
-        torchrl_logger.info(f"Init RPC on {REPLAY_BUFFER_NODE}...")
-        rpc.init_rpc(
-            REPLAY_BUFFER_NODE,
-            rank=rank,
-            backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
-        )
-        torchrl_logger.info(f"Initialised RB Node {rank}")
-        breakpoint()
-    elif rank >= 2:
-        # rank 2+ is a new data collector node
-        # data collectors also wait passively for construction instructions from trainer node
-        torchrl_logger.info(f"Init RPC on {rank} collector node")
-        rpc.init_rpc(
-            f"DataCollector{rank}",
-            rank=rank,
-            backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
-        )
-        torchrl_logger.info(f"Initialised DC Node {rank}")
-        breakpoint()
-    else:
-        sys.exit(1)
-    rpc.shutdown()
+    main(rank, world_size, str_init_method="tcp://localhost:10000")
