@@ -141,43 +141,32 @@ class TrainerNode:
                 time.sleep(RETRY_DELAY_SECS)
 
     def _create_and_launch_data_collectors(self) -> None:
-        data_collector_number = 2
+        data_collector_number = 1
         retries = 0
         data_collectors = []
         data_collector_infos = []
         # discover launched data collector nodes (with retry to allow collectors to dynamically join)
-        while True:
-            try:
-                data_collector_info = rpc.get_worker_info(
-                    f"DataCollector{data_collector_number}"
-                )
-                torchrl_logger.info(f"Data collector info: {data_collector_info}")
-                dc_ref = rpc.remote(
-                    data_collector_info,
-                    CollectorNode,
-                    args=(self.replay_buffer,),
-                )
-                data_collectors.append(dc_ref)
-                data_collector_infos.append(data_collector_info)
-                data_collector_number += 1
-                retries = 0
-            except Exception:
-                retries += 1
-                torchrl_logger.info(
-                    f"Failed to connect to DataCollector{data_collector_number} with {retries} retries"
-                )
-                if retries >= RETRY_LIMIT:
-                    torchrl_logger.info(f"{len(data_collectors)} data collectors")
-                    for data_collector_info, data_collector in zip(
-                        data_collector_infos, data_collectors
-                    ):
-                        rpc.remote(
-                            data_collector_info,
-                            CollectorNode.collect,
-                            args=(data_collector,),
-                        )
-                    break
-                else:
+        def connect(n):
+            data_collector_info = rpc.get_worker_info(
+                f"DataCollector{n + 2}"  # 2, 3, 4, ...
+            )
+            torchrl_logger.info(f"Data collector info: {data_collector_info}")
+            dc_ref = rpc.remote(
+                data_collector_info,
+                CollectorNode,
+                args=(self.replay_buffer,),
+            )
+            data_collectors.append(dc_ref)
+            data_collector_infos.append(data_collector_info)
+
+        for n in range(data_collector_number):
+            for retry in range(RETRY_LIMIT):
+                try:
+                    connect(n)
+                except Exception:
+                    torchrl_logger.info(
+                        f"Failed to connect to DataCollector{n} with {retry} retries"
+                    )
                     time.sleep(RETRY_DELAY_SECS)
 
 
