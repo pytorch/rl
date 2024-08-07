@@ -107,7 +107,7 @@ class TrainerNode:
 
     def train(self, iterations: int) -> None:
         """Write your training loop here."""
-        for iteration in tqdm.tqdm(iterations):
+        for iteration in tqdm.tqdm(range(iterations)):
             torchrl_logger.info(f"[{self.id}] Training Iteration: {iteration}")
             # # Wait until the buffer has elements
             while not rpc.rpc_sync(
