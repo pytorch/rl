@@ -884,7 +884,7 @@ It is important that your environment specs match the input and output that it s
 :class:`~torchrl.envs.ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
 Check the :func:`torchrl.envs.utils.check_env_specs` method for a sanity check.
 
-If needed, specs can be automacially generated from data using the :func:`~torchrl.envs.utils.make_composite_from_td`
+If needed, specs can be automatially generated from data using the :func:`~torchrl.envs.utils.make_composite_from_td`
 function.
 
 Specs fall in two main categories, numerical and categorical.
@@ -899,18 +899,18 @@ Specs fall in two main categories, numerical and categorical.
   | BoundedDiscrete | BoundedContinuous | UnboundedDiscrete | UnboundedContinuous |
   +-----------------+-------------------+-------------------+---------------------+
 
-.. table:: Categorical TensorSpec subclasses.
-
-  +------------------------------------------------------------------+
-  | Categorical                                                      |                                                                                        |
-  +========+=============+=============+==================+==========+
-  | OneHot | MultiOneHot | Categorical | MultiCategorical | Binary   |
-  +--------+-------------+-------------+------------------+----------+
-
 Whenever a :class:`~torchrl.data.Bounded` instance is created, its domain (defined either implicitly by its dtype or
 explicitly by the `"domain"` keyword argument) will determine if the instantiated class will be of :class:`~torchrl.data.BoundedContinuous`
 or :class:`~torchrl.data.BoundedDiscrete` type. The same applies to the :class:`~torchrl.data.Unbounded` class.
 See these classes for further information.
+
+.. table:: Categorical TensorSpec subclasses.
+
+  +------------------------------------------------------------------+
+  | Categorical                                                      |
+  +========+=============+=============+==================+==========+
+  | OneHot | MultiOneHot | Categorical | MultiCategorical | Binary   |
+  +--------+-------------+-------------+------------------+----------+
 
 Unlike ``gymnasium``, TorchRL does not have the concept of an arbitrary list of specs. If multiple specs have to be
 combined together, TorchRL assumes that the data will be presented as dictionaries (more specifically, as
