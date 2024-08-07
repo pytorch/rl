@@ -15,7 +15,7 @@ updates to any required models.
 To launch this script, run
 
 ```bash
-torchrun --rdzv-backend=c10d --rdzv-endpoint=localhost:0 --standalone --nnodes=1 --nproc-per-node=3 examples/replay-buffers/distributed_replay_buffer_torchrun.py
+python examples/replay-buffers/distributed_replay_buffer_multiproc.py
 ```
 
 """
@@ -27,19 +27,21 @@ import torch.distributed.rpc as rpc
 
 from distributed_rb_utils import TrainerNode
 from torchrl._utils import logger as torchrl_logger
+from torch import multiprocessing as mp
+
 
 REPLAY_BUFFER_NODE = "ReplayBuffer"
 TRAINER_NODE = "Trainer"
 
-if __name__ == "__main__":
 
-    rank = int(os.environ["LOCAL_RANK"])
+def main(rank):
     torchrl_logger.info(f"Rank: {rank}")
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
     str_init_method = "tcp://localhost:10000"
+
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16, init_method=str_init_method
     )
@@ -84,3 +86,12 @@ if __name__ == "__main__":
     else:
         sys.exit(1)
     rpc.shutdown()
+
+if __name__ == "__main__":
+    ctx = mp.current_context()
+    procs = []
+    for i in range(3):
+        procs.append(ctx.Process(target=main, args=(i,)))
+        procs[-1].start()
+    for p in procs:
+        p.join()

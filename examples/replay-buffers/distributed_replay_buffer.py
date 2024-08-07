@@ -60,11 +60,14 @@ if __name__ == "__main__":
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
     str_init_method = "tcp://localhost:10000"
+
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16, init_method=str_init_method
     )
+
     if rank == 0:
         # rank 0 is the trainer
+        torchrl_logger.info(f"Init RPC on {TRAINER_NODE}...")
         rpc.init_rpc(
             TRAINER_NODE,
             rank=rank,
@@ -72,13 +75,13 @@ if __name__ == "__main__":
             rpc_backend_options=options,
         )
         torchrl_logger.info(f"Initialised Trainer Node {rank}")
-        trainer = TrainerNode()
+        trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
         trainer.train(100)
         breakpoint()
     elif rank == 1:
         # rank 1 is the replay buffer
         # replay buffer waits passively for construction instructions from trainer node
-        torchrl_logger.info(REPLAY_BUFFER_NODE)
+        torchrl_logger.info(f"Init RPC on {REPLAY_BUFFER_NODE}...")
         rpc.init_rpc(
             REPLAY_BUFFER_NODE,
             rank=rank,
@@ -90,6 +93,7 @@ if __name__ == "__main__":
     elif rank >= 2:
         # rank 2+ is a new data collector node
         # data collectors also wait passively for construction instructions from trainer node
+        torchrl_logger.info(f"Init RPC on {rank} collector node")
         rpc.init_rpc(
             f"DataCollector{rank}",
             rank=rank,
