@@ -172,7 +172,7 @@ class GymLikeEnv(_EnvWrapper):
     def __new__(cls, *args, **kwargs):
         self = super().__new__(cls, *args, _batch_locked=True, **kwargs)
         self._info_dict_reader = []
-        self._convert_actions_to_numpy = kwargs.pop('convert_actions_to_numpy', True)
+        self._convert_actions_to_numpy = kwargs.pop("convert_actions_to_numpy", True)
 
         return self
 
@@ -303,7 +303,7 @@ class GymLikeEnv(_EnvWrapper):
                 truncated,
                 done,
                 info_dict,
-            ) = self._output_transform(self._env.step(action_np))
+            ) = self._output_transform(self._env.step(action))
 
             if _reward is not None:
                 reward = reward + _reward
