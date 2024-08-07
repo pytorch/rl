@@ -38,7 +38,7 @@ def main(rank):
     torchrl_logger.info(f"Rank: {rank}")
 
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "29500"
+    os.environ["MASTER_PORT"] = "29501"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
     str_init_method = "tcp://localhost:10001"
 
