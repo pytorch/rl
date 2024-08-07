@@ -523,8 +523,7 @@ def accept_remote_rref_udf_invocation(decorated_class):
         "__len__",
     }
 
-    for name in inspect.getmembers(decorated_class):
-        method = getattr(decorated_class, name)
+    for name, method in inspect.getmembers(decorated_class):
         if callable(method) and (
             not name.startswith("_") or name in __allowed_methods__
         ):

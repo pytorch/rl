@@ -25,7 +25,6 @@ $ python examples/replay-buffers/distributed_replay_buffer.py --rank=2
 ```
 """
 
-from distributed_rb_utils import TrainerNode, CollectorNode, ReplayBufferNode
 import argparse
 import os
 import random
@@ -34,11 +33,9 @@ import time
 
 import torch
 import torch.distributed.rpc as rpc
+from distributed_rb_utils import CollectorNode, ReplayBufferNode, TrainerNode
 from tensordict import TensorDict
-from torchrl._utils import (
-    accept_remote_rref_invocation,
-    logger as torchrl_logger,
-)
+from torchrl._utils import accept_remote_rref_invocation, logger as torchrl_logger
 from torchrl.data.replay_buffers import RemoteReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -58,7 +55,6 @@ parser.add_argument(
     default=-1,
     help="Node Rank [0 = Replay Buffer, 1 = Dummy Trainer, 2+ = Dummy Data Collector]",
 )
-
 
 
 if __name__ == "__main__":
