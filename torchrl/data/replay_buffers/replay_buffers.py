@@ -1450,6 +1450,10 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
         return super().update_tensordict_priority(data)
 
+    def __len__(self):
+        return super().__len__()
+    def __iter__(self):
+        return super().__iter__()
 
 class InPlaceSampler:
     """A sampler to write tennsordicts in-place.
