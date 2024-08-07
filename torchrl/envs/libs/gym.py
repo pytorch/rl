@@ -645,7 +645,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`~.reset` is called.
             Defaults to ``False``.
-
+        convert_actions_to_numpy (bool, optional): if ``True``, actions will be 
+            converted from tensors to numpy arrays and moved to CPU before being passed to the 
+            env step function. Set this to ``False`` if the environment is evaluated 
+            on GPU, such as IsaacLab.
+            Defaults to ``True``.
+            
     Attributes:
         available_envs (List[str]): a list of environments to build.
 

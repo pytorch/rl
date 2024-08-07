@@ -172,6 +172,8 @@ class GymLikeEnv(_EnvWrapper):
     def __new__(cls, *args, **kwargs):
         self = super().__new__(cls, *args, _batch_locked=True, **kwargs)
         self._info_dict_reader = []
+        self._convert_actions_to_numpy = kwargs.pop('convert_actions_to_numpy', True)
+
         return self
 
     def read_action(self, action):
@@ -289,7 +291,8 @@ class GymLikeEnv(_EnvWrapper):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
-        action_np = self.read_action(action)
+        if self._convert_actions_to_numpy:
+            action = self.read_action(action)
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
