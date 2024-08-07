@@ -9,6 +9,7 @@ import time
 
 import torch
 import torch.distributed.rpc as rpc
+import tqdm
 from tensordict import TensorDict
 
 from torchrl._utils import accept_remote_rref_invocation, logger as torchrl_logger
@@ -97,15 +98,16 @@ class CollectorNode:
 class TrainerNode:
     """Trainer node responsible for learning from experiences sampled from an experience replay buffer."""
 
-    def __init__(self) -> None:
+    def __init__(self, replay_buffer_node="ReplayBuffer") -> None:
         torchrl_logger.info("TrainerNode")
         self.id = rpc.get_worker_info().id
         self.replay_buffer = self._create_replay_buffer()
         self._create_and_launch_data_collectors()
+        self.replay_buffer_node = replay_buffer_node
 
     def train(self, iterations: int) -> None:
         """Write your training loop here."""
-        for iteration in range(iterations):
+        for iteration in tqdm.tqdm(iterations):
             torchrl_logger.info(f"[{self.id}] Training Iteration: {iteration}")
             # # Wait until the buffer has elements
             while not rpc.rpc_sync(
@@ -128,7 +130,7 @@ class TrainerNode:
     def _create_replay_buffer(self) -> rpc.RRef:
         while True:
             try:
-                replay_buffer_info = rpc.get_worker_info(REPLAY_BUFFER_NODE)
+                replay_buffer_info = rpc.get_worker_info(self.replay_buffer_node)
                 buffer_rref = rpc.remote(
                     replay_buffer_info, ReplayBufferNode, args=(10000,)
                 )

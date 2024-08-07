@@ -15,7 +15,7 @@ updates to any required models.
 To launch this script, run
 
 ```bash
-$ torchrun examples/replay-buffers/distributed_replay_buffer_torchrun.py --nnodes=1
+torchrun --rdzv-backend=c10d --rdzv-endpoint=localhost:0 --standalone --nnodes=1 --nproc-per-node=3 examples/replay-buffers/distributed_replay_buffer_torchrun.py
 ```
 
 """
@@ -53,7 +53,7 @@ if __name__ == "__main__":
             rpc_backend_options=options,
         )
         torchrl_logger.info(f"Initialised Trainer Node {rank}")
-        trainer = TrainerNode()
+        trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
         trainer.train(100)
         breakpoint()
     elif rank == 1:
