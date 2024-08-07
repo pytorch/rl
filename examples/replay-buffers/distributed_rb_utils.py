@@ -98,8 +98,9 @@ class CollectorNode:
 class TrainerNode:
     """Trainer node responsible for learning from experiences sampled from an experience replay buffer."""
 
-    def __init__(self, replay_buffer_node="ReplayBuffer") -> None:
+    def __init__(self, replay_buffer_node="ReplayBuffer", world_size=3) -> None:
         self.replay_buffer_node = replay_buffer_node
+        self.world_size = world_size
         torchrl_logger.info("TrainerNode")
         self.id = rpc.get_worker_info().id
         self.replay_buffer = self._create_replay_buffer()
@@ -144,10 +145,9 @@ class TrainerNode:
                 time.sleep(RETRY_DELAY_SECS)
 
     def _create_and_launch_data_collectors(self) -> None:
-        data_collector_number = 1
-        retries = 0
-        data_collectors = []
-        data_collector_infos = []
+        data_collector_number = self.world_size-2
+        self.data_collectors = []
+        self.data_collector_infos = []
         # discover launched data collector nodes (with retry to allow collectors to dynamically join)
         def connect(n, retry):
             data_collector_info = rpc.get_worker_info(
@@ -159,8 +159,8 @@ class TrainerNode:
                 CollectorNode,
                 args=(self.replay_buffer,),
             )
-            data_collectors.append(dc_ref)
-            data_collector_infos.append(data_collector_info)
+            self.data_collectors.append(dc_ref)
+            self.data_collector_infos.append(data_collector_info)
 
         for n in range(data_collector_number):
             for retry in range(RETRY_LIMIT):
@@ -174,6 +174,12 @@ class TrainerNode:
                     time.sleep(RETRY_DELAY_SECS)
             else:
                 raise Exception
+        for collector, data_collector_info in zip(self.data_collectors, self.data_collector_infos):
+            rpc.remote(
+                data_collector_info,
+                CollectorNode.collect,
+                args=(collector,),
+            )
 
 
 class ReplayBufferNode(RemoteReplayBuffer):

@@ -34,7 +34,7 @@ from torch import multiprocessing as mp
 REPLAY_BUFFER_NODE = "ReplayBuffer"
 TRAINER_NODE = "Trainer"
 
-def main(rank):
+def main(rank, world_size):
     torchrl_logger.info(f"Rank: {rank}")
 
     os.environ["MASTER_ADDR"] = "localhost"
@@ -55,7 +55,7 @@ def main(rank):
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
-            world_size=3,
+            world_size=world_size,
         )
         torchrl_logger.info(f"Initialised {TRAINER_NODE}")
         trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
@@ -70,7 +70,7 @@ def main(rank):
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
-            world_size=3,
+            world_size=world_size,
         )
         torchrl_logger.info(f"Initialised {REPLAY_BUFFER_NODE}")
         rpc.shutdown()
@@ -83,16 +83,18 @@ def main(rank):
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
-            world_size=3,
+            world_size=world_size,
         )
         torchrl_logger.info(f"Initialised DataCollector{rank}")
         rpc.shutdown()
+    print('exiting', rank)
 
 if __name__ == "__main__":
     ctx = mp.get_context("spawn")
     procs = []
-    for i in range(3):
-        procs.append(ctx.Process(target=main, args=(i,)))
+    world_size = 3
+    for i in range(world_size):
+        procs.append(ctx.Process(target=main, args=(i, world_size)))
         procs[-1].start()
 
     for p in reversed(procs):
