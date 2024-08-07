@@ -42,7 +42,8 @@ def main(rank):
     str_init_method = "tcp://localhost:10000"
 
     options = rpc.TensorPipeRpcBackendOptions(
-        num_worker_threads=16, init_method=str_init_method
+        num_worker_threads=16,
+        init_method=str_init_method
     )
 
     if rank == 0:
@@ -57,7 +58,6 @@ def main(rank):
         torchrl_logger.info(f"Initialised Trainer Node {rank}")
         trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
         trainer.train(100)
-        breakpoint()
     elif rank == 1:
         # rank 1 is the replay buffer
         # replay buffer waits passively for construction instructions from trainer node
@@ -69,7 +69,6 @@ def main(rank):
             rpc_backend_options=options,
         )
         torchrl_logger.info(f"Initialised RB Node {rank}")
-        breakpoint()
     else:
         # rank 2+ is a new data collector node
         # data collectors also wait passively for construction instructions from trainer node
@@ -81,7 +80,6 @@ def main(rank):
             rpc_backend_options=options,
         )
         torchrl_logger.info(f"Initialised DC Node {rank}")
-        breakpoint()
     rpc.shutdown()
 
 if __name__ == "__main__":
@@ -91,5 +89,5 @@ if __name__ == "__main__":
         procs.append(ctx.Process(target=main, args=(i,)))
         procs[-1].start()
 
-    for p in procs:
+    for p in reversed(procs):
         p.join()
