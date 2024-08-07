@@ -46,6 +46,7 @@ if __name__ == "__main__":
 
     if rank == 0:
         # rank 0 is the trainer
+        torchrl_logger.info(f"Init RPC on {TRAINER_NODE}...")
         rpc.init_rpc(
             TRAINER_NODE,
             rank=rank,
@@ -59,7 +60,7 @@ if __name__ == "__main__":
     elif rank == 1:
         # rank 1 is the replay buffer
         # replay buffer waits passively for construction instructions from trainer node
-        torchrl_logger.info(REPLAY_BUFFER_NODE)
+        torchrl_logger.info(f"Init RPC on {REPLAY_BUFFER_NODE}...")
         rpc.init_rpc(
             REPLAY_BUFFER_NODE,
             rank=rank,
@@ -71,6 +72,7 @@ if __name__ == "__main__":
     elif rank >= 2:
         # rank 2+ is a new data collector node
         # data collectors also wait passively for construction instructions from trainer node
+        torchrl_logger.info(f"Init RPC on {rank} collector node")
         rpc.init_rpc(
             f"DataCollector{rank}",
             rank=rank,
