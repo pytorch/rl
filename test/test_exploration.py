@@ -21,12 +21,7 @@ from torch import nn
 from torchrl._utils import _replace_last
 
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-)
+from torchrl.data import Bounded, Categorical, Composite, OneHot
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
 from torchrl.envs.utils import set_exploration_type
@@ -59,7 +54,7 @@ class TestEGreedy:
     @set_exploration_type(InteractionType.RANDOM)
     def test_egreedy(self, eps_init, module):
         torch.manual_seed(0)
-        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
+        spec = Bounded(1, 1, torch.Size([4]))
         module = torch.nn.Linear(4, 4, bias=False)
 
         policy = Actor(spec=spec, module=module)
@@ -91,9 +86,9 @@ class TestEGreedy:
         batch_size = (3, 4, 2)
         module = torch.nn.Linear(action_size, action_size, bias=False)
         if spec_class == "discrete":
-            spec = DiscreteTensorSpec(action_size)
+            spec = Categorical(action_size)
         else:
-            spec = OneHotDiscreteTensorSpec(
+            spec = OneHot(
                 action_size,
                 shape=(action_size,),
             )
@@ -166,7 +161,7 @@ class TestEGreedy:
         action_size = 4
         batch_size = (3, 4, 2)
         module = torch.nn.Linear(action_size, action_size, bias=False)
-        spec = OneHotDiscreteTensorSpec(action_size, shape=(action_size,))
+        spec = OneHot(action_size, shape=(action_size,))
         policy = QValueActor(spec=spec, module=module)
         explorative_policy = TensorDictSequential(
             policy,
@@ -187,7 +182,7 @@ class TestEGreedy:
     @pytest.mark.parametrize("module", [True, False])
     def test_wrong_action_shape(self, module):
         torch.manual_seed(0)
-        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
+        spec = Bounded(1, 1, torch.Size([4]))
         module = torch.nn.Linear(4, 5, bias=False)
 
         policy = Actor(spec=spec, module=module)
@@ -240,7 +235,7 @@ class TestOrnsteinUhlenbeckProcess:
             device
         )
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
-        action_spec = BoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
+        action_spec = Bounded(-torch.ones(d_act), torch.ones(d_act), (d_act,))
         policy = ProbabilisticActor(
             spec=action_spec,
             module=module,
@@ -444,7 +439,7 @@ class TestAdditiveGaussian:
             pytest.skip("module raises an error if given spec=None")
 
         torch.manual_seed(seed)
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(d_act, device=device),
             torch.ones(d_act, device=device),
             (d_act,),
@@ -463,9 +458,7 @@ class TestAdditiveGaussian:
                 spec=None,
             )
             policy = ProbabilisticActor(
-                spec=CompositeSpec(action=action_spec)
-                if spec_origin is not None
-                else None,
+                spec=Composite(action=action_spec) if spec_origin is not None else None,
                 module=module,
                 in_keys=["loc", "scale"],
                 distribution_class=TanhNormal,
@@ -541,7 +534,7 @@ class TestAdditiveGaussian:
             device
         )
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(d_act, device=device),
             torch.ones(d_act, device=device),
             (d_act,),
@@ -670,7 +663,7 @@ def test_gsde(
         module = SafeModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
         distribution_class = TanhNormal
         distribution_kwargs = {"low": -bound, "high": bound}
-    spec = BoundedTensorSpec(
+    spec = Bounded(
         -torch.ones(action_dim) * bound, torch.ones(action_dim) * bound, (action_dim,)
     ).to(device)
 

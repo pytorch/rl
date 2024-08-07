@@ -54,14 +54,7 @@ from tensordict.nn import NormalParamExtractor, TensorDictModule
 from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
 from torch import autograd, nn
-from torchrl.data import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
@@ -304,9 +297,9 @@ class TestDQN(LossModuleTestBase):
     ):
         # Actor
         if action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
+            action_spec = OneHot(action_dim)
         elif action_spec_type == "categorical":
-            action_spec = DiscreteTensorSpec(action_dim)
+            action_spec = Categorical(action_dim)
         # elif action_spec_type == "nd_bounded":
         #     action_spec = BoundedTensorSpec(
         #         -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -318,7 +311,7 @@ class TestDQN(LossModuleTestBase):
         if is_nn_module:
             return module.to(device)
         actor = QValueActor(
-            spec=CompositeSpec(
+            spec=Composite(
                 {
                     "action": action_spec,
                     (
@@ -349,14 +342,12 @@ class TestDQN(LossModuleTestBase):
         # Actor
         var_nums = None
         if action_spec_type == "mult_one_hot":
-            action_spec = MultiOneHotDiscreteTensorSpec(
-                [action_dim // 2, action_dim // 2]
-            )
+            action_spec = MultiOneHot([action_dim // 2, action_dim // 2])
             var_nums = action_spec.nvec
         elif action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
+            action_spec = OneHot(action_dim)
         elif action_spec_type == "categorical":
-            action_spec = DiscreteTensorSpec(action_dim)
+            action_spec = Categorical(action_dim)
         else:
             raise ValueError(f"Wrong {action_spec_type}")
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
@@ -367,7 +358,7 @@ class TestDQN(LossModuleTestBase):
         # if is_nn_module:
         #     return module
         actor = DistributionalQValueActor(
-            spec=CompositeSpec(
+            spec=Composite(
                 {
                     "action": action_spec,
                     action_value_key: None,
@@ -776,7 +767,7 @@ class TestDQN(LossModuleTestBase):
     ):
         n_obs = 3
         n_action = 4
-        action_spec = OneHotDiscreteTensorSpec(n_action)
+        action_spec = OneHot(n_action)
         module = nn.Linear(n_obs, n_action)  # a simple value model
         actor = QValueActor(
             spec=action_spec,
@@ -937,9 +928,9 @@ class TestQMixer(LossModuleTestBase):
     ):
         # Actor
         if action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
+            action_spec = OneHot(action_dim)
         elif action_spec_type == "categorical":
-            action_spec = DiscreteTensorSpec(action_dim)
+            action_spec = Categorical(action_dim)
         else:
             raise ValueError(f"Wrong {action_spec_type}")
 
@@ -1386,7 +1377,7 @@ class TestDDPG(LossModuleTestBase):
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, action_dim)
@@ -2024,7 +2015,7 @@ class TestTD3(LossModuleTestBase):
         dropout=0.0,
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Sequential(
@@ -2376,7 +2367,7 @@ class TestTD3(LossModuleTestBase):
         loss_fn = TD3Loss(
             actor,
             value,
-            action_spec=BoundedTensorSpec(shape=(n_act,), low=-1, high=1),
+            action_spec=Bounded(shape=(n_act,), low=-1, high=1),
             loss_function="l2",
             separate_losses=separate_losses,
         )
@@ -2730,7 +2721,7 @@ class TestTD3BC(LossModuleTestBase):
         dropout=0.0,
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Sequential(
@@ -3089,7 +3080,7 @@ class TestTD3BC(LossModuleTestBase):
         loss_fn = TD3BCLoss(
             actor,
             value,
-            action_spec=BoundedTensorSpec(shape=(n_act,), low=-1, high=1),
+            action_spec=Bounded(shape=(n_act,), low=-1, high=1),
             loss_function="l2",
             separate_losses=separate_losses,
         )
@@ -3456,7 +3447,7 @@ class TestSAC(LossModuleTestBase):
         action_key="action",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -3883,7 +3874,7 @@ class TestSAC(LossModuleTestBase):
         loss_fn = SACLoss(
             actor_network=actor,
             qvalue_network=qvalue,
-            action_spec=UnboundedContinuousTensorSpec(shape=(n_act,)),
+            action_spec=Unbounded(shape=(n_act,)),
             num_qvalue_nets=1,
             separate_losses=separate_losses,
         )
@@ -4287,14 +4278,14 @@ class TestSAC(LossModuleTestBase):
         loss = SACLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         state = loss.state_dict()
 
         loss = SACLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.load_state_dict(state)
 
@@ -4302,7 +4293,7 @@ class TestSAC(LossModuleTestBase):
         loss = SACLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.target_entropy
         state = loss.state_dict()
@@ -4310,7 +4301,7 @@ class TestSAC(LossModuleTestBase):
         loss = SACLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.load_state_dict(state)
 
@@ -4368,7 +4359,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         action_key="action",
     ):
         # Actor
-        action_spec = OneHotDiscreteTensorSpec(action_dim)
+        action_spec = OneHot(action_dim)
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
@@ -4954,7 +4945,7 @@ class TestCrossQ(LossModuleTestBase):
         action_key="action",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -5270,7 +5261,7 @@ class TestCrossQ(LossModuleTestBase):
         loss_fn = CrossQLoss(
             actor_network=actor,
             qvalue_network=qvalue,
-            action_spec=UnboundedContinuousTensorSpec(shape=(n_act,)),
+            action_spec=Unbounded(shape=(n_act,)),
             num_qvalue_nets=1,
             separate_losses=separate_losses,
         )
@@ -5575,14 +5566,14 @@ class TestCrossQ(LossModuleTestBase):
         loss = CrossQLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         state = loss.state_dict()
 
         loss = CrossQLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.load_state_dict(state)
 
@@ -5590,7 +5581,7 @@ class TestCrossQ(LossModuleTestBase):
         loss = CrossQLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.target_entropy
         state = loss.state_dict()
@@ -5598,7 +5589,7 @@ class TestCrossQ(LossModuleTestBase):
         loss = CrossQLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.load_state_dict(state)
 
@@ -5649,7 +5640,7 @@ class TestREDQ(LossModuleTestBase):
         action_key="action",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -6594,7 +6585,7 @@ class TestCQL(LossModuleTestBase):
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -7157,9 +7148,9 @@ class TestDiscreteCQL(LossModuleTestBase):
     ):
         # Actor
         if action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
+            action_spec = OneHot(action_dim)
         elif action_spec_type == "categorical":
-            action_spec = DiscreteTensorSpec(action_dim)
+            action_spec = Categorical(action_dim)
         else:
             raise ValueError(f"Wrong action spec type: {action_spec_type}")
 
@@ -7167,7 +7158,7 @@ class TestDiscreteCQL(LossModuleTestBase):
         if is_nn_module:
             return module.to(device)
         actor = QValueActor(
-            spec=CompositeSpec(
+            spec=Composite(
                 {
                     "action": action_spec,
                     (
@@ -7477,7 +7468,7 @@ class TestDiscreteCQL(LossModuleTestBase):
     ):
         n_obs = 3
         n_action = 4
-        action_spec = OneHotDiscreteTensorSpec(n_action)
+        action_spec = OneHot(n_action)
         module = nn.Linear(n_obs, n_action)  # a simple value model
         actor = QValueActor(
             spec=action_spec,
@@ -7552,7 +7543,7 @@ class TestPPO(LossModuleTestBase):
         sample_log_prob_key="sample_log_prob",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -7588,7 +7579,7 @@ class TestPPO(LossModuleTestBase):
 
     def _create_mock_actor_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         base_layer = nn.Linear(obs_dim, 5)
@@ -7616,7 +7607,7 @@ class TestPPO(LossModuleTestBase):
         self, batch=2, obs_dim=3, action_dim=4, device="cpu"
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         base_layer = nn.Linear(obs_dim, 5)
@@ -8443,7 +8434,7 @@ class TestA2C(LossModuleTestBase):
         sample_log_prob_key="sample_log_prob",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -9152,7 +9143,7 @@ class TestReinforce(LossModuleTestBase):
             distribution_class=TanhNormal,
             return_log_prob=True,
             in_keys=["loc", "scale"],
-            spec=UnboundedContinuousTensorSpec(n_act),
+            spec=Unbounded(n_act),
         )
         if advantage == "gae":
             advantage = GAE(
@@ -9262,7 +9253,7 @@ class TestReinforce(LossModuleTestBase):
             distribution_class=TanhNormal,
             return_log_prob=True,
             in_keys=["loc", "scale"],
-            spec=UnboundedContinuousTensorSpec(n_act),
+            spec=Unbounded(n_act),
         )
 
         loss_fn = ReinforceLoss(
@@ -9456,7 +9447,7 @@ class TestReinforce(LossModuleTestBase):
             distribution_class=TanhNormal,
             return_log_prob=True,
             in_keys=["loc", "scale"],
-            spec=UnboundedContinuousTensorSpec(n_act),
+            spec=Unbounded(n_act),
         )
         loss = ReinforceLoss(actor_network=actor_net, critic_network=value_net)
         loss.set_keys(
@@ -9632,8 +9623,8 @@ class TestDreamer(LossModuleTestBase):
             ContinuousActionConvMockEnv(pixel_shape=[3, *self.img_size])
         )
         default_dict = {
-            "state": UnboundedContinuousTensorSpec(state_dim),
-            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": Unbounded(state_dim),
+            "belief": Unbounded(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -9709,8 +9700,8 @@ class TestDreamer(LossModuleTestBase):
             ContinuousActionConvMockEnv(pixel_shape=[3, *self.img_size])
         )
         default_dict = {
-            "state": UnboundedContinuousTensorSpec(state_dim),
-            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": Unbounded(state_dim),
+            "belief": Unbounded(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -9760,8 +9751,8 @@ class TestDreamer(LossModuleTestBase):
             ContinuousActionConvMockEnv(pixel_shape=[3, *self.img_size])
         )
         default_dict = {
-            "state": UnboundedContinuousTensorSpec(state_dim),
-            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": Unbounded(state_dim),
+            "belief": Unbounded(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -10050,7 +10041,7 @@ class TestOnlineDT(LossModuleTestBase):
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -10282,7 +10273,7 @@ class TestDT(LossModuleTestBase):
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -10696,7 +10687,7 @@ class TestIQL(LossModuleTestBase):
         observation_key="observation",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -11507,7 +11498,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         action_key="action",
     ):
         # Actor
-        action_spec = OneHotDiscreteTensorSpec(action_dim)
+        action_spec = OneHot(action_dim)
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
