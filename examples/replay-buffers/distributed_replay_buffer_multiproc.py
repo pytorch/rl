@@ -44,7 +44,7 @@ def main(rank):
 
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
-        init_method=str_init_method
+        # init_method=str_init_method
     )
 
     if rank == 0:
