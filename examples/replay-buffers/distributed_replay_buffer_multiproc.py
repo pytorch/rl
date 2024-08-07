@@ -55,6 +55,7 @@ def main(rank):
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
+            world_size=3,
         )
         torchrl_logger.info(f"Initialised {TRAINER_NODE}")
         trainer = TrainerNode(replay_buffer_node=REPLAY_BUFFER_NODE)
@@ -68,6 +69,7 @@ def main(rank):
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
+            world_size=3,
         )
         torchrl_logger.info(f"Initialised {REPLAY_BUFFER_NODE}")
     else:
@@ -79,6 +81,7 @@ def main(rank):
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
+            world_size=3,
         )
         torchrl_logger.info(f"Initialised DataCollector{rank}")
     time.sleep(10)
