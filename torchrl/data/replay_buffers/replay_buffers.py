@@ -1452,6 +1452,44 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
 
     def __len__(self):
         return super().__len__()
+
+    def __iter__(self):
+        return super().__iter__()
+
+@accept_remote_rref_udf_invocation
+class RemoteReplayBuffer(ReplayBuffer):
+    """A remote invocation friendly ReplayBuffer class. Public methods can be invoked by remote agents using `torch.rpc` or called locally as normal."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def sample(
+        self,
+        batch_size: int | None = None,
+        include_info: bool = None,
+        return_info: bool = False,
+    ) -> TensorDictBase:
+        return super().sample(
+            batch_size=batch_size, include_info=include_info, return_info=return_info
+        )
+
+    def add(self, data: TensorDictBase) -> int:
+        return super().add(data)
+
+    def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
+        return super().extend(tensordicts)
+
+    def update_priority(
+        self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]
+    ) -> None:
+        return super().update_priority(index, priority)
+
+    def update_tensordict_priority(self, data: TensorDictBase) -> None:
+        return super().update_tensordict_priority(data)
+
+    def __len__(self):
+        return super().__len__()
+
     def __iter__(self):
         return super().__iter__()
 

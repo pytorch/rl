@@ -17,7 +17,7 @@ from .replay_buffers import (
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
-    TensorDictPrioritizedReplayBuffer,
+    TensorDictPrioritizedReplayBuffer,RemoteReplayBuffer,
     TensorDictReplayBuffer,
 )
 from .samplers import (

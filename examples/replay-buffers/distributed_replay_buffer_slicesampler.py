@@ -25,7 +25,7 @@ import torch
 import torch.distributed.rpc as rpc
 from tensordict import TensorDict
 from torchrl._utils import accept_remote_rref_invocation, logger as torchrl_logger
-from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
+from torchrl.data.replay_buffers import RemoteReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
@@ -206,8 +206,8 @@ class TrainerNode:
                     time.sleep(RETRY_DELAY_SECS)
 
 
-class ReplayBufferNode(RemoteTensorDictReplayBuffer):
-    """Experience replay buffer node that is capable of accepting remote connections. Being a `RemoteTensorDictReplayBuffer`
+class ReplayBufferNode(RemoteReplayBuffer):
+    """Experience replay buffer node that is capable of accepting remote connections. Being a `RemoteReplayBuffer`
     means all of its public methods are remotely invokable using `torch.rpc`.
     Using a LazyMemmapStorage is highly advised in distributed settings with shared storage due to the lower serialisation
     cost of MemoryMappedTensors as well as the ability to specify file storage locations which can improve ability to recover from node failures.
