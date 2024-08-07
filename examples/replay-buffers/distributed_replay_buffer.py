@@ -1,6 +1,6 @@
 """
-Example use of a distributed replay buffer
-==========================================
+Example use of a distributed replay buffer (custom)
+===================================================
 
 This example illustrates how a skeleton reinforcement learning algorithm can be implemented in a distributed fashion
 with communication between nodes/workers handled using `torch.rpc`.

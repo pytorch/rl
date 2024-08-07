@@ -1,6 +1,6 @@
 """
-Example use of a distributed replay buffer
-==========================================
+Example use of a distributed replay buffer (submitit)
+=====================================================
 
 This example illustrates how a skeleton reinforcement learning algorithm can be implemented in a distributed fashion
 with communication between nodes/workers handled using `torch.rpc`.
@@ -20,18 +20,10 @@ python examples/replay-buffers/distributed_replay_buffer_submitit.py
 
 """
 
-import os
-import sys
-import time
-
 import submitit
-
-import torch.distributed.rpc as rpc
+from torch import multiprocessing as mp
 
 from distributed_rb_utils import main
-from torch import multiprocessing as mp
-from torchrl._utils import logger as torchrl_logger
-
 
 DEFAULT_SLURM_CONF = {
     "timeout_min": 10,
