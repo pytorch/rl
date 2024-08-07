@@ -267,7 +267,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         mean (float, optional): mean of each output element’s normal distribution.
         std (float, optional): standard deviation of each output element’s normal distribution.
         action_key (NestedKey, optional): if the policy module has more than one output key,
-            its output spec will be of type CompositeSpec. One needs to know where to
+            its output spec will be of type Composite. One needs to know where to
             find the action spec.
             Default is "action".
         spec (TensorSpec, optional): if provided, the sampled action will be
@@ -410,7 +410,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
     Keyword Args:
         action_key (NestedKey, optional): if the policy module has more than one output key,
-            its output spec will be of type CompositeSpec. One needs to know where to
+            its output spec will be of type Composite. One needs to know where to
             find the action spec.
             default: "action"
 

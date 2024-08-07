@@ -61,7 +61,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
         spec = module.spec
         if len(module.out_keys) > 1 and not isinstance(spec, Composite):
             raise RuntimeError(
-                "safe TensorDictModules with multiple out_keys require a CompositeSpec with matching keys. Got "
+                "safe TensorDictModules with multiple out_keys require a Composite with matching keys. Got "
                 f"keys {module.out_keys}."
             )
         elif not isinstance(spec, Composite):
@@ -220,7 +220,7 @@ class SafeModule(TensorDictModule):
             if len(self.out_keys) > 1:
                 raise RuntimeError(
                     f"got more than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
-                    "Consider using a CompositeSpec object or no spec at all."
+                    "Consider using a Composite object or no spec at all."
                 )
             spec = Composite({self.out_keys[0]: spec})
         elif spec is not None and isinstance(spec, Composite):
@@ -264,7 +264,7 @@ class SafeModule(TensorDictModule):
     def spec(self, spec: Composite) -> None:
         if not isinstance(spec, Composite):
             raise RuntimeError(
-                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a CompositeSpec instance."
+                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a Composite instance."
             )
         self._spec = spec
 

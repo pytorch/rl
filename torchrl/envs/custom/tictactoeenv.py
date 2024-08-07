@@ -9,12 +9,7 @@ from typing import Optional
 import torch
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    Categorical,
-    Composite,
-    Unbounded,
-    UnboundedDiscreteTensorSpec,
-)
+from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.envs.common import EnvBase
 
 
@@ -42,17 +37,17 @@ class TicTacToeEnv(EnvBase):
         Composite(
             output_spec: Composite(
                 full_observation_spec: Composite(
-                    board: DiscreteTensorSpec(
+                    board: Categorical(
                         shape=torch.Size([3, 3]),
                         space=DiscreteBox(n=2),
                         dtype=torch.int32,
                         domain=discrete),
-                    turn: DiscreteTensorSpec(
+                    turn: Categorical(
                         shape=torch.Size([1]),
                         space=DiscreteBox(n=2),
                         dtype=torch.int32,
                         domain=discrete),
-                    mask: DiscreteTensorSpec(
+                    mask: Categorical(
                         shape=torch.Size([9]),
                         space=DiscreteBox(n=2),
                         dtype=torch.bool,
@@ -79,17 +74,17 @@ class TicTacToeEnv(EnvBase):
                         shape=torch.Size([])),
                     shape=torch.Size([])),
                 full_done_spec: Composite(
-                    done: DiscreteTensorSpec(
+                    done: Categorical(
                         shape=torch.Size([1]),
                         space=DiscreteBox(n=2),
                         dtype=torch.bool,
                         domain=discrete),
-                    terminated: DiscreteTensorSpec(
+                    terminated: Categorical(
                         shape=torch.Size([1]),
                         space=DiscreteBox(n=2),
                         dtype=torch.bool,
                         domain=discrete),
-                    truncated: DiscreteTensorSpec(
+                    truncated: Categorical(
                         shape=torch.Size([1]),
                         space=DiscreteBox(n=2),
                         dtype=torch.bool,
@@ -98,23 +93,23 @@ class TicTacToeEnv(EnvBase):
                 shape=torch.Size([])),
             input_spec: Composite(
                 full_state_spec: Composite(
-                    board: DiscreteTensorSpec(
+                    board: Categorical(
                         shape=torch.Size([3, 3]),
                         space=DiscreteBox(n=2),
                         dtype=torch.int32,
                         domain=discrete),
-                    turn: DiscreteTensorSpec(
+                    turn: Categorical(
                         shape=torch.Size([1]),
                         space=DiscreteBox(n=2),
                         dtype=torch.int32,
                         domain=discrete),
-                    mask: DiscreteTensorSpec(
+                    mask: Categorical(
                         shape=torch.Size([9]),
                         space=DiscreteBox(n=2),
                         dtype=torch.bool,
                         domain=discrete), shape=torch.Size([])),
                 full_action_spec: Composite(
-                    action: DiscreteTensorSpec(
+                    action: Categorical(
                         shape=torch.Size([1]),
                         space=DiscreteBox(n=9),
                         dtype=torch.int64,
@@ -172,7 +167,7 @@ class TicTacToeEnv(EnvBase):
     def __init__(self, *, single_player: bool = False, device=None):
         super().__init__(device=device)
         self.single_player = single_player
-        self.action_spec: UnboundedDiscreteTensorSpec = Categorical(
+        self.action_spec: Unbounded = Categorical(
             n=9,
             shape=(),
             device=device,

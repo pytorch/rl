@@ -32,7 +32,6 @@ from torchrl.data.tensor_specs import (
     OneHot,
     TensorSpec,
     Unbounded,
-    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
@@ -459,7 +458,7 @@ def _torchrl_to_gym_spec_transform(
             shape=shape,
             dtype=torch_to_numpy_dtype_dict[spec.dtype],
         )
-    if isinstance(spec, UnboundedDiscreteTensorSpec):
+    if isinstance(spec, Unbounded):
         minval, maxval = _minmax_dtype(spec.dtype)
         return gym_spaces.Box(
             low=minval,

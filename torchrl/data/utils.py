@@ -275,7 +275,7 @@ def _process_action_space_spec(action_space, spec):
             )
     if action_space is not None:
         if isinstance(action_space, Composite):
-            raise ValueError("action_space cannot be of type CompositeSpec.")
+            raise ValueError("action_space cannot be of type Composite.")
         if (
             spec is not None
             and isinstance(action_space, TensorSpec)

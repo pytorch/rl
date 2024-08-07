@@ -37,8 +37,8 @@ class Actor(SafeModule):
 
     The Actor class comes with default values for the out_keys (``["action"]``)
     and if the spec is provided but not as a
-    :class:`~torchrl.data.CompositeSpec` object, it will be
-    automatically translated into ``spec = CompositeSpec(action=spec)``.
+    :class:`~torchrl.data.Composite` object, it will be
+    automatically translated into ``spec = Composite(action=spec)``.
 
     Args:
         module (nn.Module): a :class:`~torch.nn.Module` used to map the input to
@@ -128,8 +128,8 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     """General class for probabilistic actors in RL.
 
     The Actor class comes with default values for the out_keys (["action"])
-    and if the spec is provided but not as a CompositeSpec object, it will be
-    automatically translated into :obj:`spec = CompositeSpec(action=spec)`
+    and if the spec is provided but not as a Composite object, it will be
+    automatically translated into :obj:`spec = Composite(action=spec)`
 
     Args:
         module (nn.Module): a :class:`torch.nn.Module` used to map the input to
@@ -588,7 +588,7 @@ class QValueModule(TensorDictModuleBase):
     def spec(self, spec: Composite) -> None:
         if not isinstance(spec, Composite):
             raise RuntimeError(
-                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a CompositeSpec instance."
+                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a Composite instance."
             )
         self._spec = spec
 
@@ -1985,7 +1985,7 @@ class TanhModule(TensorDictModuleBase):
 
     Keyword Args:
         spec (TensorSpec, optional): if provided, the spec of the output.
-            If a CompositeSpec is provided, its key(s) must match the key(s)
+            If a Composite is provided, its key(s) must match the key(s)
             in out_keys. Otherwise, the key(s) of out_keys are assumed and the
             same spec is used for all outputs.
         low (float, np.ndarray or torch.Tensor): the lower bound of the space.

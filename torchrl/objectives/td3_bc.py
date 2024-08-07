@@ -314,7 +314,7 @@ class TD3BCLoss(LossModule):
                 ]
             if not isinstance(action_spec, Bounded):
                 raise ValueError(
-                    f"action_spec is not of type BoundedTensorSpec but {type(action_spec)}."
+                    f"action_spec is not of type Bounded but {type(action_spec)}."
                 )
             low = action_spec.space.low
             high = action_spec.space.high

@@ -52,9 +52,9 @@ class DQNLoss(LossModule):
             https://arxiv.org/abs/1509.06461. Defaults to ``False``.
         action_space (str or TensorSpec, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHot`,
+            :class:`torchrl.data.MultiOneHot`,
+            :class:`torchrl.data.Binary` or :class:`torchrl.data.Categorical`).
             If not provided, an attempt to retrieve it from the value network
             will be made.
         priority_key (NestedKey, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]

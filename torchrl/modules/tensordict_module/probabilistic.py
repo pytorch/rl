@@ -133,7 +133,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             if len(self.out_keys) > 1:
                 raise RuntimeError(
                     f"got more than one out_key for the SafeModule: {self.out_keys},\nbut only one spec. "
-                    "Consider using a CompositeSpec object or no spec at all."
+                    "Consider using a Composite object or no spec at all."
                 )
             spec = Composite({self.out_keys[0]: spec})
         elif spec is not None and isinstance(spec, Composite):
@@ -176,7 +176,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
     def spec(self, spec: Composite) -> None:
         if not isinstance(spec, Composite):
             raise RuntimeError(
-                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a CompositeSpec instance."
+                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a Composite instance."
             )
         self._spec = spec
 

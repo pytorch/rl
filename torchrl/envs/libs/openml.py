@@ -8,12 +8,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 
-from torchrl.data.tensor_specs import (
-    Categorical,
-    Composite,
-    Unbounded,
-    UnboundedDiscreteTensorSpec,
-)
+from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import Compose, DoubleToFloat, RenameTransform
 from torchrl.envs.utils import _classproperty
@@ -30,9 +25,7 @@ def _make_composite_from_td(td):
             if isinstance(tensor, TensorDictBase)
             else Unbounded(dtype=tensor.dtype, device=tensor.device, shape=tensor.shape)
             if tensor.dtype in (torch.float16, torch.float32, torch.float64)
-            else UnboundedDiscreteTensorSpec(
-                dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
-            )
+            else Unbounded(dtype=tensor.dtype, device=tensor.device, shape=tensor.shape)
             for key, tensor in td.items()
         },
         shape=td.shape,

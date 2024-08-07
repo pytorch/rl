@@ -541,9 +541,9 @@ class DiscreteIQLLoss(IQLLoss):
     Keyword Args:
         action_space (str or TensorSpec): Action space. Must be one of
                 ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-                or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-                :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-                :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+                or an instance of the corresponding specs (:class:`torchrl.data.OneHot`,
+                :class:`torchrl.data.MultiOneHot`,
+                :class:`torchrl.data.Binary` or :class:`torchrl.data.Categorical`).
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with

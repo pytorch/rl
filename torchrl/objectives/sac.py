@@ -818,9 +818,9 @@ class DiscreteSACLoss(LossModule):
         qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         action_space (str or TensorSpec): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHot`,
+            :class:`torchrl.data.MultiOneHot`,
+            :class:`torchrl.data.Binary` or :class:`torchrl.data.Categorical`).
         num_actions (int, optional): number of actions in the action space.
             To be provided if target_entropy is set to "auto".
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 2.

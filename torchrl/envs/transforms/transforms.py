@@ -7521,7 +7521,7 @@ class RemoveEmptySpecs(Transform):
         ...             shape=self.batch_size,
         ...         )
         ...         self.action_spec = UnboundedContinuous((*self.batch_size, 3))
-        ...         self.done_spec = DiscreteTensorSpec(
+        ...         self.done_spec = Categorical(
         ...             2, (*self.batch_size, 1), dtype=torch.bool
         ...         )
         ...         self.full_done_spec["truncated"] = self.full_done_spec[
