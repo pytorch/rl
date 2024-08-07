@@ -24,7 +24,7 @@ import time
 import torch
 import torch.distributed.rpc as rpc
 from tensordict import TensorDict
-from torchrl._utils import accept_remote_rref_invocation, logger as torchrl_logger
+from torchrl._utils import accept_remote_rref_invocation, logger as torchrl_logger, accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers import RemoteReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -206,6 +206,7 @@ class TrainerNode:
                     time.sleep(RETRY_DELAY_SECS)
 
 
+@accept_remote_rref_udf_invocation
 class ReplayBufferNode(RemoteReplayBuffer):
     """Experience replay buffer node that is capable of accepting remote connections. Being a `RemoteReplayBuffer`
     means all of its public methods are remotely invokable using `torch.rpc`.
