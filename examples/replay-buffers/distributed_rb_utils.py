@@ -99,11 +99,11 @@ class TrainerNode:
     """Trainer node responsible for learning from experiences sampled from an experience replay buffer."""
 
     def __init__(self, replay_buffer_node="ReplayBuffer") -> None:
+        self.replay_buffer_node = replay_buffer_node
         torchrl_logger.info("TrainerNode")
         self.id = rpc.get_worker_info().id
         self.replay_buffer = self._create_replay_buffer()
         self._create_and_launch_data_collectors()
-        self.replay_buffer_node = replay_buffer_node
 
     def train(self, iterations: int) -> None:
         """Write your training loop here."""
