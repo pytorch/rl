@@ -21,9 +21,9 @@ python examples/replay-buffers/distributed_replay_buffer_submitit.py
 """
 
 import submitit
-from torch import multiprocessing as mp
 
 from distributed_rb_utils import main
+from torch import multiprocessing as mp
 
 DEFAULT_SLURM_CONF = {
     "timeout_min": 10,

@@ -20,9 +20,8 @@ python examples/replay-buffers/distributed_replay_buffer_multiproc.py
 
 """
 
-from torch import multiprocessing as mp
-
 from distributed_rb_utils import main
+from torch import multiprocessing as mp
 
 REPLAY_BUFFER_NODE = "ReplayBuffer"
 TRAINER_NODE = "Trainer"

@@ -212,6 +212,13 @@ class ReplayBufferNode(RemoteReplayBuffer):
 
 
 def main(rank, world_size, **tensorpipe_kwargs):
+    """Dispatcher for the distributed workflow.
+
+    rank 0 will be assigned the TRAINER job,
+    rank 1 will be assigned the REPLAY BUFFER job,
+    rank 2 to world_size-1 will be assigned the COLLECTOR jobs.
+
+    """
     torchrl_logger.info(f"Rank: {rank}")
 
     os.environ["MASTER_ADDR"] = "localhost"
