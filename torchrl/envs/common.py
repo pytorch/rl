@@ -1473,6 +1473,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         # sanity check
         self._assert_tensordict_shape(tensordict)
+        if not self.batch_locked:
+            # Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here
+            partial_steps = tensordict.get("_partial_steps", None)
+            if partial_steps is not None:
+                if partial_steps.all():
+                    partial_steps = None
+                else:
+                    tensordict_batch_size = tensordict.batch_size
+                    partial_steps = partial_steps.view(tensordict_batch_size)
+                    tensordict = tensordict[partial_steps]
         next_preset = tensordict.get("next", None)
 
         next_tensordict = self._step(tensordict)
@@ -1485,6 +1495,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 next_preset.exclude(*next_tensordict.keys(True, True))
             )
         tensordict.set("next", next_tensordict)
+        if partial_steps is not None:
+            result = tensordict.new_zeros(tensordict_batch_size)
+            result[partial_steps] = tensordict
+            return result
         return tensordict
 
     @classmethod

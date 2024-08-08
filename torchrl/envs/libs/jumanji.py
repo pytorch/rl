@@ -128,6 +128,12 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
     Paper: https://arxiv.org/abs/2306.09884
 
+    .. note:: For better performance, turn `jit` on when instantiating this class.
+        The `jit` attribute can also be flipped during code execution:
+
+            >>> env.jit = True # Used jit
+            >>> env.jit = False # eager
+
     Args:
         env (jumanji.env.Environment): the env to wrap.
         categorical_action_encoding (bool, optional): if ``True``, categorical
@@ -136,6 +142,22 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             Defaults to ``False``.
 
     Keyword Args:
+        batch_size (torch.Size, optional): the batch size of the environment.
+            With ``jumanji``, this indicates the number of vectorized environments.
+            If the batch-size is empty, the environment is not batch-locked and an arbitrary number
+            of environments can be executed simultaneously.
+            Defaults to ``torch.Size([])``.
+
+                >>> import jumanji
+                >>> from torchrl.envs import JumanjiWrapper
+                >>> base_env = jumanji.make("Snake-v1")
+                >>> env = JumanjiWrapper(base_env)
+                >>> # Set the batch-size of the TensorDict instead of the env allows to control the number
+                >>> #  of envs being run simultaneously
+                >>> tdreset = env.reset(TensorDict(batch_size=[32]))
+                >>> # Execute a rollout until all envs are done or max steps is reached, whichever comes first
+                >>> rollout = env.rollout(100, break_when_all_done=True, auto_reset=False, tensordict=tdreset)
+
         from_pixels (bool, optional): Whether the environment should render its output.
             This will drastically impact the environment throughput. Only the first environment
             will be rendered. See :meth:`~torchrl.envs.JumanjiWrapper.render` for more information.
@@ -146,17 +168,15 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             of rewards across steps.
         device (torch.device, optional): if provided, the device on which the data
             is to be cast. Defaults to ``torch.device("cpu")``.
-        batch_size (torch.Size, optional): the batch size of the environment.
-            With ``jumanji``, this indicates the number of vectorized environments.
-            Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`~.reset` is called.
+            Defaults to ``False``.
+        jit (bool, optional): whether the step and reset method should be wrapped in `jit`.
             Defaults to ``False``.
 
     Attributes:
         available_envs: environments availalbe to build
 
-    Examples:
     Examples:
         >>> import jumanji
         >>> from torchrl.envs import JumanjiWrapper
@@ -334,6 +354,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         self,
         env: "jumanji.env.Environment" = None,  # noqa: F821
         categorical_action_encoding=True,
+        jit: bool = True,
         **kwargs,
     ):
         if not _has_jumanji:
@@ -346,6 +367,23 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         batch_locked = kwargs.pop("batch_locked", kwargs.get("batch_size") is not None)
         super().__init__(**kwargs)
         self._batch_locked = batch_locked
+        self.jit = jit
+
+    @property
+    def jit(self):
+        return self._jit
+
+    @jit.setter
+    def jit(self, value):
+        self._jit = value
+        if value:
+            import jax
+
+            self._env_reset = jax.jit(self._env.reset)
+            self._env_step = jax.jit(self._env.step)
+        else:
+            self._env_reset = self._env.reset
+            self._env_step = self._env.step
 
     def _build_env(
         self,
@@ -489,7 +527,9 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         self.key = jax.random.PRNGKey(seed)
 
     def read_state(self, state, batch_size=None):
-        state_dict = _object_to_tensordict(state, self.device, self.batch_size if batch_size is None else batch_size)
+        state_dict = _object_to_tensordict(
+            state, self.device, self.batch_size if batch_size is None else batch_size
+        )
         return self.state_spec["state"].encode(state_dict)
 
     def read_obs(self, obs, batch_size=None):
@@ -498,7 +538,9 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         if isinstance(obs, (list, jnp.ndarray, np.ndarray)):
             obs_dict = _ndarray_to_tensor(obs).to(self.device)
         else:
-            obs_dict = _object_to_tensordict(obs, self.device, self.batch_size if batch_size is None else batch_size)
+            obs_dict = _object_to_tensordict(
+                obs, self.device, self.batch_size if batch_size is None else batch_size
+            )
         return super().read_obs(obs_dict)
 
     def render(
@@ -563,7 +605,11 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             isinteractive = plt.isinteractive()
             plt.ion()
             buf = io.BytesIO()
-            state = _tensordict_to_object(tensordict.get("state"), _state_example)
+            state = _tensordict_to_object(
+                tensordict.get("state"),
+                _state_example,
+                batch_size=tensordict.batch_size if not self.batch_locked else None,
+            )
             self._env.render(state, **kwargs)
             plt.savefig(buf, format="png")
             buf.seek(0)
@@ -581,19 +627,18 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         import jax
+
         if self.batch_locked:
             batch_size = self.batch_size
         else:
             batch_size = tensordict.batch_size
 
         # prepare inputs
-        _state_example = self._state_example
-        if not self.batch_locked and _state_example.batch_size != tensordict.batch_size:
-            _state_example = _state_example.expand(tensordict.batch_size)
-        else:
-            _state_example = self._state_example
-
-        state = _tensordict_to_object(tensordict.get("state"), self._state_example)
+        state = _tensordict_to_object(
+            tensordict.get("state"),
+            self._state_example,
+            batch_size=tensordict.batch_size if not self.batch_locked else None,
+        )
         action = self.read_action(tensordict.get("action"))
 
         # flatten batch size into vector
@@ -601,7 +646,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         action = _tree_flatten(action, batch_size)
 
         # jax vectorizing map on env.step
-        state, timestep = jax.vmap(self._env.step)(state, action)
+        state, timestep = jax.vmap(self._env_step)(state, action)
 
         # reshape batch size from vector
         state = _tree_reshape(state, batch_size)
@@ -645,7 +690,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         self.key, *keys = jax.random.split(self.key, numel + 1)
 
         # jax vectorizing map on env.reset
-        state, timestep = jax.vmap(self._env.reset)(jnp.stack(keys))
+        state, timestep = jax.vmap(self._env_reset)(jnp.stack(keys))
 
         # reshape batch size from vector
         state = _tree_reshape(state, batch_size)
@@ -669,6 +714,27 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         tensordict_out["state"] = state_dict
 
         return tensordict_out
+
+    def read_reward(self, reward):
+        """Reads the reward and maps it to the reward space.
+
+        Args:
+            reward (torch.Tensor or TensorDict): reward to be mapped.
+
+        """
+        if isinstance(reward, int) and reward == 0:
+            return self.reward_spec.zero()
+        if self.batch_locked:
+            reward = self.reward_spec.encode(reward, ignore_device=True)
+        else:
+            reward = torch.as_tensor(reward)
+            if reward.shape[-1] != self.reward_spec.shape[-1]:
+                reward = reward.unsqueeze(-1)
+
+        if reward is None:
+            reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
+
+        return reward
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
         ...
