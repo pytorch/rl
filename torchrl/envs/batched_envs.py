@@ -1075,15 +1075,15 @@ class SerialEnv(BatchedEnvBase):
             tensordict = tensordict[partial_steps]
             workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
             tensordict_in = tensordict
-            if self._use_buffers:
-                shared_tensordict_parent = (
-                    self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
-                )
+            # if self._use_buffers:
+            #     shared_tensordict_parent = (
+            #         self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
+            #     )
         else:
             workers_range = range(self.num_workers)
             tensordict_in = tensordict.clone(False)
-            if self._use_buffers:
-                shared_tensordict_parent = self.shared_tensordict_parent
+            # if self._use_buffers:
+            #     shared_tensordict_parent = self.shared_tensordict_parent
 
         data_in = []
         for i, td_ in zip(workers_range, tensordict_in):
@@ -1101,10 +1101,10 @@ class SerialEnv(BatchedEnvBase):
             out_tds = []
 
         if self._use_buffers:
-            next_td = shared_tensordict_parent.get("next")
-            for i, _next_td, _data_in in zip(workers_range, next_td, data_in):
+            next_td = self.shared_tensordict_parent.get("next")
+            for i, _data_in in zip(workers_range, data_in):
                 out_td = self._envs[i]._step(_data_in)
-                _next_td.update_(
+                next_td[i].update_(
                     out_td,
                     keys_to_update=list(self._env_output_keys),
                     non_blocking=self.non_blocking,
@@ -1120,6 +1120,8 @@ class SerialEnv(BatchedEnvBase):
                 if name in self._selected_step_keys:
                     return tensor.clone()
 
+            if partial_steps is not None:
+                next_td = next_td._get_sub_tensordict(partial_steps)
             out = next_td.named_apply(
                 select_and_clone, nested_keys=True, filter_empty=True
             )
