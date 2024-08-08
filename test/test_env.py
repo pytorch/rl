@@ -3340,6 +3340,94 @@ class TestCustomEnvs:
             assert r.shape == torch.Size((5, 10))
 
 
+@pytest.mark.parametrize("device", [None, *get_default_devices()])
+@pytest.mark.parametrize("env_device", [None, *get_default_devices()])
+class TestPartialSteps:
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_parallel_partial_steps(self, use_buffers, device, env_device):
+        penv = ParallelEnv(
+            4,
+            lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
+            mp_start_method=mp_ctx,
+            use_buffers=use_buffers,
+            device=device,
+        )
+        td = penv.reset()
+        psteps = torch.zeros(4, dtype=torch.bool)
+        psteps[[1, 3]] = True
+        td.set("_partial_steps", psteps)
+
+        td.set("action", penv.action_spec.one())
+        td = penv.step(td)
+        assert (td[0].get("next") == 0).all()
+        assert (td[1].get("next") != 0).any()
+        assert (td[2].get("next") == 0).all()
+        assert (td[3].get("next") != 0).any()
+
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_parallel_partial_step_and_maybe_reset(
+        self, use_buffers, device, env_device
+    ):
+        penv = ParallelEnv(
+            4,
+            lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
+            mp_start_method=mp_ctx,
+            use_buffers=use_buffers,
+            device=device,
+        )
+        td = penv.reset()
+        psteps = torch.zeros(4, dtype=torch.bool)
+        psteps[[1, 3]] = True
+        td.set("_partial_steps", psteps)
+
+        td.set("action", penv.action_spec.one())
+        td, tdreset = penv.step_and_maybe_reset(td)
+        assert (td[0].get("next") == 0).all()
+        assert (td[1].get("next") != 0).any()
+        assert (td[2].get("next") == 0).all()
+        assert (td[3].get("next") != 0).any()
+
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_serial_partial_steps(self, use_buffers, device, env_device):
+        penv = SerialEnv(
+            4,
+            lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
+            use_buffers=use_buffers,
+            device=device,
+        )
+        td = penv.reset()
+        psteps = torch.zeros(4, dtype=torch.bool)
+        psteps[[1, 3]] = True
+        td.set("_partial_steps", psteps)
+
+        td.set("action", penv.action_spec.one())
+        td = penv.step(td)
+        assert (td[0].get("next") == 0).all()
+        assert (td[1].get("next") != 0).any()
+        assert (td[2].get("next") == 0).all()
+        assert (td[3].get("next") != 0).any()
+
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_serial_partial_step_and_maybe_reset(self, use_buffers, device, env_device):
+        penv = SerialEnv(
+            4,
+            lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
+            use_buffers=use_buffers,
+            device=device,
+        )
+        td = penv.reset()
+        psteps = torch.zeros(4, dtype=torch.bool)
+        psteps[[1, 3]] = True
+        td.set("_partial_steps", psteps)
+
+        td.set("action", penv.action_spec.one())
+        td = penv.step(td)
+        assert (td[0].get("next") == 0).all()
+        assert (td[1].get("next") != 0).any()
+        assert (td[2].get("next") == 0).all()
+        assert (td[3].get("next") != 0).any()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
