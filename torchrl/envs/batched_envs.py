@@ -1068,6 +1068,8 @@ class SerialEnv(BatchedEnvBase):
     ) -> TensorDict:
         partial_steps = tensordict.get("_partial_steps", None)
         tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
         if partial_steps is not None:
             tensordict = tensordict[partial_steps]
             workers_range = partial_steps.nonzero().squeeze().tolist()
@@ -1459,6 +1461,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         partial_steps = tensordict.get("_partial_steps", None)
         tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
         if partial_steps is not None:
             tensordict = tensordict[partial_steps]
             workers_range = partial_steps.nonzero().squeeze().tolist()
@@ -1507,6 +1511,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         partial_steps = tensordict.get("_partial_steps", None)
         tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
         if partial_steps is not None:
             shared_tensordict_parent = (
                 self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
@@ -1622,6 +1628,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         partial_steps = tensordict.get("_partial_steps", None)
         tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
         if partial_steps is not None:
             tensordict = tensordict[partial_steps]
             workers_range = partial_steps.nonzero().squeeze().tolist()
@@ -1661,6 +1669,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   the value in-place will fail.
         partial_steps = tensordict.get("_partial_steps", None)
         tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
         if partial_steps is not None:
             shared_tensordict_parent = (
                 self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
