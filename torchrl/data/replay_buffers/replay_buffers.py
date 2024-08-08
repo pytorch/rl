@@ -804,12 +804,13 @@ class ReplayBuffer:
         return state
 
     def __setstate__(self, state: Dict[str, Any]):
+        rngstate = None
         if "_rng" in state:
-            rng = state["_rng"]
-            if rng is not None:
-                rng = torch.Generator(device=rng.device)
-                rng.set_state(rng["rng_state"])
-                state["_rng"] = rng
+            rngstate = state["_rng"]
+            if rngstate is not None:
+                rng = torch.Generator(device=rngstate.device)
+                rng.set_state(rngstate["rng_state"])
+
         if "_replay_lock_placeholder" in state:
             state.pop("_replay_lock_placeholder")
             _replay_lock = threading.RLock()
@@ -819,6 +820,8 @@ class ReplayBuffer:
             _futures_lock = threading.RLock()
             state["_futures_lock"] = _futures_lock
         self.__dict__.update(state)
+        if rngstate is not None:
+            self.set_rng(rng)
 
     @property
     def sampler(self):

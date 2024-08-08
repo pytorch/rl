@@ -186,6 +186,11 @@ class Storage:
         """Alias for :meth:`~.loads`."""
         return self.loads(*args, **kwargs)
 
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        state["_rng"] = None
+        return state
+
 
 class ListStorage(Storage):
     """A storage stored in a list.
@@ -300,7 +305,7 @@ class ListStorage(Storage):
             raise RuntimeError(
                 f"Cannot share a storage of type {type(self)} between processes."
             )
-        state = copy(self.__dict__)
+        state = super().__getstate__()
         return state
 
     def __repr__(self):
@@ -525,7 +530,7 @@ class TensorStorage(Storage):
         )
 
     def __getstate__(self):
-        state = copy(self.__dict__)
+        state = super().__getstate__()
         if get_spawning_popen() is None:
             length = self._len
             del state["_len_value"]

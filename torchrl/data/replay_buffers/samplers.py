@@ -108,6 +108,11 @@ class Sampler(ABC):
     def __repr__(self):
         return f"{self.__class__.__name__}()"
 
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        state["_rng"] = None
+        return state
+
 
 class RandomSampler(Sampler):
     """A uniformly random sampler for composable replay buffers.
@@ -395,8 +400,7 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError(
                 f"Samplers of type {type(self)} cannot be shared between processes."
             )
-        state = copy(self.__dict__)
-        return state
+        return super().__getstate__()
 
     def _init(self):
         if self.dtype in (torch.float, torch.FloatType, torch.float32):
@@ -938,7 +942,7 @@ class SliceSampler(Sampler):
                 f"one process will NOT erase the cache on another process's sampler, "
                 f"which will cause synchronization issues."
             )
-        state = copy(self.__dict__)
+        state = super().__getstate__()
         state["_cache"] = {}
         return state
 
@@ -1812,6 +1816,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     def __getstate__(self):
         state = SliceSampler.__getstate__(self)
         state.update(PrioritizedSampler.__getstate__(self))
+        return state
 
     def mark_update(
         self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
