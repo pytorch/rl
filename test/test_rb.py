@@ -1259,33 +1259,34 @@ class TestRNG:
 @pytest.mark.parametrize("size", [3, 5, 100])
 @pytest.mark.parametrize("prefetch", [0])
 class TestBuffers:
-    _default_params_rb = {}
-    _default_params_td_rb = {}
-    _default_params_prb = {"alpha": 0.8, "beta": 0.9}
-    _default_params_td_prb = {"alpha": 0.8, "beta": 0.9}
+
+    default_constr = {
+        ReplayBuffer: ReplayBuffer,
+        PrioritizedReplayBuffer: functools.partial(
+            PrioritizedReplayBuffer, alpha=0.8, beta=0.9
+        ),
+        TensorDictReplayBuffer: TensorDictReplayBuffer,
+        TensorDictPrioritizedReplayBuffer: functools.partial(
+            TensorDictPrioritizedReplayBuffer, alpha=0.8, beta=0.9
+        ),
+        TensorDictReplayBufferRNG: TensorDictReplayBufferRNG,
+        ReplayBufferRNG: ReplayBufferRNG,
+    }
 
     def _get_rb(self, rbtype, size, storage, prefetch):
         if storage is not None:
             storage = storage(size)
-        if rbtype is ReplayBuffer:
-            params = self._default_params_rb
-        elif rbtype is PrioritizedReplayBuffer:
-            params = self._default_params_prb
-        elif rbtype is TensorDictReplayBuffer:
-            params = self._default_params_td_rb
-        elif rbtype is TensorDictPrioritizedReplayBuffer:
-            params = self._default_params_td_prb
-        else:
-            raise NotImplementedError(rbtype)
-        rb = rbtype(storage=storage, prefetch=prefetch, batch_size=3, **params)
+        rb = self.default_constr[rbtype](
+            storage=storage, prefetch=prefetch, batch_size=3
+        )
         return rb
 
     def _get_datum(self, rbtype):
-        if rbtype is ReplayBuffer:
+        if rbtype in (ReplayBuffer, ReplayBufferRNG):
             data = torch.randint(100, (1,))
         elif rbtype is PrioritizedReplayBuffer:
             data = torch.randint(100, (1,))
-        elif rbtype is TensorDictReplayBuffer:
+        elif rbtype in (TensorDictReplayBuffer, TensorDictReplayBufferRNG):
             data = TensorDict({"a": torch.randint(100, (1,))}, [])
         elif rbtype is TensorDictPrioritizedReplayBuffer:
             data = TensorDict({"a": torch.randint(100, (1,))}, [])
@@ -1294,11 +1295,11 @@ class TestBuffers:
         return data
 
     def _get_data(self, rbtype, size):
-        if rbtype is ReplayBuffer:
+        if rbtype in (ReplayBuffer, ReplayBufferRNG):
             data = [torch.randint(100, (1,)) for _ in range(size)]
         elif rbtype is PrioritizedReplayBuffer:
             data = [torch.randint(100, (1,)) for _ in range(size)]
-        elif rbtype is TensorDictReplayBuffer:
+        elif rbtype in (TensorDictReplayBuffer, TensorDictReplayBufferRNG):
             data = TensorDict(
                 {
                     "a": torch.randint(100, (size,)),
