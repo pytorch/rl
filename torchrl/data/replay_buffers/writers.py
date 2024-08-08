@@ -38,6 +38,7 @@ class Writer(ABC):
     """A ReplayBuffer base Writer class."""
 
     _storage: Storage
+    _rng: torch.Generator | None = None
 
     def __init__(self) -> None:
         self._storage = None
@@ -102,6 +103,11 @@ class Writer(ABC):
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        state["_rng"] = None
+        return state
 
 
 class ImmutableDatasetWriter(Writer):
@@ -217,7 +223,7 @@ class RoundRobinWriter(Writer):
         _cursor_value.value = value
 
     def __getstate__(self):
-        state = copy(self.__dict__)
+        state = super().__getstate__()
         if get_spawning_popen() is None:
             cursor = self._cursor
             del state["_cursor_value"]
@@ -513,7 +519,7 @@ class TensorDictMaxValueWriter(Writer):
             raise RuntimeError(
                 f"Writers of type {type(self)} cannot be shared between processes."
             )
-        state = copy(self.__dict__)
+        state = super().__getstate__()
         return state
 
     def dumps(self, path):
@@ -582,7 +588,18 @@ class WriterEnsemble(Writer):
     """
 
     def __init__(self, *writers):
+        self._rng_private = None
         self._writers = writers
+
+    @property
+    def _rng(self):
+        return self._rng_private
+
+    @_rng.setter
+    def _rng(self, value):
+        self._rng_private = value
+        for writer in self._writers:
+            writer._rng = value
 
     def _empty(self):
         raise NotImplementedError

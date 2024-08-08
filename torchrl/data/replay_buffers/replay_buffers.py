@@ -23,6 +23,7 @@ from tensordict import (
     is_tensorclass,
     LazyStackedTensorDict,
     NestedKey,
+    TensorDict,
     TensorDictBase,
     unravel_key,
 )
@@ -120,7 +121,13 @@ class ReplayBuffer:
                     >>> for d in data.unbind(1):
                     ...     rb.add(d)
                     >>> rb.extend(data)
+        generator (torch.Generator, optional): a generator to use for sampling.
+            Using a dedicated generator for the replay buffer can allow a fine-grained control
+            over seeding, for instance keeping the global seed different but the RB seed identical
+            for distributed jobs.
+            Defaults to ``None`` (global default generator).
 
+            .. warning:: As of now, the generator has no effect on the transforms.
 
     Examples:
         >>> import torch
@@ -204,6 +211,7 @@ class ReplayBuffer:
         batch_size: int | None = None,
         dim_extend: int | None = None,
         checkpointer: "StorageCheckpointerBase" | None = None,  # noqa: F821
+        generator: torch.Generator | None = None,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -262,6 +270,13 @@ class ReplayBuffer:
             raise ValueError("dim_extend must be a positive value.")
         self.dim_extend = dim_extend
         self._storage.checkpointer = checkpointer
+        self.set_rng(generator=generator)
+
+    def set_rng(self, generator):
+        self._rng = generator
+        self._storage._rng = generator
+        self._sampler._rng = generator
+        self._writer._rng = generator
 
     @property
     def dim_extend(self):
@@ -414,6 +429,9 @@ class ReplayBuffer:
             "_writer": self._writer.state_dict(),
             "_transforms": self._transform.state_dict(),
             "_batch_size": self._batch_size,
+            "_rng": (self._rng.get_state().clone(), str(self._rng.device))
+            if self._rng is not None
+            else None,
         }
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
@@ -422,6 +440,12 @@ class ReplayBuffer:
         self._writer.load_state_dict(state_dict["_writer"])
         self._transform.load_state_dict(state_dict["_transforms"])
         self._batch_size = state_dict["_batch_size"]
+        rng = state_dict.get("_rng")
+        if rng is not None:
+            state, device = rng
+            rng = torch.Generator(device=device)
+            rng.set_state(state)
+            self.set_rng(generator=rng)
 
     def dumps(self, path):
         """Saves the replay buffer on disk at the specified path.
@@ -465,6 +489,13 @@ class ReplayBuffer:
         self._storage.dumps(path / "storage")
         self._sampler.dumps(path / "sampler")
         self._writer.dumps(path / "writer")
+        if self._rng is not None:
+            rng_state = TensorDict(
+                rng_state=self._rng.get_state().clone(),
+                device=self._rng.device,
+            )
+            rng_state.memmap(path / "rng_state")
+
         # fall back on state_dict for transforms
         transform_sd = self._transform.state_dict()
         if transform_sd:
@@ -487,6 +518,11 @@ class ReplayBuffer:
         self._storage.loads(path / "storage")
         self._sampler.loads(path / "sampler")
         self._writer.loads(path / "writer")
+        if (path / "rng_state").exists():
+            rng_state = TensorDict.load_memmap(path / "rng_state")
+            rng = torch.Generator(device=rng_state.device)
+            rng.set_state(rng_state["rng_state"])
+            self.set_rng(rng)
         # fall back on state_dict for transforms
         if (path / "transform.t").exists():
             self._transform.load_state_dict(torch.load(path / "transform.t"))
@@ -753,6 +789,12 @@ class ReplayBuffer:
 
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
+        if self._rng is not None:
+            rng_state = TensorDict(
+                rng_state=self._rng.get_state().clone(),
+                device=self._rng.device,
+            )
+            state["_rng"] = rng_state
         _replay_lock = state.pop("_replay_lock", None)
         _futures_lock = state.pop("_futures_lock", None)
         if _replay_lock is not None:
@@ -762,6 +804,13 @@ class ReplayBuffer:
         return state
 
     def __setstate__(self, state: Dict[str, Any]):
+        rngstate = None
+        if "_rng" in state:
+            rngstate = state["_rng"]
+            if rngstate is not None:
+                rng = torch.Generator(device=rngstate.device)
+                rng.set_state(rngstate["rng_state"])
+
         if "_replay_lock_placeholder" in state:
             state.pop("_replay_lock_placeholder")
             _replay_lock = threading.RLock()
@@ -771,6 +820,8 @@ class ReplayBuffer:
             _futures_lock = threading.RLock()
             state["_futures_lock"] = _futures_lock
         self.__dict__.update(state)
+        if rngstate is not None:
+            self.set_rng(rng)
 
     @property
     def sampler(self):
@@ -995,6 +1046,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
                     >>> for d in data.unbind(1):
                     ...     rb.add(d)
                     >>> rb.extend(data)
+        generator (torch.Generator, optional): a generator to use for sampling.
+            Using a dedicated generator for the replay buffer can allow a fine-grained control
+            over seeding, for instance keeping the global seed different but the RB seed identical
+            for distributed jobs.
+            Defaults to ``None`` (global default generator).
+
+            .. warning:: As of now, the generator has no effect on the transforms.
 
     Examples:
         >>> import torch
@@ -1327,6 +1385,13 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
                     >>> for d in data.unbind(1):
                     ...     rb.add(d)
                     >>> rb.extend(data)
+        generator (torch.Generator, optional): a generator to use for sampling.
+            Using a dedicated generator for the replay buffer can allow a fine-grained control
+            over seeding, for instance keeping the global seed different but the RB seed identical
+            for distributed jobs.
+            Defaults to ``None`` (global default generator).
+
+            .. warning:: As of now, the generator has no effect on the transforms.
 
     Examples:
         >>> import torch
@@ -1400,6 +1465,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         reduction: str = "max",
         batch_size: int | None = None,
         dim_extend: int | None = None,
+        generator: torch.Generator | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -1416,6 +1482,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             transform=transform,
             batch_size=batch_size,
             dim_extend=dim_extend,
+            generator=generator,
         )
 
 
@@ -1454,12 +1521,18 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
 class InPlaceSampler:
     """A sampler to write tennsordicts in-place.
 
+    .. warning:: This class is deprecated and will be removed in v0.7.
+
     To be used cautiously as this may lead to unexpected behaviour (i.e. tensordicts
     overwritten during execution).
 
     """
 
     def __init__(self, device: DEVICE_TYPING | None = None):
+        warnings.warn(
+            "InPlaceSampler has been deprecated and will be removed in v0.7.",
+            category=DeprecationWarning,
+        )
         self.out = None
         if device is None:
             device = "cpu"
@@ -1555,6 +1628,13 @@ class ReplayBufferEnsemble(ReplayBuffer):
             sampled according to the probabilities ``p``. Can also
             be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
             if the buffer is built explicitely.
+        generator (torch.Generator, optional): a generator to use for sampling.
+            Using a dedicated generator for the replay buffer can allow a fine-grained control
+            over seeding, for instance keeping the global seed different but the RB seed identical
+            for distributed jobs.
+            Defaults to ``None`` (global default generator).
+
+            .. warning:: As of now, the generator has no effect on the transforms.
 
     Examples:
         >>> from torchrl.envs import Compose, ToTensorImage, Resize, RenameTransform
@@ -1644,6 +1724,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
         p: Tensor = None,
         sample_from_all: bool = False,
         num_buffer_sampled: int | None = None,
+        generator: torch.Generator | None = None,
         **kwargs,
     ):
 
@@ -1680,6 +1761,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
             transform=transform,
             batch_size=batch_size,
             collate_fn=collate_fn,
+            generator=generator,
             **kwargs,
         )
 
