@@ -1232,6 +1232,35 @@ class TestRNG:
         c = rb.sample(32)
         assert (a != c).any()
 
+    def test_rng_state_dict(self):
+        state = torch.random.get_rng_state()
+        rb = ReplayBufferRNG(sampler=RandomSampler(), storage=LazyTensorStorage(100))
+        rb.extend(torch.arange(100))
+        rb._rng.set_state(state)
+        sd = rb.state_dict()
+        assert sd.get("_rng") is not None
+        a = rb.sample(32)
+
+        rb.load_state_dict(sd)
+        b = rb.sample(32)
+        assert (a == b).all()
+        c = rb.sample(32)
+        assert (a != c).any()
+
+    def test_rng_dumps(self, tmpdir):
+        state = torch.random.get_rng_state()
+        rb = ReplayBufferRNG(sampler=RandomSampler(), storage=LazyTensorStorage(100))
+        rb.extend(torch.arange(100))
+        rb._rng.set_state(state)
+        rb.dumps(tmpdir)
+        a = rb.sample(32)
+
+        rb.loads(tmpdir)
+        b = rb.sample(32)
+        assert (a == b).all()
+        c = rb.sample(32)
+        assert (a != c).any()
+
 
 @pytest.mark.parametrize(
     "rbtype,storage",
