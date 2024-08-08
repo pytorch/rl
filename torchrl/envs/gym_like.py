@@ -172,7 +172,6 @@ class GymLikeEnv(_EnvWrapper):
     def __new__(cls, *args, **kwargs):
         self = super().__new__(cls, *args, _batch_locked=True, **kwargs)
         self._info_dict_reader = []
-        self._convert_actions_to_numpy = kwargs.pop("convert_actions_to_numpy", True)
 
         return self
 
