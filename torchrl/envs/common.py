@@ -3087,6 +3087,7 @@ class _EnvWrapper(EnvBase):
 
         self._constructor_kwargs = kwargs
         self._check_kwargs(kwargs)
+        self._convert_actions_to_numpy = kwargs.pop("convert_actions_to_numpy", True)
         self._env = self._build_env(**kwargs)  # writes the self._env attribute
         self._make_specs(self._env)  # writes the self._env attribute
         self.is_closed = False
