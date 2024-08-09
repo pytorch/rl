@@ -1066,7 +1066,7 @@ class SerialEnv(BatchedEnvBase):
         self,
         tensordict: TensorDict,
     ) -> TensorDict:
-        partial_steps = tensordict.get("_partial_steps", None)
+        partial_steps = tensordict.get("_step", None)
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
@@ -1461,7 +1461,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     def _step_and_maybe_reset_no_buffers(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
-        partial_steps = tensordict.get("_partial_steps", None)
+        partial_steps = tensordict.get("_step", None)
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
@@ -1511,7 +1511,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # return self._step_and_maybe_reset_no_buffers(tensordict)
             return super().step_and_maybe_reset(tensordict)
 
-        partial_steps = tensordict.get("_partial_steps", None)
+        partial_steps = tensordict.get("_step", None)
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
@@ -1628,7 +1628,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     def _step_no_buffers(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
-        partial_steps = tensordict.get("_partial_steps", None)
+        partial_steps = tensordict.get("_step", None)
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
@@ -1669,7 +1669,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
-        partial_steps = tensordict.get("_partial_steps", None)
+        partial_steps = tensordict.get("_step", None)
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
