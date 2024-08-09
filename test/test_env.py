@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import contextlib
 import functools
 import gc
 import os.path
@@ -3347,7 +3348,7 @@ class TestPartialSteps:
     def test_parallel_partial_steps(
         self, use_buffers, device, env_device, maybe_fork_ParallelEnv
     ):
-        with torch.device(device):
+        with torch.device(device) if device is not None else contextlib.nullcontext():
             penv = maybe_fork_ParallelEnv(
                 4,
                 lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
@@ -3357,7 +3358,7 @@ class TestPartialSteps:
             td = penv.reset()
             psteps = torch.zeros(4, dtype=torch.bool)
             psteps[[1, 3]] = True
-            td.set("_partial_steps", psteps)
+            td.set("_step", psteps)
 
             td.set("action", penv.action_spec.one())
             td = penv.step(td)
@@ -3370,7 +3371,7 @@ class TestPartialSteps:
     def test_parallel_partial_step_and_maybe_reset(
         self, use_buffers, device, env_device, maybe_fork_ParallelEnv
     ):
-        with torch.device(device):
+        with torch.device(device) if device is not None else contextlib.nullcontext():
             penv = maybe_fork_ParallelEnv(
                 4,
                 lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
@@ -3380,7 +3381,7 @@ class TestPartialSteps:
             td = penv.reset()
             psteps = torch.zeros(4, dtype=torch.bool)
             psteps[[1, 3]] = True
-            td.set("_partial_steps", psteps)
+            td.set("_step", psteps)
 
             td.set("action", penv.action_spec.one())
             td, tdreset = penv.step_and_maybe_reset(td)
@@ -3391,7 +3392,7 @@ class TestPartialSteps:
 
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_serial_partial_steps(self, use_buffers, device, env_device):
-        with torch.device(device):
+        with torch.device(device) if device is not None else contextlib.nullcontext():
             penv = SerialEnv(
                 4,
                 lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
@@ -3401,7 +3402,7 @@ class TestPartialSteps:
             td = penv.reset()
             psteps = torch.zeros(4, dtype=torch.bool)
             psteps[[1, 3]] = True
-            td.set("_partial_steps", psteps)
+            td.set("_step", psteps)
 
             td.set("action", penv.action_spec.one())
             td = penv.step(td)
@@ -3412,7 +3413,7 @@ class TestPartialSteps:
 
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_serial_partial_step_and_maybe_reset(self, use_buffers, device, env_device):
-        with torch.device(device):
+        with torch.device(device) if device is not None else contextlib.nullcontext():
             penv = SerialEnv(
                 4,
                 lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
@@ -3422,7 +3423,7 @@ class TestPartialSteps:
             td = penv.reset()
             psteps = torch.zeros(4, dtype=torch.bool)
             psteps[[1, 3]] = True
-            td.set("_partial_steps", psteps)
+            td.set("_step", psteps)
 
             td.set("action", penv.action_spec.one())
             td = penv.step(td)
