@@ -887,8 +887,10 @@ class SyncDataCollector(DataCollectorBase):
 
     def _increment_frames(self, numel):
         self._frames += numel
-        if self._frames >= self.total_frames:
+        completed = self._frames >= self.total_frames
+        if completed:
             self.env.close()
+        return completed
 
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
@@ -1073,7 +1075,8 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self.replay_buffer is not None:
                     self.replay_buffer.add(self._shuttle)
-                    self._increment_frames(self._shuttle.numel())
+                    if self._increment_frames(self._shuttle.numel()):
+                        return
                 else:
                     if self.storing_device is not None:
                         tensordicts.append(
