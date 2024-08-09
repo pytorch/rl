@@ -1066,18 +1066,33 @@ class SerialEnv(BatchedEnvBase):
         self,
         tensordict: TensorDict,
     ) -> TensorDict:
-        tensordict_in = tensordict.clone(False)
+        partial_steps = tensordict.get("_step", None)
+        tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
+        if partial_steps is not None:
+            tensordict = tensordict[partial_steps]
+            workers_range = partial_steps.nonzero().squeeze().tolist()
+            tensordict_in = tensordict
+            # if self._use_buffers:
+            #     shared_tensordict_parent = (
+            #         self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
+            #     )
+        else:
+            workers_range = range(self.num_workers)
+            tensordict_in = tensordict.clone(False)
+            # if self._use_buffers:
+            #     shared_tensordict_parent = self.shared_tensordict_parent
+
         data_in = []
-        for i in range(self.num_workers):
+        for i, td_ in zip(workers_range, tensordict_in):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             env_device = self._envs[i].device
             if env_device != self.device and env_device is not None:
-                data_in.append(
-                    tensordict_in[i].to(env_device, non_blocking=self.non_blocking)
-                )
+                data_in.append(td_.to(env_device, non_blocking=self.non_blocking))
             else:
-                data_in.append(tensordict_in[i])
+                data_in.append(td_)
 
         self._sync_m2w()
         out_tds = None
@@ -1086,7 +1101,7 @@ class SerialEnv(BatchedEnvBase):
 
         if self._use_buffers:
             next_td = self.shared_tensordict_parent.get("next")
-            for i, _data_in in enumerate(data_in):
+            for i, _data_in in zip(workers_range, data_in):
                 out_td = self._envs[i]._step(_data_in)
                 next_td[i].update_(
                     out_td,
@@ -1095,32 +1110,43 @@ class SerialEnv(BatchedEnvBase):
                 )
                 if out_tds is not None:
                     out_tds.append(out_td)
+
+            # We must pass a clone of the tensordict, as the values of this tensordict
+            # will be modified in-place at further steps
+            device = self.device
+
+            def select_and_clone(name, tensor):
+                if name in self._selected_step_keys:
+                    return tensor.clone()
+
+            if partial_steps is not None:
+                next_td = next_td._get_sub_tensordict(partial_steps)
+            out = next_td.named_apply(
+                select_and_clone, nested_keys=True, filter_empty=True
+            )
+            if out_tds is not None:
+                out.update(
+                    LazyStackedTensorDict(*out_tds),
+                    keys_to_update=self._non_tensor_keys,
+                )
+
+            if out.device != device:
+                if device is None:
+                    out = out.clear_device_()
+                elif out.device != device:
+                    out = out.to(device, non_blocking=self.non_blocking)
+                    self._sync_w2m()
         else:
-            for i, _data_in in enumerate(data_in):
+            for i, _data_in in zip(workers_range, data_in):
                 out_td = self._envs[i]._step(_data_in)
                 out_tds.append(out_td)
-            return LazyStackedTensorDict.maybe_dense_stack(out_tds)
+            out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
 
-        # We must pass a clone of the tensordict, as the values of this tensordict
-        # will be modified in-place at further steps
-        device = self.device
+        if partial_steps is not None:
+            result = out.new_zeros(tensordict_save.shape)
+            result[partial_steps] = out
+            return result
 
-        def select_and_clone(name, tensor):
-            if name in self._selected_step_keys:
-                return tensor.clone()
-
-        out = next_td.named_apply(select_and_clone, nested_keys=True, filter_empty=True)
-        if out_tds is not None:
-            out.update(
-                LazyStackedTensorDict(*out_tds), keys_to_update=self._non_tensor_keys
-            )
-
-        if out.device != device:
-            if device is None:
-                out = out.clear_device_()
-            elif out.device != device:
-                out = out.to(device, non_blocking=self.non_blocking)
-                self._sync_w2m()
         return out
 
     def __getattr__(self, attr: str) -> Any:
@@ -1435,20 +1461,29 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     def _step_and_maybe_reset_no_buffers(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
+        partial_steps = tensordict.get("_step", None)
+        tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
+        if partial_steps is not None:
+            tensordict = tensordict[partial_steps]
+            workers_range = partial_steps.nonzero().squeeze().tolist()
+        else:
+            workers_range = range(self.num_workers)
 
         td = tensordict.consolidate(share_memory=True, inplace=True, num_threads=1)
-        for i in range(td.shape[0]):
+        for i in workers_range:
             # We send the same td multiple times as it is in shared mem and we just need to index it
             # in each process.
             # If we don't do this, we need to unbind it but then the custom pickler will require
             # some extra metadata to be collected.
             self.parent_channels[i].send(("step_and_maybe_reset", (td, i)))
 
-        results = [None] * self.num_workers
+        results = [None] * len(workers_range)
 
         consumed_indices = []
-        events = set(range(self.num_workers))
-        while len(consumed_indices) < self.num_workers:
+        events = set(workers_range)
+        while len(consumed_indices) < len(workers_range):
             for i in list(events):
                 if self._events[i].is_set():
                     results[i] = self.parent_channels[i].recv()
@@ -1457,9 +1492,14 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     events.discard(i)
 
         out_next, out_root = zip(*(future for future in results))
-        return TensorDict.maybe_dense_stack(out_next), TensorDict.maybe_dense_stack(
+        out = TensorDict.maybe_dense_stack(out_next), TensorDict.maybe_dense_stack(
             out_root
         )
+        if partial_steps is not None:
+            result = out.new_zeros(tensordict_save.shape)
+            result[partial_steps] = out
+            return result
+        return out
 
     @torch.no_grad()
     @_check_start
@@ -1471,6 +1511,28 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # return self._step_and_maybe_reset_no_buffers(tensordict)
             return super().step_and_maybe_reset(tensordict)
 
+        partial_steps = tensordict.get("_step", None)
+        tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
+        if partial_steps is not None:
+            shared_tensordict_parent = (
+                self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
+            )
+            next_td = self._shared_tensordict_parent_next._get_sub_tensordict(
+                partial_steps
+            )
+            tensordict_ = self._shared_tensordict_parent_root._get_sub_tensordict(
+                partial_steps
+            )
+            tensordict = tensordict[partial_steps]
+            workers_range = partial_steps.nonzero().squeeze().tolist()
+        else:
+            workers_range = range(self.num_workers)
+            shared_tensordict_parent = self.shared_tensordict_parent
+            next_td = self._shared_tensordict_parent_next
+            tensordict_ = self._shared_tensordict_parent_root
+
         # We must use the in_keys and nothing else for the following reasons:
         # - efficiency: copying all the keys will in practice mean doing a lot
         #   of writing operations since the input tensordict may (and often will)
@@ -1479,7 +1541,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
-        self.shared_tensordict_parent.update_(
+        shared_tensordict_parent.update_(
             tensordict,
             keys_to_update=self._env_input_keys,
             non_blocking=self.non_blocking,
@@ -1489,46 +1551,41 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # if we have input "next" data (eg, RNNs which pass the next state)
             # the sub-envs will need to process them through step_and_maybe_reset.
             # We keep track of which keys are present to let the worker know what
-            # should be passd to the env (we don't want to pass done states for instance)
+            # should be passed to the env (we don't want to pass done states for instance)
             next_td_keys = list(next_td_passthrough.keys(True, True))
-            data = [
-                {"next_td_passthrough_keys": next_td_keys}
-                for _ in range(self.num_workers)
-            ]
-            self.shared_tensordict_parent.get("next").update_(
+            data = [{"next_td_passthrough_keys": next_td_keys} for _ in workers_range]
+            shared_tensordict_parent.get("next").update_(
                 next_td_passthrough, non_blocking=self.non_blocking
             )
         else:
             # next_td_keys = None
-            data = [{} for _ in range(self.num_workers)]
+            data = [{} for _ in workers_range]
 
         if self._non_tensor_keys:
-            for i in range(self.num_workers):
+            for i in workers_range:
                 data[i]["non_tensor_data"] = tensordict[i].select(
                     *self._non_tensor_keys, strict=False
                 )
 
         self._sync_m2w()
-        for i in range(self.num_workers):
-            self.parent_channels[i].send(("step_and_maybe_reset", data[i]))
+        for i, _data in zip(workers_range, data):
+            self.parent_channels[i].send(("step_and_maybe_reset", _data))
 
-        for i in range(self.num_workers):
+        for i in workers_range:
             event = self._events[i]
             event.wait(self._timeout)
             event.clear()
 
         if self._non_tensor_keys:
             non_tensor_tds = []
-            for i in range(self.num_workers):
+            for i in workers_range:
                 msg, non_tensor_td = self.parent_channels[i].recv()
                 non_tensor_tds.append(non_tensor_td)
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        next_td = self._shared_tensordict_parent_next
-        tensordict_ = self._shared_tensordict_parent_root
         device = self.device
-        if self.shared_tensordict_parent.device == device:
+        if shared_tensordict_parent.device == device:
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
         elif device is not None:
@@ -1558,22 +1615,46 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 keys_to_update=[("next", key) for key in self._non_tensor_keys],
             )
             tensordict_.update(non_tensor_tds, keys_to_update=self._non_tensor_keys)
+
+        if partial_steps is not None:
+            result = tensordict.new_zeros(tensordict_save.shape)
+            result_ = tensordict_.new_zeros(tensordict_save.shape)
+            result[partial_steps] = tensordict
+            result_[partial_steps] = tensordict_
+            return result, result_
+
         return tensordict, tensordict_
 
     def _step_no_buffers(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
+        partial_steps = tensordict.get("_step", None)
+        tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
+        if partial_steps is not None:
+            tensordict = tensordict[partial_steps]
+            workers_range = partial_steps.nonzero().squeeze().tolist()
+        else:
+            workers_range = range(self.num_workers)
+
         data = tensordict.consolidate(share_memory=True, inplace=True, num_threads=1)
-        for i, local_data in enumerate(data.unbind(0)):
+        for i, local_data in zip(workers_range, data.unbind(0)):
             self.parent_channels[i].send(("step", local_data))
         # for i in range(data.shape[0]):
         #     self.parent_channels[i].send(("step", (data, i)))
         out_tds = []
-        for i, channel in enumerate(self.parent_channels):
+        for i in workers_range:
+            channel = self.parent_channels[i]
             self._events[i].wait()
             td = channel.recv()
             out_tds.append(td)
-        return LazyStackedTensorDict.maybe_dense_stack(out_tds)
+        out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
+        if partial_steps is not None:
+            result = out.new_zeros(tensordict_save.shape)
+            result[partial_steps] = out
+            return result
+        return out
 
     @torch.no_grad()
     @_check_start
@@ -1588,8 +1669,21 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
+        partial_steps = tensordict.get("_step", None)
+        tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
+        if partial_steps is not None:
+            shared_tensordict_parent = (
+                self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
+            )
+            tensordict = tensordict[partial_steps]
+            workers_range = partial_steps.nonzero().squeeze().tolist()
+        else:
+            workers_range = range(self.num_workers)
+            shared_tensordict_parent = self.shared_tensordict_parent
 
-        self.shared_tensordict_parent.update_(
+        shared_tensordict_parent.update_(
             tensordict,
             keys_to_update=list(self._env_input_keys),
             non_blocking=self.non_blocking,
@@ -1605,14 +1699,14 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 {"next_td_passthrough_keys": next_td_keys}
                 for _ in range(self.num_workers)
             ]
-            self.shared_tensordict_parent.get("next").update_(
+            shared_tensordict_parent.get("next").update_(
                 next_td_passthrough, non_blocking=self.non_blocking
             )
         else:
             data = [{} for _ in range(self.num_workers)]
 
         if self._non_tensor_keys:
-            for i in range(self.num_workers):
+            for i in workers_range:
                 data[i]["non_tensor_data"] = tensordict[i].select(
                     *self._non_tensor_keys, strict=False
                 )
@@ -1622,23 +1716,23 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self.event is not None:
             self.event.record()
             self.event.synchronize()
-        for i in range(self.num_workers):
+        for i in workers_range:
             self.parent_channels[i].send(("step", data[i]))
 
-        for i in range(self.num_workers):
+        for i in workers_range:
             event = self._events[i]
             event.wait(self._timeout)
             event.clear()
 
         if self._non_tensor_keys:
             non_tensor_tds = []
-            for i in range(self.num_workers):
+            for i in workers_range:
                 msg, non_tensor_td = self.parent_channels[i].recv()
                 non_tensor_tds.append(non_tensor_td)
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        next_td = self.shared_tensordict_parent.get("next")
+        next_td = shared_tensordict_parent.get("next")
         device = self.device
 
         if next_td.device != device and device is not None:
@@ -1665,6 +1759,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 keys_to_update=self._non_tensor_keys,
             )
         self._sync_w2m()
+        if partial_steps is not None:
+            result = out.new_zeros(tensordict_save.shape)
+            result[partial_steps] = out
+            return result
         return out
 
     def _reset_no_buffers(
