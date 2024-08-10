@@ -9,6 +9,7 @@ import functools
 import gc
 
 import sys
+import time
 
 import numpy as np
 import pytest
@@ -2796,6 +2797,30 @@ class TestCollectorRB:
             env.close()
         del collector, env
         assert assert_allclose_td(rbdata0, rbdata1)
+
+    def test_collector_rb_multisync(self):
+        env = GymEnv(CARTPOLE_VERSIONED())
+        env.set_seed(0)
+
+        rb = ReplayBuffer(storage=LazyTensorStorage(256), batch_size=5)
+        rb.add(env.rand_step(env.reset()))
+        rb.empty()
+
+        collector = MultiSyncDataCollector(
+            [lambda: env, lambda: env],
+            RandomPolicy(env.action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=16,
+        )
+        torch.manual_seed(0)
+        pred_len = 0
+        for c in collector:
+            pred_len += 16
+            assert c is None
+            assert len(rb) == pred_len
+        collector.shutdown()
+        assert len(rb) == 256
 
 
 if __name__ == "__main__":
