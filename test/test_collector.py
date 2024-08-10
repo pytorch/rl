@@ -69,6 +69,7 @@ from torchrl.collectors.collectors import (
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
+    LazyMemmapStorage,
     LazyTensorStorage,
     NonTensor,
     ReplayBuffer,
@@ -2801,7 +2802,10 @@ class TestCollectorRB:
 
     @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
-    def test_collector_rb_multisync(self, replay_buffer_chunk, env_creator):
+    @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_rb_multisync(
+        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+    ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
             env.set_seed(0)
@@ -2815,7 +2819,9 @@ class TestCollectorRB:
             )
             action_spec = env.meta_data.specs["input_spec", "full_action_spec"]
 
-        rb = ReplayBuffer(storage=LazyTensorStorage(256), batch_size=5)
+        if storagetype == LazyMemmapStorage:
+            storagetype = functools.partial(LazyMemmapStorage, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storagetype(256), batch_size=5)
 
         collector = MultiSyncDataCollector(
             [env, env],
@@ -2846,7 +2852,10 @@ class TestCollectorRB:
 
     @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
-    def test_collector_rb_multiasync(self, replay_buffer_chunk, env_creator):
+    @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_rb_multiasync(
+        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+    ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
             env.set_seed(0)
@@ -2860,7 +2869,9 @@ class TestCollectorRB:
             )
             action_spec = env.meta_data.specs["input_spec", "full_action_spec"]
 
-        rb = ReplayBuffer(storage=LazyTensorStorage(256), batch_size=5)
+        if storagetype == LazyMemmapStorage:
+            storagetype = functools.partial(LazyMemmapStorage, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storagetype(256), batch_size=5)
 
         collector = MultiaSyncDataCollector(
             [env, env],
