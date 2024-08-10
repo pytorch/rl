@@ -7,6 +7,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import json
+import multiprocessing
 import textwrap
 import threading
 import warnings
@@ -128,6 +129,8 @@ class ReplayBuffer:
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -212,6 +215,7 @@ class ReplayBuffer:
         dim_extend: int | None = None,
         checkpointer: "StorageCheckpointerBase" | None = None,  # noqa: F821
         generator: torch.Generator | None = None,
+        shared: bool = False,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
@@ -227,6 +231,9 @@ class ReplayBuffer:
         self._prefetch_queue = collections.deque()
         if self._prefetch_cap:
             self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
+
+        self.shared = shared
+        self.share(self.shared)
 
         self._replay_lock = threading.RLock()
         self._futures_lock = threading.RLock()
@@ -271,6 +278,13 @@ class ReplayBuffer:
         self.dim_extend = dim_extend
         self._storage.checkpointer = checkpointer
         self.set_rng(generator=generator)
+
+    def share(self, shared: bool = True):
+        self.shared = shared
+        if self.shared:
+            self._write_lock = multiprocessing.Lock()
+        else:
+            self._write_lock = contextlib.nullcontext()
 
     def set_rng(self, generator):
         self._rng = generator
@@ -349,6 +363,11 @@ class ReplayBuffer:
     def __len__(self) -> int:
         with self._replay_lock:
             return len(self._storage)
+
+    @property
+    def write_count(self):
+        """The total number of items written so far in the buffer through add and extend."""
+        return self._writer._write_count
 
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose
@@ -576,13 +595,13 @@ class ReplayBuffer:
         return self._add(data)
 
     def _add(self, data):
-        with self._replay_lock:
+        with self._replay_lock, self._write_lock:
             index = self._writer.add(data)
             self._sampler.add(index)
         return index
 
     def _extend(self, data: Sequence) -> torch.Tensor:
-        with self._replay_lock:
+        with self._replay_lock, self._write_lock:
             if self.dim_extend > 0:
                 data = self._transpose(data)
             index = self._writer.extend(data)
@@ -630,7 +649,7 @@ class ReplayBuffer:
         if self.dim_extend > 0 and priority.ndim > 1:
             priority = self._transpose(priority).flatten()
             # priority = priority.flatten()
-        with self._replay_lock:
+        with self._replay_lock, self._write_lock:
             self._sampler.update_priority(index, priority, storage=self.storage)
 
     @pin_memory_output
@@ -1053,6 +1072,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1392,6 +1413,8 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1466,6 +1489,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         batch_size: int | None = None,
         dim_extend: int | None = None,
         generator: torch.Generator | None = None,
+        shared: bool = False,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -1483,6 +1507,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             batch_size=batch_size,
             dim_extend=dim_extend,
             generator=generator,
+            shared=shared,
         )
 
 
@@ -1635,6 +1660,8 @@ class ReplayBufferEnsemble(ReplayBuffer):
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs import Compose, ToTensorImage, Resize, RenameTransform
@@ -1725,6 +1752,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
         sample_from_all: bool = False,
         num_buffer_sampled: int | None = None,
         generator: torch.Generator | None = None,
+        shared: bool = False,
         **kwargs,
     ):
 
@@ -1762,6 +1790,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
             batch_size=batch_size,
             collate_fn=collate_fn,
             generator=generator,
+            shared=shared,
             **kwargs,
         )
 
