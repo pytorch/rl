@@ -2751,6 +2751,53 @@ class TestCollectorsNonTensor:
             del collector
 
 
+class TestCollectorRB:
+    def test_collector_rb_sync(self):
+        env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
+        env.set_seed(0)
+        rb = ReplayBuffer(storage=LazyTensorStorage(256, ndim=2), batch_size=5)
+        collector = SyncDataCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=16,
+        )
+        torch.manual_seed(0)
+
+        for c in collector:
+            assert c is None
+            rb.sample()
+        rbdata0 = rb[:].clone()
+        collector.shutdown()
+        if not env.is_closed:
+            env.close()
+        del collector, env
+
+        env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
+        env.set_seed(0)
+        rb = ReplayBuffer(storage=LazyTensorStorage(256, ndim=2), batch_size=5)
+        collector = SyncDataCollector(
+            env, RandomPolicy(env.action_spec), total_frames=256, frames_per_batch=16
+        )
+        torch.manual_seed(0)
+
+        for i, c in enumerate(collector):
+            rb.extend(c)
+            torch.testing.assert_close(
+                rbdata0[:, : (i + 1) * 2]["observation"], rb[:]["observation"]
+            )
+            assert c is not None
+            rb.sample()
+
+        rbdata1 = rb[:].clone()
+        collector.shutdown()
+        if not env.is_closed:
+            env.close()
+        del collector, env
+        assert assert_allclose_td(rbdata0, rbdata1)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

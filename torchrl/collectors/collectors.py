@@ -50,6 +50,7 @@ from torchrl._utils import (
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
+from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
@@ -357,6 +358,8 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+            but populate the buffer instead. Defaults to ``None``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -446,6 +449,7 @@ class SyncDataCollector(DataCollectorBase):
         interruptor=None,
         set_truncated: bool = False,
         use_buffers: bool | None = None,
+        replay_buffer: ReplayBuffer | None = None,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
 
@@ -538,9 +542,17 @@ class SyncDataCollector(DataCollectorBase):
 
         self.env: EnvBase = env
         del env
+        self.replay_buffer = replay_buffer
+        if self.replay_buffer is not None:
+            if postproc is not None:
+                raise TypeError("postproc must be None when a replay buffer is passed.")
+            if use_buffers:
+                raise TypeError("replay_buffer is exclusive with use_buffers.")
         if use_buffers is None:
-            use_buffers = not self.env._has_dynamic_specs
+            use_buffers = not self.env._has_dynamic_specs and self.replay_buffer is None
         self._use_buffers = use_buffers
+        self.replay_buffer = replay_buffer
+
         self.closed = False
         if not reset_when_done:
             raise ValueError("reset_when_done is deprectated.")
@@ -871,7 +883,15 @@ class SyncDataCollector(DataCollectorBase):
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
-        return self.env.set_seed(seed, static_seed=static_seed)
+        out = self.env.set_seed(seed, static_seed=static_seed)
+        return out
+
+    def _increment_frames(self, numel):
+        self._frames += numel
+        completed = self._frames >= self.total_frames
+        if completed:
+            self.env.close()
+        return completed
 
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
@@ -917,14 +937,15 @@ class SyncDataCollector(DataCollectorBase):
             for stream in streams:
                 stack.enter_context(torch.cuda.stream(stream))
 
-            total_frames = self.total_frames
-
             while self._frames < self.total_frames:
                 self._iter += 1
                 tensordict_out = self.rollout()
-                self._frames += tensordict_out.numel()
-                if self._frames >= total_frames:
-                    self.env.close()
+                if tensordict_out is None:
+                    # if a replay buffer is passed, there is no tensordict_out
+                    #  frames are updated within the rollout function
+                    yield
+                    continue
+                self._increment_frames(tensordict_out.numel())
 
                 if self.split_trajs:
                     tensordict_out = split_trajectories(
@@ -1053,13 +1074,18 @@ class SyncDataCollector(DataCollectorBase):
                         next_data.clear_device_()
                     self._shuttle.set("next", next_data)
 
-                if self.storing_device is not None:
-                    tensordicts.append(
-                        self._shuttle.to(self.storing_device, non_blocking=True)
-                    )
-                    self._sync_storage()
+                if self.replay_buffer is not None:
+                    self.replay_buffer.add(self._shuttle)
+                    if self._increment_frames(self._shuttle.numel()):
+                        return
                 else:
-                    tensordicts.append(self._shuttle)
+                    if self.storing_device is not None:
+                        tensordicts.append(
+                            self._shuttle.to(self.storing_device, non_blocking=True)
+                        )
+                        self._sync_storage()
+                    else:
+                        tensordicts.append(self._shuttle)
 
                 # carry over collector data without messing up devices
                 collector_data = self._shuttle.get("collector").copy()
@@ -1074,6 +1100,8 @@ class SyncDataCollector(DataCollectorBase):
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
+                    if self.replay_buffer is not None:
+                        return
                     result = self._final_rollout
                     if self._use_buffers:
                         try:
@@ -1109,6 +1137,8 @@ class SyncDataCollector(DataCollectorBase):
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
+                elif self.replay_buffer is not None:
+                    return
                 else:
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
