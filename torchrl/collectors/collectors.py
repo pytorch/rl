@@ -883,7 +883,8 @@ class SyncDataCollector(DataCollectorBase):
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
-        return self.env.set_seed(seed, static_seed=static_seed)
+        out = self.env.set_seed(seed, static_seed=static_seed)
+        return out
 
     def _increment_frames(self, numel):
         self._frames += numel
