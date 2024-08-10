@@ -1014,15 +1014,18 @@ class SyncDataCollector(DataCollectorBase):
             env_output.get("next"), done_keys=self.env.done_keys
         )
         if traj_sop.any():
+            device = self.storing_device
+
             traj_ids = self._shuttle.get(("collector", "traj_ids"))
-            traj_sop = traj_sop.to(self.storing_device)
+            if device is not None:
+                traj_ids = traj_ids.to(device)
+                traj_sop = traj_sop.to(device)
+
             pool = self._traj_pool
             new_traj = pool.get_traj_and_increment(
-                traj_sop.sum(), device=self.storing_device
+                traj_sop.sum(), device=traj_sop.device
             )
-            traj_ids = traj_ids.to(self.storing_device).masked_scatter(
-                traj_sop, new_traj
-            )
+            traj_ids = traj_ids.masked_scatter(traj_sop, new_traj)
             self._shuttle.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
@@ -3026,7 +3029,7 @@ class _TrajectoryPool:
     def get_traj_and_increment(self, n=1, device=None):
         traj_id = []
         with self.lock:
-            for i in range(n):
+            for _ in range(n):
                 traj_id.append(int(self._traj_id.value))
                 self._traj_id.value += 1
         return torch.as_tensor(traj_id, device=device)
