@@ -54,6 +54,7 @@ from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
+from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
@@ -1511,6 +1512,7 @@ class _MultiDataCollector(DataCollectorBase):
 
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
+        self._check_replay_buffer_init()
         self.replay_buffer_chunk = replay_buffer_chunk
         if (
             replay_buffer is not None
@@ -1657,6 +1659,21 @@ class _MultiDataCollector(DataCollectorBase):
                 "cat_results can only be used with ``MultiSyncDataCollector``."
             )
         self.cat_results = cat_results
+
+    def _check_replay_buffer_init(self):
+        try:
+            if not self.replay_buffer._storage.initialized:
+                if isinstance(self.create_env_fn, EnvCreator):
+                    fake_td = self.create_env_fn.tensordict
+                else:
+                    fake_td = self.create_env_fn[0](
+                        **self.create_env_kwargs[0]
+                    ).fake_tensordict()
+                fake_td["collector", "traj_ids"] = torch.zeros((), dtype=torch.long)
+
+                self.replay_buffer._storage._init(fake_td)
+        except AttributeError:
+            pass
 
     @classmethod
     def _total_workers_from_env(cls, env_creators):
@@ -3034,7 +3051,7 @@ class _TrajectoryPool:
     def get_traj_and_increment(self, n=1, device=None):
         traj_id = []
         with self.lock:
-            for i in range(n):
+            for _ in range(n):
                 traj_id.append(int(self._traj_id.value))
                 self._traj_id.value += 1
         return torch.as_tensor(traj_id, device=device)

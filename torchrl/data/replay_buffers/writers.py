@@ -163,6 +163,7 @@ class RoundRobinWriter(Writer):
         self._cursor = (self._cursor + 1) % self._storage._max_size_along_dim0(
             single_data=data
         )
+        self._write_count += 1
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(_cursor, data)
@@ -191,6 +192,7 @@ class RoundRobinWriter(Writer):
         )
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % max_size_along0
+        self._write_count += batch_size
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
@@ -222,6 +224,20 @@ class RoundRobinWriter(Writer):
             _cursor_value = self._cursor_value = mp.Value("i", 0)
         _cursor_value.value = value
 
+    @property
+    def _write_count(self):
+        _write_count = self.__dict__.get("_write_count_value", None)
+        if _write_count is None:
+            _write_count = self._write_count_value = mp.Value("i", 0)
+        return _write_count.value
+
+    @_write_count.setter
+    def _write_count(self, value):
+        _write_count = self.__dict__.get("_write_count_value", None)
+        if _write_count is None:
+            _write_count = self._write_count_value = mp.Value("i", 0)
+        _write_count.value = value
+
     def __getstate__(self):
         state = super().__getstate__()
         if get_spawning_popen() is None:
@@ -249,6 +265,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # we need to update the cursor first to avoid race conditions between workers
         max_size_along_dim0 = self._storage._max_size_along_dim0(single_data=data)
         self._cursor = (index + 1) % max_size_along_dim0
+        self._write_count += 1
         if not is_tensorclass(data):
             data.set(
                 "index",
@@ -275,6 +292,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         )
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % max_size_along_dim0
+        self._write_count += batch_size
         # storage must convert the data to the appropriate format if needed
         if not is_tensorclass(data):
             data.set(
@@ -469,6 +487,7 @@ class TensorDictMaxValueWriter(Writer):
         index = self.get_insert_index(data)
         if index is not None:
             data.set("index", index)
+            self._write_count += 1
             # Replicate index requires the shape of the storage to be known
             # Other than that, a "flat" (1d) index is ok to write the data
             self._storage.set(index, data)
@@ -488,6 +507,7 @@ class TensorDictMaxValueWriter(Writer):
         for data_idx, sample in enumerate(data):
             storage_idx = self.get_insert_index(sample)
             if storage_idx is not None:
+                self._write_count += 1
                 data_to_replace[storage_idx] = data_idx
 
         # -1 will be interpreted as invalid by prioritized buffers

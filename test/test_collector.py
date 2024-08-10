@@ -9,7 +9,6 @@ import functools
 import gc
 
 import sys
-import time
 
 import numpy as np
 import pytest
@@ -2799,43 +2798,71 @@ class TestCollectorRB:
         assert assert_allclose_td(rbdata0, rbdata1)
 
     @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
-    def test_collector_rb_multisync(self, replay_buffer_chunk):
-        env = GymEnv(CARTPOLE_VERSIONED())
-        env.set_seed(0)
+    @pytest.mark.parametrize("env_creator", [False, True])
+    def test_collector_rb_multisync(self, replay_buffer_chunk, env_creator):
+        if not env_creator:
+            env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
+            env.set_seed(0)
+            action_spec = env.action_spec
+            env = lambda env=env: env
+        else:
+            env = EnvCreator(
+                lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp).append_transform(
+                    StepCounter()
+                )
+            )
+            action_spec = env.meta_data.specs["input_spec", "full_action_spec"]
 
         rb = ReplayBuffer(storage=LazyTensorStorage(256), batch_size=5)
-        rb.add(env.rand_step(env.reset()))
-        rb.empty()
 
         collector = MultiSyncDataCollector(
-            [lambda: env, lambda: env],
-            RandomPolicy(env.action_spec),
+            [env, env],
+            RandomPolicy(action_spec),
             replay_buffer=rb,
             total_frames=256,
-            frames_per_batch=16,
+            frames_per_batch=32,
             replay_buffer_chunk=replay_buffer_chunk,
         )
         torch.manual_seed(0)
         pred_len = 0
         for c in collector:
-            pred_len += 16
+            pred_len += 32
             assert c is None
             assert len(rb) == pred_len
         collector.shutdown()
         assert len(rb) == 256
+        if not replay_buffer_chunk:
+            steps_counts = rb["step_count"].squeeze().split(16)
+            collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
+            for step_count, ids in zip(steps_counts, collector_ids):
+                step_countdiff = step_count.diff()
+                idsdiff = ids.diff()
+                assert (
+                    (step_countdiff == 1) | (step_countdiff < 0)
+                ).all(), steps_counts
+                assert (idsdiff >= 0).all()
 
     @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
-    def test_collector_rb_multiasync(self, replay_buffer_chunk):
-        env = GymEnv(CARTPOLE_VERSIONED())
-        env.set_seed(0)
+    @pytest.mark.parametrize("env_creator", [False, True])
+    def test_collector_rb_multiasync(self, replay_buffer_chunk, env_creator):
+        if not env_creator:
+            env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
+            env.set_seed(0)
+            action_spec = env.action_spec
+            env = lambda env=env: env
+        else:
+            env = EnvCreator(
+                lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp).append_transform(
+                    StepCounter()
+                )
+            )
+            action_spec = env.meta_data.specs["input_spec", "full_action_spec"]
 
         rb = ReplayBuffer(storage=LazyTensorStorage(256), batch_size=5)
-        rb.add(env.rand_step(env.reset()))
-        rb.empty()
 
         collector = MultiaSyncDataCollector(
-            [lambda: env, lambda: env],
-            RandomPolicy(env.action_spec),
+            [env, env],
+            RandomPolicy(action_spec),
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=16,
@@ -2849,6 +2876,16 @@ class TestCollectorRB:
             assert len(rb) >= pred_len
         collector.shutdown()
         assert len(rb) == 256
+        if not replay_buffer_chunk:
+            steps_counts = rb["step_count"].squeeze().split(16)
+            collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
+            for step_count, ids in zip(steps_counts, collector_ids):
+                step_countdiff = step_count.diff()
+                idsdiff = ids.diff()
+                assert (
+                    (step_countdiff == 1) | (step_countdiff < 0)
+                ).all(), steps_counts
+                assert (idsdiff >= 0).all()
 
 
 if __name__ == "__main__":
