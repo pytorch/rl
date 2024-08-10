@@ -547,15 +547,15 @@ class TensorStorage(Storage):
             # check that the content is shared, otherwise tell the user we can't help
             storage = self._storage
             STORAGE_ERR = "The storage must be place in shared memory or memmapped before being shared between processes."
-            if is_tensor_collection(storage):
-                if not storage.is_memmap() and not storage.is_shared():
-                    raise RuntimeError(STORAGE_ERR)
-            else:
-                if (
-                    not isinstance(storage, MemoryMappedTensor)
-                    and not storage.is_shared()
-                ):
-                    raise RuntimeError(STORAGE_ERR)
+            # if is_tensor_collection(storage):
+            #     if not storage.is_memmap() and not storage.is_shared():
+            #         raise RuntimeError(STORAGE_ERR)
+            # else:
+            #     if (
+            #         not isinstance(storage, MemoryMappedTensor)
+            #         and not storage.is_shared()
+            #     ):
+            #         raise RuntimeError(STORAGE_ERR)
 
         return state
 

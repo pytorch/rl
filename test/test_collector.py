@@ -9,6 +9,7 @@ import functools
 import gc
 
 import sys
+import time
 
 import numpy as np
 import pytest
@@ -2749,6 +2750,101 @@ class TestCollectorsNonTensor:
         finally:
             collector.shutdown()
             del collector
+
+
+class TestCollectorRB:
+    def test_collector_rb_sync(self):
+        env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
+        env.set_seed(0)
+        rb = ReplayBuffer(storage=LazyTensorStorage(256, ndim=2), batch_size=5)
+        collector = SyncDataCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=16,
+        )
+        torch.manual_seed(0)
+
+        for c in collector:
+            assert c is None
+            rb.sample()
+        rbdata0 = rb[:].clone()
+        collector.shutdown()
+        if not env.is_closed:
+            env.close()
+        del collector, env
+
+        env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
+        env.set_seed(0)
+        rb = ReplayBuffer(storage=LazyTensorStorage(256, ndim=2), batch_size=5)
+        collector = SyncDataCollector(
+            env, RandomPolicy(env.action_spec), total_frames=256, frames_per_batch=16
+        )
+        torch.manual_seed(0)
+
+        for i, c in enumerate(collector):
+            rb.extend(c)
+            torch.testing.assert_close(
+                rbdata0[:, : (i + 1) * 2]["observation"], rb[:]["observation"]
+            )
+            assert c is not None
+            rb.sample()
+
+        rbdata1 = rb[:].clone()
+        collector.shutdown()
+        if not env.is_closed:
+            env.close()
+        del collector, env
+        assert assert_allclose_td(rbdata0, rbdata1)
+
+    def test_collector_rb_multisync(self):
+        env = GymEnv(CARTPOLE_VERSIONED())
+        env.set_seed(0)
+
+        rb = ReplayBuffer(storage=LazyTensorStorage(256), batch_size=5)
+        rb.add(env.rand_step(env.reset()))
+        rb.empty()
+
+        collector = MultiSyncDataCollector(
+            [lambda: env, lambda: env],
+            RandomPolicy(env.action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=16,
+        )
+        torch.manual_seed(0)
+        pred_len = 0
+        for c in collector:
+            pred_len += 16
+            assert c is None
+            assert len(rb) == pred_len
+        collector.shutdown()
+        assert len(rb) == 256
+
+    def test_collector_rb_multiasync(self):
+        env = GymEnv(CARTPOLE_VERSIONED())
+        env.set_seed(0)
+
+        rb = ReplayBuffer(storage=LazyTensorStorage(256), batch_size=5)
+        rb.add(env.rand_step(env.reset()))
+        rb.empty()
+
+        collector = MultiaSyncDataCollector(
+            [lambda: env, lambda: env],
+            RandomPolicy(env.action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=16,
+        )
+        torch.manual_seed(0)
+        pred_len = 0
+        for c in collector:
+            pred_len += 16
+            assert c is None
+            assert len(rb) >= pred_len
+        collector.shutdown()
+        assert len(rb) == 256
 
 
 if __name__ == "__main__":
