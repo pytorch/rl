@@ -50,6 +50,7 @@ from torchrl._utils import (
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
+from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
@@ -357,6 +358,8 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+            but populate the buffer instead. Defaults to ``None``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -446,6 +449,8 @@ class SyncDataCollector(DataCollectorBase):
         interruptor=None,
         set_truncated: bool = False,
         use_buffers: bool | None = None,
+        replay_buffer: ReplayBuffer | None = None,
+        **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
 
@@ -471,6 +476,14 @@ class SyncDataCollector(DataCollectorBase):
             from torchrl.collectors import RandomPolicy
 
             policy = RandomPolicy(env.full_action_spec)
+
+        ##########################
+        # Trajectory pool
+        self._traj_pool_val = kwargs.pop("traj_pool", None)
+        if kwargs:
+            raise TypeError(
+                f"Keys {list(kwargs.keys())} are unknown to {type(self).__name__}."
+            )
 
         ##########################
         # Setting devices:
@@ -538,10 +551,19 @@ class SyncDataCollector(DataCollectorBase):
 
         self.env: EnvBase = env
         del env
+        self.replay_buffer = replay_buffer
+        if self.replay_buffer is not None:
+            if postproc is not None:
+                raise TypeError("postproc must be None when a replay buffer is passed.")
+            if use_buffers:
+                raise TypeError("replay_buffer is exclusive with use_buffers.")
         if use_buffers is None:
-            use_buffers = not self.env._has_dynamic_specs
+            use_buffers = not self.env._has_dynamic_specs and self.replay_buffer is None
         self._use_buffers = use_buffers
+        self.replay_buffer = replay_buffer
+
         self.closed = False
+
         if not reset_when_done:
             raise ValueError("reset_when_done is deprectated.")
         self.reset_when_done = reset_when_done
@@ -655,6 +677,13 @@ class SyncDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
+    @property
+    def _traj_pool(self):
+        pool = getattr(self, "_traj_pool_val", None)
+        if pool is None:
+            pool = self._traj_pool_val = _TrajectoryPool()
+        return pool
+
     def _make_shuttle(self):
         # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
         with torch.no_grad():
@@ -665,9 +694,9 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self._shuttle_has_no_device = False
 
-        traj_ids = torch.arange(self.n_env, device=self.storing_device).view(
-            self.env.batch_size
-        )
+        traj_ids = self._traj_pool.get_traj_and_increment(
+            self.n_env, device=self.storing_device
+        ).view(self.env.batch_size)
         self._shuttle.set(
             ("collector", "traj_ids"),
             traj_ids,
@@ -871,7 +900,15 @@ class SyncDataCollector(DataCollectorBase):
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
-        return self.env.set_seed(seed, static_seed=static_seed)
+        out = self.env.set_seed(seed, static_seed=static_seed)
+        return out
+
+    def _increment_frames(self, numel):
+        self._frames += numel
+        completed = self._frames >= self.total_frames
+        if completed:
+            self.env.close()
+        return completed
 
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
@@ -917,14 +954,15 @@ class SyncDataCollector(DataCollectorBase):
             for stream in streams:
                 stack.enter_context(torch.cuda.stream(stream))
 
-            total_frames = self.total_frames
-
             while self._frames < self.total_frames:
                 self._iter += 1
                 tensordict_out = self.rollout()
-                self._frames += tensordict_out.numel()
-                if self._frames >= total_frames:
-                    self.env.close()
+                if tensordict_out is None:
+                    # if a replay buffer is passed, there is no tensordict_out
+                    #  frames are updated within the rollout function
+                    yield
+                    continue
+                self._increment_frames(tensordict_out.numel())
 
                 if self.split_trajs:
                     tensordict_out = split_trajectories(
@@ -978,11 +1016,12 @@ class SyncDataCollector(DataCollectorBase):
         if traj_sop.any():
             traj_ids = self._shuttle.get(("collector", "traj_ids"))
             traj_sop = traj_sop.to(self.storing_device)
-            traj_ids = traj_ids.clone().to(self.storing_device)
-            traj_ids[traj_sop] = traj_ids.max() + torch.arange(
-                1,
-                traj_sop.sum() + 1,
-                device=self.storing_device,
+            pool = self._traj_pool
+            new_traj = pool.get_traj_and_increment(
+                traj_sop.sum(), device=self.storing_device
+            )
+            traj_ids = traj_ids.to(self.storing_device).masked_scatter(
+                traj_sop, new_traj
             )
             self._shuttle.set(("collector", "traj_ids"), traj_ids)
 
@@ -1053,13 +1092,18 @@ class SyncDataCollector(DataCollectorBase):
                         next_data.clear_device_()
                     self._shuttle.set("next", next_data)
 
-                if self.storing_device is not None:
-                    tensordicts.append(
-                        self._shuttle.to(self.storing_device, non_blocking=True)
-                    )
-                    self._sync_storage()
+                if self.replay_buffer is not None:
+                    self.replay_buffer.add(self._shuttle)
+                    if self._increment_frames(self._shuttle.numel()):
+                        return
                 else:
-                    tensordicts.append(self._shuttle)
+                    if self.storing_device is not None:
+                        tensordicts.append(
+                            self._shuttle.to(self.storing_device, non_blocking=True)
+                        )
+                        self._sync_storage()
+                    else:
+                        tensordicts.append(self._shuttle)
 
                 # carry over collector data without messing up devices
                 collector_data = self._shuttle.get("collector").copy()
@@ -1074,6 +1118,8 @@ class SyncDataCollector(DataCollectorBase):
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
+                    if self.replay_buffer is not None:
+                        return
                     result = self._final_rollout
                     if self._use_buffers:
                         try:
@@ -1109,6 +1155,8 @@ class SyncDataCollector(DataCollectorBase):
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
+                elif self.replay_buffer is not None:
+                    return
                 else:
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
@@ -1380,6 +1428,8 @@ class _MultiDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+            but populate the buffer instead. Defaults to ``None``.
 
     """
 
@@ -1415,6 +1465,7 @@ class _MultiDataCollector(DataCollectorBase):
         cat_results: str | int | None = None,
         set_truncated: bool = False,
         use_buffers: bool | None = None,
+        replay_buffer: ReplayBuffer | None = None,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1458,6 +1509,13 @@ class _MultiDataCollector(DataCollectorBase):
         del storing_device, env_device, policy_device, device
 
         self._use_buffers = use_buffers
+        self.replay_buffer = replay_buffer
+        if (
+            replay_buffer is not None
+            and hasattr(replay_buffer, "shared")
+            and not replay_buffer.shared
+        ):
+            replay_buffer.share()
 
         _policy_weights_dict = {}
         _get_weights_fn_dict = {}
@@ -1694,6 +1752,7 @@ class _MultiDataCollector(DataCollectorBase):
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
+        traj_pool = _TrajectoryPool(lock=True)
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
         ):
@@ -1730,6 +1789,8 @@ class _MultiDataCollector(DataCollectorBase):
                     "interruptor": self.interruptor,
                     "set_truncated": self.set_truncated,
                     "use_buffers": self._use_buffers,
+                    "replay_buffer": self.replay_buffer,
+                    "traj_pool": traj_pool,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2088,10 +2149,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
         self.out_buffer = None
-        last_traj_ids = [-10 for _ in range(self.num_workers)]
-        last_traj_ids_subs = [None for _ in range(self.num_workers)]
-        traj_max = -1
-        traj_ids_list = [None for _ in range(self.num_workers)]
         preempt = self.interruptor is not None and self.preemptive_threshold < 1.0
 
         while not all(dones) and self._frames < self.total_frames:
@@ -2125,7 +2182,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
             for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 use_buffers = self._use_buffers
-                if j == 0 or not use_buffers:
+                if self.replay_buffer is not None:
+                    idx = new_data
+                    workers_frames[idx] = (
+                        workers_frames[idx] + self.frames_per_batch_worker
+                    )
+                    continue
+                elif j == 0 or not use_buffers:
                     try:
                         data, idx = new_data
                         self.buffers[idx] = data
@@ -2167,51 +2230,25 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
 
+            if self.replay_buffer is not None:
+                yield
+                self._frames += self.frames_per_batch_worker * self.num_workers
+                continue
+
             # we have to correct the traj_ids to make sure that they don't overlap
             # We can count the number of frames collected for free in this loop
             n_collected = 0
             for idx in range(self.num_workers):
                 buffer = buffers[idx]
                 traj_ids = buffer.get(("collector", "traj_ids"))
-                is_last = traj_ids == last_traj_ids[idx]
-                # If we `cat` interrupted data, we have already filtered out
-                # non-valid steps. If we stack, we haven't.
-                if preempt and cat_results == "stack":
-                    valid = buffer.get(("collector", "traj_ids")) != -1
-                    if valid.ndim > 2:
-                        valid = valid.flatten(0, -2)
-                    if valid.ndim == 2:
-                        valid = valid.any(0)
-                    last_traj_ids[idx] = traj_ids[..., valid][..., -1:].clone()
-                else:
-                    last_traj_ids[idx] = traj_ids[..., -1:].clone()
-                if not is_last.all():
-                    traj_to_correct = traj_ids[~is_last]
-                    traj_to_correct = (
-                        traj_to_correct + (traj_max + 1) - traj_to_correct.min()
-                    )
-                    traj_ids = traj_ids.masked_scatter(~is_last, traj_to_correct)
-                # is_last can only be true if we're after the first iteration
-                if is_last.any():
-                    traj_ids = torch.where(
-                        is_last, last_traj_ids_subs[idx].expand_as(traj_ids), traj_ids
-                    )
-
                 if preempt:
                     if cat_results == "stack":
                         mask_frames = buffer.get(("collector", "traj_ids")) != -1
-                        traj_ids = torch.where(mask_frames, traj_ids, -1)
                         n_collected += mask_frames.sum().cpu()
-                        last_traj_ids_subs[idx] = traj_ids[..., valid][..., -1:].clone()
                     else:
-                        last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
                         n_collected += traj_ids.numel()
                 else:
-                    last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
                     n_collected += traj_ids.numel()
-                traj_ids_list[idx] = traj_ids
-
-                traj_max = max(traj_max, traj_ids.max())
 
             if same_device is None:
                 prev_device = None
@@ -2232,9 +2269,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     self.out_buffer = stack(
                         [item.cpu() for item in buffers.values()], 0
                     )
-                self.out_buffer.set(
-                    ("collector", "traj_ids"), torch.stack(traj_ids_list), inplace=True
-                )
             else:
                 if self._use_buffers is None:
                     torchrl_logger.warning(
@@ -2251,9 +2285,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         self.out_buffer = torch.cat(
                             [item.cpu() for item in buffers.values()], cat_results
                         )
-                    self.out_buffer.set_(
-                        ("collector", "traj_ids"), torch.cat(traj_ids_list, cat_results)
-                    )
                 except RuntimeError as err:
                     if (
                         preempt
@@ -2762,6 +2793,8 @@ def _main_async_collector(
     interruptor=None,
     set_truncated: bool = False,
     use_buffers: bool | None = None,
+    replay_buffer: ReplayBuffer | None = None,
+    traj_pool: _TrajectoryPool = None,
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
@@ -2786,6 +2819,8 @@ def _main_async_collector(
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
+        replay_buffer=replay_buffer,
+        traj_pool=traj_pool,
     )
     use_buffers = inner_collector._use_buffers
     if verbose:
@@ -2848,6 +2883,21 @@ def _main_async_collector(
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
                 # sending the trajectory in the queue until timeout when it's never going to be received.
                 continue
+
+            if replay_buffer is not None:
+                try:
+                    queue_out.put((idx, j), timeout=_TIMEOUT)
+                    if verbose:
+                        torchrl_logger.info(f"worker {idx} successfully sent data")
+                    j += 1
+                    has_timed_out = False
+                    continue
+                except queue.Full:
+                    if verbose:
+                        torchrl_logger.info(f"worker {idx} has timed out")
+                    has_timed_out = True
+                    continue
+
             if j == 0 or not use_buffers:
                 collected_tensordict = next_data
                 if (
@@ -2956,3 +3006,22 @@ def _make_meta_params(param):
     if is_param:
         pd = nn.Parameter(pd, requires_grad=False)
     return pd
+
+
+class _TrajectoryPool:
+    def __init__(self, ctx=None, lock: bool = False):
+        self.ctx = ctx
+        if ctx is None:
+            self._traj_id = mp.Value("i", 0)
+            self.lock = contextlib.nullcontext() if not lock else mp.Lock()
+        else:
+            self._traj_id = ctx.Value("i", 0)
+            self.lock = contextlib.nullcontext() if not lock else ctx.Lock()
+
+    def get_traj_and_increment(self, n=1, device=None):
+        traj_id = []
+        with self.lock:
+            for i in range(n):
+                traj_id.append(int(self._traj_id.value))
+                self._traj_id.value += 1
+        return torch.as_tensor(traj_id, device=device)
