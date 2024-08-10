@@ -9,7 +9,6 @@ import functools
 import gc
 
 import sys
-import time
 
 import numpy as np
 import pytest
