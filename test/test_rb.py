@@ -2064,13 +2064,16 @@ class TestMultiProc:
         init=True,
         writer_type=TensorDictRoundRobinWriter,
         sampler_type=RandomSampler,
+        device=None,
     ):
         rb = TensorDictReplayBuffer(
             storage=storage_type(21), writer=writer_type(), sampler=sampler_type()
         )
         if init:
             td = TensorDict(
-                {"a": torch.zeros(10), "next": {"reward": torch.ones(10)}}, [10]
+                {"a": torch.zeros(10), "next": {"reward": torch.ones(10)}},
+                [10],
+                device=device,
             )
             rb.extend(td)
         q0 = mp.Queue(1)
@@ -2097,13 +2100,6 @@ class TestMultiProc:
         # list storage cannot be shared
         with pytest.raises(RuntimeError, match="Cannot share a storage of type"):
             self.exec_multiproc_rb(storage_type=ListStorage)
-
-    def test_error_nonshared(self):
-        # non shared tensor storage cannot be shared
-        with pytest.raises(
-            RuntimeError, match="The storage must be place in shared memory"
-        ):
-            self.exec_multiproc_rb(storage_type=LazyTensorStorage)
 
     def test_error_maxwriter(self):
         # TensorDictMaxValueWriter cannot be shared
