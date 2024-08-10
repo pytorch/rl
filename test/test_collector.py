@@ -2798,7 +2798,8 @@ class TestCollectorRB:
         del collector, env
         assert assert_allclose_td(rbdata0, rbdata1)
 
-    def test_collector_rb_multisync(self):
+    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    def test_collector_rb_multisync(self, replay_buffer_chunk):
         env = GymEnv(CARTPOLE_VERSIONED())
         env.set_seed(0)
 
@@ -2812,6 +2813,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=16,
+            replay_buffer_chunk=replay_buffer_chunk,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -2822,7 +2824,8 @@ class TestCollectorRB:
         collector.shutdown()
         assert len(rb) == 256
 
-    def test_collector_rb_multiasync(self):
+    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    def test_collector_rb_multiasync(self, replay_buffer_chunk):
         env = GymEnv(CARTPOLE_VERSIONED())
         env.set_seed(0)
 
@@ -2836,6 +2839,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=16,
+            replay_buffer_chunk=replay_buffer_chunk,
         )
         torch.manual_seed(0)
         pred_len = 0

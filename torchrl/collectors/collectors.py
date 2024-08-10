@@ -1466,6 +1466,7 @@ class _MultiDataCollector(DataCollectorBase):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        replay_buffer_chunk: bool = True,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1510,6 +1511,7 @@ class _MultiDataCollector(DataCollectorBase):
 
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
+        self.replay_buffer_chunk = replay_buffer_chunk
         if (
             replay_buffer is not None
             and hasattr(replay_buffer, "shared")
@@ -1790,6 +1792,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "set_truncated": self.set_truncated,
                     "use_buffers": self._use_buffers,
                     "replay_buffer": self.replay_buffer,
+                    "replay_buffer_chunk": self.replay_buffer_chunk,
                     "traj_pool": traj_pool,
                 }
                 proc = _ProcessNoWarn(
@@ -2799,6 +2802,7 @@ def _main_async_collector(
     set_truncated: bool = False,
     use_buffers: bool | None = None,
     replay_buffer: ReplayBuffer | None = None,
+    replay_buffer_chunk: bool = True,
     traj_pool: _TrajectoryPool = None,
 ) -> None:
     pipe_parent.close()
@@ -2824,7 +2828,7 @@ def _main_async_collector(
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
-        replay_buffer=replay_buffer,
+        replay_buffer=replay_buffer if replay_buffer_chunk else None,
         traj_pool=traj_pool,
     )
     use_buffers = inner_collector._use_buffers
@@ -2890,6 +2894,10 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
+                if not replay_buffer_chunk:
+                    next_data.names = None
+                    replay_buffer.extend(next_data)
+
                 try:
                     queue_out.put((idx, j), timeout=_TIMEOUT)
                     if verbose:
