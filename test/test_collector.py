@@ -2586,6 +2586,8 @@ class TestUniqueTraj:
             assert c._use_buffers
             traj_ids = buffer[:].get(("collector", "traj_ids"))
             # check that we have as many trajs as expected (no skip)
+            sorted_traj = traj_ids.unique().sort()
+            assert (sorted_traj.values == sorted_traj.indices).all()
             assert traj_ids.unique().numel() == traj_ids.max() + 1
             # check that trajs are not overlapping
             if stack_results:
