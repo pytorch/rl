@@ -2841,7 +2841,7 @@ def _main_async_collector(
         env_device=env_device,
         exploration_type=exploration_type,
         reset_when_done=reset_when_done,
-        return_same_td=True,
+        return_same_td=replay_buffer is None,
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
