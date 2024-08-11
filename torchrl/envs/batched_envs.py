@@ -1122,7 +1122,7 @@ class SerialEnv(BatchedEnvBase):
                     return tensor.clone()
 
             if partial_steps is not None:
-                next_td = LazyStackedTensorDict([next_td[i] for i in workers_range])
+                next_td = TensorDict.lazy_stack([next_td[i] for i in workers_range])
             out = next_td.named_apply(
                 select_and_clone, nested_keys=True, filter_empty=True
             )
