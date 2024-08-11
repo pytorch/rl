@@ -7533,7 +7533,7 @@ class TestDiscreteCQL(LossModuleTestBase):
 class TestPPO(LossModuleTestBase):
     seed = 0
 
-    def _create_mock_actor(
+    def _create_mock_actor_old(
         self,
         batch=2,
         obs_dim=3,
@@ -7554,6 +7554,51 @@ class TestPPO(LossModuleTestBase):
             module=module,
             distribution_class=TanhNormal,
             in_keys=["loc", "scale"],
+            spec=action_spec,
+            return_log_prob=True,
+            log_prob_key=sample_log_prob_key,
+        )
+        return actor.to(device)
+
+    def _create_mock_actor(
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        observation_key="observation",
+        sample_log_prob_key="sample_log_prob",
+        composite_action_dist=True,
+    ):
+        from tensordict.nn import CompositeDistribution
+        from torchrl.data import Composite
+
+        # Actor
+        action_spec = Composite({
+            "action":{
+                "action1": 
+                    Bounded(-torch.ones(action_dim), torch.ones(action_dim), (action_dim,))
+                }
+            }
+        )
+        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        module = TensorDictModule(
+            net, in_keys=[observation_key], out_keys=[("params", "action1", "loc"), ("params", "action1", "scale")]
+        )
+        distribution_class = functools.partial(
+            CompositeDistribution,
+            distribution_map={
+                "action1": TanhNormal,
+            },
+            name_map={
+                "action1": ("action", "action1"),
+            }
+        )
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=distribution_class,
+            in_keys=["params"],
+            out_keys=["action"],
             spec=action_spec,
             return_log_prob=True,
             log_prob_key=sample_log_prob_key,
@@ -7649,6 +7694,7 @@ class TestPPO(LossModuleTestBase):
         done_key="done",
         terminated_key="terminated",
         sample_log_prob_key="sample_log_prob",
+        composite_action_dist=True,
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
@@ -7674,13 +7720,16 @@ class TestPPO(LossModuleTestBase):
                     terminated_key: terminated,
                     reward_key: reward,
                 },
-                action_key: action,
+                action_key: {"action1": action} if composite_action_dist else action,
                 sample_log_prob_key: torch.randn_like(action[..., 1]) / 10,
                 loc_key: loc,
                 scale_key: scale,
             },
             device=device,
         )
+        if composite_action_dist:
+            td[("params", "action1", loc_key)] = loc
+            td[("params", "action1", scale_key)] = scale
         return td
 
     def _create_seq_mock_data_ppo(
@@ -7693,6 +7742,7 @@ class TestPPO(LossModuleTestBase):
         device="cpu",
         sample_log_prob_key="sample_log_prob",
         action_key="action",
+        composite_action_dist=True,
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -7708,8 +7758,11 @@ class TestPPO(LossModuleTestBase):
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = torch.ones(batch, T, dtype=torch.bool, device=device)
+        action = action.masked_fill_(~mask.unsqueeze(-1), 0.0)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
+        loc = params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0)
+        scale = params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0)
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -7721,16 +7774,20 @@ class TestPPO(LossModuleTestBase):
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
-                action_key: action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                action_key: {"action1": action} if composite_action_dist else action,
                 sample_log_prob_key: (
                     torch.randn_like(action[..., 1]) / 10
                 ).masked_fill_(~mask, 0.0),
-                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "loc": loc,
+                "scale": scale,
             },
             device=device,
             names=[None, "time"],
         )
+        if composite_action_dist:
+            td[("params", "action1", "loc")] = loc
+            td[("params", "action1", "scale")] = scale
+
         return td
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
