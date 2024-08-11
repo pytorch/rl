@@ -1021,6 +1021,8 @@ class SyncDataCollector(DataCollectorBase):
             if device is not None:
                 traj_ids = traj_ids.to(device)
                 traj_sop = traj_sop.to(device)
+            elif traj_sop.device != traj_ids.device:
+                traj_sop = traj_sop.to(traj_ids.device)
 
             pool = self._traj_pool
             new_traj = pool.get_traj_and_increment(
