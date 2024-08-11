@@ -1031,12 +1031,18 @@ class SerialEnv(BatchedEnvBase):
             if out_tds is not None:
                 out_tds[i] = _td
 
+        device = self.device
         if not self._use_buffers:
             result = LazyStackedTensorDict.maybe_dense_stack(out_tds)
+            if result.device != device:
+                if device is None:
+                    result = result.clear_device_()
+                else:
+                    result = result.to(device, non_blocking=self.non_blocking)
+                    self._sync_w2m()
             return result
 
         selected_output_keys = self._selected_reset_keys_filt
-        device = self.device
 
         # select + clone creates 2 tds, but we can create one only
         def select_and_clone(name, tensor):
@@ -1650,6 +1656,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             td = channel.recv()
             out_tds.append(td)
         out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
+        if self.device is not None and out.device != self.device:
+            out = out.to(self.device, non_blocking=self.non_blocking)
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
             result[partial_steps] = out
@@ -1796,7 +1804,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             self._events[i].wait()
             td = channel.recv()
             out_tds[i] = td
-        return LazyStackedTensorDict.maybe_dense_stack(out_tds)
+        result = LazyStackedTensorDict.maybe_dense_stack(out_tds)
+        device = self.device
+        if device is not None and result.device != device:
+            return result.to(self.device, non_blocking=self.non_blocking)
+        return result
 
     @torch.no_grad()
     @_check_start
