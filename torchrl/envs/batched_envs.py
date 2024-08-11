@@ -1520,7 +1520,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None:
             workers_range = partial_steps.nonzero().squeeze().tolist()
             shared_tensordict_parent = TensorDict.lazy_stack(
-                [self._shared_tensordict[i] for i in workers_range]
+                [self.shared_tensordict_parent[i] for i in workers_range]
             )
             next_td = TensorDict.lazy_stack(
                 [self._shared_tensordict_parent_next[i] for i in workers_range]
