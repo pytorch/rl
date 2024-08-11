@@ -1674,7 +1674,9 @@ class _MultiDataCollector(DataCollectorBase):
                     fake_td = self.create_env_fn[0](
                         **self.create_env_kwargs[0]
                     ).fake_tensordict()
-                fake_td["collector", "traj_ids"] = torch.zeros((), dtype=torch.long)
+                fake_td["collector", "traj_ids"] = torch.zeros(
+                    fake_td.shape, dtype=torch.long
+                )
 
                 self.replay_buffer._storage._init(fake_td)
         except AttributeError:

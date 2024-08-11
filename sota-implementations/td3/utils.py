@@ -10,9 +10,9 @@ import torch
 from tensordict.nn import TensorDictSequential
 
 from torch import nn, optim
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
 from torchrl.envs import (
     CatTensors,
     Compose,
@@ -46,20 +46,18 @@ from torchrl.record import VideoRecorder
 # -----------------
 
 
-def env_maker(cfg, device="cpu", from_pixels=False):
-    lib = cfg.env.library
+def env_maker(envname, task, library, device="cpu", from_pixels=False):
+    lib = library  # cfg.env.library
     if lib in ("gym", "gymnasium"):
         with set_gym_backend(lib):
             return GymEnv(
-                cfg.env.name,
+                envname,  # cfg.env.name
                 device=device,
                 from_pixels=from_pixels,
                 pixels_only=False,
             )
     elif lib == "dm_control":
-        env = DMControlEnv(
-            cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
-        )
+        env = DMControlEnv(envname, task, from_pixels=from_pixels, pixels_only=False)
         return TransformedEnv(
             env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
         )
@@ -82,31 +80,54 @@ def apply_env_transforms(env, max_episode_steps):
 
 def make_environment(cfg, logger=None):
     """Make environments for training and evaluation."""
-    partial = functools.partial(env_maker, cfg=cfg)
-    parallel_env = ParallelEnv(
-        cfg.collector.env_per_collector,
-        EnvCreator(partial),
-        serial_for_single=True,
+    partial = functools.partial(
+        env_maker, envname=cfg.env.name, task=cfg.env.task, library=cfg.env.library
     )
+    if cfg.collector.env_per_collector == 0:
+        parallel_env = partial()
+    else:
+        parallel_env = ParallelEnv(
+            cfg.collector.env_per_collector,
+            EnvCreator(partial),
+            serial_for_single=True,
+        )
     parallel_env.set_seed(cfg.env.seed)
 
     train_env = apply_env_transforms(parallel_env, cfg.env.max_episode_steps)
 
-    partial = functools.partial(env_maker, cfg=cfg, from_pixels=cfg.logger.video)
+    partial = functools.partial(
+        env_maker,
+        envname=cfg.env.name,
+        task=cfg.env.task,
+        library=cfg.env.library,
+        from_pixels=cfg.logger.video,
+    )
     trsf_clone = train_env.transform.clone()
     if cfg.logger.video:
         trsf_clone.insert(
             0, VideoRecorder(logger, tag="rendering/test", in_keys=["pixels"])
         )
-    eval_env = TransformedEnv(
-        ParallelEnv(
-            cfg.collector.env_per_collector,
-            EnvCreator(partial),
-            serial_for_single=True,
-        ),
-        trsf_clone,
-    )
+    if cfg.collector.env_per_collector == 0:
+        eval_env = TransformedEnv(partial(), trsf_clone)
+    else:
+        eval_env = TransformedEnv(
+            ParallelEnv(
+                cfg.collector.env_per_collector,
+                EnvCreator(partial),
+                serial_for_single=True,
+            ),
+            trsf_clone,
+        )
     return train_env, eval_env
+
+
+def make_simple_environment(
+    envname, task, library, seed, max_episode_steps, logger=None
+):
+    """Make environments for training and evaluation."""
+    env = env_maker(envname=envname, task=task, library=library)
+    env.set_seed(seed)
+    return apply_env_transforms(env, max_episode_steps)
 
 
 # ====================================================================
@@ -129,6 +150,23 @@ def make_collector(cfg, train_env, actor_model_explore):
     return collector
 
 
+def make_async_collector(cfg, train_env, actor_model_explore, rb):
+    """Make fast collector."""
+    collector = MultiaSyncDataCollector(
+        [EnvCreator(train_env)] * cfg.collector.num_workers,
+        actor_model_explore,
+        init_random_frames=cfg.collector.init_random_frames,
+        frames_per_batch=cfg.collector.frames_per_batch,
+        total_frames=cfg.collector.total_frames,
+        reset_at_each_iter=cfg.collector.reset_at_each_iter,
+        device=cfg.collector.device,
+        replay_buffer=rb,
+        replay_buffer_chunk=False,
+    )
+    collector.set_seed(cfg.env.seed)
+    return collector
+
+
 def make_replay_buffer(
     batch_size,
     prb=False,
@@ -136,34 +174,39 @@ def make_replay_buffer(
     scratch_dir=None,
     device="cpu",
     prefetch=3,
+    mmap=True,
 ):
     with (
         tempfile.TemporaryDirectory()
         if scratch_dir is None
         else nullcontext(scratch_dir)
     ) as scratch_dir:
+        if mmap:
+            storage = LazyMemmapStorage(
+                buffer_size,
+                scratch_dir=scratch_dir,
+                device=device,
+            )
+        else:
+            storage = LazyTensorStorage(
+                buffer_size,
+                device=device,
+            )
+
         if prb:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
                 alpha=0.7,
                 beta=0.5,
                 pin_memory=False,
                 prefetch=prefetch,
-                storage=LazyMemmapStorage(
-                    buffer_size,
-                    scratch_dir=scratch_dir,
-                    device=device,
-                ),
+                storage=storage,
                 batch_size=batch_size,
             )
         else:
             replay_buffer = TensorDictReplayBuffer(
                 pin_memory=False,
                 prefetch=prefetch,
-                storage=LazyMemmapStorage(
-                    buffer_size,
-                    scratch_dir=scratch_dir,
-                    device=device,
-                ),
+                storage=storage,
                 batch_size=batch_size,
             )
         return replay_buffer
@@ -282,12 +325,14 @@ def make_optimizer(cfg, loss_module):
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.adam_eps,
+        foreach=True,
     )
     optimizer_critic = optim.Adam(
         critic_params,
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.adam_eps,
+        foreach=True,
     )
     return optimizer_actor, optimizer_critic
 
