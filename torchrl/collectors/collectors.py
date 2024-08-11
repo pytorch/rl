@@ -1778,8 +1778,7 @@ class _MultiDataCollector(DataCollectorBase):
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
-        traj_pool = _TrajectoryPool(lock=True)
-        self._traj_pool = traj_pool
+        self._traj_pool = _TrajectoryPool(lock=True)
 
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
@@ -1819,7 +1818,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "use_buffers": self._use_buffers,
                     "replay_buffer": self.replay_buffer,
                     "replay_buffer_chunk": self.replay_buffer_chunk,
-                    "traj_pool": traj_pool,
+                    "traj_pool": self._traj_pool,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -3058,7 +3057,11 @@ class _TrajectoryPool:
             self.lock = contextlib.nullcontext() if not lock else ctx.RLock()
 
     def get_traj_and_increment(self, n=1, device=None):
-        with self.lock:
-            v = self._traj_id.value
-            self._traj_id.value = v + n
-        return torch.arange(v, v + n, device=device)
+        out = []
+        for _ in range(n):
+            with self.lock:
+                v = self._traj_id.value
+                out.append(v)
+                v += 1
+                self._traj_id.value += 1
+        return torch.as_tensor(out, device=device)
