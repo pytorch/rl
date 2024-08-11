@@ -364,6 +364,11 @@ class ReplayBuffer:
         with self._replay_lock:
             return len(self._storage)
 
+    @property
+    def write_count(self):
+        """The total number of items written so far in the buffer through add and extend."""
+        return self._writer._write_count
+
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose
 

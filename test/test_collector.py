@@ -69,6 +69,7 @@ from torchrl.collectors.collectors import (
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
+    LazyMemmapStorage,
     LazyTensorStorage,
     NonTensor,
     ReplayBuffer,
@@ -2799,44 +2800,86 @@ class TestCollectorRB:
         del collector, env
         assert assert_allclose_td(rbdata0, rbdata1)
 
-    def test_collector_rb_multisync(self):
-        env = GymEnv(CARTPOLE_VERSIONED())
-        env.set_seed(0)
+    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("env_creator", [False, True])
+    @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_rb_multisync(
+        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+    ):
+        if not env_creator:
+            env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
+            env.set_seed(0)
+            action_spec = env.action_spec
+            env = lambda env=env: env
+        else:
+            env = EnvCreator(
+                lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp).append_transform(
+                    StepCounter()
+                )
+            )
+            action_spec = env.meta_data.specs["input_spec", "full_action_spec"]
 
-        rb = ReplayBuffer(storage=LazyTensorStorage(256), batch_size=5)
-        rb.add(env.rand_step(env.reset()))
-        rb.empty()
+        if storagetype == LazyMemmapStorage:
+            storagetype = functools.partial(LazyMemmapStorage, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storagetype(256), batch_size=5)
 
         collector = MultiSyncDataCollector(
-            [lambda: env, lambda: env],
-            RandomPolicy(env.action_spec),
+            [env, env],
+            RandomPolicy(action_spec),
             replay_buffer=rb,
             total_frames=256,
-            frames_per_batch=16,
+            frames_per_batch=32,
+            replay_buffer_chunk=replay_buffer_chunk,
         )
         torch.manual_seed(0)
         pred_len = 0
         for c in collector:
-            pred_len += 16
+            pred_len += 32
             assert c is None
             assert len(rb) == pred_len
         collector.shutdown()
         assert len(rb) == 256
+        if not replay_buffer_chunk:
+            steps_counts = rb["step_count"].squeeze().split(16)
+            collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
+            for step_count, ids in zip(steps_counts, collector_ids):
+                step_countdiff = step_count.diff()
+                idsdiff = ids.diff()
+                assert (
+                    (step_countdiff == 1) | (step_countdiff < 0)
+                ).all(), steps_counts
+                assert (idsdiff >= 0).all()
 
-    def test_collector_rb_multiasync(self):
-        env = GymEnv(CARTPOLE_VERSIONED())
-        env.set_seed(0)
+    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("env_creator", [False, True])
+    @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_rb_multiasync(
+        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+    ):
+        if not env_creator:
+            env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
+            env.set_seed(0)
+            action_spec = env.action_spec
+            env = lambda env=env: env
+        else:
+            env = EnvCreator(
+                lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp).append_transform(
+                    StepCounter()
+                )
+            )
+            action_spec = env.meta_data.specs["input_spec", "full_action_spec"]
 
-        rb = ReplayBuffer(storage=LazyTensorStorage(256), batch_size=5)
-        rb.add(env.rand_step(env.reset()))
-        rb.empty()
+        if storagetype == LazyMemmapStorage:
+            storagetype = functools.partial(LazyMemmapStorage, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storagetype(256), batch_size=5)
 
         collector = MultiaSyncDataCollector(
-            [lambda: env, lambda: env],
-            RandomPolicy(env.action_spec),
+            [env, env],
+            RandomPolicy(action_spec),
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=16,
+            replay_buffer_chunk=replay_buffer_chunk,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -2846,6 +2889,16 @@ class TestCollectorRB:
             assert len(rb) >= pred_len
         collector.shutdown()
         assert len(rb) == 256
+        if not replay_buffer_chunk:
+            steps_counts = rb["step_count"].squeeze().split(16)
+            collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
+            for step_count, ids in zip(steps_counts, collector_ids):
+                step_countdiff = step_count.diff()
+                idsdiff = ids.diff()
+                assert (
+                    (step_countdiff == 1) | (step_countdiff < 0)
+                ).all(), steps_counts
+                assert (idsdiff >= 0).all()
 
 
 if __name__ == "__main__":
