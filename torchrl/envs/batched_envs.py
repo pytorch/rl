@@ -1080,10 +1080,6 @@ class SerialEnv(BatchedEnvBase):
             tensordict = tensordict[partial_steps]
             workers_range = partial_steps.nonzero().squeeze().tolist()
             tensordict_in = tensordict
-            # if self._use_buffers:
-            #     shared_tensordict_parent = (
-            #         self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
-            #     )
         else:
             workers_range = range(self.num_workers)
             tensordict_in = tensordict.clone(False)
@@ -1522,17 +1518,30 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
-            shared_tensordict_parent = (
-                self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
-            )
-            next_td = self._shared_tensordict_parent_next._get_sub_tensordict(
-                partial_steps
-            )
-            tensordict_ = self._shared_tensordict_parent_root._get_sub_tensordict(
-                partial_steps
-            )
-            tensordict = tensordict[partial_steps]
             workers_range = partial_steps.nonzero().squeeze().tolist()
+            shared_tensordict_parent = TensorDict.lazy_stack(
+                [self._shared_tensordict[i] for i in workers_range]
+            )
+            next_td = TensorDict.lazy_stack(
+                [self._shared_tensordict_parent_next[i] for i in workers_range]
+            )
+            tensordict_ = TensorDict.lazy_stack(
+                [self._shared_tensordict_parent_root[i] for i in workers_range]
+            )
+            if self.shared_tensordict_parent.device is None:
+                tensordict = tensordict._fast_apply(
+                    lambda x, y: x[partial_steps].to(y.device)
+                    if y is not None
+                    else x[partial_steps],
+                    self.shared_tensordict_parent,
+                    default=None,
+                    device=None,
+                    batch_size=shared_tensordict_parent.shape,
+                )
+            else:
+                tensordict = tensordict[partial_steps].to(
+                    self.shared_tensordict_parent.device
+                )
         else:
             workers_range = range(self.num_workers)
             shared_tensordict_parent = self.shared_tensordict_parent
@@ -1682,18 +1691,24 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
-            shared_tensordict_parent = (
-                self.shared_tensordict_parent._get_sub_tensordict(partial_steps)
-            )
-            tensordict = tensordict._fast_apply(
-                lambda x, y: x[partial_steps].to(y.device)
-                if y is not None
-                else x[partial_steps],
-                shared_tensordict_parent,
-                default=None,
-                device=shared_tensordict_parent.device,
-            )
             workers_range = partial_steps.nonzero().squeeze().tolist()
+            shared_tensordict_parent = TensorDict.lazy_stack(
+                [self.shared_tensordicts[i] for i in workers_range]
+            )
+            if self.shared_tensordict_parent.device is None:
+                tensordict = tensordict._fast_apply(
+                    lambda x, y: x[partial_steps].to(y.device)
+                    if y is not None
+                    else x[partial_steps],
+                    self.shared_tensordict_parent,
+                    default=None,
+                    device=None,
+                    batch_size=shared_tensordict_parent.shape,
+                )
+            else:
+                tensordict = tensordict[partial_steps].to(
+                    self.shared_tensordict_parent.device
+                )
         else:
             workers_range = range(self.num_workers)
             shared_tensordict_parent = self.shared_tensordict_parent
