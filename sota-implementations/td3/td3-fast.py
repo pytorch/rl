@@ -80,7 +80,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         prb=cfg.replay_buffer.prb,
         buffer_size=cfg.replay_buffer.size,
         scratch_dir=cfg.replay_buffer.scratch_dir,
-        device=cfg.replay_buffer.device if cfg.replay_buffer.device else None,
+        device=cfg.replay_buffer.device if cfg.replay_buffer.device else device,
         prefetch=0,
         mmap=False,
     )
