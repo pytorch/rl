@@ -129,6 +129,38 @@ def main(cfg: "DictConfig"):  # noqa: F821
         reward = test_env.rollout(10_000, exploration_policy)["next", "reward"].mean()
         print(f"reward before training: {reward: 4.4f}")
 
+    # loss_module.value_loss = torch.compile(
+    #     loss_module.value_loss, mode="reduce-overhead"
+    # )
+    # loss_module.actor_loss = torch.compile(
+    #     loss_module.actor_loss, mode="reduce-overhead"
+    # )
+
+    def train_update(sampled_tensordict):
+        # Compute loss
+        q_loss, *_ = loss_module.value_loss(sampled_tensordict)
+
+        # Update critic
+        optimizer_critic.zero_grad()
+        q_loss.backward()
+        optimizer_critic.step()
+        q_losses.append(q_loss.item())
+
+        # Update actor
+        if update_actor:
+            actor_loss, *_ = loss_module.actor_loss(sampled_tensordict)
+            optimizer_actor.zero_grad()
+            actor_loss.backward()
+            optimizer_actor.step()
+
+            actor_losses.append(actor_loss.item())
+
+            # Update target params
+            target_net_updater.step()
+
+    train_update_cuda = None
+    g = torch.cuda.CUDAGraph()
+
     for _ in collector:
         sampling_time = time.time() - sampling_start
         exploration_policy[1].step(current_frames)
@@ -143,12 +175,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Optimization steps
         training_start = time.time()
-        loss_module.value_loss = torch.compile(
-            loss_module.value_loss, mode="reduce-overhead"
-        )
-        loss_module.actor_loss = torch.compile(
-            loss_module.actor_loss, mode="reduce-overhead"
-        )
 
         if collected_frames >= init_random_frames:
             (
@@ -170,26 +196,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 else:
                     sampled_tensordict = sampled_tensordict.clone()
 
-                # Compute loss
-                q_loss, *_ = loss_module.value_loss(sampled_tensordict)
+                if train_update_cuda is None:
+                    static_sample = sampled_tensordict
+                    with torch.cuda.graph(g):
+                        train_update(static_sample)
 
-                # Update critic
-                optimizer_critic.zero_grad()
-                q_loss.backward()
-                optimizer_critic.step()
-                q_losses.append(q_loss.item())
-
-                # Update actor
-                if update_actor:
-                    actor_loss, *_ = loss_module.actor_loss(sampled_tensordict)
-                    optimizer_actor.zero_grad()
-                    actor_loss.backward()
-                    optimizer_actor.step()
-
-                    actor_losses.append(actor_loss.item())
-
-                    # Update target params
-                    target_net_updater.step()
+                    def train_update_cuda(x):
+                        static_sample.copy_(x)
+                        g.replay()
+                else:
+                    train_update_cuda(sampled_tensordict)
 
                 # Update priority
                 if prb:
