@@ -1523,7 +1523,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             partial_steps = partial_steps.view(tensordict.shape)
             workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
             shared_tensordict_parent = TensorDict.lazy_stack(
-                [self._shared_tensordict[i] for i in workers_range]
+                [self.shared_tensordict_parent[i] for i in workers_range]
             )
             next_td = TensorDict.lazy_stack(
                 [self._shared_tensordict_parent_next[i] for i in workers_range]
