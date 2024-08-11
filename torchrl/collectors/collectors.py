@@ -1023,7 +1023,7 @@ class SyncDataCollector(DataCollectorBase):
 
             pool = self._traj_pool
             new_traj = pool.get_traj_and_increment(
-                traj_sop.sum().item(), device=traj_sop.device
+                traj_sop.sum(), device=traj_sop.device
             )
             traj_ids = traj_ids.masked_scatter(traj_sop, new_traj)
             self._shuttle.set(("collector", "traj_ids"), traj_ids)
@@ -1756,6 +1756,8 @@ class _MultiDataCollector(DataCollectorBase):
         self.procs = []
         self.pipes = []
         traj_pool = _TrajectoryPool(lock=True)
+        self._traj_pool = traj_pool
+
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
         ):
@@ -3016,15 +3018,13 @@ class _TrajectoryPool:
         self.ctx = ctx
         if ctx is None:
             self._traj_id = mp.Value("i", 0)
-            self.lock = contextlib.nullcontext() if not lock else mp.Lock()
+            self.lock = contextlib.nullcontext() if not lock else mp.RLock()
         else:
             self._traj_id = ctx.Value("i", 0)
-            self.lock = contextlib.nullcontext() if not lock else ctx.Lock()
+            self.lock = contextlib.nullcontext() if not lock else ctx.RLock()
 
     def get_traj_and_increment(self, n=1, device=None):
         with self.lock:
-            traj_id = torch.arange(
-                self._traj_id.value, self._traj_id.value + n, device=device
-            )
-            self._traj_id.value += n
-            return traj_id
+            v = self._traj_id.value
+            self._traj_id.value = v + n
+        return torch.arange(v, v + n, device=device)
