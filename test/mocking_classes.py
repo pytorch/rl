@@ -1038,7 +1038,7 @@ class CountingEnv(EnvBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         action = tensordict.get(self.action_key)
-        self.count += action.to(dtype=torch.int, device=self.device)
+        self.count += action.to(dtype=torch.int, device=self.full_observation_spec["observation"].device)
         tensordict = TensorDict(
             source={
                 "observation": self.count.clone(),
