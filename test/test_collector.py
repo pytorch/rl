@@ -2586,10 +2586,15 @@ class TestUniqueTraj:
                 buffer.extend(d)
             assert c._use_buffers
             traj_ids = buffer[:].get(("collector", "traj_ids"))
-            # check that we have as many trajs as expected (no skip)
-            sorted_traj = traj_ids.unique().sort()
-            assert (sorted_traj.values == sorted_traj.indices).all()
-            assert traj_ids.unique().numel() == traj_ids.max() + 1
+            # Ideally, we'd like that (sorted_traj.values == sorted_traj.indices).all()
+            #  but in practice, one env can reach the end of the rollout and do a reset
+            #  (which we don't want to prevent) and increment the global traj count,
+            #  when the others have not finished yet. In that case, this traj number will never
+            #  appear.
+            # sorted_traj = traj_ids.unique().sort()
+            # assert (sorted_traj.values == sorted_traj.indices).all()
+            # assert traj_ids.unique().numel() == traj_ids.max() + 1
+
             # check that trajs are not overlapping
             if stack_results:
                 sets = [
