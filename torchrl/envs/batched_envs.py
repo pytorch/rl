@@ -1077,8 +1077,9 @@ class SerialEnv(BatchedEnvBase):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
+            partial_steps = partial_steps.view(tensordict.shape)
             tensordict = tensordict[partial_steps]
-            workers_range = partial_steps.nonzero().squeeze().tolist()
+            workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
             tensordict_in = tensordict
         else:
             workers_range = range(self.num_workers)
@@ -1468,8 +1469,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
+            partial_steps = partial_steps.view(tensordict.shape)
             tensordict = tensordict[partial_steps]
-            workers_range = partial_steps.nonzero().squeeze().tolist()
+            workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
         else:
             workers_range = range(self.num_workers)
 
@@ -1518,7 +1520,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
-            workers_range = partial_steps.nonzero().squeeze().tolist()
+            partial_steps = partial_steps.view(tensordict.shape)
+            workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
             shared_tensordict_parent = TensorDict.lazy_stack(
                 [self.shared_tensordict_parent[i] for i in workers_range]
             )
@@ -1648,8 +1651,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
+            partial_steps = partial_steps.view(tensordict.shape)
             tensordict = tensordict[partial_steps]
-            workers_range = partial_steps.nonzero().squeeze().tolist()
+            workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
         else:
             workers_range = range(self.num_workers)
 
@@ -1691,7 +1695,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
-            workers_range = partial_steps.nonzero().squeeze().tolist()
+            partial_steps = partial_steps.view(tensordict.shape)
+            workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
             shared_tensordict_parent = TensorDict.lazy_stack(
                 [self.shared_tensordicts[i] for i in workers_range]
             )
@@ -1723,7 +1728,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # if we have input "next" data (eg, RNNs which pass the next state)
             # the sub-envs will need to process them through step_and_maybe_reset.
             # We keep track of which keys are present to let the worker know what
-            # should be passd to the env (we don't want to pass done states for instance)
+            # should be passed to the env (we don't want to pass done states for instance)
             next_td_keys = list(next_td_passthrough.keys(True, True))
             data = [
                 {"next_td_passthrough_keys": next_td_keys}
