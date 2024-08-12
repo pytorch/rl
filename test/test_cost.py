@@ -8443,8 +8443,8 @@ class TestPPO(LossModuleTestBase):
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
         if loss_class is KLPENPPOLoss:
-            loc_key = ("params", "action1", "loc") if composite_action_dist else "loc"
-            scale_key = ("params", "action1", "scale") if composite_action_dist else "scale"
+            loc_key = "params" if composite_action_dist else "loc"
+            scale_key = "params" if composite_action_dist else "scale"
             kwargs.update({loc_key: td.get(loc_key), scale_key: td.get(scale_key)})
 
         td = TensorDict(kwargs, td.batch_size, names=["time"]).unflatten_keys("_")
