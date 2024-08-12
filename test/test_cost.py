@@ -7560,6 +7560,7 @@ class TestPPO(LossModuleTestBase):
                 name_map={
                     "action1": (action_key, "action1"),
                 },
+                log_prob_key=sample_log_prob_key,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -7607,6 +7608,7 @@ class TestPPO(LossModuleTestBase):
         action_dim=4,
         device="cpu",
         composite_action_dist=False,
+        sample_log_prob_key="sample_log_prob",
     ):
         # Actor
         action_spec = Bounded(
@@ -7627,6 +7629,7 @@ class TestPPO(LossModuleTestBase):
                 name_map={
                     "action1": ("action", "action1"),
                 },
+                log_prob_key=sample_log_prob_key,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -7660,6 +7663,7 @@ class TestPPO(LossModuleTestBase):
         action_dim=4,
         device="cpu",
         composite_action_dist=False,
+        sample_log_prob_key="sample_log_prob",
     ):
         # Actor
         action_spec = Bounded(
@@ -7681,6 +7685,7 @@ class TestPPO(LossModuleTestBase):
                 name_map={
                     "action1": ("action", "action1"),
                 },
+                log_prob_key=sample_log_prob_key,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
