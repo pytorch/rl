@@ -7539,6 +7539,7 @@ class TestPPO(LossModuleTestBase):
         obs_dim=3,
         action_dim=4,
         device="cpu",
+        action_key="action",
         observation_key="observation",
         sample_log_prob_key="sample_log_prob",
         composite_action_dist=False,
@@ -7548,7 +7549,7 @@ class TestPPO(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         if composite_action_dist:
-            action_spec = Composite({"action": {"action1": action_spec}})
+            action_spec = Composite({action_key: {"action1": action_spec}})
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         if composite_action_dist:
             distribution_class = functools.partial(
@@ -7557,7 +7558,7 @@ class TestPPO(LossModuleTestBase):
                     "action1": TanhNormal,
                 },
                 name_map={
-                    "action1": ("action", "action1"),
+                    "action1": (action_key, "action1"),
                 },
             )
             module_out_keys = [
@@ -7575,6 +7576,7 @@ class TestPPO(LossModuleTestBase):
             module=module,
             distribution_class=distribution_class,
             in_keys=actor_in_keys,
+            out_keys=[action_key],
             spec=action_spec,
             return_log_prob=True,
             log_prob_key=sample_log_prob_key,
@@ -7924,10 +7926,15 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True,))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_ppo_state_dict(self, loss_class, device, gradient_mode):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_state_dict(
+        self, loss_class, device, gradient_mode, composite_action_dist
+    ):
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
         sd = loss_fn.state_dict()
@@ -8126,11 +8133,18 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_diff(
+        self, loss_class, device, gradient_mode, advantage, composite_action_dist
+    ):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ppo(device=device)
+        td = self._create_seq_mock_data_ppo(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
@@ -8219,8 +8233,9 @@ class TestPPO(LossModuleTestBase):
             ValueEstimators.TDLambda,
         ],
     )
-    def test_ppo_tensordict_keys(self, loss_class, td_est):
-        actor = self._create_mock_actor()
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_tensordict_keys(self, loss_class, td_est, composite_action_dist):
+        actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
         value = self._create_mock_value()
 
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
@@ -8259,7 +8274,10 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_ppo_tensordict_keys_run(self, loss_class, advantage, td_est):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_tensordict_keys_run(
+        self, loss_class, advantage, td_est, composite_action_dist
+    ):
         """Test PPO loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -8274,9 +8292,12 @@ class TestPPO(LossModuleTestBase):
         td = self._create_seq_mock_data_ppo(
             sample_log_prob_key=tensor_keys["sample_log_prob"],
             action_key=tensor_keys["action"],
+            composite_action_dist=composite_action_dist,
         )
         actor = self._create_mock_actor(
-            sample_log_prob_key=tensor_keys["sample_log_prob"]
+            sample_log_prob_key=tensor_keys["sample_log_prob"],
+            composite_action_dist=composite_action_dist,
+            action_key=tensor_keys["action"],
         )
         value = self._create_mock_value(out_keys=[tensor_keys["value"]])
 
@@ -8451,15 +8472,20 @@ class TestPPO(LossModuleTestBase):
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_ppo_reduction(self, reduction, loss_class):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_reduction(self, reduction, loss_class, composite_action_dist):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
             if torch.cuda.device_count() == 0
             else torch.device("cuda")
         )
-        td = self._create_seq_mock_data_ppo(device=device)
-        actor = self._create_mock_actor(device=device)
+        td = self._create_seq_mock_data_ppo(
+            device=device, composite_action_dist=composite_action_dist
+        )
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         advantage = GAE(
             gamma=0.9,
@@ -8487,10 +8513,17 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("clip_value", [True, False, None, 0.5, torch.tensor(0.5)])
-    def test_ppo_value_clipping(self, clip_value, loss_class, device):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_value_clipping(
+        self, clip_value, loss_class, device, composite_action_dist
+    ):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ppo(device=device)
-        actor = self._create_mock_actor(device=device)
+        td = self._create_seq_mock_data_ppo(
+            device=device, composite_action_dist=composite_action_dist
+        )
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         advantage = GAE(
             gamma=0.9,
