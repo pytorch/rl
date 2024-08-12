@@ -451,7 +451,7 @@ class PPOLoss(LossModule):
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
             if isinstance(dist, CompositeDistribution):
-                log_prob = dist.log_prob(x).get(self.tensor_keys.sample_log_prob)
+                log_prob = dist.log_prob(x).get("sample_log_prob")
             else:
                 log_prob = dist.log_prob(x)
             entropy = -log_prob.mean(0)
@@ -478,7 +478,7 @@ class PPOLoss(LossModule):
 
         if isinstance(dist, CompositeDistribution):
             tensordict = dist.log_prob(tensordict)
-            log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
+            log_prob = tensordict.get("sample_log_prob")
         else:
             log_prob = dist.log_prob(action)
 
@@ -1118,12 +1118,8 @@ class KLPENPPOLoss(PPOLoss):
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
             if isinstance(current_dist, CompositeDistribution):
-                previous_log_prob = previous_dist.log_prob(x).get(
-                    self.tensor_keys.sample_log_prob
-                )
-                current_log_prob = current_dist.log_prob(x).get(
-                    self.tensor_keys.sample_log_prob
-                )
+                previous_log_prob = previous_dist.log_prob(x).get("sample_log_prob")
+                current_log_prob = current_dist.log_prob(x).get("sample_log_prob")
             else:
                 previous_log_prob = previous_dist.log_prob(x)
                 current_log_prob = current_dist.log_prob(x)
