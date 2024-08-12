@@ -1117,7 +1117,6 @@ class SyncDataCollector(DataCollectorBase):
                 if self._shuttle_has_no_device:
                     self._shuttle.clear_device_()
                 self._shuttle.set("collector", collector_data)
-
                 self._update_traj_ids(env_output)
 
                 if (
@@ -3049,19 +3048,15 @@ def _make_meta_params(param):
 class _TrajectoryPool:
     def __init__(self, ctx=None, lock: bool = False):
         self.ctx = ctx
+        self._traj_id = torch.zeros((), device="cpu", dtype=torch.int).share_memory_()
         if ctx is None:
-            self._traj_id = mp.Value("i", 0)
             self.lock = contextlib.nullcontext() if not lock else mp.RLock()
         else:
-            self._traj_id = ctx.Value("i", 0)
             self.lock = contextlib.nullcontext() if not lock else ctx.RLock()
 
     def get_traj_and_increment(self, n=1, device=None):
-        out = []
-        for _ in range(n):
-            with self.lock:
-                v = self._traj_id.value
-                out.append(v)
-                v += 1
-                self._traj_id.value += 1
-        return torch.as_tensor(out, device=device)
+        with self.lock:
+            v = self._traj_id.item()
+            out = torch.arange(v, v + n).to(device)
+            self._traj_id.copy_(1 + out[-1].item())
+        return out
