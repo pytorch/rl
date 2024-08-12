@@ -8393,6 +8393,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_ppo_notensordict(
         self,
         loss_class,
@@ -8402,6 +8403,7 @@ class TestPPO(LossModuleTestBase):
         reward_key,
         done_key,
         terminated_key,
+        composite_action_dist,
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_ppo(
@@ -8411,10 +8413,14 @@ class TestPPO(LossModuleTestBase):
             reward_key=reward_key,
             done_key=done_key,
             terminated_key=terminated_key,
+            composite_action_dist=composite_action_dist,
         )
 
         actor = self._create_mock_actor(
-            observation_key=observation_key, sample_log_prob_key=sample_log_prob_key
+            observation_key=observation_key,
+            sample_log_prob_key=sample_log_prob_key,
+            composite_action_dist=composite_action_dist,
+            action_key=action_key,
         )
         value = self._create_mock_value(observation_key=observation_key)
 
@@ -8437,7 +8443,9 @@ class TestPPO(LossModuleTestBase):
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
         if loss_class is KLPENPPOLoss:
-            kwargs.update({"loc": td.get("loc"), "scale": td.get("scale")})
+            loc_key = ("params", "action1", "loc") if composite_action_dist else "loc"
+            scale_key = ("params", "action1", "scale") if composite_action_dist else "scale"
+            kwargs.update({loc_key: td.get(loc_key), scale_key: td.get(scale_key)})
 
         td = TensorDict(kwargs, td.batch_size, names=["time"]).unflatten_keys("_")
 
