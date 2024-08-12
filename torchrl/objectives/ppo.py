@@ -477,6 +477,9 @@ class PPOLoss(LossModule):
             raise RuntimeError("tensordict prev_log_prob requires grad.")
 
         if isinstance(dist, CompositeDistribution):
+            if tensordict.get(self.tensor_keys.action).batch_size != tensordict.batch_size:
+                # This condition can be True in notensordict usage
+                tensordict.get(self.tensor_keys.action).batch_size = tensordict.batch_size
             tensordict = dist.log_prob(tensordict)
             log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         else:
