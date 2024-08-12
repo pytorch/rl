@@ -7750,14 +7750,15 @@ class TestPPO(LossModuleTestBase):
                 },
                 action_key: {"action1": action} if composite_action_dist else action,
                 sample_log_prob_key: torch.randn_like(action[..., 1]) / 10,
-                loc_key: loc,
-                scale_key: scale,
             },
             device=device,
         )
         if composite_action_dist:
             td[("params", "action1", loc_key)] = loc
             td[("params", "action1", scale_key)] = scale
+        else:
+            td[loc_key] = loc
+            td[scale_key] = scale
         return td
 
     def _create_seq_mock_data_ppo(
@@ -7806,8 +7807,6 @@ class TestPPO(LossModuleTestBase):
                 sample_log_prob_key: (
                     torch.randn_like(action[..., 1]) / 10
                 ).masked_fill_(~mask, 0.0),
-                "loc": loc,
-                "scale": scale,
             },
             device=device,
             names=[None, "time"],
@@ -7815,6 +7814,9 @@ class TestPPO(LossModuleTestBase):
         if composite_action_dist:
             td[("params", "action1", "loc")] = loc
             td[("params", "action1", "scale")] = scale
+        else:
+            td["loc"] = loc
+            td["scale"] = scale
 
         return td
 
@@ -7882,10 +7884,10 @@ class TestPPO(LossModuleTestBase):
 
         loss = loss_fn(td)
         if isinstance(loss_fn, KLPENPPOLoss):
-            if "kl" in loss:
-                kl = loss.pop("kl")
-            else:
+            if composite_action_dist:
                 kl = loss.pop("kl_approx")
+            else:
+                kl = loss.pop("kl")
             assert (kl != 0).any()
 
         loss_critic = loss["loss_critic"]
