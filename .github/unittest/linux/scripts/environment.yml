@@ -24,8 +24,8 @@ dependencies:
     - tensorboard
     - imageio==2.26.0
     - wandb
-    - dm_control<1.0.21
-    - mujoco<3.2.1
+    - dm_control
+    - mujoco
     - mlflow
     - av
     - coverage
