@@ -16,7 +16,7 @@ import queue
 import sys
 import time
 import warnings
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
@@ -2433,7 +2433,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.out_tensordicts = {}
+        self.out_tensordicts = defaultdict(lambda: None)
         self.running = False
 
         if self.postprocs is not None:
@@ -2478,7 +2478,9 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
         use_buffers = self._use_buffers
-        if j == 0 or not use_buffers:
+        if self.replay_buffer is not None:
+            idx = new_data
+        elif j == 0 or not use_buffers:
             try:
                 data, idx = new_data
                 self.out_tensordicts[idx] = data
@@ -2493,7 +2495,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         else:
             idx = new_data
         out = self.out_tensordicts[idx]
-        if j == 0 or use_buffers:
+        if not self.replay_buffer and (j == 0 or use_buffers):
             # we clone the data to make sure that we'll be working with a fixed copy
             out = out.clone()
         return idx, j, out
@@ -2518,9 +2520,12 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             _check_for_faulty_process(self.procs)
             self._iter += 1
             idx, j, out = self._get_from_queue()
-            worker_frames = out.numel()
-            if self.split_trajs:
-                out = split_trajectories(out, prefix="collector")
+            if self.replay_buffer is None:
+                worker_frames = out.numel()
+                if self.split_trajs:
+                    out = split_trajectories(out, prefix="collector")
+            else:
+                worker_frames = self.frames_per_batch_worker
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
             if self.postprocs:
@@ -2536,7 +2541,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             else:
                 msg = "continue"
             self.pipes[idx].send((idx, msg))
-            if self._exclude_private_keys:
+            if out is not None and self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
             yield out
