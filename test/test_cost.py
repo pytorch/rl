@@ -149,7 +149,12 @@ from torchrl.objectives.value.utils import (
 
 
 # Capture all warnings
-pytestmark = pytest.mark.filterwarnings("error")
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings(
+        "ignore:The current behavior of MLP when not providing `num_cells` is that the number"
+    ),
+]
 
 
 class _check_td_steady:

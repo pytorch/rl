@@ -1412,7 +1412,7 @@ class _MultiDataCollector(DataCollectorBase):
             workers may charge the cpu load too much and harm performance.
         cat_results (str, int or None): (:class:`~torchrl.collectors.MultiSyncDataCollector` exclusively).
             If ``"stack"``, the data collected from the workers will be stacked along the
-            first dimension. This is the preferred behaviour as it is the most compatible
+            first dimension. This is the preferred behavior as it is the most compatible
             with the rest of the library.
             If ``0``, results will be concatenated along the first dimension
             of the outputs, which can be the batched dimension if the environments are
@@ -2160,7 +2160,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 f"For MultiSyncDataCollector, `cat_results` indicates how the data should "
                 f"be packed: the preferred option and current default is `cat_results='stack'` "
                 f"which provides the best interoperability across torchrl components. "
-                f"Other accepted values are `cat_results=0` (previous behaviour) and "
+                f"Other accepted values are `cat_results=0` (previous behavior) and "
                 f"`cat_results=-1` (cat along time dimension). Among these two, the latter "
                 f"should be preferred for consistency across environment configurations. "
                 f"Currently, the default value is `'stack'`."
@@ -2948,7 +2948,7 @@ def _main_async_collector(
                     # If policy is on cuda and env on cpu (or opposite) we put tensors that
                     # are on cpu in shared mem.
                     if collected_tensordict.device is not None:
-                        # placehoder in case we need different behaviours
+                        # placehoder in case we need different behaviors
                         if collected_tensordict.device.type in ("cpu", "mps"):
                             collected_tensordict.share_memory_()
                         elif collected_tensordict.device.type == "cuda":

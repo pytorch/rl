@@ -1286,7 +1286,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if include_info is not None:
             warnings.warn(
                 "include_info is going to be deprecated soon."
-                "The default behaviour has changed to `include_info=True` "
+                "The default behavior has changed to `include_info=True` "
                 "to avoid bugs linked to wrongly preassigned values in the "
                 "output tensordict."
             )
@@ -1548,7 +1548,7 @@ class InPlaceSampler:
 
     .. warning:: This class is deprecated and will be removed in v0.7.
 
-    To be used cautiously as this may lead to unexpected behaviour (i.e. tensordicts
+    To be used cautiously as this may lead to unexpected behavior (i.e. tensordicts
     overwritten during execution).
 
     """

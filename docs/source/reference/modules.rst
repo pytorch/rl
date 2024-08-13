@@ -62,7 +62,7 @@ Exploration wrappers
 
 To efficiently explore the environment, TorchRL proposes a series of wrappers
 that will override the action sampled by the policy by a noisier version.
-Their behaviour is controlled by :func:`~torchrl.envs.utils.exploration_mode`:
+Their behavior is controlled by :func:`~torchrl.envs.utils.exploration_mode`:
 if the exploration is set to ``"random"``, the exploration is active. In all
 other cases, the action written in the tensordict is simply the network output.
 

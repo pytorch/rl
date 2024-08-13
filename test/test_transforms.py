@@ -146,7 +146,7 @@ class TransformBase:
 
     We ask for every new transform tests to be coded following this minimum requirement class.
 
-    Of course, specific behaviours can also be tested separately.
+    Of course, specific behaviors can also be tested separately.
 
     If your transform identifies an issue with the EnvBase or _BatchedEnv abstraction(s),
     this needs to be corrected independently.

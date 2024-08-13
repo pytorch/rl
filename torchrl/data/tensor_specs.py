@@ -524,7 +524,7 @@ class TensorSpec:
     """Parent class of the tensor meta-data containers.
 
     TorchRL's TensorSpec are used to present what input/output is to be expected for a specific class,
-    or sometimes to simulate simple behaviours by generating random data within a defined space.
+    or sometimes to simulate simple behaviors by generating random data within a defined space.
 
     TensorSpecs are primarily used in environments to specify their input/output structure without needing to
     execute the environment (or starting it). They can also be used to instantiate shared buffers to pass
@@ -5316,7 +5316,7 @@ def _unsqueezed_shape(shape: torch.Size, dim: int) -> torch.Size:
 
 
 class _CompositeSpecItemsView:
-    """Wrapper class that enables richer behaviour of `items` for Composite."""
+    """Wrapper class that enables richer behavior of `items` for Composite."""
 
     def __init__(
         self,

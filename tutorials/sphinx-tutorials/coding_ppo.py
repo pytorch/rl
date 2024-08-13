@@ -195,7 +195,7 @@ total_frames = 10_000
 # ~~~~~~~~~~~~~~
 #
 # At each data collection (or batch collection) we will run the optimization
-# over a certain number of *epochs*, each time consuming the entire data we just
+# over a certain number of *epochs*, each time-consuming the entire data we just
 # acquired in a nested training loop. Here, the ``sub_batch_size`` is different from the
 # ``frames_per_batch`` here above: recall that we are working with a "batch of data"
 # coming from our collector, which size is defined by ``frames_per_batch``, and that
@@ -203,7 +203,7 @@ total_frames = 10_000
 # The size of these sub-batches is controlled by ``sub_batch_size``.
 #
 sub_batch_size = 64  # cardinality of the sub-samples gathered from the current data in the inner loop
-num_epochs = 10  # optimisation steps per batch of data collected
+num_epochs = 10  # optimization steps per batch of data collected
 clip_epsilon = (
     0.2  # clip value for PPO loss: see the equation in the intro for more context.
 )
