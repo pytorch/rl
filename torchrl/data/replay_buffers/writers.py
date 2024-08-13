@@ -478,6 +478,20 @@ class TensorDictMaxValueWriter(Writer):
 
         return ret
 
+    @property
+    def _write_count(self):
+        _write_count = self.__dict__.get("_write_count_value", None)
+        if _write_count is None:
+            _write_count = self._write_count_value = mp.Value("i", 0)
+        return _write_count.value
+
+    @_write_count.setter
+    def _write_count(self, value):
+        _write_count = self.__dict__.get("_write_count_value", None)
+        if _write_count is None:
+            _write_count = self._write_count_value = mp.Value("i", 0)
+        _write_count.value = value
+
     def add(self, data: Any) -> int | torch.Tensor:
         """Inserts a single element of data at an appropriate index, and returns that index.
 
@@ -537,7 +551,8 @@ class TensorDictMaxValueWriter(Writer):
     def __getstate__(self):
         if get_spawning_popen() is not None:
             raise RuntimeError(
-                f"Writers of type {type(self)} cannot be shared between processes."
+                f"Writers of type {type(self)} cannot be shared between processes. "
+                f"Please submit an issue at https://github.com/pytorch/rl if this feature is needed."
             )
         state = super().__getstate__()
         return state
