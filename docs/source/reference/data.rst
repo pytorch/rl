@@ -171,7 +171,7 @@ using the following components:
 Storage choice is very influential on replay buffer sampling latency, especially
 in distributed reinforcement learning settings with larger data volumes.
 :class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage` is highly
-advised in distributed settings with shared storage due to the lower serialisation
+advised in distributed settings with shared storage due to the lower serialization
 cost of MemoryMappedTensors as well as the ability to specify file storage locations
 for improved node failure recovery.
 The following mean sampling latency improvements over using :class:`~torchrl.data.replay_buffers.ListStorage`

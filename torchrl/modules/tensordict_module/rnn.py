@@ -529,7 +529,7 @@ class LSTMModule(ModuleBase):
         inputs and outputs (recurrent states) during rollout execution. That way, the data can be shared across
         processes and dealt with properly.
 
-        Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviours, for instance
+        Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviors, for instance
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
         are not registered within the environment specs.
@@ -605,7 +605,7 @@ class LSTMModule(ModuleBase):
     def set_recurrent_mode(self, mode: bool = True):
         """Returns a new copy of the module that shares the same lstm model but with a different ``recurrent_mode`` attribute (if it differs).
 
-        A copy is created such that the module can be used with divergent behaviour
+        A copy is created such that the module can be used with divergent behavior
         in various parts of the code (inference vs training):
 
         Examples:
@@ -619,7 +619,7 @@ class LSTMModule(ModuleBase):
             >>> lstm = nn.LSTM(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
             >>> lstm_module = LSTMModule(lstm=lstm, in_keys=["observation", "hidden0", "hidden1"], out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")])
             >>> mlp = MLP(num_cells=[64], out_features=1)
-            >>> # building two policies with different behaviours:
+            >>> # building two policies with different behaviors:
             >>> policy_inference = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy_training = Seq(lstm_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> traj_td = env.rollout(3) # some random temporal data
@@ -1275,7 +1275,7 @@ class GRUModule(ModuleBase):
         inputs and outputs (recurrent states) during rollout execution. That way, the data can be shared across
         processes and dealt with properly.
 
-        Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviours, for instance
+        Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviors, for instance
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
         are not registered within the environment specs.
@@ -1348,7 +1348,7 @@ class GRUModule(ModuleBase):
     def set_recurrent_mode(self, mode: bool = True):
         """Returns a new copy of the module that shares the same gru model but with a different ``recurrent_mode`` attribute (if it differs).
 
-        A copy is created such that the module can be used with divergent behaviour
+        A copy is created such that the module can be used with divergent behavior
         in various parts of the code (inference vs training):
 
         Examples:
@@ -1361,7 +1361,7 @@ class GRUModule(ModuleBase):
             >>> gru = nn.GRU(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
             >>> gru_module = GRUModule(gru=gru, in_keys=["observation", "hidden"], out_keys=["intermediate", ("next", "hidden")])
             >>> mlp = MLP(num_cells=[64], out_features=1)
-            >>> # building two policies with different behaviours:
+            >>> # building two policies with different behaviors:
             >>> policy_inference = Seq(gru_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy_training = Seq(gru_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> traj_td = env.rollout(3) # some random temporal data

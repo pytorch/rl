@@ -730,7 +730,7 @@ class TensorStorage(Storage):
                     "A cursor of length superior to the storage capacity was provided. "
                     "To accommodate for this, the cursor will be truncated to its last "
                     "element such that its length matched the length of the storage. "
-                    "This may **not** be the optimal behaviour for your application! "
+                    "This may **not** be the optimal behavior for your application! "
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )
