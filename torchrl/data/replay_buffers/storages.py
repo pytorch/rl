@@ -547,15 +547,24 @@ class TensorStorage(Storage):
             # check that the content is shared, otherwise tell the user we can't help
             storage = self._storage
             STORAGE_ERR = "The storage must be place in shared memory or memmapped before being shared between processes."
-            if is_tensor_collection(storage):
-                if not storage.is_memmap() and not storage.is_shared():
-                    raise RuntimeError(STORAGE_ERR)
-            else:
-                if (
-                    not isinstance(storage, MemoryMappedTensor)
-                    and not storage.is_shared()
+
+            # If the content is on cpu, it will be placed in shared memory.
+            # If it's on cuda it's already shared.
+            # If it's memmaped no worry in this case either.
+            # Only if the device is not "cpu" or "cuda" we may have a problem.
+            def assert_is_sharable(tensor):
+                if tensor.device is None or tensor.device.type in (
+                    "cuda",
+                    "cpu",
+                    "meta",
                 ):
-                    raise RuntimeError(STORAGE_ERR)
+                    return
+                raise RuntimeError(STORAGE_ERR)
+
+            if is_tensor_collection(storage):
+                storage.apply(assert_is_sharable, filter_empty=True)
+            else:
+                tree_map(storage, assert_is_sharable)
 
         return state
 
@@ -730,7 +739,7 @@ class TensorStorage(Storage):
                     "A cursor of length superior to the storage capacity was provided. "
                     "To accommodate for this, the cursor will be truncated to its last "
                     "element such that its length matched the length of the storage. "
-                    "This may **not** be the optimal behaviour for your application! "
+                    "This may **not** be the optimal behavior for your application! "
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )

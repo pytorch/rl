@@ -467,7 +467,7 @@ class REDQLoss_deprecated(LossModule):
 
 
 class DoubleREDQLoss_deprecated(REDQLoss_deprecated):
-    """[Deprecated] Class for delayed target-REDQ (which should be the default behaviour)."""
+    """[Deprecated] Class for delayed target-REDQ (which should be the default behavior)."""
 
     delay_qvalue: bool = True
 

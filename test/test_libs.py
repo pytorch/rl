@@ -3682,7 +3682,7 @@ class TestRoboHive:
     # The other option would be not to use parametrize but that also
     # means less informative error trace stacks.
     # In the CI, robohive should not coexist with other libs so that's fine.
-    # Robohive logging behaviour can be controlled via ROBOHIVE_VERBOSITY=ALL/INFO/(WARN)/ERROR/ONCE/ALWAYS/SILENT
+    # Robohive logging behavior can be controlled via ROBOHIVE_VERBOSITY=ALL/INFO/(WARN)/ERROR/ONCE/ALWAYS/SILENT
     @pytest.mark.parametrize("from_pixels", [False, True])
     @pytest.mark.parametrize("from_depths", [False, True])
     @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)

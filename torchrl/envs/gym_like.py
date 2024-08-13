@@ -149,7 +149,7 @@ class default_info_dict_reader(BaseInfoDictReader):
 class GymLikeEnv(_EnvWrapper):
     """A gym-like env is an environment.
 
-    Its behaviour is similar to gym environments in what common methods (specifically reset and step) are expected to do.
+    Its behavior is similar to gym environments in what common methods (specifically reset and step) are expected to do.
 
     A :obj:`GymLikeEnv` has a :obj:`.step()` method with the following signature:
 
@@ -508,7 +508,7 @@ class GymLikeEnv(_EnvWrapper):
         the info is filled at reset time.
 
         .. note:: This method requires running a few iterations in the environment to
-          manually check that the behaviour matches expectations.
+          manually check that the behavior matches expectations.
 
         Args:
             ignore_private (bool, optional): If ``True``, private infos (starting with

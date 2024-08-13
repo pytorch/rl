@@ -45,15 +45,15 @@ from torchrl.objectives.value import (
 class PPOLoss(LossModule):
     """A parent PPO loss class.
 
-    PPO (Proximal Policy Optimisation) is a model-free, online RL algorithm
+    PPO (Proximal Policy Optimization) is a model-free, online RL algorithm
     that makes use of a recorded (batch of)
     trajectories to perform several optimization steps, while actively
     preventing the updated policy to deviate too
     much from its original parameter configuration.
 
-    PPO loss can be found in different flavours, depending on the way the
-    constrained optimisation is implemented: ClipPPOLoss and KLPENPPOLoss.
-    Unlike its subclasses, this class does not implement any regularisation
+    PPO loss can be found in different flavors, depending on the way the
+    constrained optimization is implemented: ClipPPOLoss and KLPENPPOLoss.
+    Unlike its subclasses, this class does not implement any regularization
     and should therefore be used cautiously.
 
     For more details regarding PPO, refer to: "Proximal Policy Optimization Algorithms",
