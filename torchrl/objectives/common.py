@@ -14,7 +14,13 @@ from typing import Iterator, List, Optional, Tuple
 
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
-from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
+from tensordict.nn import (
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictParams,
+    TensorDictSequential,
+)
+from tensordict.utils import Buffer
 from torch import nn
 from torch.nn import Parameter
 from torchrl._utils import RL_WARNINGS
@@ -252,13 +258,14 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         """
         raise NotImplementedError
 
-    def convert_to_functional(
+    def maybe_convert_to_functional(
         self,
         module: TensorDictModule,
         module_name: str,
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,
         compare_against: Optional[List[Parameter]] = None,
+        target_network: TensorDictModule | None = None,
         **kwargs,
     ) -> None:
         """Converts a module to functional to be used in the loss.
@@ -298,6 +305,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 the resulting parameters will be a detached version of the
                 original parameters. If ``None``, the resulting parameters
                 will carry gradients as expected.
+            target_network (TensorDictModule, optional): if the loss module is
+                not functional, the optional target network associated with
+                the input network.
 
         """
         for name in (
@@ -309,6 +319,11 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 warnings.warn(
                     f"The name {name} wasn't part of the annotations ({self.__class__.__annotations__.keys()}). Make sure it is present in the definition class."
                 )
+
+        name_target_network = "target_" + module_name
+
+        def _custom_resample(param_dst):
+            return param_dst.uniform_(param_dst.min().item(), param_dst.max().item())
 
         if kwargs:
             raise TypeError(f"Unrecognised keyword arguments {list(kwargs.keys())}")
@@ -323,11 +338,113 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                     "The ``expand_dim`` value must match the length of the module list/tuple "
                     "if a single module isn't provided."
                 )
-            params = TensorDict.from_modules(
-                *module, as_module=True, expand_identical=True
-            )
+            if self.functional:
+                params = TensorDict.from_modules(
+                    *module,
+                    as_module=True,
+                    expand_identical=True,
+                    lazy_stack=not self.functional,
+                )
+                module = module[0]
+            else:
+                setattr(self, module_name, TensorDictSequential(*module))
+                module = getattr(self, module_name)
+                params = TensorDict.from_module(module, as_module=True)
+                # We don't want the parameters to appear twice
+                setattr(self, module_name + "_params", None)
+                if target_network is not None:
+                    if not isinstance(target_network, (list, tuple)):
+                        raise RuntimeError(
+                            "The target network must be a list or a tuple of modules of the same length as "
+                            f"the module for {module}."
+                        )
+                    target_network = TensorDictSequential(
+                        *target_network
+                    ).requires_grad_(False)
+                    # convert all params to buffers
+                    target_params = TensorDict.from_module(target_network)
+                    target_params = target_params.apply(Buffer)
+                    target_params.to_module(target_network)
+                    setattr(self, name_target_network, target_network)
+                elif create_target_params:
+                    target_params = TensorDict.from_module(
+                        module, as_module=True
+                    ).apply(lambda x: Buffer(x.data.clone()))
+                    with target_params.to("meta").to_module(module):
+                        # The only way to get this working is to deepcopy the module
+                        setattr(self, name_target_network, deepcopy(module))
+                    target_params.to_module(getattr(self, name_target_network))
+                else:
+                    self.__name__[name_target_network] = module
+
+                setattr(self, name_target_network + "_params", None)
+                self._has_update_associated[module_name] = not create_target_params
+                return
         else:
             params = TensorDict.from_module(module, as_module=True)
+            if not self.functional:
+                if expand_dim:
+
+                    new_params = params.data.expand(expand_dim, *params.shape).clone()
+                    new_params = new_params.apply(_custom_resample)
+                    new_params = new_params.unbind(0)
+
+                    def deepcopy_module(module, new_params):
+                        with new_params.to("meta").to_module(module):
+                            module = deepcopy(module)
+                        new_params = new_params.data.apply(
+                            lambda x, y: nn.Parameter(x, requires_grad=True)
+                            if isinstance(y, nn.Parameter)
+                            else Buffer(x),
+                            params,
+                        )
+                        new_params.to_module(module)
+                        return module
+
+                    module = TensorDictSequential(
+                        *(
+                            deepcopy_module(module, new_params_)
+                            for new_params_ in new_params
+                        )
+                    )
+                    params = TensorDict.from_module(module, as_module=True)
+                setattr(self, module_name, module)
+                setattr(self, module_name + "_params", None)
+                if target_network is not None and not expand_dim:
+                    target_network.requires_grad_(False)
+                    # convert all params to buffers
+                    target_params = TensorDict.from_module(target_network)
+                    target_params = target_params.apply(Buffer)
+                    target_params.to_module(target_network)
+
+                    # Check shape of the target params
+                    def assert_shape(p1, p2):
+                        if not p1.shape == p2.shape:
+                            raise ValueError(
+                                "The shape of the target parameters must match the original ones."
+                            )
+
+                    target_params.apply(assert_shape, params, filter_empty=True)
+                    setattr(self, name_target_network, target_network)
+                elif create_target_params:
+                    if target_network is not None:
+                        warnings.warn(
+                            "The target network is ignored as the network must be deepcopied anyway. "
+                            f"If you want to use a precise target network for {module_name}, please provide "
+                            f"a list of targets instead."
+                        )
+                    target_params = TensorDict.from_module(
+                        module, as_module=True
+                    ).apply(lambda x: Buffer(x.data.clone()))
+                    with target_params.to("meta").to_module(module):
+                        # The only way to get this working is to deepcopy the module
+                        setattr(self, name_target_network, deepcopy(module))
+                    target_params.to_module(getattr(self, name_target_network))
+                else:
+                    self.__dict__[name_target_network] = module
+                setattr(self, name_target_network + "_params", None)
+                self._has_update_associated[module_name] = not create_target_params
+                return
 
             for key in params.keys(True):
                 if sep in key:
@@ -362,11 +479,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                         return expanded_param
                     else:
                         p_out = param.expand(expand_dim, *param.shape).clone()
-                        p_out = nn.Parameter(
-                            p_out.uniform_(
-                                p_out.min().item(), p_out.max().item()
-                            ).requires_grad_()
-                        )
+                        p_out = nn.Parameter(_custom_resample(p_out).requires_grad_())
                         return p_out
 
                 params = TensorDictParams(
@@ -396,7 +509,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         # A deepcopy with meta device could be used but that assumes that the model is copyable!
         self.__dict__[module_name] = module
 
-        name_params_target = "target_" + module_name
         if create_target_params:
             # if create_target_params:
             # we create a TensorDictParams to keep the target params as Buffer instances
@@ -406,8 +518,12 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 ),
                 no_convert=True,
             )
-            setattr(self, name_params_target + "_params", target_params)
+            setattr(self, name_target_network + "_params", target_params)
+        self.__dict__[name_target_network] = module
         self._has_update_associated[module_name] = not create_target_params
+
+    # legacy
+    convert_to_functional = maybe_convert_to_functional
 
     def __getattr__(self, item):
         if item.startswith("target_") and item.endswith("_params"):
@@ -581,6 +697,18 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             )
         self._vmap_randomness = value
         self._make_vmap()
+
+    def _maybe_func_call(
+        self, *args, module: nn.Module, module_params: TensorDictBase, func=None
+    ):
+        if func is None:
+            func = "forward"
+        module_func = getattr(module, func)
+        if self.functional:
+            with module_params.to_module(module):
+                return module_func(*args)
+        else:
+            return module_func(*args)
 
     @staticmethod
     def _make_meta_params(param):

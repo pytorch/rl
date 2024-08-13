@@ -24,8 +24,8 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _maybe_vmap_maybe_func,
     _reduce,
-    _vmap_func,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
@@ -166,7 +166,7 @@ class REDQLoss_deprecated(LossModule):
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
@@ -181,7 +181,7 @@ class REDQLoss_deprecated(LossModule):
         self.actor_network.return_log_prob = True
 
         self.delay_qvalue = delay_qvalue
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             qvalue_network,
             "qvalue_network",
             expand_dim=num_qvalue_nets,
@@ -228,7 +228,9 @@ class REDQLoss_deprecated(LossModule):
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _make_vmap(self):
-        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_networkN0 = _maybe_vmap_maybe_func(
+            self.qvalue_network, (None, 0)
+        )
 
     @property
     def target_entropy(self):

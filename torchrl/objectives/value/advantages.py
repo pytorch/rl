@@ -27,7 +27,11 @@ from torch import nn, Tensor
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
 
-from torchrl.objectives.utils import _vmap_func, hold_out_net, RANDOM_MODULE_LIST
+from torchrl.objectives.utils import (
+    _maybe_vmap_maybe_func,
+    hold_out_net,
+    RANDOM_MODULE_LIST,
+)
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -142,9 +146,9 @@ def _call_value_nets(
             )
         elif params is not None:
             params_stack = torch.stack([params, next_params], 0).contiguous()
-            data_out = _vmap_func(value_net, (0, 0), randomness=vmap_randomness)(
-                data_in, params_stack
-            )
+            data_out = _maybe_vmap_maybe_func(
+                value_net, (0, 0), randomness=vmap_randomness
+            )(data_in, params_stack)
         else:
             data_out = vmap(value_net, (0,), randomness=vmap_randomness)(data_in)
         value_est = data_out.get(value_key)
@@ -217,6 +221,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
+    target_value_network: Union[TensorDictModule, Callable]
     _vmap_randomness = None
 
     @property
@@ -290,6 +295,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self,
         *,
         value_network: TensorDictModule,
+        target_value_network: TensorDictModule | None = None,
         shifted: bool = False,
         differentiable: bool = False,
         skip_existing: bool | None = None,
@@ -302,6 +308,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self.differentiable = differentiable
         self.skip_existing = skip_existing
         self.__dict__["value_network"] = value_network
+        self.__dict__["target_value_network"] = (
+            value_network if target_value_network is None else target_value_network
+        )
         self.dep_keys = {}
         self.shifted = shifted
 
@@ -429,8 +438,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
         step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
             with hold_out_net(
-                self.value_network
-            ) if target_params is None else target_params.to_module(self.value_network):
+                self.target_value_network
+            ) if target_params is None else target_params.to_module(
+                self.target_value_network
+            ):
                 self.value_network(step_td)
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
@@ -519,6 +530,7 @@ class TD0Estimator(ValueEstimatorBase):
         *,
         gamma: float | torch.Tensor,
         value_network: TensorDictModule,
+        target_value_network: TensorDictModule | None = None,
         shifted: bool = False,
         average_rewards: bool = False,
         differentiable: bool = False,
@@ -530,6 +542,7 @@ class TD0Estimator(ValueEstimatorBase):
     ):
         super().__init__(
             value_network=value_network,
+            target_value_network=target_value_network,
             differentiable=differentiable,
             shifted=shifted,
             advantage_key=advantage_key,
@@ -732,6 +745,7 @@ class TD1Estimator(ValueEstimatorBase):
         *,
         gamma: float | torch.Tensor,
         value_network: TensorDictModule,
+        target_value_network: TensorDictModule | None = None,
         average_rewards: bool = False,
         differentiable: bool = False,
         skip_existing: bool | None = None,
@@ -744,6 +758,7 @@ class TD1Estimator(ValueEstimatorBase):
     ):
         super().__init__(
             value_network=value_network,
+            target_value_network=target_value_network,
             differentiable=differentiable,
             advantage_key=advantage_key,
             value_target_key=value_target_key,
@@ -954,6 +969,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         gamma: float | torch.Tensor,
         lmbda: float | torch.Tensor,
         value_network: TensorDictModule,
+        target_value_network: TensorDictModule | None = None,
         average_rewards: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
@@ -967,6 +983,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
     ):
         super().__init__(
             value_network=value_network,
+            target_value_network=target_value_network,
             differentiable=differentiable,
             advantage_key=advantage_key,
             value_target_key=value_target_key,
@@ -1209,6 +1226,7 @@ class GAE(ValueEstimatorBase):
         gamma: float | torch.Tensor,
         lmbda: float | torch.Tensor,
         value_network: TensorDictModule,
+        target_value_network: TensorDictModule | None = None,
         average_gae: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
@@ -1223,6 +1241,7 @@ class GAE(ValueEstimatorBase):
         super().__init__(
             shifted=shifted,
             value_network=value_network,
+            target_value_network=target_value_network,
             differentiable=differentiable,
             advantage_key=advantage_key,
             value_target_key=value_target_key,
@@ -1517,6 +1536,7 @@ class VTrace(ValueEstimatorBase):
         gamma: float | torch.Tensor,
         actor_network: TensorDictModule,
         value_network: TensorDictModule,
+        target_value_network: TensorDictModule | None = None,
         rho_thresh: float | torch.Tensor = 1.0,
         c_thresh: float | torch.Tensor = 1.0,
         average_adv: bool = False,
@@ -1532,6 +1552,7 @@ class VTrace(ValueEstimatorBase):
         super().__init__(
             shifted=shifted,
             value_network=value_network,
+            target_value_network=target_value_network,
             differentiable=differentiable,
             advantage_key=advantage_key,
             value_target_key=value_target_key,

@@ -198,12 +198,12 @@ def _init(
 ) -> None:
     super(type(self), self).__init__()
 
-    self.convert_to_functional(
+    self.maybe_convert_to_functional(
         actor_network,
         "actor_network",
         create_target_params=True,
     )
-    self.convert_to_functional(
+    self.maybe_convert_to_functional(
         value_network,
         "value_network",
         create_target_params=True,

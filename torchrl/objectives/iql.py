@@ -20,8 +20,8 @@ from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _maybe_vmap_maybe_func,
     _reduce,
-    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -279,7 +279,7 @@ class IQLLoss(LossModule):
         self.expectile = expectile
 
         # Actor Network
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=False,
@@ -291,7 +291,7 @@ class IQLLoss(LossModule):
         else:
             policy_params = None
         # Value Function Network
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             value_network,
             "value_network",
             create_target_params=False,
@@ -307,7 +307,7 @@ class IQLLoss(LossModule):
             )
         else:
             qvalue_policy_params = None
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
@@ -322,7 +322,7 @@ class IQLLoss(LossModule):
         self.reduction = reduction
 
     def _make_vmap(self):
-        self._vmap_qvalue_networkN0 = _vmap_func(
+        self._vmap_qvalue_networkN0 = _maybe_vmap_maybe_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
 

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 import math
 import warnings
 from dataclasses import dataclass
@@ -28,11 +29,11 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _LoopVmapModule,
+    _maybe_vmap_maybe_func,
     _reduce,
-    _vmap_func,
     default_value_kwargs,
     distance_loss,
+    hold_out_net,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
@@ -54,16 +55,24 @@ class SACLoss(LossModule):
     Reinforcement Learning with a Stochastic Actor" https://arxiv.org/abs/1801.01290
     and "Soft Actor-Critic Algorithms and Applications" https://arxiv.org/abs/1812.05905
 
+    SACLoss has four different losses that are executed in the following order in :meth:`.forward`:
+
+    - :meth:`~.qvalue_loss`;
+    - :meth:`~.value_loss`, which can be ignored for SAC-v2;
+    - :meth:`~.actor_loss`;
+    - :meth:`~.alpha_loss`.
+
+
     Args:
         actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (TensorDictModule): Q(s, a) parametric model.
+        qvalue_network (TensorDictModule or list of modules): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
             If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
             times. If a list of modules is passed, their
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of modules if passed, it will not be compared against the policy parameters
               and all the parameters will be considered as untied.
 
         value_network (TensorDictModule, optional): V(s) parametric model.
@@ -75,6 +84,9 @@ class SACLoss(LossModule):
 
     Keyword Args:
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
+            If a list of :attr:`qvalue_network` is passed and ``num_qvalue_nets`` is not specified,
+            the vlaue of ``num_qvalue_nets`` is determined accordingly. If the two are passed, the length of the
+            module list must match ``num_qvalue_nets``.
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
@@ -296,7 +308,7 @@ class SACLoss(LossModule):
         qvalue_network: TensorDictModule | List[TensorDictModule],
         value_network: Optional[TensorDictModule] = None,
         *,
-        num_qvalue_nets: int = 2,
+        num_qvalue_nets: int | None = None,
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = None,
@@ -312,8 +324,12 @@ class SACLoss(LossModule):
         separate_losses: bool = False,
         reduction: str = None,
         use_vmap: bool = True,
+        functional: bool = True,
+        target_actor_network: ProbabilisticActor | None = None,
+        target_qvalue_network: ProbabilisticActor | None = None,
+        target_value_network: ProbabilisticActor | None = None,
     ) -> None:
-        self.use_vmap = use_vmap
+
         self._in_keys = None
         self._out_keys = None
         if reduction is None:
@@ -321,12 +337,22 @@ class SACLoss(LossModule):
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
+        if num_qvalue_nets is None:
+            if isinstance(qvalue_network, (list, tuple)):
+                num_qvalue_nets = len(qvalue_network)
+            else:
+                num_qvalue_nets = 2
+
+        self.use_vmap = use_vmap
+        self.functional = functional
+
         # Actor
         self.delay_actor = delay_actor
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
+            target_network=target_actor_network,
         )
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
@@ -339,11 +365,12 @@ class SACLoss(LossModule):
         if value_network is not None:
             self._version = 1
             self.delay_value = delay_value
-            self.convert_to_functional(
+            self.maybe_convert_to_functional(
                 value_network,
                 "value_network",
                 create_target_params=self.delay_value,
                 compare_against=policy_params,
+                target_network=target_value_network,
             )
         else:
             self._version = 2
@@ -359,12 +386,13 @@ class SACLoss(LossModule):
                 q_value_policy_params = policy_params
         else:
             q_value_policy_params = policy_params
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
             compare_against=q_value_policy_params,
+            target_network=target_qvalue_network,
         )
 
         self.loss_function = loss_function
@@ -412,23 +440,33 @@ class SACLoss(LossModule):
         self._make_vmap()
         self.reduction = reduction
 
+    @property
+    def functional(self):
+        return self._functional
+
+    @functional.setter
+    def functional(self, value):
+        self._functional = value
+
     def _make_vmap(self):
-        if self.use_vmap:
-            self._vmap_qnetworkN0 = _vmap_func(
-                self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+        if self.use_vmap and not self.functional:
+            raise RuntimeError(
+                "functional=False required use_vmap to be set to False too."
             )
-            if self._version == 1:
-                self._vmap_qnetwork00 = _vmap_func(
-                    self.qvalue_network, randomness=self.vmap_randomness
-                )
-        else:
-            self._vmap_qnetworkN0 = _LoopVmapModule(
-                self.qvalue_network, (None, 0), functional=True
+        self._vmap_qnetworkN0 = _maybe_vmap_maybe_func(
+            self.qvalue_network,
+            (None, 0),
+            randomness=self.vmap_randomness,
+            functional=self.functional,
+            use_vmap=self.use_vmap,
+        )
+        if self._version == 1:
+            self._vmap_qnetwork00 = _maybe_vmap_maybe_func(
+                self.qvalue_network,
+                randomness=self.vmap_randomness,
+                functional=self.functional,
+                use_vmap=self.use_vmap,
             )
-            if self._version == 1:
-                self._vmap_qnetwork00 = _LoopVmapModule(
-                    self.qvalue_network, functional=True
-                )
 
     @property
     def target_entropy_buffer(self):
@@ -588,14 +626,11 @@ class SACLoss(LossModule):
         else:
             tensordict_reshape = tensordict
 
-        if self._version == 1:
-            loss_qvalue, value_metadata = self._qvalue_v1_loss(tensordict_reshape)
-            loss_value, _ = self._value_loss(tensordict_reshape)
-        else:
-            loss_qvalue, value_metadata = self._qvalue_v2_loss(tensordict_reshape)
-            loss_value = None
+        loss_qvalue, value_metadata = self.qvalue_loss(tensordict_reshape)
+        loss_value, _ = self.value_loss(tensordict_reshape)
         loss_actor, metadata_actor = self.actor_loss(tensordict_reshape)
-        loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
+        loss_alpha, _ = self.alpha_loss(log_prob=metadata_actor["log_prob"])
+
         tensordict_reshape.set(self.tensor_keys.priority, value_metadata["td_error"])
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
@@ -624,15 +659,57 @@ class SACLoss(LossModule):
         )
         return td_out
 
+    def qvalue_loss(self, tensordict):
+        """The loss for the QValue network.
+
+        In :meth:`~.forward`, this method is the first to be executed.
+
+        Args:
+            tensordict (TensorDictBase): the input data. See :attr:`~.in_keys` for more details
+                on the required fields.
+
+        Returns: a tensor containing the qvalue loss along with a dictionary of metadata.
+
+        """
+        if self._version == 1:
+            loss_qvalue, qvalue_metadata = self._qvalue_v1_loss(tensordict)
+        else:
+            loss_qvalue, qvalue_metadata = self._qvalue_v2_loss(tensordict)
+        return loss_qvalue, qvalue_metadata
+
+    def value_loss(self, tensordict):
+        """The loss for the QValue network.
+
+        In :meth:`~.forward`, this method is the second to be executed.
+        It's a no-op for SAC-v2.
+
+        Args:
+            tensordict (TensorDictBase): the input data. See :attr:`~.in_keys` for more details
+                on the required fields.
+
+        Returns: a tensor containing the qvalue loss along with a dictionary of metadata.
+
+        """
+        if self._version == 1:
+            loss_value, metadata = self._value_loss(tensordict)
+        else:
+            loss_value = None
+            metadata = {}
+        return loss_value, metadata
+
     @property
     @_cache_values
     def _cached_detached_qvalue_params(self):
-        return self.qvalue_network_params.detach()
+        if self.functional:
+            return self.qvalue_network_params.detach()
+        return None
 
     def actor_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         """The loss for the actor.
+
+        In :meth:`~.forward`, this method is the third to be executed.
 
         Args:
             tensordict (TensorDictBase): the input data. See :attr:`~.in_keys` for more details
@@ -641,20 +718,25 @@ class SACLoss(LossModule):
         Returns: a tensor containing the actor loss along with a dictionary of metadata.
 
         """
-        with set_exploration_type(
-            ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
-            dist = self.actor_network.get_dist(tensordict)
-            a_reparm = dist.rsample()
+        with set_exploration_type(ExplorationType.RANDOM):
+            dist = self._maybe_func_call(
+                tensordict,
+                func="get_dist",
+                module=self.actor_network,
+                module_params=self.actor_network_params,
+            )
+        a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
-
-        td_q = self._vmap_qnetworkN0(
-            td_q,
-            self._cached_detached_qvalue_params,  # should we clone?
-        )
+        with hold_out_net(
+            self.qvalue_network
+        ) if not self.functional else contextlib.nullcontext():
+            td_q = self._vmap_qnetworkN0(
+                td_q,
+                self._cached_detached_qvalue_params,  # should we clone?
+            )
 
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -667,28 +749,52 @@ class SACLoss(LossModule):
 
         return self._alpha * log_prob - min_q_logprob, {"log_prob": log_prob.detach()}
 
+    def alpha_loss(self, log_prob: Tensor) -> Tensor:
+        """The loss for the entropy factor.
+
+        In :meth:`~.forward`, this method is the fourth to be executed.
+
+        Args:
+            log_prob (Tensor): the log probability of the action taken in the actor loss.
+
+        Returns: a tensor containing the entropy loss for the `alpha` parameter and a dictionary of metadata.
+        """
+        if self.target_entropy is not None:
+            # we can compute this loss even if log_alpha is not a parameter
+            alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
+        else:
+            # placeholder
+            alpha_loss = torch.zeros_like(log_prob)
+        return alpha_loss, {}
+
     @property
     @_cache_values
     def _cached_target_params_actor_value(self):
-        return TensorDict._new_unsafe(
-            {
-                "module": {
-                    "0": self.target_actor_network_params,
-                    "1": self.target_value_network_params,
-                }
-            },
-            torch.Size([]),
-        )
+        if self.functional:
+            return TensorDict._new_unsafe(
+                {
+                    "module": {
+                        "0": self.target_actor_network_params,
+                        "1": self.target_value_network_params,
+                    }
+                },
+                torch.Size([]),
+            )
+        return None
 
     def _qvalue_v1_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
-        target_params = self._cached_target_params_actor_value
         with set_exploration_type(self.deterministic_sampling_mode):
-            target_value = self.value_estimator.value_estimate(
-                tensordict, target_params=target_params
-            ).squeeze(-1)
-
+            if self.functional:
+                target_params = self._cached_target_params_actor_value
+                target_value = self.value_estimator.value_estimate(
+                    tensordict, target_params=target_params
+                ).squeeze(-1)
+            else:
+                target_value = self.value_estimator.value_estimate(tensordict).squeeze(
+                    -1
+                )
         # Q-nets must be trained independently: as such, we split the data in 2
         # if required and train each q-net on one half of the data.
         shape = tensordict.shape
@@ -732,14 +838,18 @@ class SACLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         with torch.no_grad():
-            with set_exploration_type(
-                ExplorationType.RANDOM
-            ), self.actor_network_params.to_module(self.actor_network):
-                next_tensordict = tensordict.get("next").clone(False)
-                next_dist = self.actor_network.get_dist(next_tensordict)
-                next_action = next_dist.rsample()
-                next_tensordict.set(self.tensor_keys.action, next_action)
-                next_sample_log_prob = next_dist.log_prob(next_action)
+            next_tensordict = tensordict.get("next").clone(False)
+            # We need to set the mode if the module is explorative (?)
+            with set_exploration_type(ExplorationType.RANDOM):
+                next_dist = self._maybe_func_call(
+                    next_tensordict,
+                    module=self.actor_network,
+                    func="get_dist",
+                    module_params=self.actor_network_params,
+                )
+            next_action = next_dist.rsample()
+            next_tensordict.set(self.tensor_keys.action, next_action)
+            next_sample_log_prob = next_dist.log_prob(next_action)
 
             # get q-values
             next_tensordict_expand = self._vmap_qnetworkN0(
@@ -788,11 +898,19 @@ class SACLoss(LossModule):
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
-        with self.value_network_params.to_module(self.value_network):
-            self.value_network(td_copy)
+
+        td_copy = self._maybe_func_call(
+            td_copy, module=self.value_network, module_params=self.value_network_params
+        )
+
         pred_val = td_copy.get(self.tensor_keys.value).squeeze(-1)
-        with self.target_actor_network_params.to_module(self.actor_network):
-            action_dist = self.actor_network.get_dist(td_copy)  # resample an action
+
+        action_dist = self._maybe_func_call(
+            td_copy,
+            module=self.target_actor_network,
+            module_params=self.target_actor_network_params,
+            func="get_dist",
+        )
         action = action_dist.rsample()
 
         td_copy.set(self.tensor_keys.action, action, inplace=False)
@@ -817,15 +935,6 @@ class SACLoss(LossModule):
             pred_val, target_val, loss_function=self.loss_function
         )
         return loss_value, {}
-
-    def _alpha_loss(self, log_prob: Tensor) -> Tensor:
-        if self.target_entropy is not None:
-            # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
-        else:
-            # placeholder
-            alpha_loss = torch.zeros_like(log_prob)
-        return alpha_loss
 
     @property
     def _alpha(self):
@@ -1055,7 +1164,7 @@ class DiscreteSACLoss(LossModule):
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
@@ -1067,7 +1176,7 @@ class DiscreteSACLoss(LossModule):
         else:
             policy_params = None
         self.delay_qvalue = delay_qvalue
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
@@ -1132,7 +1241,7 @@ class DiscreteSACLoss(LossModule):
         self.reduction = reduction
 
     def _make_vmap(self):
-        self._vmap_qnetworkN0 = _vmap_func(
+        self._vmap_qnetworkN0 = _maybe_vmap_maybe_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
 

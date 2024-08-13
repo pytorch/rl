@@ -23,8 +23,8 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _maybe_vmap_maybe_func,
     _reduce,
-    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -280,7 +280,7 @@ class REDQLoss(LossModule):
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
@@ -295,7 +295,7 @@ class REDQLoss(LossModule):
         else:
             policy_params = None
         self.delay_qvalue = delay_qvalue
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
@@ -339,10 +339,10 @@ class REDQLoss(LossModule):
         self._make_vmap()
 
     def _make_vmap(self):
-        self._vmap_qvalue_network00 = _vmap_func(
+        self._vmap_qvalue_network00 = _maybe_vmap_maybe_func(
             self.qvalue_network, randomness=self.vmap_randomness
         )
-        self._vmap_getdist = _vmap_func(
+        self._vmap_getdist = _maybe_vmap_maybe_func(
             self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
         )
 

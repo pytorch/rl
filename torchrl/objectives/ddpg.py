@@ -218,7 +218,7 @@ class DDPGLoss(LossModule):
         with params_meta.to_module(actor_critic):
             self.__dict__["actor_critic"] = deepcopy(actor_critic)
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
@@ -229,7 +229,7 @@ class DDPGLoss(LossModule):
             policy_params = list(actor_network.parameters())
         else:
             policy_params = None
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             value_network,
             "value_network",
             create_target_params=self.delay_value,

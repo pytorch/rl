@@ -275,7 +275,7 @@ class ReinforceLoss(LossModule):
 
         # Actor
         if self.functional:
-            self.convert_to_functional(
+            self.maybe_convert_to_functional(
                 actor_network,
                 "actor_network",
                 create_target_params=False,
@@ -292,7 +292,7 @@ class ReinforceLoss(LossModule):
         # Value
         if critic_network is not None:
             if self.functional:
-                self.convert_to_functional(
+                self.maybe_convert_to_functional(
                     critic_network,
                     "critic_network",
                     create_target_params=self.delay_value,

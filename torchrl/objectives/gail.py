@@ -86,7 +86,7 @@ class GAILLoss(LossModule):
         super().__init__()
 
         # Discriminator Network
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             discriminator_network,
             "discriminator_network",
             create_target_params=False,

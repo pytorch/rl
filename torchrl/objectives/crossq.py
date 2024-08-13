@@ -22,8 +22,8 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
+    _maybe_vmap_maybe_func,
     _reduce,
-    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -277,7 +277,7 @@ class CrossQLoss(LossModule):
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         # Actor
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=False,
@@ -294,7 +294,7 @@ class CrossQLoss(LossModule):
         self.num_qvalue_nets = num_qvalue_nets
 
         q_value_policy_params = policy_params
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
@@ -342,7 +342,7 @@ class CrossQLoss(LossModule):
         self.reduction = reduction
 
     def _make_vmap(self):
-        self._vmap_qnetworkN0 = _vmap_func(
+        self._vmap_qnetworkN0 = _maybe_vmap_maybe_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
 

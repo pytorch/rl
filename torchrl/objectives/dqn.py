@@ -199,7 +199,7 @@ class DQNLoss(LossModule):
             action_space=action_space,
         )
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             value_network,
             "value_network",
             create_target_params=self.delay_value,
@@ -462,7 +462,7 @@ class DistributionalDQNLoss(LossModule):
             module=value_network, wrapper_type=DistributionalQValueActor
         )
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             value_network,
             "value_network",
             create_target_params=self.delay_value,

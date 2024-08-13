@@ -95,7 +95,7 @@ class OnlineDTLoss(LossModule):
         super().__init__()
 
         # Actor Network
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=False,
@@ -300,7 +300,7 @@ class DTLoss(LossModule):
         super().__init__()
 
         # Actor Network
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=False,

@@ -278,7 +278,7 @@ class A2CLoss(LossModule):
         )
 
         if functional:
-            self.convert_to_functional(
+            self.maybe_convert_to_functional(
                 actor_network,
                 "actor_network",
             )
@@ -292,7 +292,7 @@ class A2CLoss(LossModule):
         else:
             policy_params = None
         if functional:
-            self.convert_to_functional(
+            self.maybe_convert_to_functional(
                 critic_network, "critic_network", compare_against=policy_params
             )
         else:

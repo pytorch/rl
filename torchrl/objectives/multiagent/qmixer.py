@@ -225,12 +225,12 @@ class QMixerLoss(LossModule):
         ).to_module(global_value_network):
             self.__dict__["global_value_network"] = deepcopy(global_value_network)
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             local_value_network,
             "local_value_network",
             create_target_params=self.delay_value,
         )
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             mixer_network,
             "mixer_network",
             create_target_params=self.delay_value,

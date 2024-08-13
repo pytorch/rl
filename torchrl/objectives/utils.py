@@ -482,27 +482,53 @@ def _cache_values(fun):
     return new_fun
 
 
-def _vmap_func(module, *args, func=None, call_vmap: bool = True, **kwargs):
-    try:
+def _capture_vmap_error(func):
+    @functools.wraps(func)
+    def new_func(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except RuntimeError as err:
+            if re.match(
+                r"vmap: called random operation while in randomness error mode",
+                str(err),
+            ):
+                raise RuntimeError(
+                    "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
+                ) from err
+
+    return new_func
+
+
+def _maybe_vmap_maybe_func(
+    module, *args, func=None, use_vmap: bool = True, functional: bool = True, **kwargs
+):
+    randomness = kwargs.pop("randomness", "error")
+    if functional:
+        if func is None:
+            func = "forward"
+        func = getattr(module, func)
 
         def decorated_module(*module_args_params):
             params = module_args_params[-1]
             module_args = module_args_params[:-1]
             with params.to_module(module):
-                if func is None:
-                    return module(*module_args)
-                else:
-                    return getattr(module, func)(*module_args)
+                return func(*module_args)
 
-        return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
-
-    except RuntimeError as err:
-        if re.match(
-            r"vmap: called random operation while in randomness error mode", str(err)
-        ):
-            raise RuntimeError(
-                "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
-            ) from err
+        if use_vmap:
+            out = vmap(  # noqa: TOR101
+                decorated_module, *args, randomness=randomness, **kwargs
+            )
+            return _capture_vmap_error(out)
+        else:
+            return _LoopVmapModule(module, *args, func=func, **kwargs, functional=True)
+    else:
+        if use_vmap:
+            # This should be rarely reached - we don't allow vmap + non functional in losses
+            out = vmap(func, *args, randomness=randomness, **kwargs)  # noqa: TOR101
+            return _capture_vmap_error(out)
+        else:
+            # we still need to iterate over the module
+            return _LoopVmapModule(module, *args, func=func, **kwargs, functional=False)
 
 
 class _LoopVmapModule(nn.Module):
@@ -511,6 +537,7 @@ class _LoopVmapModule(nn.Module):
         module: nn.Module,
         in_dims: Tuple[int | None] = None,
         out_dims: Tuple[int | None] = None,
+        func=None,
         register_module: bool = False,
         functional: bool = False,
     ):
@@ -520,6 +547,9 @@ class _LoopVmapModule(nn.Module):
             self.__dict__["module"] = module
         else:
             self.module = module
+        if func is None:
+            func = "forward"
+        self.func = func
         self.in_dims = in_dims
         if out_dims is not None:
             raise NotImplementedError("out_dims not implemented yet.")
@@ -531,8 +561,17 @@ class _LoopVmapModule(nn.Module):
         to_rep = []
         if self.in_dims is None:
             self.in_dims = [0] * len(args)
+
+        if not self.functional:
+            args = args[:-1]
+            in_dims = self.in_dims[:-1]
+        else:
+            in_dims = self.in_dims
+
         args = list(args)
-        for i, (arg, in_dim) in enumerate(_zip_strict(args, self.in_dims)):
+        for i, (arg, in_dim) in enumerate(_zip_strict(args, in_dims)):
+            if not self.functional and n is None:
+                n = len(self.module)
             if in_dim is not None:
                 arg = arg.unbind(in_dim)
                 if n is None:
@@ -550,12 +589,13 @@ class _LoopVmapModule(nn.Module):
         ]
         out = []
         n_out = None
-        for _args in zip(*args):
+        for i, _args in enumerate(zip(*args)):
             if self.functional:
                 with _args[-1].to_module(self.module):
                     out.append(self.module(*_args[:-1]))
             else:
-                out.append(self.module(*_args))
+                # Ignore the last param, which must be a TD containing params
+                out.append(self.module[i](*_args))
             if n_out is None:
                 n_out = len(out[-1]) if isinstance(out[-1], tuple) else 1
         if n_out > 1:

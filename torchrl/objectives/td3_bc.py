@@ -19,8 +19,8 @@ from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
+    _maybe_vmap_maybe_func,
     _reduce,
-    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -264,7 +264,7 @@ class TD3BCLoss(LossModule):
         self.delay_actor = delay_actor
         self.delay_qvalue = delay_qvalue
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
@@ -275,7 +275,7 @@ class TD3BCLoss(LossModule):
             policy_params = list(actor_network.parameters())
         else:
             policy_params = None
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
@@ -335,10 +335,10 @@ class TD3BCLoss(LossModule):
         self.reduction = reduction
 
     def _make_vmap(self):
-        self._vmap_qvalue_network00 = _vmap_func(
+        self._vmap_qvalue_network00 = _maybe_vmap_maybe_func(
             self.qvalue_network, randomness=self.vmap_randomness
         )
-        self._vmap_actor_network00 = _vmap_func(
+        self._vmap_actor_network00 = _maybe_vmap_maybe_func(
             self.actor_network, randomness=self.vmap_randomness
         )
 

@@ -29,8 +29,8 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _maybe_vmap_maybe_func,
     _reduce,
-    _vmap_func,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -301,7 +301,7 @@ class CQLLoss(LossModule):
 
         # Actor
         self.delay_actor = delay_actor
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
@@ -311,7 +311,7 @@ class CQLLoss(LossModule):
         self.delay_qvalue = delay_qvalue
         self.num_qvalue_nets = 2
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             qvalue_network,
             "qvalue_network",
             self.num_qvalue_nets,
@@ -377,10 +377,10 @@ class CQLLoss(LossModule):
         self.reduction = reduction
 
     def _make_vmap(self):
-        self._vmap_qvalue_networkN0 = _vmap_func(
+        self._vmap_qvalue_networkN0 = _maybe_vmap_maybe_func(
             self.qvalue_network, (None, 0), randomness=self.vmap_randomness
         )
-        self._vmap_qvalue_network00 = _vmap_func(
+        self._vmap_qvalue_network00 = _maybe_vmap_maybe_func(
             self.qvalue_network, randomness=self.vmap_randomness
         )
 
@@ -1067,7 +1067,7 @@ class DiscreteCQLLoss(LossModule):
             action_space=action_space,
         )
 
-        self.convert_to_functional(
+        self.maybe_convert_to_functional(
             value_network,
             "value_network",
             create_target_params=self.delay_value,

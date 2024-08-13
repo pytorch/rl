@@ -328,7 +328,7 @@ class PPOLoss(LossModule):
         self._out_keys = None
         super().__init__()
         if functional:
-            self.convert_to_functional(actor_network, "actor_network")
+            self.maybe_convert_to_functional(actor_network, "actor_network")
         else:
             self.actor_network = actor_network
             self.actor_network_params = None
@@ -341,7 +341,7 @@ class PPOLoss(LossModule):
         else:
             policy_params = None
         if functional:
-            self.convert_to_functional(
+            self.maybe_convert_to_functional(
                 critic_network, "critic_network", compare_against=policy_params
             )
         else:
