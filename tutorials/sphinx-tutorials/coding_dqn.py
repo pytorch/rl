@@ -449,7 +449,7 @@ def get_collector(
         policy=actor_explore,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        # this is the default behaviour: the collector runs in ``"random"`` (or explorative) mode
+        # this is the default behavior: the collector runs in ``"random"`` (or explorative) mode
         exploration_type=ExplorationType.RANDOM,
         # We set the all the devices to be identical. Below is an example of
         # heterogeneous devices

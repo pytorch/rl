@@ -359,7 +359,7 @@ class gSDEModule(nn.Module):
 
     def forward(self, mu, state, _eps_gSDE):
         sigma = self.sigma.clamp_max(self.scale_max)
-        _err_explo = f"gSDE behaviour for exploration mode {exploration_type()} is not defined. Choose from 'random' or 'mode'."
+        _err_explo = f"gSDE behavior for exploration mode {exploration_type()} is not defined. Choose from 'random' or 'mode'."
 
         if state.shape[:-1] != mu.shape[:-1]:
             _err_msg = f"mu and state are expected to have matching batch size, got shapes {mu.shape} and {state.shape}"

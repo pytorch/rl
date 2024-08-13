@@ -1088,7 +1088,7 @@ class DiscreteSACLoss(LossModule):
         if action_space is None:
             warnings.warn(
                 "action_space was not specified. DiscreteSACLoss will default to 'one-hot'."
-                "This behaviour will be deprecated soon and a space will have to be passed. "
+                "This behavior will be deprecated soon and a space will have to be passed. "
                 "Check the DiscreteSACLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"

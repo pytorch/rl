@@ -39,7 +39,7 @@ class IndependentNormal(D.Independent):
         .. math::
             loc = tanh(loc / upscale) * upscale.
 
-    This behaviour can be disabled by switching off the tanh_loc parameter (see below).
+    This behavior can be disabled by switching off the tanh_loc parameter (see below).
 
 
     Args:
@@ -173,7 +173,7 @@ class TruncatedNormal(D.Independent):
         .. math::
             loc = tanh(loc / upscale) * upscale.
 
-    This behaviour can be disabled by switching off the tanh_loc parameter (see below).
+    This behavior can be disabled by switching off the tanh_loc parameter (see below).
 
 
     Args:

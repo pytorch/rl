@@ -45,7 +45,7 @@ worker) may also impact the memory management. The key parameters to control are
 :obj:`devices` which controls the execution devices (ie the device of the policy)
 and :obj:`storing_device` which will control the device where the environment and
 data are stored during a rollout. A good heuristic is usually to use the same device
-for storage and compute, which is the default behaviour when only the `devices` argument
+for storage and compute, which is the default behavior when only the `devices` argument
 is being passed.
 
 Besides those compute parameters, users may choose to configure the following parameters:
