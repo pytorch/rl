@@ -99,7 +99,7 @@ class RayCollector(DataCollectorBase):
 
     The class dictionary input parameter "ray_init_config" can be used to provide the kwargs to
     call Ray initialization method ray.init(). If "ray_init_config" is not provided, the default
-    behaviour is to autodetect an existing Ray cluster or start a new Ray instance locally if no
+    behavior is to autodetect an existing Ray cluster or start a new Ray instance locally if no
     existing cluster is found. Refer to Ray documentation for advanced initialization kwargs.
 
     Similarly, dictionary input parameter "remote_configs" can be used to specify the kwargs for

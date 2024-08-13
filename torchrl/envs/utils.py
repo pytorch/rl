@@ -360,7 +360,7 @@ def step_mdp(
 
     Given a tensordict retrieved after a step, returns the :obj:`"next"` indexed-tensordict.
     The arguments allow for a precise control over what should be kept and what
-    should be copied from the ``"next"`` entry. The default behaviour is:
+    should be copied from the ``"next"`` entry. The default behavior is:
     move the observation entries, reward and done states to the root, exclude
     the current action and keep all extra keys (non-action, non-done, non-reward).
 
@@ -1503,7 +1503,7 @@ def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False)
     If you want TorchRL to automatically wrap your policy with a TensorDictModule
     then the arguments to policy.forward must correspond one-to-one with entries
     in env.observation_spec.
-    For more complex behaviour and more control you can consider writing your
+    For more complex behavior and more control you can consider writing your
     own TensorDictModule.
     Check the collector documentation to know more about accepted policies.
     """
@@ -1541,7 +1541,7 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
 
     # if in_keys or out_keys were defined but policy is not a TensorDictModule or
     # accepts multiple arguments then it's likely the user is trying to do something
-    # that will have undetermined behaviour, we raise an error
+    # that will have undetermined behavior, we raise an error
     raise TypeError(
         "Received a policy that defines in_keys or out_keys and also expects multiple "
         "arguments to policy.forward. If the policy is compatible with TensorDict, it "

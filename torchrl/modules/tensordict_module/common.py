@@ -350,7 +350,7 @@ def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
 
     # if in_keys or out_keys were defined but module is not a TensorDictModule or
     # accepts multiple arguments then it's likely the user is trying to do something
-    # that will have undetermined behaviour, we raise an error
+    # that will have undetermined behavior, we raise an error
     raise TypeError(
         "Received a module that defines in_keys or out_keys and also expects multiple "
         "arguments to module.forward. If the module is compatible with TensorDict, it "
@@ -403,7 +403,7 @@ def ensure_tensordict_compatible(
             "env.observation_spec. If you want TorchRL to automatically "
             "wrap your module with a TensorDictModule then the arguments "
             "to module must correspond one-to-one with entries in "
-            "in_keys. For more complex behaviour and more control you can "
+            "in_keys. For more complex behavior and more control you can "
             "consider writing your own TensorDictModule."
         )
 
