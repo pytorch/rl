@@ -28,6 +28,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _LoopVmapModule,
     _reduce,
     _vmap_func,
     default_value_kwargs,
@@ -113,6 +114,9 @@ class SACLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        use_vmap (bool, optional): Whether :func:`~torch.vmap` should be used to batch
+            operations. Defaults to ``True``.
+            .. note:: Not using ``vmap`` offers greater flexibility but may incur a slower runtime.
 
     Examples:
         >>> import torch
@@ -307,7 +311,9 @@ class SACLoss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
+        use_vmap: bool = True,
     ) -> None:
+        self.use_vmap = use_vmap
         self._in_keys = None
         self._out_keys = None
         if reduction is None:
@@ -407,13 +413,22 @@ class SACLoss(LossModule):
         self.reduction = reduction
 
     def _make_vmap(self):
-        self._vmap_qnetworkN0 = _vmap_func(
-            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
-        )
-        if self._version == 1:
-            self._vmap_qnetwork00 = _vmap_func(
-                self.qvalue_network, randomness=self.vmap_randomness
+        if self.use_vmap:
+            self._vmap_qnetworkN0 = _vmap_func(
+                self.qvalue_network, (None, 0), randomness=self.vmap_randomness
             )
+            if self._version == 1:
+                self._vmap_qnetwork00 = _vmap_func(
+                    self.qvalue_network, randomness=self.vmap_randomness
+                )
+        else:
+            self._vmap_qnetworkN0 = _LoopVmapModule(
+                self.qvalue_network, (None, 0), functional=True
+            )
+            if self._version == 1:
+                self._vmap_qnetwork00 = _LoopVmapModule(
+                    self.qvalue_network, functional=True
+                )
 
     @property
     def target_entropy_buffer(self):
@@ -579,7 +594,7 @@ class SACLoss(LossModule):
         else:
             loss_qvalue, value_metadata = self._qvalue_v2_loss(tensordict_reshape)
             loss_value = None
-        loss_actor, metadata_actor = self._actor_loss(tensordict_reshape)
+        loss_actor, metadata_actor = self.actor_loss(tensordict_reshape)
         loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
         tensordict_reshape.set(self.tensor_keys.priority, value_metadata["td_error"])
         if (loss_actor.shape != loss_qvalue.shape) or (
@@ -614,9 +629,18 @@ class SACLoss(LossModule):
     def _cached_detached_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
-    def _actor_loss(
+    def actor_loss(
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
+        """The loss for the actor.
+
+        Args:
+            tensordict (TensorDictBase): the input data. See :attr:`~.in_keys` for more details
+                on the required fields.
+
+        Returns: a tensor containing the actor loss along with a dictionary of metadata.
+
+        """
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
@@ -626,10 +650,12 @@ class SACLoss(LossModule):
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
+
         td_q = self._vmap_qnetworkN0(
             td_q,
             self._cached_detached_qvalue_params,  # should we clone?
         )
+
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         )

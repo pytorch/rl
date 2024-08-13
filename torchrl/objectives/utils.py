@@ -8,14 +8,16 @@ import functools
 import re
 import warnings
 from enum import Enum
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional, Tuple, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
+from tensordict.utils import _zip_strict
 from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.nn.modules import dropout
+from torch.utils._pytree import tree_map
 
 try:
     from torch import vmap
@@ -480,7 +482,7 @@ def _cache_values(fun):
     return new_fun
 
 
-def _vmap_func(module, *args, func=None, **kwargs):
+def _vmap_func(module, *args, func=None, call_vmap: bool = True, **kwargs):
     try:
 
         def decorated_module(*module_args_params):
@@ -501,6 +503,69 @@ def _vmap_func(module, *args, func=None, **kwargs):
             raise RuntimeError(
                 "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
             ) from err
+
+
+class _LoopVmapModule(nn.Module):
+    def __init__(
+        self,
+        module: nn.Module,
+        in_dims: Tuple[int | None] = None,
+        out_dims: Tuple[int | None] = None,
+        register_module: bool = False,
+        functional: bool = False,
+    ):
+        super().__init__()
+        self.register_module = register_module
+        if not register_module:
+            self.__dict__["module"] = module
+        else:
+            self.module = module
+        self.in_dims = in_dims
+        if out_dims is not None:
+            raise NotImplementedError("out_dims not implemented yet.")
+        self.out_dims = out_dims
+        self.functional = functional
+
+    def forward(self, *args):
+        n = None
+        to_rep = []
+        if self.in_dims is None:
+            self.in_dims = [0] * len(args)
+        args = list(args)
+        for i, (arg, in_dim) in enumerate(_zip_strict(args, self.in_dims)):
+            if in_dim is not None:
+                arg = arg.unbind(in_dim)
+                if n is None:
+                    n = len(arg)
+                elif n != len(arg):
+                    raise ValueError(
+                        f"The length of the unbound args differs: {n} vs {len(arg)}."
+                    )
+                args[i] = arg
+            else:
+                to_rep.append(i)
+        args = [
+            tuple(arg.copy() for _ in range(n)) if i in to_rep else arg
+            for i, arg in enumerate(args)
+        ]
+        out = []
+        n_out = None
+        for _args in zip(*args):
+            if self.functional:
+                with _args[-1].to_module(self.module):
+                    out.append(self.module(*_args[:-1]))
+            else:
+                out.append(self.module(*_args))
+            if n_out is None:
+                n_out = len(out[-1]) if isinstance(out[-1], tuple) else 1
+        if n_out > 1:
+            return tree_map(lambda *x: torch.stack(out, dim=0), *out)
+        elif n_out == 1:
+            # We explicitly assume that out can be stacked
+            result = torch.stack(out, dim=0)
+            return result
+        else:
+            raise ValueError("Could not determine the number of outputs.")
 
 
 def _reduce(tensor: torch.Tensor, reduction: str) -> Union[float, torch.Tensor]:

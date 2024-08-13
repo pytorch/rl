@@ -3645,6 +3645,7 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("use_vmap", [False, True])
     def test_sac(
         self,
         delay_value,
@@ -3654,6 +3655,7 @@ class TestSAC(LossModuleTestBase):
         device,
         version,
         td_est,
+        use_vmap,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
@@ -3682,6 +3684,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            use_vmap=use_vmap,
             **kwargs,
         )
 
@@ -3805,6 +3808,68 @@ class TestSAC(LossModuleTestBase):
                 assert (
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_sac_vmap_equiv(
+        self,
+        device,
+        version,
+        delay_value=True,
+        delay_actor=True,
+        delay_qvalue=True,
+        num_qvalue=4,
+        td_est=None,
+    ):
+        if (delay_actor or delay_qvalue) and not delay_value:
+            pytest.skip("incompatible config")
+
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        if version == 1:
+            value = self._create_mock_value(device=device)
+        else:
+            value = None
+
+        kwargs = {}
+        if delay_actor:
+            kwargs["delay_actor"] = True
+        if delay_qvalue:
+            kwargs["delay_qvalue"] = True
+        if delay_value:
+            kwargs["delay_value"] = True
+
+        loss_fn_vmap = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            use_vmap=True,
+            **kwargs,
+        )
+        loss_fn_novmap = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            use_vmap=False,
+            **kwargs,
+        )
+        loss_fn_novmap.load_state_dict(loss_fn_vmap.state_dict())
+
+        with torch.no_grad(), _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            rng_state = torch.random.get_rng_state()
+            loss_vmap = loss_fn_vmap(td.clone())
+            torch.random.set_rng_state(rng_state)
+            loss_novmap = loss_fn_novmap(td.clone())
+
+        assert_allclose_td(loss_vmap, loss_novmap)
 
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
