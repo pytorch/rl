@@ -2760,6 +2760,7 @@ class TestCollectorsNonTensor:
 
 
 class TestCollectorRB:
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     def test_collector_rb_sync(self):
         env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
         env.set_seed(0)
@@ -2805,6 +2806,7 @@ class TestCollectorRB:
         del collector, env
         assert assert_allclose_td(rbdata0, rbdata1)
 
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
@@ -2855,6 +2857,7 @@ class TestCollectorRB:
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
 
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
