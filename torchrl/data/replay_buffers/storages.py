@@ -562,7 +562,7 @@ class TensorStorage(Storage):
                 raise RuntimeError(STORAGE_ERR)
 
             if is_tensor_collection(storage):
-                storage.apply(assert_is_sharable)
+                storage.apply(assert_is_sharable, filter_empty=True)
             else:
                 tree_map(storage, assert_is_sharable)
 

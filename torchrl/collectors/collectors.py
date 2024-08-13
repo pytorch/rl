@@ -54,6 +54,7 @@ from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
+from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
@@ -1470,6 +1471,7 @@ class _MultiDataCollector(DataCollectorBase):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        replay_buffer_chunk: bool = True,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1514,6 +1516,8 @@ class _MultiDataCollector(DataCollectorBase):
 
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
+        self._check_replay_buffer_init()
+        self.replay_buffer_chunk = replay_buffer_chunk
         if (
             replay_buffer is not None
             and hasattr(replay_buffer, "shared")
@@ -1660,6 +1664,21 @@ class _MultiDataCollector(DataCollectorBase):
             )
         self.cat_results = cat_results
 
+    def _check_replay_buffer_init(self):
+        try:
+            if not self.replay_buffer._storage.initialized:
+                if isinstance(self.create_env_fn, EnvCreator):
+                    fake_td = self.create_env_fn.tensordict
+                else:
+                    fake_td = self.create_env_fn[0](
+                        **self.create_env_kwargs[0]
+                    ).fake_tensordict()
+                fake_td["collector", "traj_ids"] = torch.zeros((), dtype=torch.long)
+
+                self.replay_buffer._storage._init(fake_td)
+        except AttributeError:
+            pass
+
     @classmethod
     def _total_workers_from_env(cls, env_creators):
         if isinstance(env_creators, (tuple, list)):
@@ -1795,6 +1814,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "set_truncated": self.set_truncated,
                     "use_buffers": self._use_buffers,
                     "replay_buffer": self.replay_buffer,
+                    "replay_buffer_chunk": self.replay_buffer_chunk,
                     "traj_pool": self._traj_pool,
                 }
                 proc = _ProcessNoWarn(
@@ -2804,6 +2824,7 @@ def _main_async_collector(
     set_truncated: bool = False,
     use_buffers: bool | None = None,
     replay_buffer: ReplayBuffer | None = None,
+    replay_buffer_chunk: bool = True,
     traj_pool: _TrajectoryPool = None,
 ) -> None:
     pipe_parent.close()
@@ -2825,11 +2846,11 @@ def _main_async_collector(
         env_device=env_device,
         exploration_type=exploration_type,
         reset_when_done=reset_when_done,
-        return_same_td=True,
+        return_same_td=replay_buffer is None,
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
-        replay_buffer=replay_buffer,
+        replay_buffer=replay_buffer if replay_buffer_chunk else None,
         traj_pool=traj_pool,
     )
     use_buffers = inner_collector._use_buffers
@@ -2895,6 +2916,10 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
+                if not replay_buffer_chunk:
+                    next_data.names = None
+                    replay_buffer.extend(next_data)
+
                 try:
                     queue_out.put((idx, j), timeout=_TIMEOUT)
                     if verbose:
