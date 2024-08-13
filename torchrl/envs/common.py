@@ -1473,6 +1473,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         # sanity check
         self._assert_tensordict_shape(tensordict)
+        if not self.batch_locked:
+            # Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here
+            partial_steps = tensordict.get("_step", None)
+            if partial_steps is not None:
+                if partial_steps.all():
+                    partial_steps = None
+                else:
+                    tensordict_batch_size = tensordict.batch_size
+                    partial_steps = partial_steps.view(tensordict_batch_size)
+                    tensordict = tensordict[partial_steps]
         next_preset = tensordict.get("next", None)
 
         next_tensordict = self._step(tensordict)
@@ -1485,6 +1495,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 next_preset.exclude(*next_tensordict.keys(True, True))
             )
         tensordict.set("next", next_tensordict)
+        if partial_steps is not None:
+            result = tensordict.new_zeros(tensordict_batch_size)
+            result[partial_steps] = tensordict
+            return result
         return tensordict
 
     @classmethod
@@ -2696,7 +2710,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if break_when_all_done:
                 if partial_steps is not True:
                     # At least one partial step has been done
-                    del td_append["_partial_steps"]
+                    del td_append["_step"]
                     td_append = torch.where(
                         partial_steps.view(td_append.shape), td_append, tensordicts[-1]
                     )
@@ -2722,17 +2736,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 _terminated_or_truncated(
                     tensordict,
                     full_done_spec=self.output_spec["full_done_spec"],
-                    key="_partial_steps",
+                    key="_step",
                     write_full_false=False,
                 )
-                partial_step_curr = tensordict.get("_partial_steps", None)
+                partial_step_curr = tensordict.get("_step", None)
                 if partial_step_curr is not None:
                     partial_step_curr = ~partial_step_curr
                     partial_steps = partial_steps & partial_step_curr
                 if partial_steps is not True:
                     if not partial_steps.any():
                         break
-                    tensordict.set("_partial_steps", partial_steps)
+                    tensordict.set("_step", partial_steps)
 
             if callback is not None:
                 callback(self, tensordict)
