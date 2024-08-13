@@ -216,6 +216,7 @@ class PendulumEnv(EnvBase):
         "render_fps": 30,
     }
     batch_locked = False
+    rng = None
 
     def __init__(self, td_params=None, seed=None, device=None):
         if td_params is None:
@@ -224,7 +225,7 @@ class PendulumEnv(EnvBase):
         super().__init__(device=device)
         self._make_spec(td_params)
         if seed is None:
-            seed = torch.empty((), dtype=torch.int64).random_().item()
+            seed = torch.empty((), dtype=torch.int64).random_(generator=self.rng).item()
         self.set_seed(seed)
 
     @classmethod
@@ -354,7 +355,8 @@ class PendulumEnv(EnvBase):
         return composite
 
     def _set_seed(self, seed: int):
-        rng = torch.manual_seed(seed)
+        rng = torch.Generator()
+        rng.manual_seed(seed)
         self.rng = rng
 
     @staticmethod
