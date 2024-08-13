@@ -136,7 +136,7 @@ class PettingZooWrapper(_EnvWrapper):
     For example, you can provide ``MarlGroupMapType.ONE_GROUP_PER_AGENT``, telling that each agent should
     have its own tensordict (similar to the pettingzoo parallel API).
 
-    Grouping is useful for leveraging vectorisation among agents whose data goes through the same
+    Grouping is useful for leveraging vectorization among agents whose data goes through the same
     neural network.
 
     Args:
@@ -897,7 +897,7 @@ class PettingZooEnv(PettingZooWrapper):
     For example, you can provide ``MarlGroupMapType.ONE_GROUP_PER_AGENT``, telling that each agent should
     have its own tensordict (similar to the pettingzoo parallel API).
 
-    Grouping is useful for leveraging vectorisation among agents whose data goes through the same
+    Grouping is useful for leveraging vectorization among agents whose data goes through the same
     neural network.
 
     Args:

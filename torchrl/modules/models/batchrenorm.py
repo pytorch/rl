@@ -32,9 +32,9 @@ class BatchRenorm1d(nn.Module):
             Defaults to ``5.0``.
         warmup_steps (int, optional): Number of warm-up steps for the running mean and variance.
             Defaults to ``10000``.
-        smooth (bool, optional): if ``True``, the behaviour smoothly transitions from regular
+        smooth (bool, optional): if ``True``, the behavior smoothly transitions from regular
             batch-norm (when ``iter=0``) to batch-renorm (when ``iter=warmup_steps``).
-            Otherwise, the behaviour will transition from batch-norm to batch-renorm when
+            Otherwise, the behavior will transition from batch-norm to batch-renorm when
             ``iter=warmup_steps``. Defaults to ``False``.
     """
 

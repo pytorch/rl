@@ -599,7 +599,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             device = env.device
         super().__init__(device=None, allow_done_after_reset=None, **kwargs)
 
-        # Type matching must be exact here, because subtyping could introduce differences in behaviour that must
+        # Type matching must be exact here, because subtyping could introduce differences in behavior that must
         # be contained within the subclass.
         if type(env) is TransformedEnv and type(self) is TransformedEnv:
             self._set_env(env.base_env, device)
@@ -1507,7 +1507,7 @@ class TargetReturn(Transform):
 
     In goal-conditioned RL, the :class:`~.TargetReturn` is defined as the
     expected cumulative reward obtained from the current state to the goal state
-    or the end of the episode. It is used as input for the policy to guide its behaviour.
+    or the end of the episode. It is used as input for the policy to guide its behavior.
     For a trained policy typically the maximum return in the environment is
     chosen as the target return.
     However, as it is used as input to the policy module, it should be scaled
@@ -2505,7 +2505,7 @@ class ObservationNorm(ObservationTransform):
         loc (number or tensor): location of the affine transform
         scale (number or tensor): scale of the affine transform
         in_keys (sequence of NestedKey, optional): entries to be normalized. Defaults to ["observation", "pixels"].
-            All entries will be normalized with the same values: if a different behaviour is desired
+            All entries will be normalized with the same values: if a different behavior is desired
             (e.g. a different normalization for pixels and states) different :obj:`ObservationNorm`
             objects should be used.
         out_keys (sequence of NestedKey, optional): output entries. Defaults to the value of `in_keys`.
@@ -2569,7 +2569,7 @@ class ObservationNorm(ObservationTransform):
     ):
         if in_keys is None:
             raise RuntimeError(
-                "Not passing in_keys to ObservationNorm is a deprecated behaviour."
+                "Not passing in_keys to ObservationNorm is a deprecated behavior."
             )
 
         if out_keys is None:
@@ -3361,7 +3361,7 @@ class DTypeCastTransform(Transform):
     """Casts one dtype to another for selected keys.
 
     Depending on whether the ``in_keys`` or ``in_keys_inv`` are provided
-    during construction, the class behaviour will change:
+    during construction, the class behavior will change:
 
       * If the keys are provided, those entries and those entries only will be
         transformed from ``dtype_in`` to ``dtype_out`` entries;
@@ -3417,7 +3417,7 @@ class DTypeCastTransform(Transform):
         >>> print(td.get("not_transformed").dtype)
         torch.float32
 
-    The same behaviour is the rule when environments are constructedw without
+    The same behavior is the rule when environments are constructedw without
     specifying the transform keys:
 
     Examples:
@@ -3733,7 +3733,7 @@ class DoubleToFloat(DTypeCastTransform):
     """Casts one dtype to another for selected keys.
 
     Depending on whether the ``in_keys`` or ``in_keys_inv`` are provided
-    during construction, the class behaviour will change:
+    during construction, the class behavior will change:
 
       * If the keys are provided, those entries and those entries only will be
         transformed from ``float64`` to ``float32`` entries;
@@ -3787,7 +3787,7 @@ class DoubleToFloat(DTypeCastTransform):
         >>> print(td.get("not_transformed").dtype)
         torch.float32
 
-    The same behaviour is the rule when environments are constructedw without
+    The same behavior is the rule when environments are constructedw without
     specifying the transform keys:
 
     Examples:
@@ -4090,7 +4090,7 @@ class CatTensors(Transform):
     Args:
         in_keys (sequence of NestedKey): keys to be concatenated. If `None` (or not provided)
             the keys will be retrieved from the parent environment the first time
-            the transform is used. This behaviour will only work if a parent is set.
+            the transform is used. This behavior will only work if a parent is set.
         out_key (NestedKey): key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
             Default is ``-1``.
@@ -4454,7 +4454,7 @@ class NoopResetEnv(Transform):
             )
         # Merge the two tensordicts
         tensordict = parent._reset_proc_data(tensordict.clone(False), tensordict_reset)
-        # check that there is a single done state -- behaviour is undefined for multiple dones
+        # check that there is a single done state -- behavior is undefined for multiple dones
         done_keys = parent.done_keys
         reward_key = parent.reward_key
         if parent.batch_size.numel() > 1:
@@ -6373,7 +6373,7 @@ class RandomCropTensorDict(Transform):
 
     This transform is primarily designed to be used with replay buffers and modules.
     Currently, it cannot be used as an environment transform.
-    Do not hesitate to request for this behaviour through an issue if this is
+    Do not hesitate to request for this behavior through an issue if this is
     desired.
 
     Args:
@@ -6401,7 +6401,7 @@ class RandomCropTensorDict(Transform):
         if sample_dim > 0:
             warnings.warn(
                 "A positive shape has been passed to the RandomCropTensorDict "
-                "constructor. This may have unexpected behaviours when the "
+                "constructor. This may have unexpected behaviors when the "
                 "passed tensordicts have inconsistent batch dimensions. "
                 "For context, by convention, TorchRL concatenates time steps "
                 "along the last dimension of the tensordict."
