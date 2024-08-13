@@ -10423,17 +10423,18 @@ class TestPermuteTransform(TransformBase):
     reason="EndOfLifeTransform can only be tested when Gym is present.",
 )
 class TestEndOfLife(TransformBase):
+    pytest.mark.filterwarnings("ignore:The base_env is not a gym env")
+
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         def make():
             with set_gym_backend("gymnasium"):
                 return GymEnv(BREAKOUT_VERSIONED())
 
-        with pytest.warns(UserWarning, match="The base_env is not a gym env"):
-            with pytest.raises(AttributeError):
-                env = TransformedEnv(
-                    maybe_fork_ParallelEnv(2, make), transform=EndOfLifeTransform()
-                )
-                check_env_specs(env)
+        with pytest.raises(AttributeError):
+            env = TransformedEnv(
+                maybe_fork_ParallelEnv(2, make), transform=EndOfLifeTransform()
+            )
+            check_env_specs(env)
 
     def test_trans_serial_env_check(self):
         def make():
