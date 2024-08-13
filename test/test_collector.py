@@ -2759,6 +2759,7 @@ class TestCollectorsNonTensor:
 
 
 class TestCollectorRB:
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     def test_collector_rb_sync(self):
         env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
         env.set_seed(0)
@@ -2804,6 +2805,7 @@ class TestCollectorRB:
         del collector, env
         assert assert_allclose_td(rbdata0, rbdata1)
 
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     def test_collector_rb_multisync(self):
         env = GymEnv(CARTPOLE_VERSIONED())
         env.set_seed(0)

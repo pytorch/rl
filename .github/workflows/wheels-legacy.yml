@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - release/*
+      - main
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
