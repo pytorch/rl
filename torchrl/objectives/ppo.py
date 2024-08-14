@@ -465,7 +465,6 @@ class PPOLoss(LossModule):
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict)
-            # dist = TransformedDistribution(dist, ExpTransform())
 
         def check_requires_grad(tensor, key=self.tensor_keys.action):
             if tensor.requires_grad:

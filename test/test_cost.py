@@ -8392,7 +8392,12 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
-    @pytest.mark.parametrize("composite_action_dist", [False, ])
+    @pytest.mark.parametrize(
+        "composite_action_dist",
+        [
+            False,
+        ],
+    )
     def test_ppo_notensordict(
         self,
         loss_class,
@@ -8457,6 +8462,7 @@ class TestPPO(LossModuleTestBase):
         loss_val = loss(**kwargs)
         torch.manual_seed(self.seed)
         if beta is not None:
+
             loss.beta = beta.clone()
         loss_val_td = loss(td)
 
@@ -9232,12 +9238,13 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    @pytest.mark.parametrize("composite_action_dist", [False, ])
     def test_a2c_notensordict(
-        self, action_key, observation_key, reward_key, done_key, terminated_key
+        self, action_key, observation_key, reward_key, done_key, terminated_key, composite_action_dist
     ):
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(observation_key=observation_key)
+        actor = self._create_mock_actor(observation_key=observation_key, composite_action_dist=composite_action_dist)
         value = self._create_mock_value(observation_key=observation_key)
         td = self._create_seq_mock_data_a2c(
             action_key=action_key,
@@ -9245,6 +9252,7 @@ class TestA2C(LossModuleTestBase):
             reward_key=reward_key,
             done_key=done_key,
             terminated_key=terminated_key,
+            composite_action_dist=composite_action_dist,
         )
 
         loss = A2CLoss(actor, value)
