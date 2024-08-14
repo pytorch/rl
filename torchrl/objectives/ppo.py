@@ -460,10 +460,6 @@ class PPOLoss(LossModule):
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
         action = tensordict.get(self.tensor_keys.action)
-        if action.requires_grad:
-            raise RuntimeError(
-                f"tensordict stored {self.tensor_keys.action} requires grad."
-            )
 
         with self.actor_network_params.to_module(
             self.actor_network
@@ -471,13 +467,19 @@ class PPOLoss(LossModule):
             dist = self.actor_network.get_dist(tensordict)
             # dist = TransformedDistribution(dist, ExpTransform())
 
+        def check_requires_grad(tensor, key=self.tensor_keys.action):
+            if tensor.requires_grad:
+                raise RuntimeError(f"tensordict stored {key} requires grad.")
+            return tensor
+
         prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
-        if prev_log_prob.requires_grad:
-            raise RuntimeError("tensordict prev_log_prob requires grad.")
+        check_requires_grad(prev_log_prob, self.tensor_keys.sample_log_prob)
 
         if isinstance(action, torch.Tensor):
+            check_requires_grad(action, self.tensor_keys.action)
             log_prob = dist.log_prob(action)
         else:
+            action.apply(check_requires_grad)
             tensordict = dist.log_prob(tensordict)
             log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
 

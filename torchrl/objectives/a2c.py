@@ -384,7 +384,7 @@ class A2CLoss(LossModule):
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
             log_prob = dist.log_prob(x)
-            if isinstance(x, log_prob):
+            if isinstance(log_prob, TensorDict):
                 log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
             entropy = -log_prob.mean(0)
         return entropy.unsqueeze(-1)
@@ -394,10 +394,6 @@ class A2CLoss(LossModule):
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
         action = tensordict.get(self.tensor_keys.action)
-        if action.requires_grad:
-            raise RuntimeError(
-                f"tensordict stored {self.tensor_keys.action} require grad."
-            )
         tensordict_clone = tensordict.select(
             *self.actor_network.in_keys, strict=False
         ).clone()
@@ -405,9 +401,19 @@ class A2CLoss(LossModule):
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict_clone)
+
+        def check_requires_grad(tensor):
+            if tensor.requires_grad:
+                raise RuntimeError(
+                    f"tensordict stored {self.tensor_keys.action} requires grad."
+                )
+            return tensor
+
         if isinstance(action, torch.Tensor):
+            check_requires_grad(action)
             log_prob = dist.log_prob(action)
         else:
+            action.apply(check_requires_grad)
             tensordict = dist.log_prob(tensordict)
             log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         log_prob = log_prob.unsqueeze(-1)

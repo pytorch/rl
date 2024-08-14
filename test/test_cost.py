@@ -8860,14 +8860,24 @@ class TestA2C(LossModuleTestBase):
             functional=functional,
         )
 
+        def set_requires_grad(tensor, requires_grad):
+            tensor.requires_grad = requires_grad
+            return tensor
+
         # Check error is raised when actions require grads
-        td["action"].requires_grad = True
+        if composite_action_dist:
+            td["action"].apply_(lambda x: set_requires_grad(x, True))
+        else:
+            td["action"].requires_grad = True
         with pytest.raises(
             RuntimeError,
-            match="tensordict stored action require grad.",
+            match="tensordict stored action requires grad.",
         ):
             _ = loss_fn._log_probs(td)
-        td["action"].requires_grad = False
+        if composite_action_dist:
+            td["action"].apply_(lambda x: set_requires_grad(x, False))
+        else:
+            td["action"].requires_grad = False
 
         td = td.exclude(loss_fn.tensor_keys.value_target)
         if advantage is not None:
