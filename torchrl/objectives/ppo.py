@@ -14,7 +14,6 @@ from typing import Tuple
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import (
-    CompositeDistribution,
     dispatch,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
@@ -450,10 +449,9 @@ class PPOLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            if isinstance(dist, CompositeDistribution):
-                log_prob = dist.log_prob(x).get(self.tensor_keys.sample_log_prob)
-            else:
-                log_prob = dist.log_prob(x)
+            log_prob = dist.log_prob(x)
+            if isinstance(log_prob, TensorDict):
+                log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
             entropy = -log_prob.mean(0)
         return entropy.unsqueeze(-1)
 
@@ -471,24 +469,17 @@ class PPOLoss(LossModule):
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict)
+            # dist = TransformedDistribution(dist, ExpTransform())
 
         prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         if prev_log_prob.requires_grad:
             raise RuntimeError("tensordict prev_log_prob requires grad.")
 
-        if isinstance(dist, CompositeDistribution):
-            if (
-                tensordict.get(self.tensor_keys.action).batch_size
-                != tensordict.batch_size
-            ):
-                # This condition can be True in notensordict usage
-                tensordict.get(
-                    self.tensor_keys.action
-                ).batch_size = tensordict.batch_size
+        if isinstance(action, torch.Tensor):
+            log_prob = dist.log_prob(action)
+        else:
             tensordict = dist.log_prob(tensordict)
             log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
-        else:
-            log_prob = dist.log_prob(action)
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
@@ -1125,16 +1116,16 @@ class KLPENPPOLoss(PPOLoss):
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
-            if isinstance(current_dist, CompositeDistribution):
-                previous_log_prob = previous_dist.log_prob(x).get(
+            previous_log_prob = previous_dist.log_prob(x)
+            current_log_prob = current_dist.log_prob(x)
+            if isinstance(x, TensorDict):
+                previous_log_prob = previous_log_prob.get(
                     self.tensor_keys.sample_log_prob
                 )
-                current_log_prob = current_dist.log_prob(x).get(
+                current_log_prob = current_log_prob.get(
                     self.tensor_keys.sample_log_prob
                 )
-            else:
-                previous_log_prob = previous_dist.log_prob(x)
-                current_log_prob = current_dist.log_prob(x)
+
             kl = (previous_log_prob - current_log_prob).mean(0)
         kl = kl.unsqueeze(-1)
         neg_loss = neg_loss - self.beta * kl

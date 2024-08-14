@@ -11,12 +11,7 @@ from typing import Tuple
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import (
-    CompositeDistribution,
-    dispatch,
-    ProbabilisticTensorDictSequential,
-    TensorDictModule,
-)
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
@@ -388,10 +383,9 @@ class A2CLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            if isinstance(dist, CompositeDistribution):
-                log_prob = dist.log_prob(x).get(self.tensor_keys.sample_log_prob)
-            else:
-                log_prob = dist.log_prob(x)
+            log_prob = dist.log_prob(x)
+            if isinstance(x, log_prob):
+                log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
             entropy = -log_prob.mean(0)
         return entropy.unsqueeze(-1)
 
@@ -411,11 +405,11 @@ class A2CLoss(LossModule):
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict_clone)
-        if isinstance(dist, CompositeDistribution):
+        if isinstance(action, torch.Tensor):
+            log_prob = dist.log_prob(action)
+        else:
             tensordict = dist.log_prob(tensordict)
             log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
-        else:
-            log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
 
