@@ -245,7 +245,7 @@ class PPOLoss(LossModule):
 
     .. note::
       There is an exception regarding compatibility with non-tensordict-based modules.
-      If the actor network is probabilistic and uses a `~tensordict.nn.distributions.CompositeDistribution`,
+      If the actor network is probabilistic and uses a :class:`~tensordict.nn.distributions.CompositeDistribution`,
       this class must be used with tensordicts and cannot function as a tensordict-independent module.
       This is because composite action spaces inherently rely on the structured representation of data provided by
       tensordicts to handle their actions.
