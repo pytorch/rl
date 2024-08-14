@@ -12,7 +12,12 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict import (
+    is_tensor_collection,
+    TensorDict,
+    TensorDictBase,
+    TensorDictParams,
+)
 from tensordict.nn import (
     dispatch,
     ProbabilisticTensorDictModule,
@@ -238,6 +243,12 @@ class PPOLoss(LossModule):
         ...         next_observation=torch.randn(*batch, n_obs))
         >>> loss_objective.backward()
 
+    .. note::
+      There is an exception regarding compatibility with non-tensordict-based modules.
+      If the actor network is probabilistic and uses a `~tensordict.nn.distributions.CompositeDistribution`,
+      this class must be used with tensordicts and cannot function as a tensordict-independent module.
+      This is because composite action spaces inherently rely on the structured representation of data provided by
+      tensordicts to handle their actions.
     """
 
     @dataclass
@@ -450,7 +461,7 @@ class PPOLoss(LossModule):
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
             log_prob = dist.log_prob(x)
-            if isinstance(log_prob, TensorDict):
+            if is_tensor_collection(log_prob):
                 log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
             entropy = -log_prob.mean(0)
         return entropy.unsqueeze(-1)
@@ -1119,7 +1130,7 @@ class KLPENPPOLoss(PPOLoss):
             x = previous_dist.sample((self.samples_mc_kl,))
             previous_log_prob = previous_dist.log_prob(x)
             current_log_prob = current_dist.log_prob(x)
-            if isinstance(x, TensorDict):
+            if is_tensor_collection(x):
                 previous_log_prob = previous_log_prob.get(
                     self.tensor_keys.sample_log_prob
                 )
