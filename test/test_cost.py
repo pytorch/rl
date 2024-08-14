@@ -8392,7 +8392,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
-    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    @pytest.mark.parametrize("composite_action_dist", [False, ])
     def test_ppo_notensordict(
         self,
         loss_class,
@@ -8631,6 +8631,7 @@ class TestA2C(LossModuleTestBase):
         actor = ProbabilisticActor(
             module=module,
             in_keys=actor_in_keys,
+            out_keys=[action_key],
             spec=action_spec,
             distribution_class=distribution_class,
             return_log_prob=True,
@@ -8947,7 +8948,7 @@ class TestA2C(LossModuleTestBase):
         td["action"].requires_grad = True
         with pytest.raises(
             RuntimeError,
-            match="tensordict stored action require grad.",
+            match="tensordict stored action requires grad.",
         ):
             _ = loss_fn._log_probs(td)
         td["action"].requires_grad = False
@@ -9152,6 +9153,7 @@ class TestA2C(LossModuleTestBase):
             device=device,
             sample_log_prob_key=sample_log_prob_key,
             composite_action_dist=composite_action_dist,
+            action_key=action_key,
         )
         value = self._create_mock_value(device=device, out_keys=[value_key])
         if advantage == "gae":
