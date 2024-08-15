@@ -48,6 +48,7 @@ from .models import (
     Squeeze2dLayer,
     SqueezeLayer,
     VDNMixer,
+    ConsistentDropoutModule
 )
 from .tensordict_module import (
     Actor,

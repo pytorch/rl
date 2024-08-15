@@ -444,6 +444,7 @@ Regular modules
     SqueezeLayer
     Squeeze2dLayer
     BatchRenorm1d
+    ConsistentDropoutModule
 
 Algorithm-specific modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
