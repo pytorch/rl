@@ -528,28 +528,38 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
 
 
 class ConsistentDropout(_DropoutNd):
-    """
-    Implements the Dropout variant proposed in `"Consistent Dropout for 
-    Policy Gradient Reinforcement Learning" (Hausknecht & Wagener, 2022) <https://arxiv.org/abs/2202.11818>`
+    '''
+    Implements the :class:`~torch.nn.Dropout` variant proposed in `"Consistent Dropout for 
+    Policy Gradient Reinforcement Learning" (Hausknecht & Wagener, 2022) <https://arxiv.org/abs/2202.11818>`_.
     
-    This implementation capitalizes on the extensibility of TensorDicts
-    by storing generated dropout masks in the transitions themselves.
+    This :class:`~torch.nn.Dropout` variant attempts to increase training stability and 
+    reduce update variance by caching the dropout masks used during rollout
+    and reusing them during the update phase.
 
-    There is otherwise little conceptual deviance from the original 
-    :class:`~torch.nn.Dropout` implementation. Although, there is probably a lot of 
-    `room for improvement... <https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/Dropout.cpp>`
+    TorchRL's implementation capitalizes on the extensibility of 
+    ``TensorDict``s by storing generated dropout masks 
+    in the transition ``TensorDict`` themselves.
+
+    There is otherwise little conceptual deviance from the PyTorch
+    :class:`~torch.nn.Dropout` implementation. 
 
     NOTE: TorchRL's data collectors perform rollouts in :meth:`~torch.no_grad` mode,
     so the dropout masks ARE in fact still applied.
 
-    See 
-    - :class:`~torchrl.collectors.SyncDataCollector`: rollout() and iterator()
-    - :class:`~torchrl.collectors.MultiSyncDataCollector`: Uses 
-    :meth:`~torchrl.collectors.collectors._main_async_collector` 
-    (SyncDataCollector) under the hood
-    """
+    See
+
+    - :class:`~torchrl.collectors.SyncDataCollector`: :meth:`~torchrl.collectors.SyncDataCollector.rollout()` and :meth:`~torchrl.collectors.SyncDataCollector.iterator()`
+
+    - :class:`~torchrl.collectors.MultiSyncDataCollector`: Uses :meth:`~torchrl.collectors.collectors._main_async_collector` (:class:`~torchrl.collectors.SyncDataCollector`) under the hood
+
+    - :class:`~torchrl.collectors.MultiaSyncDataCollector`, :class:`~torchrl.collectors.aSyncDataCollector`: Ditto.
+    '''
 
     def __init__(self, p=0.5):
+        '''
+        Parameters:
+            p (float, optional): Dropout probability. Default: ``0.5``.
+        '''
         super().__init__()
         self.p = p
 
@@ -568,7 +578,20 @@ class ConsistentDropout(_DropoutNd):
         return x
         
 class ConsistentDropoutModule(TensorDictModuleBase):
-    """
+    '''
+
+    Parameters:
+        p (float, optional): Dropout probability. Default: ``0.5``.
+
+        in_key (str, optional): The key to be read from input tensordict. 
+            Only used if ``in_keys`` is not specified.
+        
+        in_keys (iterable of NestedKeys, Dict[NestedStr, str]): keys to be read
+            from input tensordict and passed to this module. Default: ``None``.
+        
+        out_keys (iterable of str): keys to be written to the input tensordict. 
+            Default: ``None``.
+
     Examples:
         >>> from tensordict import TensorDict
         >>> module = ConsistentDropoutModule(p = 0.1)
@@ -581,7 +604,9 @@ class ConsistentDropoutModule(TensorDictModuleBase):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
-    """
+    '''
+    __doc__ = f"{ConsistentDropout.__doc__}\n{__doc__}"
+
     def __init__(self, p: float, in_key: NestedKey=None, in_keys=None, out_keys=None):
         if in_key is None:
             in_key = "x"
