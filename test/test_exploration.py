@@ -31,7 +31,10 @@ from torchrl.modules.distributions import (
     NormalParamExtractor,
     TanhNormal,
 )
-from torchrl.modules.models.exploration import LazygSDEModule
+from torchrl.modules.models.exploration import (
+    LazygSDEModule,
+    ConsistentDropoutModule
+)
 from torchrl.modules.tensordict_module.actors import (
     Actor,
     ProbabilisticActor,
@@ -737,6 +740,123 @@ def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_s
         abs(sigma_init - sigma.mean()) < 0.3
     ), f"failed: mean={mean}, std={std}, sigma_init={sigma_init}, actual: {sigma.mean()}"
 
+
+@pytest.mark.parametrize("dropout_p", [0.0, 0.1, 0.5])
+@pytest.mark.parametrize("parallel_spec", [False, True])
+@pytest.mark.parametrize(
+    "device",
+    [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
+)
+def test_consistent_dropout(dropout_p, parallel_spec, device):
+    '''
+    
+    This preliminary test seeks to ensure two things for both
+    ConsistentDropout and ConsistentDropoutModule:
+    1. Rollout transitions generate a dropout mask as desired.
+        - We can easily verify the existence of a mask
+    2. The dropout mask is correctly applied.
+        - We will check with stochastic policies whether or not 
+        the loc and scale are the same.
+    '''
+    torch.manual_seed(0)
+
+    # NOTE: Please only put a module with one dropout layer.
+    # That's how this test is constructed anyways.
+    @torch.no_grad
+    def inner_verify_routine(module, env):
+        # Perform transitions.
+        collector = SyncDataCollector(
+            create_env_fn=env,
+            policy=module,
+            frames_per_batch=640,
+            total_frames=1280,
+            device=device,
+        )
+        for frames in collector:
+            masks = [    
+                        (key, value)
+                        for key, value in frames.items() 
+                        if 'mask_' in key
+                    ]
+            # Assert rollouts do indeed correctly generate the masks.
+            assert len(masks) == 1, (
+                        "Expected exactly ONE mask since we only put "
+                        f"one dropout module, got {len(masks)}."
+                    )
+            
+            # Verify that the result for this batch is the same.
+            # Kind of Monte Carlo, to be honest.
+            sentinel_mask = masks[0][1].clone()
+            sentinel_outputs = frames.select("loc", "scale").clone()
+
+            desired_dropout_mask = torch.full_like(sentinel_mask, 1 / (1 - dropout_p))
+            desired_dropout_mask[sentinel_mask == 0.] = 0.
+            # As of 15/08/24, :meth:`~torch.nn.functional.dropout`
+            # is being used. Never hurts to be safe.
+            assert torch.allclose(sentinel_mask, desired_dropout_mask), (
+                "Dropout was not scaled properly."
+            )
+
+            infer_mask = module(frames)[masks[0][0]]
+            infer_outputs = module(frames).select("loc", "scale")
+            assert (infer_mask == sentinel_mask).all(), (
+                "Mask does not match"
+            )
+
+            assert all([torch.allclose(
+                        infer_outputs[key],
+                        sentinel_outputs[key]
+                    ) for key in ('loc', 'scale')]), (
+                "Outputs do not match:\n "
+                f"{infer_outputs['loc']}\n--- vs ---\n{sentinel_outputs['loc']}"
+                f"{infer_outputs['scale']}\n--- vs ---\n{sentinel_outputs['scale']}"
+            )
+
+    env = SerialEnv(
+        2,
+        ContinuousActionVecMockEnv,
+    )
+    env = TransformedEnv(env.to(device), InitTracker())
+    env = env.to(device)
+    # the module must work with the action spec of a single env or a serial env
+    if parallel_spec:
+        action_spec = env.action_spec
+    else:
+        action_spec = ContinuousActionVecMockEnv(device=device).action_spec
+    d_act = action_spec.shape[-1]
+
+    # NOTE: Please only put a module with one dropout layer.
+    # That's how this test is constructed anyways.
+    module_td_seq = TensorDictSequential(
+                        TensorDictModule(
+                            nn.LazyLinear(2 * d_act),
+                            in_keys = ["observation"],
+                            out_keys = ["out"]
+                        ),
+                        ConsistentDropoutModule(
+                            p = dropout_p,
+                            in_key = "out"
+                        ),
+                        TensorDictModule(
+                            NormalParamExtractor(), 
+                            in_keys=["out"], 
+                            out_keys=["loc", "scale"]
+                        )
+                    )
+
+    policy_td_seq = ProbabilisticActor(
+        module=module_td_seq,
+        in_keys=["loc", "scale"],
+        distribution_class=TanhNormal,
+        default_interaction_type=InteractionType.RANDOM,
+        spec=action_spec,
+    ).to(device)
+
+    # Wake up the policies
+    policy_td_seq(env.reset())
+
+    # Test.
+    inner_verify_routine(policy_td_seq, env)
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

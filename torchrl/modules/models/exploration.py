@@ -8,8 +8,13 @@ from typing import Optional, Sequence, Union
 
 import torch
 from torch import distributions as d, nn
+from torch.nn import functional as F
+from torch.nn.modules.dropout import _DropoutNd
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
+
+from tensordict.nn import TensorDictModuleBase
+from tensordict.utils import NestedKey
 
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
@@ -520,3 +525,92 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                         )
                     self._sigma.materialize((action_dim, state_dim))
                     self._sigma.data.copy_(self.sigma_init.expand_as(self._sigma))
+
+
+class ConsistentDropout(_DropoutNd):
+    """
+    Implements the Dropout variant proposed in `"Consistent Dropout for 
+    Policy Gradient Reinforcement Learning" (Hausknecht & Wagener, 2022) <https://arxiv.org/abs/2202.11818>`
+    
+    This implementation capitalizes on the extensibility of TensorDicts
+    by storing generated dropout masks in the transitions themselves.
+
+    There is otherwise little conceptual deviance from the original 
+    :class:`~torch.nn.Dropout` implementation. Although, there is probably a lot of 
+    `room for improvement... <https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/Dropout.cpp>`
+
+    NOTE: TorchRL's data collectors perform rollouts in :meth:`~torch.no_grad` mode,
+    so the dropout masks ARE in fact still applied.
+
+    See 
+    - :class:`~torchrl.collectors.SyncDataCollector`: rollout() and iterator()
+    - :class:`~torchrl.collectors.MultiSyncDataCollector`: Uses 
+    :meth:`~torchrl.collectors.collectors._main_async_collector` 
+    (SyncDataCollector) under the hood
+    """
+
+    def __init__(self, p=0.5):
+        super().__init__()
+        self.p = p
+
+    def forward(self, x, mask=None):
+        '''
+        During training (rollouts & updates), this call masks a tensor full of 
+        ones before multiplying with the input tensor.
+
+        During evaluation, this call results in a no-op.
+        '''
+        if self.training:
+            if mask is None:
+                mask = F.dropout(torch.ones_like(x), self.p, self.training, inplace = False)
+            return x * mask, mask
+        
+        return x
+        
+class ConsistentDropoutModule(TensorDictModuleBase):
+    """
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> module = ConsistentDropoutModule(p = 0.1)
+        >>> td = TensorDict({"x": torch.randn(3, 4)}, [3])
+        >>> module(td)
+        TensorDict(
+            fields={
+                mask_6127171760: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+                x: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+    """
+    def __init__(self, p: float, in_key: NestedKey=None, in_keys=None, out_keys=None):
+        if in_key is None:
+            in_key = "x"
+        if in_keys is None:
+            in_keys = [in_key, f"mask_{id(self)}"]
+        elif len(in_keys) != 2:
+            raise ValueError("in_keys and out_keys length must be 2 for consistent dropout.")
+        if out_keys is None:
+            out_keys = [in_key, f"mask_{id(self)}"]
+        elif len(out_keys) != 2:
+            raise ValueError("in_keys and out_keys length must be 2 for consistent dropout.")
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        super().__init__()
+
+        if not 0 <= p < 1:
+            raise ValueError("p must be in [0,1)!")
+
+        self.consistent_dropout = ConsistentDropout(p)
+
+    def forward(self, tensordict):
+        x = tensordict.get(self.in_keys[0])
+        mask = tensordict.get(self.in_keys[1], default=None)
+        if self.training:
+            x, mask = self.consistent_dropout(x, mask=mask)
+            tensordict.set(self.out_keys[0], x)
+            tensordict.set(self.out_keys[1], mask)
+        else:
+            x = self.consistent_dropout(x, mask=mask)
+            tensordict.set(self.out_keys[0], x)
+
+        return tensordict
