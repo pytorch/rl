@@ -477,19 +477,19 @@ class PPOLoss(LossModule):
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict)
 
-        def check_requires_grad(tensor, key=self.tensor_keys.action):
-            if tensor.requires_grad:
-                raise RuntimeError(f"tensordict stored {key} requires grad.")
-            return tensor
-
         prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
-        check_requires_grad(prev_log_prob, self.tensor_keys.sample_log_prob)
+        if prev_log_prob.requires_grad:
+            raise RuntimeError(
+                f"tensordict stored {self.tensor_keys.sample_log_prob} requires grad."
+            )
 
+        if action.requires_grad:
+            raise RuntimeError(
+                f"tensordict stored {self.tensor_keys.action} requires grad."
+            )
         if isinstance(action, torch.Tensor):
-            check_requires_grad(action, self.tensor_keys.action)
             log_prob = dist.log_prob(action)
         else:
-            action.apply(check_requires_grad)
             tensordict = dist.log_prob(tensordict)
             log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
 
