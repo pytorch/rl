@@ -521,16 +521,16 @@ class CQLLoss(LossModule):
         else:
             tensordict_reshape = tensordict
 
-        td_device = tensordict_reshape.to(tensordict.device)
-
-        q_loss, metadata = self.q_loss(td_device)
-        cql_loss, cql_metadata = self.cql_loss(td_device)
+        q_loss, metadata = self.q_loss(tensordict_reshape)
+        cql_loss, cql_metadata = self.cql_loss(tensordict_reshape)
         if self.with_lagrange:
-            alpha_prime_loss, alpha_prime_metadata = self.alpha_prime_loss(td_device)
+            alpha_prime_loss, alpha_prime_metadata = self.alpha_prime_loss(
+                tensordict_reshape
+            )
             metadata.update(alpha_prime_metadata)
-        loss_actor_bc, bc_metadata = self.actor_bc_loss(td_device)
-        loss_actor, actor_metadata = self.actor_loss(td_device)
-        loss_alpha, alpha_metadata = self.alpha_loss(td_device)
+        loss_actor_bc, bc_metadata = self.actor_bc_loss(tensordict_reshape)
+        loss_actor, actor_metadata = self.actor_loss(tensordict_reshape)
+        loss_alpha, alpha_metadata = self.alpha_loss(tensordict_reshape)
         metadata.update(bc_metadata)
         metadata.update(cql_metadata)
         metadata.update(actor_metadata)
@@ -547,7 +547,9 @@ class CQLLoss(LossModule):
             "loss_cql": cql_loss,
             "loss_alpha": loss_alpha,
             "alpha": self._alpha,
-            "entropy": -td_device.get(self.tensor_keys.log_prob).mean().detach(),
+            "entropy": -tensordict_reshape.get(self.tensor_keys.log_prob)
+            .mean()
+            .detach(),
         }
         if self.with_lagrange:
             out["loss_alpha_prime"] = alpha_prime_loss.mean()

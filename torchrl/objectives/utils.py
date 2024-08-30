@@ -454,11 +454,17 @@ def next_state_value(
     return target_value
 
 
-def _cache_values(fun):
+def _cache_values(func):
     """Caches the tensordict returned by a property."""
-    name = fun.__name__
+    name = func.__name__
 
-    def new_fun(self, netname=None):
+    @functools.wraps(func)
+    def new_func(self, netname=None):
+        if torch.compiler.is_dynamo_compiling():
+            if netname is not None:
+                return func(self, netname)
+            else:
+                return func(self)
         __dict__ = self.__dict__
         _cache = __dict__.setdefault("_cache", {})
         attr_name = name
@@ -468,16 +474,16 @@ def _cache_values(fun):
             out = _cache[attr_name]
             return out
         if netname is not None:
-            out = fun(self, netname)
+            out = func(self, netname)
         else:
-            out = fun(self)
+            out = func(self)
         # TODO: decide what to do with locked tds in functional calls
         # if is_tensor_collection(out):
         #     out.lock_()
         _cache[attr_name] = out
         return out
 
-    return new_fun
+    return new_func
 
 
 def _vmap_func(module, *args, func=None, **kwargs):

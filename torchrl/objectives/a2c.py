@@ -56,8 +56,9 @@ class A2CLoss(LossModule):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (float): the weight of the entropy loss.
-        critic_coef (float): the weight of the critic loss.
+        entropy_coef (float): the weight of the entropy loss. Defaults to `0.01``.
+        critic_coef (float): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic
+            loss won't be included and the in-keys will miss the critic inputs.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         separate_losses (bool, optional): if ``True``, shared parameters between
@@ -311,7 +312,13 @@ class A2CLoss(LossModule):
         self.register_buffer(
             "entropy_coef", torch.as_tensor(entropy_coef, device=device)
         )
-        self.register_buffer("critic_coef", torch.as_tensor(critic_coef, device=device))
+        if critic_coef is not None:
+            self.register_buffer(
+                "critic_coef", torch.as_tensor(critic_coef, device=device)
+            )
+        else:
+            self.critic_coef = None
+
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
@@ -344,7 +351,7 @@ class A2CLoss(LossModule):
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
         ]
-        if self.critic_coef:
+        if self.critic_coef is not None:
             keys.extend(self.critic_network.in_keys)
         return list(set(keys))
 
@@ -352,7 +359,7 @@ class A2CLoss(LossModule):
     def out_keys(self):
         if self._out_keys is None:
             outs = ["loss_objective"]
-            if self.critic_coef:
+            if self.critic_coef is not None:
                 outs.append("loss_critic")
             if self.entropy_bonus:
                 outs.append("entropy")
@@ -407,6 +414,7 @@ class A2CLoss(LossModule):
         return log_prob, dist
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+        """Returns the loss value of the critic, multiplied by ``critic_coef`` if it is not ``None``."""
         if self.clip_value:
             old_state_value = tensordict.get(
                 self.tensor_keys.value, None
@@ -456,7 +464,9 @@ class A2CLoss(LossModule):
                 loss_value,
                 self.loss_critic_type,
             )
-        return self.critic_coef * loss_value, clip_fraction
+        if self.critic_coef is not None:
+            return self.critic_coef * loss_value, clip_fraction
+        return loss_value, clip_fraction
 
     @property
     @_cache_values
@@ -483,7 +493,7 @@ class A2CLoss(LossModule):
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef:
+        if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
