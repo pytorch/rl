@@ -57,8 +57,8 @@ projected (in a L1-manner) into the desired domain.
     SafeSequential
     TanhModule
 
-Exploration wrappers
-~~~~~~~~~~~~~~~~~~~~
+Exploration wrappers and modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To efficiently explore the environment, TorchRL proposes a series of wrappers
 that will override the action sampled by the policy by a noisier version.
@@ -66,7 +66,7 @@ Their behavior is controlled by :func:`~torchrl.envs.utils.exploration_mode`:
 if the exploration is set to ``"random"``, the exploration is active. In all
 other cases, the action written in the tensordict is simply the network output.
 
-.. currentmodule:: torchrl.modules.tensordict_module
+.. currentmodule:: torchrl.modules
 
 .. autosummary::
     :toctree: generated/
@@ -74,6 +74,7 @@ other cases, the action written in the tensordict is simply the network output.
 
     AdditiveGaussianModule
     AdditiveGaussianWrapper
+    ConsistentDropoutModule
     EGreedyModule
     EGreedyWrapper
     OrnsteinUhlenbeckProcessModule
@@ -438,13 +439,13 @@ Regular modules
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    MLP
-    ConvNet
-    Conv3dNet
-    SqueezeLayer
-    Squeeze2dLayer
     BatchRenorm1d
-    ConsistentDropoutModule
+    ConsistentDropout
+    Conv3dNet
+    ConvNet
+    MLP
+    Squeeze2dLayer
+    SqueezeLayer
 
 Algorithm-specific modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

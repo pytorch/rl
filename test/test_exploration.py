@@ -31,10 +31,7 @@ from torchrl.modules.distributions import (
     NormalParamExtractor,
     TanhNormal,
 )
-from torchrl.modules.models.exploration import (
-    LazygSDEModule,
-    ConsistentDropoutModule
-)
+from torchrl.modules.models.exploration import ConsistentDropoutModule, LazygSDEModule
 from torchrl.modules.tensordict_module.actors import (
     Actor,
     ProbabilisticActor,
@@ -748,16 +745,16 @@ def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_s
     [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
 )
 def test_consistent_dropout(dropout_p, parallel_spec, device):
-    '''
-    
+    """
+
     This preliminary test seeks to ensure two things for both
     ConsistentDropout and ConsistentDropoutModule:
     1. Rollout transitions generate a dropout mask as desired.
         - We can easily verify the existence of a mask
     2. The dropout mask is correctly applied.
-        - We will check with stochastic policies whether or not 
+        - We will check with stochastic policies whether or not
         the loc and scale are the same.
-    '''
+    """
     torch.manual_seed(0)
 
     # NOTE: Please only put a module with one dropout layer.
@@ -773,40 +770,36 @@ def test_consistent_dropout(dropout_p, parallel_spec, device):
             device=device,
         )
         for frames in collector:
-            masks = [    
-                        (key, value)
-                        for key, value in frames.items() 
-                        if 'mask_' in key
-                    ]
+            masks = [(key, value) for key, value in frames.items() if "mask_" in key]
             # Assert rollouts do indeed correctly generate the masks.
             assert len(masks) == 1, (
-                        "Expected exactly ONE mask since we only put "
-                        f"one dropout module, got {len(masks)}."
-                    )
-            
+                "Expected exactly ONE mask since we only put "
+                f"one dropout module, got {len(masks)}."
+            )
+
             # Verify that the result for this batch is the same.
             # Kind of Monte Carlo, to be honest.
             sentinel_mask = masks[0][1].clone()
             sentinel_outputs = frames.select("loc", "scale").clone()
 
             desired_dropout_mask = torch.full_like(sentinel_mask, 1 / (1 - dropout_p))
-            desired_dropout_mask[sentinel_mask == 0.] = 0.
+            desired_dropout_mask[sentinel_mask == 0.0] = 0.0
             # As of 15/08/24, :meth:`~torch.nn.functional.dropout`
             # is being used. Never hurts to be safe.
-            assert torch.allclose(sentinel_mask, desired_dropout_mask), (
-                "Dropout was not scaled properly."
-            )
+            assert torch.allclose(
+                sentinel_mask, desired_dropout_mask
+            ), "Dropout was not scaled properly."
 
             infer_mask = module(frames)[masks[0][0]]
             infer_outputs = module(frames).select("loc", "scale")
-            assert (infer_mask == sentinel_mask).all(), (
-                "Mask does not match"
-            )
+            assert (infer_mask == sentinel_mask).all(), "Mask does not match"
 
-            assert all([torch.allclose(
-                        infer_outputs[key],
-                        sentinel_outputs[key]
-                    ) for key in ('loc', 'scale')]), (
+            assert all(
+                [
+                    torch.allclose(infer_outputs[key], sentinel_outputs[key])
+                    for key in ("loc", "scale")
+                ]
+            ), (
                 "Outputs do not match:\n "
                 f"{infer_outputs['loc']}\n--- vs ---\n{sentinel_outputs['loc']}"
                 f"{infer_outputs['scale']}\n--- vs ---\n{sentinel_outputs['scale']}"
@@ -828,21 +821,14 @@ def test_consistent_dropout(dropout_p, parallel_spec, device):
     # NOTE: Please only put a module with one dropout layer.
     # That's how this test is constructed anyways.
     module_td_seq = TensorDictSequential(
-                        TensorDictModule(
-                            nn.LazyLinear(2 * d_act),
-                            in_keys = ["observation"],
-                            out_keys = ["out"]
-                        ),
-                        ConsistentDropoutModule(
-                            p = dropout_p,
-                            in_key = "out"
-                        ),
-                        TensorDictModule(
-                            NormalParamExtractor(), 
-                            in_keys=["out"], 
-                            out_keys=["loc", "scale"]
-                        )
-                    )
+        TensorDictModule(
+            nn.LazyLinear(2 * d_act), in_keys=["observation"], out_keys=["out"]
+        ),
+        ConsistentDropoutModule(p=dropout_p, in_key="out"),
+        TensorDictModule(
+            NormalParamExtractor(), in_keys=["out"], out_keys=["loc", "scale"]
+        ),
+    )
 
     policy_td_seq = ProbabilisticActor(
         module=module_td_seq,
@@ -857,6 +843,7 @@ def test_consistent_dropout(dropout_p, parallel_spec, device):
 
     # Test.
     inner_verify_routine(policy_td_seq, env)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

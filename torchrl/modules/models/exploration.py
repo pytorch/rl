@@ -2,21 +2,22 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import functools
 import math
 import warnings
-from typing import Optional, Sequence, Union
+from typing import List, Optional, Sequence, Union
 
 import torch
+
+from tensordict.nn import TensorDictModuleBase
+from tensordict.utils import NestedKey
 from torch import distributions as d, nn
 from torch.nn import functional as F
 from torch.nn.modules.dropout import _DropoutNd
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
-
-from tensordict.nn import TensorDictModuleBase
-from tensordict.utils import NestedKey
-
 from torchrl._utils import prod
+from torchrl.data.tensor_specs import Unbounded
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
 from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.distributions.utils import _cast_transform_device
@@ -528,69 +529,89 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
 
 
 class ConsistentDropout(_DropoutNd):
-    '''
-    Implements the :class:`~torch.nn.Dropout` variant proposed in `"Consistent Dropout for 
-    Policy Gradient Reinforcement Learning" (Hausknecht & Wagener, 2022) <https://arxiv.org/abs/2202.11818>`_.
-    
-    This :class:`~torch.nn.Dropout` variant attempts to increase training stability and 
+    """Implements a :class:`~torch.nn.Dropout` variant with consistent dropout.
+
+    This method is proposed in `"Consistent Dropout for Policy Gradient Reinforcement Learning" (Hausknecht & Wagener, 2022) <https://arxiv.org/abs/2202.11818>`_.
+
+    This :class:`~torch.nn.Dropout` variant attempts to increase training stability and
     reduce update variance by caching the dropout masks used during rollout
     and reusing them during the update phase.
 
-    TorchRL's implementation capitalizes on the extensibility of 
-    ``TensorDict``s by storing generated dropout masks 
-    in the transition ``TensorDict`` themselves.
+    TorchRL's implementation capitalizes on the extensibility of ``TensorDict``s by storing generated dropout masks
+    in the transition ``TensorDict`` themselves. This class can be used through :class:`~torchrl.modules.ConsistentDropoutModule`
+    within policies coded using the :class:`~tensordict.nn.TensorDictModuleBase` API. See this class for a detailed
+    explanation as well as usage examples.
 
     There is otherwise little conceptual deviance from the PyTorch
-    :class:`~torch.nn.Dropout` implementation. 
+    :class:`~torch.nn.Dropout` implementation.
 
-    NOTE: TorchRL's data collectors perform rollouts in :meth:`~torch.no_grad` mode,
-    so the dropout masks ARE in fact still applied.
+    ..note:: TorchRL's data collectors perform rollouts in :meth:`~torch.no_grad` mode but not in `eval` mode,
+        so the dropout masks will be applied unless the policy passed to the collector is in eval mode.
 
-    See
+    Args:
+       p (float, optional): Dropout probability. Defaults to ``0.5``.
 
-    - :class:`~torchrl.collectors.SyncDataCollector`: :meth:`~torchrl.collectors.SyncDataCollector.rollout()` and :meth:`~torchrl.collectors.SyncDataCollector.iterator()`
+    .. seealso::
 
-    - :class:`~torchrl.collectors.MultiSyncDataCollector`: Uses :meth:`~torchrl.collectors.collectors._main_async_collector` (:class:`~torchrl.collectors.SyncDataCollector`) under the hood
+      - :class:`~torchrl.collectors.SyncDataCollector`:
+        :meth:`~torchrl.collectors.SyncDataCollector.rollout()` and :meth:`~torchrl.collectors.SyncDataCollector.iterator()`
+      - :class:`~torchrl.collectors.MultiSyncDataCollector`:
+        Uses :meth:`~torchrl.collectors.collectors._main_async_collector` (:class:`~torchrl.collectors.SyncDataCollector`)
+        under the hood
+      - :class:`~torchrl.collectors.MultiaSyncDataCollector`, :class:`~torchrl.collectors.aSyncDataCollector`: Ditto.
 
-    - :class:`~torchrl.collectors.MultiaSyncDataCollector`, :class:`~torchrl.collectors.aSyncDataCollector`: Ditto.
-    '''
+    """
 
-    def __init__(self, p=0.5):
-        '''
-        Parameters:
-            p (float, optional): Dropout probability. Default: ``0.5``.
-        '''
+    def __init__(self, p: float = 0.5):
         super().__init__()
         self.p = p
 
-    def forward(self, x, mask=None):
-        '''
-        During training (rollouts & updates), this call masks a tensor full of 
-        ones before multiplying with the input tensor.
+    def forward(
+        self, x: torch.Tensor, mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """During training (rollouts & updates), this call masks a tensor full of ones before multiplying with the input tensor.
 
-        During evaluation, this call results in a no-op.
-        '''
+        During evaluation, this call results in a no-op and only the input is returned.
+
+        Args:
+            x (torch.Tensor): the input tensor.
+            mask (torch.Tensor, optional): the optional mask for the dropout.
+
+        Returns: a tensor and a corresponding mask in train mode, and only a tensor in eval mode.
+        """
         if self.training:
             if mask is None:
-                mask = F.dropout(torch.ones_like(x), self.p, self.training, inplace = False)
+                mask = self.make_mask(input=x)
             return x * mask, mask
-        
+
         return x
-        
+
+    def make_mask(self, *, input=None, shape=None):
+        if input is not None:
+            return F.dropout(
+                torch.ones_like(input), self.p, self.training, inplace=False
+            )
+        elif shape is not None:
+            return F.dropout(torch.ones(shape), self.p, self.training, inplace=False)
+        else:
+            raise RuntimeError("input or shape must be passed to make_mask.")
+
+
 class ConsistentDropoutModule(TensorDictModuleBase):
-    '''
+    """A TensorDictModule wrapper for :class:`~ConsistentDropout`.
 
-    Parameters:
+    Args:
         p (float, optional): Dropout probability. Default: ``0.5``.
+        in_keys (NestedKey or list of NestedKeys): keys to be read
+            from input tensordict and passed to this module.
+        out_keys (NestedKey or iterable of NestedKeys): keys to be written to the input tensordict.
+            Defaults to ``in_keys`` values.
 
-        in_key (str, optional): The key to be read from input tensordict. 
-            Only used if ``in_keys`` is not specified.
-        
-        in_keys (iterable of NestedKeys, Dict[NestedStr, str]): keys to be read
-            from input tensordict and passed to this module. Default: ``None``.
-        
-        out_keys (iterable of str): keys to be written to the input tensordict. 
-            Default: ``None``.
+    Keyword Args:
+        input_shape (tuple, optional): the shape of the input (non-batchted), used to generate the
+            tensordict primers with :meth:`~.make_tensordict_primer`.
+        input_dtype (torch.dtype, optional): the dtype of the input for the primer. If none is pased,
+            ``torch.get_default_dtype`` is assumed.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -604,33 +625,41 @@ class ConsistentDropoutModule(TensorDictModuleBase):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
-    '''
-    __doc__ = f"{ConsistentDropout.__doc__}\n{__doc__}"
+    """
 
-    def __init__(self, p: float, in_key: NestedKey=None, in_keys=None, out_keys=None):
-        if in_key is None:
-            in_key = "x"
-        if in_keys is None:
-            in_keys = [in_key, f"mask_{id(self)}"]
-        elif len(in_keys) != 2:
-            raise ValueError("in_keys and out_keys length must be 2 for consistent dropout.")
+    def __init__(
+        self,
+        p: float,
+        in_keys: NestedKey | List[NestedKey],
+        out_keys: NestedKey | List[NestedKey] | None = None,
+        input_shape: torch.Size = None,
+        input_dtype: torch.dtype | None = None,
+    ):
+        if isinstance(in_keys, NestedKey):
+            in_keys = [in_keys, f"mask_{id(self)}"]
         if out_keys is None:
-            out_keys = [in_key, f"mask_{id(self)}"]
-        elif len(out_keys) != 2:
-            raise ValueError("in_keys and out_keys length must be 2 for consistent dropout.")
+            out_keys = list(in_keys)
+        if isinstance(out_keys, NestedKey):
+            out_keys = [out_keys, f"mask_{id(self)}"]
+        if len(in_keys) != 2 or len(out_keys) != 2:
+            raise ValueError(
+                "in_keys and out_keys length must be 2 for consistent dropout."
+            )
         self.in_keys = in_keys
         self.out_keys = out_keys
+        self.input_shape = input_shape
+        self.input_dtype = input_dtype
         super().__init__()
 
         if not 0 <= p < 1:
-            raise ValueError("p must be in [0,1)!")
+            raise ValueError(f"p must be in [0,1), got p={p: 4.4f}.")
 
         self.consistent_dropout = ConsistentDropout(p)
 
     def forward(self, tensordict):
         x = tensordict.get(self.in_keys[0])
         mask = tensordict.get(self.in_keys[1], default=None)
-        if self.training:
+        if self.consistent_dropout.training:
             x, mask = self.consistent_dropout(x, mask=mask)
             tensordict.set(self.out_keys[0], x)
             tensordict.set(self.out_keys[1], mask)
@@ -639,3 +668,29 @@ class ConsistentDropoutModule(TensorDictModuleBase):
             tensordict.set(self.out_keys[0], x)
 
         return tensordict
+
+    def make_tensordict_primer(self):
+        """Makes a tensordict primer for the environment to generate random masks during reset calls.
+
+        .. seealso:: :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given
+        module.
+
+        """
+        from torchrl.envs import TensorDictPrimer
+
+        shape = self.input_shape
+        dtype = self.input_dtype
+        if dtype is None:
+            dtype = torch.get_default_dtype()
+        if shape is None:
+            raise RuntimeError(
+                "Cannot infer the shape of the input automatically. "
+                "Please pass the shape of the tensor to `ConstistentDropoutModule` during construction "
+                "with the `input_shape` kwarg."
+            )
+        return TensorDictPrimer(
+            primers={self.in_keys[1]: Unbounded(dtype=dtype, shape=shape)},
+            default_value=functools.partial(
+                self.consistent_dropout.make_mask, shape=shape
+            ),
+        )
