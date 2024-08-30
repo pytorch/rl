@@ -4656,10 +4656,15 @@ class TensorDictPrimer(Transform):
     def reset_key(self):
         reset_key = self.__dict__.get("_reset_key", None)
         if reset_key is None:
+            if self.parent is None:
+                raise RuntimeError(
+                    "Missing parent, cannot infer reset_key automatically."
+                )
             reset_keys = self.parent.reset_keys
             if len(reset_keys) > 1:
                 raise RuntimeError(
-                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
+                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. "
+                    f"Consider providing the reset key in the {type(self)} constructor."
                 )
             reset_key = self._reset_key = reset_keys[0]
         return reset_key
