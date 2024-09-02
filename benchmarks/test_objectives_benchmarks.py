@@ -320,7 +320,7 @@ def test_sac_speed(
         value, in_keys=["hidden", "action"], out_keys=["state_action_value"]
     )
     value = Seq(common, value_head)
-    value(actor(td))
+    value(actor(td.clone()))
 
     loss = SACLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
@@ -404,7 +404,7 @@ def test_redq_speed(
         value, in_keys=["hidden", "action"], out_keys=["state_action_value"]
     )
     value = Seq(common, value_head)
-    value(actor(td))
+    value(actor(td.copy()))
 
     loss = REDQLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
@@ -489,7 +489,7 @@ def test_redq_deprec_speed(
         value, in_keys=["hidden", "action"], out_keys=["state_action_value"]
     )
     value = Seq(common, value_head)
-    value(actor(td))
+    value(actor(td.copy()))
 
     loss = REDQLoss_deprecated(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
