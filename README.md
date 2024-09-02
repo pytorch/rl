@@ -593,7 +593,7 @@ Importantly, the nightly builds require the nightly builds of PyTorch too.
 
 To install extra dependencies, call
 ```bash
-pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl,checkpointing]"
+pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl,open_spiel,checkpointing]"
 ```
 or a subset of these.
 
