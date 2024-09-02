@@ -147,9 +147,10 @@ def test_gae_speed(benchmark, gae_fn, gamma_tensor, batches, timesteps):
     )
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_dqn_speed(
-    benchmark, compile, n_obs=8, n_act=4, depth=3, ncells=128, batch=128
+    benchmark, backward, compile, n_obs=8, n_act=4, depth=3, ncells=128, batch=128
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -180,12 +181,23 @@ def test_dqn_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_ddpg_speed(
-    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -240,12 +252,23 @@ def test_ddpg_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_sac_speed(
-    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -312,12 +335,23 @@ def test_sac_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_redq_speed(
-    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -385,12 +419,24 @@ def test_redq_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            totalloss = sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            )
+            totalloss.backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_redq_deprec_speed(
-    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -458,12 +504,23 @@ def test_redq_deprec_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_td3_speed(
-    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -543,12 +600,23 @@ def test_td3_speed(
         loss(td)
         loss(td)
 
-    benchmark.pedantic(loss, args=(td,), rounds=100, iterations=10)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark.pedantic(loss_and_bw(), args=(td,), rounds=100, iterations=10)
+    else:
+        benchmark.pedantic(loss, args=(td,), rounds=100, iterations=10)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_cql_speed(
-    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -615,12 +683,31 @@ def test_cql_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_a2c_speed(
-    benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
+    benchmark,
+    backward,
+    compile,
+    n_obs=8,
+    n_act=4,
+    n_hidden=64,
+    ncells=128,
+    batch=128,
+    T=10,
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -688,12 +775,31 @@ def test_a2c_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_ppo_speed(
-    benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
+    benchmark,
+    backward,
+    compile,
+    n_obs=8,
+    n_act=4,
+    n_hidden=64,
+    ncells=128,
+    batch=128,
+    T=10,
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -761,12 +867,31 @@ def test_ppo_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_reinforce_speed(
-    benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
+    benchmark,
+    backward,
+    compile,
+    n_obs=8,
+    n_act=4,
+    n_hidden=64,
+    ncells=128,
+    batch=128,
+    T=10,
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -834,12 +959,31 @@ def test_reinforce_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
+@pytest.mark.parametrize("backward", [False, True])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_iql_speed(
-    benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
+    benchmark,
+    backward,
+    compile,
+    n_obs=8,
+    n_act=4,
+    n_hidden=64,
+    ncells=128,
+    batch=128,
+    T=10,
 ):
     if compile:
         torch._dynamo.reset_code_caches()
@@ -915,7 +1059,17 @@ def test_iql_speed(
         loss(td)
         loss(td)
 
-    benchmark(loss, td)
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark(loss_and_bw, td)
+    else:
+        benchmark(loss, td)
 
 
 if __name__ == "__main__":
