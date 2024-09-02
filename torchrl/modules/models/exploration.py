@@ -548,6 +548,11 @@ class ConsistentDropout(_DropoutNd):
     ..note:: TorchRL's data collectors perform rollouts in :meth:`~torch.no_grad` mode but not in `eval` mode,
         so the dropout masks will be applied unless the policy passed to the collector is in eval mode.
 
+    .. note:: Unlike other exploration modules, :class:`~torchrl.modules.ConsistentDropoutModule`
+      uses the ``train``/``eval`` mode to comply with the regular `Dropout` API in PyTorch.
+      The :func:`~torchrl.envs.utils.set_exploration_mode` context manager will have no effect on
+      this module.
+
     Args:
        p (float, optional): Dropout probability. Defaults to ``0.5``.
 

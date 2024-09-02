@@ -742,7 +742,7 @@ def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_s
 @pytest.mark.parametrize("parallel_spec", [False, True])
 @pytest.mark.parametrize(
     "device",
-    [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
+    get_default_devices()
 )
 def test_consistent_dropout(dropout_p, parallel_spec, device):
     """
@@ -770,7 +770,7 @@ def test_consistent_dropout(dropout_p, parallel_spec, device):
             device=device,
         )
         for frames in collector:
-            masks = [(key, value) for key, value in frames.items() if "mask_" in key]
+            masks = [(key, value) for key, value in frames.items() if key.startswith("mask_")]
             # Assert rollouts do indeed correctly generate the masks.
             assert len(masks) == 1, (
                 "Expected exactly ONE mask since we only put "
@@ -824,7 +824,7 @@ def test_consistent_dropout(dropout_p, parallel_spec, device):
         TensorDictModule(
             nn.LazyLinear(2 * d_act), in_keys=["observation"], out_keys=["out"]
         ),
-        ConsistentDropoutModule(p=dropout_p, in_key="out"),
+        ConsistentDropoutModule(p=dropout_p, in_keys="out"),
         TensorDictModule(
             NormalParamExtractor(), in_keys=["out"], out_keys=["loc", "scale"]
         ),
