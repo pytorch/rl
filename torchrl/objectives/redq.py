@@ -451,6 +451,8 @@ class REDQLoss(LossModule):
         tensordict_select = tensordict.clone(False).select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
         )
+
+        # TODO: figure out how to make this work with compile
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
         ].sort()[0]
@@ -469,6 +471,7 @@ class REDQLoss(LossModule):
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
         # tensordict_actor = tensordict_actor.contiguous()
 
+        # with nullcontext():
         with set_exploration_type(ExplorationType.RANDOM):
             if self.gSDE:
                 tensordict_actor.set(
