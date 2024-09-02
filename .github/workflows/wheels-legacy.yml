@@ -19,7 +19,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"],  ["3.12", "3.12"]]
+        python_version: [["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"],  ["3.12", "3.12"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -51,7 +51,7 @@ jobs:
     needs: build-wheel-windows
     strategy:
       matrix:
-        python_version: [ "3.8", "3.9", "3.10", "3.11", "3.12" ]
+        python_version: ["3.9", "3.10", "3.11", "3.12" ]
     runs-on: windows-latest
     steps:
       - name: Setup Python
