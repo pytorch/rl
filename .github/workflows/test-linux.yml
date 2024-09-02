@@ -22,7 +22,7 @@ jobs:
   tests-cpu:
     strategy:
       matrix:
-        python_version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python_version: ["3.9", "3.10", "3.11", "3.12"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
@@ -155,7 +155,7 @@ jobs:
   tests-optdeps:
     strategy:
       matrix:
-        python_version: ["3.10"] # "3.8", "3.9", "3.10", "3.11"
+        python_version: ["3.10"] # "3.9", "3.10", "3.11"
         cuda_arch_version: ["12.1"] # "11.6", "11.7"
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -193,7 +193,7 @@ jobs:
   tests-stable-gpu:
     strategy:
       matrix:
-        python_version: ["3.10"] # "3.8", "3.9", "3.10", "3.11"
+        python_version: ["3.10"] # "3.9", "3.10", "3.11"
         cuda_arch_version: ["11.8"] # "11.6", "11.7"
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
