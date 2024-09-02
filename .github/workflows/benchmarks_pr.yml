@@ -26,7 +26,7 @@ jobs:
       - name: Python Setup
         uses: actions/setup-python@v4
         with:
-          python-version: 3.8
+          python-version: 3.9
       - name: Setup Environment
         run: |
           python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U 
@@ -95,7 +95,7 @@ jobs:
       - name: Python Setup
         uses: actions/setup-python@v4
         with:
-          python-version: 3.8
+          python-version: 3.9
       - name: Setup git
         run: git config --global --add safe.directory /__w/rl/rl
       - name: setup Path
