@@ -372,7 +372,7 @@ class TD3Loss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    def actor_loss(self, tensordict):
+    def actor_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
@@ -398,7 +398,7 @@ class TD3Loss(LossModule):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, metadata
 
-    def value_loss(self, tensordict):
+    def value_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
         tensordict = tensordict.clone(False)
 
         act = tensordict.get(self.tensor_keys.action)

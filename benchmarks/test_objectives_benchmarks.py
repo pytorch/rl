@@ -44,6 +44,15 @@ from torchrl.objectives.value.functional import (
 )
 
 
+@pytest.fixture(scope="module")
+def set_default_device():
+    cur_device = torch.get_default_device()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    torch.set_default_device(device)
+    yield
+    torch.set_default_device(cur_device)
+
+
 class setup_value_fn:
     def __init__(self, has_lmbda, has_state_value):
         self.has_lmbda = has_lmbda
@@ -142,6 +151,8 @@ def test_gae_speed(benchmark, gae_fn, gamma_tensor, batches, timesteps):
 def test_dqn_speed(
     benchmark, compile, n_obs=8, n_act=4, depth=3, ncells=128, batch=128
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     net = MLP(in_features=n_obs, out_features=n_act, depth=depth, num_cells=ncells)
     action_space = "one-hot"
     mod = QValueActor(net, in_keys=["obs"], action_space=action_space)
@@ -176,6 +187,8 @@ def test_dqn_speed(
 def test_ddpg_speed(
     benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -234,6 +247,8 @@ def test_ddpg_speed(
 def test_sac_speed(
     benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -304,6 +319,8 @@ def test_sac_speed(
 def test_redq_speed(
     benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -346,6 +363,7 @@ def test_redq_speed(
             out_keys=["action"],
             distribution_class=TanhNormal,
             return_log_prob=True,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     value_head = Mod(
@@ -374,6 +392,8 @@ def test_redq_speed(
 def test_redq_deprec_speed(
     benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -416,6 +436,7 @@ def test_redq_deprec_speed(
             out_keys=["action"],
             distribution_class=TanhNormal,
             return_log_prob=True,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     value_head = Mod(
@@ -444,6 +465,8 @@ def test_redq_deprec_speed(
 def test_td3_speed(
     benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -527,6 +550,8 @@ def test_td3_speed(
 def test_cql_speed(
     benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -597,6 +622,8 @@ def test_cql_speed(
 def test_a2c_speed(
     benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common_net = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -668,6 +695,8 @@ def test_a2c_speed(
 def test_ppo_speed(
     benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common_net = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -739,6 +768,8 @@ def test_ppo_speed(
 def test_reinforce_speed(
     benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common_net = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -810,6 +841,8 @@ def test_reinforce_speed(
 def test_iql_speed(
     benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common_net = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -856,7 +889,10 @@ def test_iql_speed(
         Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
         Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
         ProbMod(
-            in_keys=["loc", "scale"], out_keys=["action"], distribution_class=TanhNormal
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     value = Seq(common, Mod(value_net, in_keys=["hidden"], out_keys=["state_value"]))

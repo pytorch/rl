@@ -576,7 +576,7 @@ class CQLLoss(LossModule):
         metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
         return bc_actor_loss, metadata
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
@@ -693,7 +693,7 @@ class CQLLoss(LossModule):
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
-    def q_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def q_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
         target_value = self._get_value_v(
             tensordict,
@@ -724,7 +724,7 @@ class CQLLoss(LossModule):
         metadata = {"td_error": td_error.detach()}
         return loss_qval, metadata
 
-    def cql_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def cql_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         pred_q1 = tensordict.get(self.tensor_keys.pred_q1)
         pred_q2 = tensordict.get(self.tensor_keys.pred_q2)
 

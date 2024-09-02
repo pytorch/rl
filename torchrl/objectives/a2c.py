@@ -413,8 +413,12 @@ class A2CLoss(LossModule):
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
 
-    def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
-        """Returns the loss value of the critic, multiplied by ``critic_coef`` if it is not ``None``."""
+    def loss_critic(self, tensordict: TensorDictBase) -> Tuple[torch.Tensor, float]:
+        """Returns the loss value of the critic, multiplied by ``critic_coef`` if it is not ``None``.
+
+        Returns the loss and the clip-fraction.
+
+        """
         if self.clip_value:
             old_state_value = tensordict.get(
                 self.tensor_keys.value, None
