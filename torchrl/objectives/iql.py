@@ -383,7 +383,8 @@ class IQLLoss(LossModule):
         loss_actor, metadata = self.actor_loss(tensordict_reshape)
         loss_qvalue, metadata_qvalue = self.qvalue_loss(tensordict_reshape)
         loss_value, metadata_value = self.value_loss(tensordict_reshape)
-        metadata.update(**metadata_qvalue, **metadata_value)
+        metadata.update(metadata_qvalue)
+        metadata.update(metadata_value)
 
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
@@ -410,7 +411,7 @@ class IQLLoss(LossModule):
             [],
         )
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # KL loss
         with self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict)
@@ -446,7 +447,7 @@ class IQLLoss(LossModule):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, {}
 
-    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
@@ -460,7 +461,7 @@ class IQLLoss(LossModule):
         value_loss = _reduce(value_loss, reduction=self.reduction)
         return value_loss, {}
 
-    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         obs_keys = self.actor_network.in_keys
         tensordict = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
@@ -781,7 +782,7 @@ class DiscreteIQLLoss(IQLLoss):
         self.action_space = _find_action_space(action_space)
         self.reduction = reduction
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # KL loss
         with self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict)
@@ -828,7 +829,7 @@ class DiscreteIQLLoss(IQLLoss):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, {}
 
-    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # Min Q value
         with torch.no_grad():
             # Min Q value
@@ -856,7 +857,7 @@ class DiscreteIQLLoss(IQLLoss):
         value_loss = _reduce(value_loss, reduction=self.reduction)
         return value_loss, {}
 
-    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         obs_keys = self.actor_network.in_keys
         next_td = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False

@@ -39,9 +39,13 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
-from tensordict._C import _unravel_key_to_tuple
 from tensordict.nn import dispatch, TensorDictModuleBase
-from tensordict.utils import expand_as_right, expand_right, NestedKey
+from tensordict.utils import (
+    _unravel_key_to_tuple,
+    expand_as_right,
+    expand_right,
+    NestedKey,
+)
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
 

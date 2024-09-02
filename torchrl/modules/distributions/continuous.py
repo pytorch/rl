@@ -5,13 +5,16 @@
 from __future__ import annotations
 
 import warnings
+import weakref
 from numbers import Number
 from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 from torch import distributions as D, nn
+from torch.compiler import assume_constant_result
 from torch.distributions import constraints
+from torch.distributions.transforms import _InverseTransform
 
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
@@ -20,8 +23,8 @@ from torchrl.modules.distributions.truncated_normal import (
 from torchrl.modules.distributions.utils import (
     _cast_device,
     FasterTransformedDistribution,
-    safeatanh,
-    safetanh,
+    safeatanh_noeps,
+    safetanh_noeps,
 )
 from torchrl.modules.utils import mappings
 
@@ -92,19 +95,21 @@ class SafeTanhTransform(D.TanhTransform):
     """TanhTransform subclass that ensured that the transformation is numerically invertible."""
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dtype.is_floating_point:
-            eps = torch.finfo(x.dtype).resolution
-        else:
-            raise NotImplementedError(f"No tanh transform for {x.dtype} inputs.")
-        return safetanh(x, eps)
+        return safetanh_noeps(x)
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
-        if y.dtype.is_floating_point:
-            eps = torch.finfo(y.dtype).resolution
-        else:
-            raise NotImplementedError(f"No inverse tanh for {y.dtype} inputs.")
-        x = safeatanh(y, eps)
-        return x
+        return safeatanh_noeps(y)
+
+    @property
+    def inv(self):
+        inv = None
+        if self._inv is not None:
+            inv = self._inv()
+        if inv is None:
+            inv = _InverseTransform(self)
+            if not torch.compiler.is_dynamo_compiling():
+                self._inv = weakref.ref(inv)
+        return inv
 
 
 class NormalParamWrapper(nn.Module):
@@ -316,6 +321,33 @@ class TruncatedNormal(D.Independent):
         return lp
 
 
+class _PatchedComposeTransform(D.ComposeTransform):
+    @property
+    def inv(self):
+        inv = None
+        if self._inv is not None:
+            inv = self._inv()
+        if inv is None:
+            inv = _PatchedComposeTransform([p.inv for p in reversed(self.parts)])
+            if not torch.compiler.is_dynamo_compiling():
+                self._inv = weakref.ref(inv)
+                inv._inv = weakref.ref(self)
+        return inv
+
+
+class _PatchedAffineTransform(D.AffineTransform):
+    @property
+    def inv(self):
+        inv = None
+        if self._inv is not None:
+            inv = self._inv()
+        if inv is None:
+            inv = _InverseTransform(self)
+            if not torch.compiler.is_dynamo_compiling():
+                self._inv = weakref.ref(inv)
+        return inv
+
+
 class TanhNormal(FasterTransformedDistribution):
     """Implements a TanhNormal distribution with location scaling.
 
@@ -344,6 +376,8 @@ class TanhNormal(FasterTransformedDistribution):
             as the input, ``1`` will reduce (sum over) the last dimension, ``2`` the last two etc.
         tanh_loc (bool, optional): if ``True``, the above formula is used for the location scaling, otherwise the raw
             value is kept. Default is ``False``;
+        safe_tanh (bool, optional): if ``True``, the Tanh transform is done "safely", to avoid numerical overflows.
+            This will currently break with :func:`torch.compile`.
     """
 
     arg_constraints = {
@@ -369,6 +403,7 @@ class TanhNormal(FasterTransformedDistribution):
         high: Union[torch.Tensor, Number] = 1.0,
         event_dims: int | None = None,
         tanh_loc: bool = False,
+        safe_tanh: bool = True,
         **kwargs,
     ):
         if "max" in kwargs:
@@ -419,13 +454,22 @@ class TanhNormal(FasterTransformedDistribution):
         self.low = low
         self.high = high
 
-        t = SafeTanhTransform()
+        if safe_tanh:
+            if torch.compiler.is_dynamo_compiling():
+                _err_compile_safetanh()
+            t = SafeTanhTransform()
+        else:
+            t = D.TanhTransform()
         # t = D.TanhTransform()
-        if self.non_trivial_max or self.non_trivial_min:
-            t = D.ComposeTransform(
+        if torch.compiler.is_dynamo_compiling() or (
+            self.non_trivial_max or self.non_trivial_min
+        ):
+            t = _PatchedComposeTransform(
                 [
                     t,
-                    D.AffineTransform(loc=(high + low) / 2, scale=(high - low) / 2),
+                    _PatchedAffineTransform(
+                        loc=(high + low) / 2, scale=(high - low) / 2
+                    ),
                 ]
             )
         self._t = t
@@ -446,7 +490,9 @@ class TanhNormal(FasterTransformedDistribution):
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
             # loc must be rescaled if tanh_loc
-            if self.non_trivial_max or self.non_trivial_min:
+            if torch.compiler.is_dynamo_compiling() or (
+                self.non_trivial_max or self.non_trivial_min
+            ):
                 loc = loc + (self.high - self.low) / 2 + self.low
         self.loc = loc
         self.scale = scale
@@ -465,6 +511,10 @@ class TanhNormal(FasterTransformedDistribution):
             else:
                 base = D.Normal(self.loc, self.scale)
                 super().__init__(base, self._t)
+
+    @property
+    def support(self):
+        return D.constraints.real()
 
     @property
     def root_dist(self):
@@ -696,10 +746,10 @@ class TanhDelta(FasterTransformedDistribution):
         loc = self.update(param)
 
         if self.non_trivial:
-            t = D.ComposeTransform(
+            t = _PatchedComposeTransform(
                 [
                     t,
-                    D.AffineTransform(
+                    _PatchedAffineTransform(
                         loc=(self.high + self.low) / 2, scale=(self.high - self.low) / 2
                     ),
                 ]
@@ -761,3 +811,16 @@ def _uniform_sample_delta(dist: Delta, size=None) -> torch.Tensor:
 
 
 uniform_sample_delta = _uniform_sample_delta
+
+
+def _err_compile_safetanh():
+    raise RuntimeError(
+        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass"
+        "safe_tanh=False. "
+        "If you are using a ProbabilisticTensorDictModule, this can be done via "
+        "`distribution_kwargs={'safe_tanh': False}`. "
+        "See https://github.com/pytorch/pytorch/issues/133529 for more details."
+    )
+
+
+_warn_compile_safetanh = assume_constant_result(_err_compile_safetanh)

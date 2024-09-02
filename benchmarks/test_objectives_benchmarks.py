@@ -9,6 +9,7 @@ import torch
 
 from tensordict import TensorDict
 from tensordict.nn import (
+    InteractionType,
     NormalParamExtractor,
     ProbabilisticTensorDictModule as ProbMod,
     ProbabilisticTensorDictSequential as ProbSeq,
@@ -41,6 +42,15 @@ from torchrl.objectives.value.functional import (
     vec_td1_return_estimate,
     vec_td_lambda_return_estimate,
 )
+
+
+@pytest.fixture(scope="module")
+def set_default_device():
+    cur_device = torch.get_default_device()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    torch.set_default_device(device)
+    yield
+    torch.set_default_device(cur_device)
 
 
 class setup_value_fn:
@@ -137,7 +147,12 @@ def test_gae_speed(benchmark, gae_fn, gamma_tensor, batches, timesteps):
     )
 
 
-def test_dqn_speed(benchmark, n_obs=8, n_act=4, depth=3, ncells=128, batch=128):
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+def test_dqn_speed(
+    benchmark, compile, n_obs=8, n_act=4, depth=3, ncells=128, batch=128
+):
+    if compile:
+        torch._dynamo.reset_code_caches()
     net = MLP(in_features=n_obs, out_features=n_act, depth=depth, num_cells=ncells)
     action_space = "one-hot"
     mod = QValueActor(net, in_keys=["obs"], action_space=action_space)
@@ -155,10 +170,25 @@ def test_dqn_speed(benchmark, n_obs=8, n_act=4, depth=3, ncells=128, batch=128):
         [batch],
     )
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
-def test_ddpg_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64):
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+def test_ddpg_speed(
+    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -200,10 +230,25 @@ def test_ddpg_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden
     loss = DDPGLoss(actor, value)
 
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
-def test_sac_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64):
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+def test_sac_speed(
+    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -245,6 +290,7 @@ def test_sac_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
             in_keys=["loc", "scale"],
             out_keys=["action"],
             distribution_class=TanhNormal,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     value_head = Mod(
@@ -256,10 +302,25 @@ def test_sac_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
     loss = SACLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
-def test_redq_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64):
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+def test_redq_speed(
+    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -302,6 +363,7 @@ def test_redq_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden
             out_keys=["action"],
             distribution_class=TanhNormal,
             return_log_prob=True,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     value_head = Mod(
@@ -313,12 +375,25 @@ def test_redq_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden
     loss = REDQLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_redq_deprec_speed(
-    benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -361,6 +436,7 @@ def test_redq_deprec_speed(
             out_keys=["action"],
             distribution_class=TanhNormal,
             return_log_prob=True,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     value_head = Mod(
@@ -372,10 +448,25 @@ def test_redq_deprec_speed(
     loss = REDQLoss_deprecated(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
-def test_td3_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64):
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+def test_td3_speed(
+    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -417,14 +508,23 @@ def test_td3_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
             in_keys=["loc", "scale"],
             out_keys=["action"],
             distribution_class=TanhNormal,
+            distribution_kwargs={"safe_tanh": False},
             return_log_prob=True,
+            default_interaction_type=InteractionType.DETERMINISTIC,
         ),
     )
     value_head = Mod(
         value, in_keys=["hidden", "action"], out_keys=["state_action_value"]
     )
     value = Seq(common, value_head)
-    value(actor(td))
+    value(actor(td.clone()))
+    if compile:
+        actor_c = torch.compile(actor.get_dist, fullgraph=True)
+        actor_c(td)
+        actor_c = torch.compile(actor, fullgraph=True)
+        actor_c(td)
+        value_c = torch.compile(value, fullgraph=True)
+        value_c(td)
 
     loss = TD3Loss(
         actor,
@@ -433,10 +533,25 @@ def test_td3_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
     )
 
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark.pedantic(loss, args=(td,), rounds=100, iterations=10)
 
 
-def test_cql_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64):
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+def test_cql_speed(
+    benchmark, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -475,7 +590,10 @@ def test_cql_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
         Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
         Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
         ProbMod(
-            in_keys=["loc", "scale"], out_keys=["action"], distribution_class=TanhNormal
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     value_head = Mod(
@@ -487,12 +605,25 @@ def test_cql_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
     loss = CQLLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_a2c_speed(
-    benchmark, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
+    benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common_net = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -533,7 +664,10 @@ def test_a2c_speed(
         Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
         Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
         ProbMod(
-            in_keys=["loc", "scale"], out_keys=["action"], distribution_class=TanhNormal
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     critic = Seq(common, Mod(value_net, in_keys=["hidden"], out_keys=["state_value"]))
@@ -544,12 +678,25 @@ def test_a2c_speed(
     advantage = GAE(value_network=critic, gamma=0.99, lmbda=0.95, shifted=True)
     advantage(td)
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_ppo_speed(
-    benchmark, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
+    benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common_net = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -590,7 +737,10 @@ def test_ppo_speed(
         Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
         Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
         ProbMod(
-            in_keys=["loc", "scale"], out_keys=["action"], distribution_class=TanhNormal
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     critic = Seq(common, Mod(value_net, in_keys=["hidden"], out_keys=["state_value"]))
@@ -601,12 +751,25 @@ def test_ppo_speed(
     advantage = GAE(value_network=critic, gamma=0.99, lmbda=0.95, shifted=True)
     advantage(td)
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_reinforce_speed(
-    benchmark, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
+    benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common_net = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -647,7 +810,10 @@ def test_reinforce_speed(
         Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
         Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
         ProbMod(
-            in_keys=["loc", "scale"], out_keys=["action"], distribution_class=TanhNormal
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     critic = Seq(common, Mod(value_net, in_keys=["hidden"], out_keys=["state_value"]))
@@ -658,12 +824,25 @@ def test_reinforce_speed(
     advantage = GAE(value_network=critic, gamma=0.99, lmbda=0.95, shifted=True)
     advantage(td)
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_iql_speed(
-    benchmark, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
+    benchmark, compile, n_obs=8, n_act=4, n_hidden=64, ncells=128, batch=128, T=10
 ):
+    if compile:
+        torch._dynamo.reset_code_caches()
     common_net = MLP(
         num_cells=ncells,
         in_features=n_obs,
@@ -710,7 +889,10 @@ def test_iql_speed(
         Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
         Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
         ProbMod(
-            in_keys=["loc", "scale"], out_keys=["action"], distribution_class=TanhNormal
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"safe_tanh": False},
         ),
     )
     value = Seq(common, Mod(value_net, in_keys=["hidden"], out_keys=["state_value"]))
@@ -723,6 +905,16 @@ def test_iql_speed(
 
     loss = IQLLoss(actor_network=actor, value_network=value, qvalue_network=qvalue)
     loss(td)
+
+    if compile:
+        if isinstance(compile, str):
+            loss = torch.compile(loss, mode=compile, fullgraph=True)
+        else:
+            loss = torch.compile(loss, fullgraph=True)
+
+        loss(td)
+        loss(td)
+
     benchmark(loss, td)
 
 
