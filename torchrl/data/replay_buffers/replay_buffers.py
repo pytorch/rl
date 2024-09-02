@@ -652,7 +652,6 @@ class ReplayBuffer:
         with self._replay_lock, self._write_lock:
             self._sampler.update_priority(index, priority, storage=self.storage)
 
-    @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
         with self._replay_lock:
             index, info = self._sampler.sample(self._storage, batch_size)
@@ -675,6 +674,7 @@ class ReplayBuffer:
         self._sampler._empty()
         self._storage._empty()
 
+    @pin_memory_output
     def sample(self, batch_size: int | None = None, return_info: bool = False) -> Any:
         """Samples a batch of data from the replay buffer.
 
@@ -1262,6 +1262,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 index = index[..., 0]
         return self.update_priority(index, priority)
 
+    @pin_memory_output
     def sample(
         self,
         batch_size: int | None = None,
