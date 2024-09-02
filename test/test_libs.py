@@ -107,6 +107,7 @@ from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
+from torchrl.envs.libs.openspiel import _has_pyspiel, OpenSpielEnv, OpenSpielWrapper
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
@@ -3800,6 +3801,132 @@ class TestSmacv2:
         for _ in collector:
             break
         collector.shutdown()
+
+
+# List of OpenSpiel games to test
+# TODO: Some of the games in `OpenSpielWrapper.available_envs` raise errors for
+# a few different reasons, mostly because we do not support chance nodes yet. So
+# we cannot run tests on all of them yet.
+_openspiel_games = [
+    # ----------------
+    # Sequential games
+    # 1-player
+    "morpion_solitaire",
+    # 2-player
+    "amazons",
+    "battleship",
+    "breakthrough",
+    "checkers",
+    "chess",
+    "cliff_walking",
+    "clobber",
+    "connect_four",
+    "cursor_go",
+    "dark_chess",
+    "dark_hex",
+    "dark_hex_ir",
+    "dots_and_boxes",
+    "go",
+    "havannah",
+    "hex",
+    "kriegspiel",
+    "mancala",
+    "nim",
+    "nine_mens_morris",
+    "othello",
+    "oware",
+    "pentago",
+    "phantom_go",
+    "phantom_ttt",
+    "phantom_ttt_ir",
+    "sheriff",
+    "tic_tac_toe",
+    "twixt",
+    "ultimate_tic_tac_toe",
+    "y",
+    # --------------
+    # Parallel games
+    # 2-player
+    "blotto",
+    "matrix_bos",
+    "matrix_brps",
+    "matrix_cd",
+    "matrix_coordination",
+    "matrix_mp",
+    "matrix_pd",
+    "matrix_rps",
+    "matrix_rpsw",
+    "matrix_sh",
+    "matrix_shapleys_game",
+    "oshi_zumo",
+    # 3-player
+    "matching_pennies_3p",
+]
+
+
+@pytest.mark.skipif(not _has_pyspiel, reason="open_spiel not found")
+class TestOpenSpiel:
+    @pytest.mark.parametrize("game_string", _openspiel_games)
+    @pytest.mark.parametrize("return_state", [False, True])
+    @pytest.mark.parametrize("categorical_actions", [False, True])
+    def test_all_envs(self, game_string, return_state, categorical_actions):
+        env = OpenSpielEnv(
+            game_string,
+            categorical_actions=categorical_actions,
+            return_state=return_state,
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("game_string", _openspiel_games)
+    @pytest.mark.parametrize("return_state", [False, True])
+    @pytest.mark.parametrize("categorical_actions", [False, True])
+    def test_wrapper(self, game_string, return_state, categorical_actions):
+        import pyspiel
+
+        base_env = pyspiel.load_game(game_string).new_initial_state()
+        env_torchrl = OpenSpielWrapper(
+            base_env, categorical_actions=categorical_actions, return_state=return_state
+        )
+        env_torchrl.rollout(max_steps=5)
+
+    @pytest.mark.parametrize("game_string", _openspiel_games)
+    @pytest.mark.parametrize("return_state", [False, True])
+    @pytest.mark.parametrize("categorical_actions", [False, True])
+    def test_reset_state(self, game_string, return_state, categorical_actions):
+        env = OpenSpielEnv(
+            game_string,
+            categorical_actions=categorical_actions,
+            return_state=return_state,
+        )
+        td = env.reset()
+        td_init = td.clone()
+
+        # Perform an action
+        td = env.step(env.full_action_spec.rand())
+
+        # Save the current td for reset
+        td_reset = td["next"].clone()
+
+        # Perform a second action
+        td = env.step(env.full_action_spec.rand())
+
+        # Resetting to a specific state can only happen if `return_state` is
+        # enabled. Otherwise, it is reset to the initial state.
+        if return_state:
+            # Check that the state was reset to the specified state
+            td = env.reset(td_reset)
+            assert (td == td_reset).all()
+        else:
+            # Check that the state was reset to the initial state
+            td = env.reset()
+            assert (td == td_init).all()
+
+    def test_chance_not_implemented(self):
+        with pytest.raises(
+            NotImplementedError,
+            match="not yet supported",
+        ):
+            OpenSpielEnv("bridge")
 
 
 @pytest.mark.skipif(not _has_meltingpot, reason="Meltingpot not found")
