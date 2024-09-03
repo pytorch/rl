@@ -94,6 +94,17 @@ def _vmas_to_torchrl_spec_transform(
                 device=device,
             )
         )
+    elif isinstance(spec, gym_spaces.Dict):
+        spec_out = {}
+        for k in spec.keys():
+            key = k
+            spec_out[key] = _vmas_to_torchrl_spec_transform(
+                spec[k],
+                device=device,
+                categorical_action_encoding=categorical_action_encoding,
+            )
+        # the batch-size must be set later
+        return Composite(spec_out, device=device)
     else:
         raise NotImplementedError(
             f"spec of type {type(spec).__name__} is currently unaccounted for vmas"
