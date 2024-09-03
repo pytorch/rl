@@ -29,6 +29,7 @@ from torchrl.data.tensor_specs import (
     Composite,
     MultiCategorical,
     MultiOneHot,
+    NonTensor,
     OneHot,
     TensorSpec,
     Unbounded,
@@ -55,6 +56,14 @@ if not _has_gym:
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 _has_sb3 = importlib.util.find_spec("stable_baselines3") is not None
+_has_minigrid = importlib.util.find_spec("minigrid") is not None
+
+
+def _minigrid_lib():
+    assert _has_minigrid, "minigrid not found"
+    import minigrid
+
+    return minigrid
 
 
 class set_gym_backend(_DecoratorContextManager):
@@ -369,6 +378,8 @@ def _gym_to_torchrl_spec_transform(
             categorical_action_encoding=categorical_action_encoding,
             remap_state_to_observation=remap_state_to_observation,
         )
+    elif _has_minigrid and isinstance(spec, _minigrid_lib().core.mission.MissionSpace):
+        return NonTensor((), device=device)
     else:
         raise NotImplementedError(
             f"spec of type {type(spec).__name__} is currently unaccounted for"
@@ -766,14 +777,20 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
         if env is not None:
-            if "EnvCompatibility" in str(
-                env
-            ):  # a hacky way of knowing if EnvCompatibility is part of the wrappers of env
-                raise ValueError(
-                    "GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility wrapper. "
-                    "If this feature is needed, detail your use case in an issue of "
-                    "https://github.com/pytorch/rl/issues."
-                )
+            try:
+                env_str = str(env)
+            except TypeError:
+                # MiniGrid has a bug where the __str__ method fails
+                pass
+            else:
+                if (
+                    "EnvCompatibility" in env_str
+                ):  # a hacky way of knowing if EnvCompatibility is part of the wrappers of env
+                    raise ValueError(
+                        "GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility wrapper. "
+                        "If this feature is needed, detail your use case in an issue of "
+                        "https://github.com/pytorch/rl/issues."
+                    )
             libname = self.get_library_name(env)
             with set_gym_backend(libname):
                 kwargs["env"] = env
