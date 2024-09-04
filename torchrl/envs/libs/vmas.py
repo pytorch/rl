@@ -96,10 +96,9 @@ def _vmas_to_torchrl_spec_transform(
         )
     elif isinstance(spec, gym_spaces.Dict):
         spec_out = {}
-        for k in spec.keys():
-            key = k
+        for key in spec.keys():
             spec_out[key] = _vmas_to_torchrl_spec_transform(
-                spec[k],
+                spec[key],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,
             )
