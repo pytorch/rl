@@ -2823,10 +2823,9 @@ def _minari_selected_datasets():
 
     torch.manual_seed(0)
 
-    total_keys = sorted(minari.list_remote_datasets(
-        latest_version=True,
-        compatible_minari_version=True
-    ))
+    total_keys = sorted(
+        minari.list_remote_datasets(latest_version=True, compatible_minari_version=True)
+    )
     indices = torch.randperm(len(total_keys))[:20]
     keys = [total_keys[idx] for idx in indices]
 
