@@ -2269,9 +2269,10 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             dest_device = torch.device(dest)
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
+        self.space.device = dest_device
         return Bounded(
-            low=self.space.low.to(dest),
-            high=self.space.high.to(dest),
+            low=self.space.low,
+            high=self.space.high,
             shape=self.shape,
             device=dest_device,
             dtype=dest_dtype,
