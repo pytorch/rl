@@ -32,8 +32,6 @@ jobs:
       matrix:
         include:
           - repository: pytorch/rl
-            pre-script: .github/scripts/td_script.sh
-            env-script: .github/scripts/version_script.bat
             post-script: "python packaging/wheel/relocate.py"
             smoke-test-script: test/smoke_test.py
             package-name: torchrl
@@ -45,9 +43,8 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
-      pre-script: ${{ matrix.pre-script }}
-      env-script: ${{ matrix.env-script }}
-      post-script: ${{ matrix.post-script }}
       package-name: ${{ matrix.package-name }}
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
+      pre-script: .github/scripts/td_script.sh
+      env-script: .github/scripts/version_script.bat

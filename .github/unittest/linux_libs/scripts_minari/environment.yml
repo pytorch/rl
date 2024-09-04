@@ -17,4 +17,4 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - minari[gcs]
+    - minari
