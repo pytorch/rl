@@ -2823,34 +2823,12 @@ def _minari_selected_datasets():
 
     torch.manual_seed(0)
 
-    # We rely on sorting the keys as v0 < v1 but if the version is greater than 9 this won't work
-    total_keys = sorted(minari.list_remote_datasets())
-    assert not any(
-        key[-2:] == "10" for key in total_keys
-    ), "You should adapt the Minari test scripts as some dataset have a version >= 10 and sorting will fail."
-    total_keys_splits = [key.split("-") for key in total_keys]
+    total_keys = sorted(minari.list_remote_datasets(
+        latest_version=True,
+        compatible_minari_version=True
+    ))
     indices = torch.randperm(len(total_keys))[:20]
     keys = [total_keys[idx] for idx in indices]
-    keys = [
-        key
-        for key in keys
-        if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
-    ]
-
-    def _replace_with_max(key):
-        key_split = key.split("-")
-        same_entries = (
-            torch.tensor(
-                [total_key[:-1] == key_split[:-1] for total_key in total_keys_splits]
-            )
-            .nonzero()
-            .squeeze()
-            .tolist()
-        )
-        last_same_entry = same_entries[-1]
-        return total_keys[last_same_entry]
-
-    keys = [_replace_with_max(key) for key in keys]
 
     assert len(keys) > 5, keys
     _MINARI_DATASETS += keys
