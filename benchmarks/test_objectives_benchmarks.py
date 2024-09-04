@@ -147,7 +147,20 @@ def test_gae_speed(benchmark, gae_fn, gamma_tensor, batches, timesteps):
     )
 
 
-@pytest.mark.parametrize("backward", [False, True])
+def _maybe_compile(fn, compile, td, fullgraph=True, warmup=3):
+    if compile:
+        if isinstance(compile, str):
+            fn = torch.compile(fn, mode=compile, fullgraph=fullgraph)
+        else:
+            fn = torch.compile(fn, fullgraph=fullgraph)
+
+        for _ in range(warmup):
+            fn(td)
+
+    return fn
+
+
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_dqn_speed(
     benchmark, backward, compile, n_obs=8, n_act=4, depth=3, ncells=128, batch=128
@@ -172,14 +185,7 @@ def test_dqn_speed(
     )
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -189,12 +195,19 @@ def test_dqn_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark(loss_and_bw, td)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_ddpg_speed(
     benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
@@ -243,14 +256,7 @@ def test_ddpg_speed(
 
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -260,12 +266,19 @@ def test_ddpg_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark(loss_and_bw, td)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_sac_speed(
     benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
@@ -326,14 +339,7 @@ def test_sac_speed(
 
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -343,12 +349,19 @@ def test_sac_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark(loss_and_bw, td)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_redq_speed(
     benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
@@ -409,15 +422,7 @@ def test_redq_speed(
     loss = REDQLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
-
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -428,12 +433,21 @@ def test_redq_speed(
             )
             totalloss.backward()
 
-        benchmark(loss_and_bw, td)
+        loss_and_bw(td)
+
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_redq_deprec_speed(
     benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
@@ -495,14 +509,7 @@ def test_redq_deprec_speed(
 
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -512,12 +519,19 @@ def test_redq_deprec_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark(loss_and_bw, td)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_td3_speed(
     benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
@@ -575,13 +589,6 @@ def test_td3_speed(
     )
     value = Seq(common, value_head)
     value(actor(td.clone()))
-    if compile:
-        actor_c = torch.compile(actor.get_dist, fullgraph=True)
-        actor_c(td)
-        actor_c = torch.compile(actor, fullgraph=True)
-        actor_c(td)
-        value_c = torch.compile(value, fullgraph=True)
-        value_c(td)
 
     loss = TD3Loss(
         actor,
@@ -591,14 +598,7 @@ def test_td3_speed(
 
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -608,12 +608,19 @@ def test_td3_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark.pedantic(loss_and_bw(), args=(td,), rounds=100, iterations=10)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark.pedantic(loss, args=(td,), rounds=100, iterations=10)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_cql_speed(
     benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
@@ -668,20 +675,13 @@ def test_cql_speed(
         value, in_keys=["hidden", "action"], out_keys=["state_action_value"]
     )
     value = Seq(common, value_head)
-    value(actor(td))
+    value(actor(td.copy()))
 
     loss = CQLLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
 
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -691,12 +691,19 @@ def test_cql_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark(loss_and_bw, td)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_a2c_speed(
     benchmark,
@@ -766,14 +773,7 @@ def test_a2c_speed(
     advantage(td)
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -783,12 +783,19 @@ def test_a2c_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark(loss_and_bw, td)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_ppo_speed(
     benchmark,
@@ -858,14 +865,7 @@ def test_ppo_speed(
     advantage(td)
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -875,12 +875,19 @@ def test_ppo_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark(loss_and_bw, td)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_reinforce_speed(
     benchmark,
@@ -950,14 +957,7 @@ def test_reinforce_speed(
     advantage(td)
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -967,12 +967,19 @@ def test_reinforce_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark(loss_and_bw, td)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 
 
-@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
 def test_iql_speed(
     benchmark,
@@ -1050,14 +1057,7 @@ def test_iql_speed(
     loss = IQLLoss(actor_network=actor, value_network=value, qvalue_network=qvalue)
     loss(td)
 
-    if compile:
-        if isinstance(compile, str):
-            loss = torch.compile(loss, mode=compile, fullgraph=True)
-        else:
-            loss = torch.compile(loss, fullgraph=True)
-
-        loss(td)
-        loss(td)
+    loss = _maybe_compile(loss, compile, td)
 
     if backward:
 
@@ -1067,7 +1067,14 @@ def test_iql_speed(
                 [val for key, val in losses.items() if key.startswith("loss")]
             ).backward()
 
-        benchmark(loss_and_bw, td)
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
     else:
         benchmark(loss, td)
 

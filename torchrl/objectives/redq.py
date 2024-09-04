@@ -12,7 +12,7 @@ from typing import List, Union
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
-from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
 
@@ -326,7 +326,11 @@ class REDQLoss(LossModule):
         else:
             self.register_parameter(
                 "log_alpha",
-                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
+                torch.nn.Parameter(
+                    torch.tensor(
+                        math.log(alpha_init), device=device, requires_grad=True
+                    )
+                ),
             )
 
         self._target_entropy = target_entropy
@@ -401,10 +405,8 @@ class REDQLoss(LossModule):
 
     @property
     def alpha(self):
-        self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
-            alpha = self.log_alpha.exp()
-        return alpha
+            return self.log_alpha.clamp(self.min_log_alpha, self.max_log_alpha).exp()
 
     def _set_in_keys(self):
         keys = [
@@ -448,11 +450,10 @@ class REDQLoss(LossModule):
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
-        tensordict_select = tensordict.clone(False).select(
+        tensordict_select = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
         )
 
-        # TODO: figure out how to make this work with compile
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
         ].sort()[0]
@@ -469,9 +470,7 @@ class REDQLoss(LossModule):
             *self.actor_network.in_keys, strict=False
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
-        # tensordict_actor = tensordict_actor.contiguous()
 
-        # with nullcontext():
         with set_exploration_type(ExplorationType.RANDOM):
             if self.gSDE:
                 tensordict_actor.set(
@@ -483,19 +482,12 @@ class REDQLoss(LossModule):
                 tensordict_actor,
                 actor_params,
             )
-            if isinstance(self.actor_network, TensorDictSequential):
-                sample_key = self.tensor_keys.action
-                tensordict_actor_dist = self.actor_network.build_dist_from_params(
-                    td_params
-                )
-            else:
-                sample_key = self.tensor_keys.action
-                tensordict_actor_dist = self.actor_network.build_dist_from_params(
-                    td_params
-                )
+            sample_key = self.tensor_keys.action
+            sample_key_lp = self.tensor_keys.sample_log_prob
+            tensordict_actor_dist = self.actor_network.build_dist_from_params(td_params)
             tensordict_actor.set(sample_key, tensordict_actor_dist.rsample())
             tensordict_actor.set(
-                self.tensor_keys.sample_log_prob,
+                sample_key_lp,
                 tensordict_actor_dist.log_prob(tensordict_actor.get(sample_key)),
             )
 
@@ -606,11 +598,21 @@ class REDQLoss(LossModule):
             )
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha.exp() * (log_pi.detach() + self.target_entropy)
+            alpha_loss = -self._safe_log_alpha.exp() * (
+                log_pi.detach() + self.target_entropy
+            )
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
+
+    @property
+    def _safe_log_alpha(self):
+        log_alpha = self.log_alpha
+        with torch.no_grad():
+            log_alpha_clamp = log_alpha.clamp(self.min_log_alpha, self.max_log_alpha)
+            log_alpha_det = log_alpha.detach()
+        return log_alpha - log_alpha_det + log_alpha_clamp
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
