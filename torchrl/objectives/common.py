@@ -16,6 +16,7 @@ import torch.compiler
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
+from tensordict.utils import Buffer
 from torch import nn
 from torch.nn import Parameter
 from torchrl._utils import RL_WARNINGS
@@ -613,11 +614,10 @@ class _make_target_param:
         self.clone = clone
 
     def __call__(self, x):
+        x = x.data.clone() if self.clone else x.data
         if isinstance(x, nn.Parameter):
-            return nn.Parameter(
-                x.data.clone() if self.clone else x.data, requires_grad=False
-            )
-        return x.data.clone() if self.clone else x.data
+            return Buffer(x)
+        return x
 
 
 def add_ramdom_module(module):
