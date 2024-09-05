@@ -98,12 +98,11 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             self._step_env = step_env
             import jax
 
-            @torch._dynamo.disable()
             @jax.jit
             def step(handle, action):
                 return step_env(handle, action)
 
-            self._step_jax = lambda _handle, _action: step(_hanlde, jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(_action)))
+            self._step_jax = torch._dynamo.disable(lambda _handle, _action: step(_handle, jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(_action))))
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
