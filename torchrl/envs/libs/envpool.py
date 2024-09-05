@@ -98,6 +98,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             self._step_env = step_env
             import jax
 
+            @torch._dynamo.disable()
             @jax.jit
             def step(handle, action):
                 return step_env(handle, action)
@@ -151,8 +152,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
         if self.xla:
-            with torch._dynamo.disable():
-                self._env_handle, step_output = self._step_jax(
+            self._env_handle, step_output = self._step_jax(
                     self._env_handle,
                     jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(action)),
                 )
