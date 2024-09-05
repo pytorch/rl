@@ -103,7 +103,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             def step(handle, action):
                 return step_env(handle, action)
 
-            self._step_jax = step
+            self._step_jax = lambda _handle, _action: step(_hanlde, jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(_action)))
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -154,7 +154,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if self.xla:
             self._env_handle, step_output = self._step_jax(
                     self._env_handle,
-                    jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(action)),
+                    action,
                 )
         else:
             # Action needs to be moved to CPU and converted to numpy before being passed to envpool
