@@ -21,6 +21,15 @@ from torchrl.envs.utils import _classproperty
 _has_envpool = importlib.util.find_spec("envpool") is not None
 
 
+@torch._dynamo.disable()
+def _from_dlpack(jax_array):
+    return torch.from_dlpack(jax.dlpack.to_dlpack(jax_array))
+
+@torch._dynamo.disable()
+def _to_dlpack(tensor):
+    return torch.to_dlpack(jax.dlpack.from_dlpack(tensor))
+
+
 class MultiThreadedEnvWrapper(_EnvWrapper):
     """Wrapper for envpool-based multithreaded environments.
 
@@ -102,7 +111,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             def step(handle, action):
                 return step_env(handle, action)
 
-            self._step_jax = torch._dynamo.disable(lambda _handle, _action: step(_handle, jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(_action))))
+            self._step_jax = step
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -153,7 +162,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if self.xla:
             self._env_handle, step_output = self._step_jax(
                     self._env_handle,
-                    action,
+                    _to_dlpack(action),
                 )
         else:
             # Action needs to be moved to CPU and converted to numpy before being passed to envpool
@@ -272,6 +281,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         out = envpool_output
         if len(out) == 4:
             obs, reward, done, info = out
+            done = self.to_tensor(done)
             terminated = done
             truncated = info.get("TimeLimit.truncated", done * 0)
         elif len(out) == 5:
@@ -283,9 +293,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             )
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
         reward_and_done = {self.reward_key: self.to_tensor(reward)}
-        reward_and_done["done"] = self.to_tensor(done)
-        reward_and_done["terminated"] = self.to_tensor(terminated)
-        reward_and_done["truncated"] = self.to_tensor(truncated)
+        reward_and_done["done"] = done
+        reward_and_done["terminated"] = terminated
+        reward_and_done["truncated"] = truncated
         obs.update(reward_and_done)
         self.obs = tensordict_out = TensorDict(
             obs,
@@ -299,7 +309,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if isinstance(x, np.ndarray):
             return torch.from_numpy(x)
         else:
-            return torch.from_dlpack(jax.dlpack.to_dlpack(x))
+            return _from_dlpack(x)
 
     def _treevalue_or_numpy_to_tensor_or_dict(
         self, x: Union["treevalue.TreeValue", np.ndarray]  # noqa: F821
