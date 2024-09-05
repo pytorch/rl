@@ -136,6 +136,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             reset_workers = None
         if reset_workers is not None:
             d = tensordict.get("done").clone().fill_(0)
+            tensordict.set("_reset", d)
             return tensordict.exclude("_reset").set("done", d).set("truncated", d).set("terminated", d)
         else:
             reset_data = self._env.reset()
