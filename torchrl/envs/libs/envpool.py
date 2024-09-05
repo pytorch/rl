@@ -23,11 +23,13 @@ _has_envpool = importlib.util.find_spec("envpool") is not None
 
 @torch._dynamo.disable()
 def _from_dlpack(jax_array):
-    return torch.from_dlpack(jax.dlpack.to_dlpack(jax_array, copy=False))
+    # return torch.from_dlpack(jax.dlpack.to_dlpack(jax_array, copy=False))
+    return torch.from_dlpack(jax_array)
 
 @torch._dynamo.disable()
 def _to_dlpack(tensor):
-    return jax.dlpack.from_dlpack(torch.to_dlpack(tensor))
+    # return jax.dlpack.from_dlpack(torch.to_dlpack(tensor))
+    return jax.dlpack.from_dlpack(tensor)
 
 
 class MultiThreadedEnvWrapper(_EnvWrapper):
