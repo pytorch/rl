@@ -73,6 +73,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def __init__(
         self,
         env: Optional["envpool.python.envpool.EnvPoolMixin"] = None,  # noqa: F821
+        xla: bool=False,
         **kwargs,
     ):
         if not _has_envpool:
@@ -89,6 +90,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         # Buffer to keep the latest observation for each worker
         # It's a TensorDict when the observation consists of several variables, e.g. "position" and "velocity"
         self.obs: Union[torch.tensor, TensorDict] = self.observation_spec.zero()
+        self.xla = xla
+        if xla:
+            handle, recv, send, step_env = self._env.xla()
+            self._env_handle = handle
+            self._step_env = step_env
+
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -133,9 +140,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     @torch.no_grad()
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
-        # Action needs to be moved to CPU and converted to numpy before being passed to envpool
-        action = action.to(torch.device("cpu"))
-        step_output = self._env.step(action.numpy())
+        if self.xla:
+            self._env_handle, step_output = self._step_env(self._env_handle, action)
+        else:
+            # Action needs to be moved to CPU and converted to numpy before being passed to envpool
+            action = action.to(torch.device("cpu"))
+            step_output = self._env.step(action.numpy())
         tensordict_out = self._transform_step_output(step_output)
         return tensordict_out
 
