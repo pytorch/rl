@@ -281,9 +281,10 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         out = envpool_output
         if len(out) == 4:
             obs, reward, done, info = out
+            reward = self.to_tensor(reward)
             done = self.to_tensor(done)
             terminated = done
-            truncated = info.get("TimeLimit.truncated", done * 0)
+            truncated = self.to_tensor(info.get("TimeLimit.truncated", done * 0))
         elif len(out) == 5:
             obs, reward, terminated, truncated, info = out
             done = terminated | truncated
@@ -292,7 +293,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
                 f"The output of step was had {len(out)} elements, but only 4 or 5 are supported."
             )
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
-        reward_and_done = {self.reward_key: self.to_tensor(reward)}
+        reward_and_done = {self.reward_key: reward}
         reward_and_done["done"] = done
         reward_and_done["terminated"] = terminated
         reward_and_done["truncated"] = truncated
