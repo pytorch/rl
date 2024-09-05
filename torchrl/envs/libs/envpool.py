@@ -129,6 +129,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _init_env(self) -> Optional[int]:
         pass
 
+    def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
+
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         if tensordict is not None:
             reset_workers = tensordict.get("_reset", None)
