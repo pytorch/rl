@@ -27,7 +27,7 @@ def _from_dlpack(jax_array):
 
 @torch._dynamo.disable()
 def _to_dlpack(tensor):
-    return torch.to_dlpack(jax.dlpack.from_dlpack(tensor))
+    return jax.dlpack.from_dlpack(torch.to_dlpack(tensor))
 
 
 class MultiThreadedEnvWrapper(_EnvWrapper):
