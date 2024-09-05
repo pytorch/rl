@@ -138,9 +138,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         else:
             reset_workers = None
         if reset_workers is not None:
-            d = tensordict.get("done").clone().fill_(0)
-            tensordict.set("_reset", d)
-            return tensordict.exclude("_reset").set("done", d).set("truncated", d).set("terminated", d)
+            raise RuntimeError("envpool is auto-resetting.")
         else:
             reset_data = self._env.reset()
         tensordict_out = self._transform_reset_output(reset_data, reset_workers)
