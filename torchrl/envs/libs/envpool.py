@@ -111,7 +111,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             def step(handle, action):
                 return step_env(handle, action)
 
-            self._step_jax = step
+            self._step_jax = torch._dynamo.disable()(step)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
