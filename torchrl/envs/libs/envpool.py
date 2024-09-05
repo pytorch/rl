@@ -161,7 +161,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         action = tensordict.get(self.action_key)
         if self.xla:
             print(action.device)
-            print(_to_dlpack(action.device_buffer.device()))
+            print(_to_dlpack(action).device_buffer.device())
             self._env_handle, step_output = self._step_jax(
                     self._env_handle,
                     _to_dlpack(action),
