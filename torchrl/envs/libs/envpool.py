@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 from typing import Any, Dict, Optional, Tuple, Union
+
 import jax.dlpack
 import numpy as np
 import torch
@@ -73,7 +74,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def __init__(
         self,
         env: Optional["envpool.python.envpool.EnvPoolMixin"] = None,  # noqa: F821
-        xla: bool=False,
+        xla: bool = False,
         **kwargs,
     ):
         if not _has_envpool:
@@ -96,11 +97,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             self._env_handle = handle
             self._step_env = step_env
             import jax
+
             @jax.jit
             def step(handle, action):
                 return step_env(handle, action)
-            self._step_jax = step
 
+            self._step_jax = step
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -146,16 +148,14 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out
 
     @torch.no_grad()
-    @torch._dynamo.disable()
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
         if self.xla:
-            self._env_handle, step_output = self._step_jax(
-                self._env_handle,
-                jax.dlpack.from_dlpack(
-                    torch.utils.dlpack.to_dlpack(
-                        action
-                    )))
+            with torch._dynamo.disable():
+                self._env_handle, step_output = self._step_jax(
+                    self._env_handle,
+                    jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(action)),
+                )
         else:
             # Action needs to be moved to CPU and converted to numpy before being passed to envpool
             action = action.to(torch.device("cpu"))
