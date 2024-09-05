@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import importlib
 from typing import Any, Dict, Optional, Tuple, Union
-
+import jax.dlpack
 import numpy as np
 import torch
 
@@ -95,6 +95,11 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             handle, recv, send, step_env = self._env.xla()
             self._env_handle = handle
             self._step_env = step_env
+            import jax
+            @jax.jit
+            def step(handle, action):
+                return step_env(handle, action)
+            self._step_jax = step
 
 
     def _check_kwargs(self, kwargs: Dict):
@@ -130,7 +135,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         else:
             reset_workers = None
         if reset_workers is not None:
-            reset_data = self._env.reset(np.where(reset_workers.cpu().numpy())[0])
+            d = tensordict.get("done").clone().fill_(0)
+            return tensordict.exclude("_reset").set("done", d).set("truncated", d).set("terminated", d)
         else:
             reset_data = self._env.reset()
         tensordict_out = self._transform_reset_output(reset_data, reset_workers)
@@ -138,10 +144,11 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out
 
     @torch.no_grad()
+    @torch._dynamo.disable()
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
         if self.xla:
-            self._env_handle, step_output = self._step_env(self._env_handle, action)
+            self._env_handle, step_output = self._step_jax(self._env_handle, jax.dlpack.from_dlpack(torch.utils.dlpack.to_dlpack(action.to(torch.int32))))
         else:
             # Action needs to be moved to CPU and converted to numpy before being passed to envpool
             action = action.to(torch.device("cpu"))
@@ -269,10 +276,10 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
                 f"The output of step was had {len(out)} elements, but only 4 or 5 are supported."
             )
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
-        reward_and_done = {self.reward_key: torch.as_tensor(reward)}
-        reward_and_done["done"] = done
-        reward_and_done["terminated"] = terminated
-        reward_and_done["truncated"] = truncated
+        reward_and_done = {self.reward_key: self.to_tensor(reward)}
+        reward_and_done["done"] = self.to_tensor(done)
+        reward_and_done["terminated"] = self.to_tensor(terminated)
+        reward_and_done["truncated"] = self.to_tensor(truncated)
         obs.update(reward_and_done)
         self.obs = tensordict_out = TensorDict(
             obs,
@@ -280,6 +287,13 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             device=self.device,
         )
         return tensordict_out
+
+    @staticmethod
+    def to_tensor(x):
+        if isinstance(x, np.ndarray):
+            return torch.from_numpy(x)
+        else:
+            return torch.from_dlpack(jax.dlpack.to_dlpack(x))
 
     def _treevalue_or_numpy_to_tensor_or_dict(
         self, x: Union["treevalue.TreeValue", np.ndarray]  # noqa: F821
@@ -295,7 +309,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if isinstance(x, treevalue.TreeValue):
             ret = self._treevalue_to_dict(x)
         elif not isinstance(x, dict):
-            ret = {"observation": torch.as_tensor(x)}
+            ret = {"observation": self.to_tensor(x)}
         else:
             ret = x
         return ret
