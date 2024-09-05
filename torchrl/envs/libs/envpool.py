@@ -23,11 +23,11 @@ _has_envpool = importlib.util.find_spec("envpool") is not None
 
 @torch._dynamo.disable()
 def _from_dlpack(jax_array):
-    return torch.from_dlpack(jax.dlpack.to_dlpack(jax_array))
+    return torch.from_dlpack(jax.dlpack.to_dlpack(jax_array, copy=False))
 
 @torch._dynamo.disable()
 def _to_dlpack(tensor):
-    return jax.dlpack.from_dlpack(torch.to_dlpack(tensor))
+    return jax.dlpack.from_dlpack(torch.to_dlpack(tensor), copy=False)
 
 
 class MultiThreadedEnvWrapper(_EnvWrapper):
@@ -160,8 +160,6 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
         if self.xla:
-            print(action.device)
-            print(_to_dlpack(action).device_buffer.device())
             self._env_handle, step_output = self._step_jax(
                     self._env_handle,
                     _to_dlpack(action),
