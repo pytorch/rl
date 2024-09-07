@@ -10,12 +10,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import (
-    is_tensor_collection,
-    TensorDict,
-    TensorDictBase,
-    TensorDictParams,
-)
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -395,10 +390,7 @@ class A2CLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            log_prob = dist.log_prob(x)
-            if is_tensor_collection(log_prob):
-                log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
-            entropy = -log_prob.mean(0)
+            entropy = -dist.log_prob(x).mean(0)
         return entropy.unsqueeze(-1)
 
     def _log_probs(
@@ -420,8 +412,7 @@ class A2CLoss(LossModule):
         if isinstance(action, torch.Tensor):
             log_prob = dist.log_prob(action)
         else:
-            tensordict = dist.log_prob(tensordict)
-            log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
+            log_prob = dist.log_prob(tensordict)
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
 
