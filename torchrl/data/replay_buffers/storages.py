@@ -57,10 +57,15 @@ class Storage:
     _rng: torch.Generator | None = None
 
     def __init__(
-        self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
+        self,
+        max_size: int,
+        checkpointer: StorageCheckpointerBase | None = None,
+        compilable: bool = False,
     ) -> None:
         self.max_size = int(max_size)
         self.checkpointer = checkpointer
+        self._compilable = compilable
+        self._attached_entities_set = set()
 
     @property
     def checkpointer(self):
@@ -80,11 +85,11 @@ class Storage:
     def _attached_entities(self):
         # RBs that use a given instance of Storage should add
         # themselves to this set.
-        _attached_entities = self.__dict__.get("_attached_entities_set", None)
-        if _attached_entities is None:
-            _attached_entities = set()
-            self.__dict__["_attached_entities_set"] = _attached_entities
-        return _attached_entities
+        return getattr(self, "_attached_entities_set", None)
+
+    @torch._dynamo.assume_constant_result
+    def _attached_entities_iter(self):
+        return list(self._attached_entities)
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any, *, set_cursor: bool = True):
@@ -140,6 +145,7 @@ class Storage:
     def _empty(self):
         ...
 
+    @torch._dynamo.disable()
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
@@ -330,6 +336,9 @@ class TensorStorage(Storage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+        compilable (bool, optional): whether the storage is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
 
     Examples:
         >>> data = TensorDict({
@@ -389,6 +398,7 @@ class TensorStorage(Storage):
         *,
         device: torch.device = "cpu",
         ndim: int = 1,
+        compilable: bool = False,
     ):
         if not ((storage is None) ^ (max_size is None)):
             if storage is None:
@@ -404,7 +414,7 @@ class TensorStorage(Storage):
             else:
                 max_size = tree_flatten(storage)[0][0].shape[0]
         self.ndim = ndim
-        super().__init__(max_size)
+        super().__init__(max_size, compilable=compilable)
         self.initialized = storage is not None
         if self.initialized:
             self._len = max_size
@@ -423,16 +433,23 @@ class TensorStorage(Storage):
     @property
     def _len(self):
         _len_value = self.__dict__.get("_len_value", None)
+        if not self._compilable or not isinstance(self._len_value, int):
+            if _len_value is None:
+                _len_value = self._len_value = mp.Value("i", 0)
+            return _len_value.value
         if _len_value is None:
-            _len_value = self._len_value = mp.Value("i", 0)
-        return _len_value.value
+            _len_value = self._len_value = 0
+        return _len_value
 
     @_len.setter
     def _len(self, value):
         _len_value = self.__dict__.get("_len_value", None)
-        if _len_value is None:
-            _len_value = self._len_value = mp.Value("i", 0)
-        _len_value.value = value
+        if not self._compilable:
+            if _len_value is None:
+                _len_value = self._len_value = mp.Value("i", 0)
+            _len_value.value = value
+        else:
+            self._len_value = value
 
     @property
     def _total_shape(self):
@@ -1177,9 +1194,9 @@ class StorageEnsemble(Storage):
         for storage in self._storages:
             storage._rng = value
 
-    @property
-    def _attached_entities(self):
-        return set()
+    # @property
+    # def _attached_entities(self):
+    #     return set()
 
     def extend(self, value):
         raise RuntimeError

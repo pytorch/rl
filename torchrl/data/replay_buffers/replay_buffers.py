@@ -131,6 +131,9 @@ class ReplayBuffer:
             .. warning:: As of now, the generator has no effect on the transforms.
         shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
             Defaults to ``False``.
+        compilable (bool, optional): whether the writer is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -216,11 +219,20 @@ class ReplayBuffer:
         checkpointer: "StorageCheckpointerBase" | None = None,  # noqa: F821
         generator: torch.Generator | None = None,
         shared: bool = False,
+        compilable: bool = None,
     ) -> None:
         self._storage = storage if storage is not None else ListStorage(max_size=1_000)
         self._storage.attach(self)
+        if compilable is not None:
+            self._storage._compilable = compilable
+            self._storage._len = self._storage._len
+
         self._sampler = sampler if sampler is not None else RandomSampler()
-        self._writer = writer if writer is not None else RoundRobinWriter()
+        self._writer = (
+            writer
+            if writer is not None
+            else RoundRobinWriter(compilable=bool(compilable))
+        )
         self._writer.register_storage(self._storage)
 
         self._get_collate_fn(collate_fn)
@@ -601,7 +613,9 @@ class ReplayBuffer:
         return index
 
     def _extend(self, data: Sequence) -> torch.Tensor:
-        with self._replay_lock, self._write_lock:
+        is_compiling = torch.compiler.is_dynamo_compiling()
+        nc = contextlib.nullcontext()
+        with self._replay_lock if not is_compiling else nc, self._write_lock if not is_compiling else nc:
             if self.dim_extend > 0:
                 data = self._transpose(data)
             index = self._writer.extend(data)
@@ -654,7 +668,7 @@ class ReplayBuffer:
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
-        with self._replay_lock:
+        with self._replay_lock if not torch.compiler.is_dynamo_compiling() else contextlib.nullcontext():
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)
@@ -1753,6 +1767,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
         num_buffer_sampled: int | None = None,
         generator: torch.Generator | None = None,
         shared: bool = False,
+        compilable: bool = False,
         **kwargs,
     ):
 
