@@ -521,16 +521,16 @@ class CQLLoss(LossModule):
         else:
             tensordict_reshape = tensordict
 
-        td_device = tensordict_reshape.to(tensordict.device)
-
-        q_loss, metadata = self.q_loss(td_device)
-        cql_loss, cql_metadata = self.cql_loss(td_device)
+        q_loss, metadata = self.q_loss(tensordict_reshape)
+        cql_loss, cql_metadata = self.cql_loss(tensordict_reshape)
         if self.with_lagrange:
-            alpha_prime_loss, alpha_prime_metadata = self.alpha_prime_loss(td_device)
+            alpha_prime_loss, alpha_prime_metadata = self.alpha_prime_loss(
+                tensordict_reshape
+            )
             metadata.update(alpha_prime_metadata)
-        loss_actor_bc, bc_metadata = self.actor_bc_loss(td_device)
-        loss_actor, actor_metadata = self.actor_loss(td_device)
-        loss_alpha, alpha_metadata = self.alpha_loss(td_device)
+        loss_actor_bc, bc_metadata = self.actor_bc_loss(tensordict_reshape)
+        loss_actor, actor_metadata = self.actor_loss(tensordict_reshape)
+        loss_alpha, alpha_metadata = self.alpha_loss(actor_metadata)
         metadata.update(bc_metadata)
         metadata.update(cql_metadata)
         metadata.update(actor_metadata)
@@ -547,7 +547,7 @@ class CQLLoss(LossModule):
             "loss_cql": cql_loss,
             "loss_alpha": loss_alpha,
             "alpha": self._alpha,
-            "entropy": -td_device.get(self.tensor_keys.log_prob).mean().detach(),
+            "entropy": -actor_metadata.get(self.tensor_keys.log_prob).mean().detach(),
         }
         if self.with_lagrange:
             out["loss_alpha_prime"] = alpha_prime_loss.mean()
@@ -574,7 +574,7 @@ class CQLLoss(LossModule):
         metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
         return bc_actor_loss, metadata
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
@@ -585,6 +585,8 @@ class CQLLoss(LossModule):
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
+        if td_q is tensordict:
+            raise RuntimeError
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qvalue_networkN0(
             td_q,
@@ -599,12 +601,12 @@ class CQLLoss(LossModule):
                 f"Losses shape mismatch: {log_prob.shape} and {min_q_logprob.shape}"
             )
 
-        # write log_prob in tensordict for alpha loss
-        tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
+        metadata = {}
+        metadata[self.tensor_keys.log_prob] = log_prob.detach()
         actor_loss = self._alpha * log_prob - min_q_logprob
         actor_loss = _reduce(actor_loss, reduction=self.reduction)
 
-        return actor_loss, {}
+        return actor_loss, metadata
 
     def _get_policy_actions(self, data, actor_params, num_actions=10):
         batch_size = data.batch_size
@@ -667,7 +669,7 @@ class CQLLoss(LossModule):
 
             if self.max_q_backup:
                 next_tensordict, _ = self._get_policy_actions(
-                    tensordict.get("next"),
+                    tensordict.get("next").copy(),
                     actor_params,
                     num_actions=self.num_random,
                 )
@@ -691,10 +693,10 @@ class CQLLoss(LossModule):
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
-    def q_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def q_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
         target_value = self._get_value_v(
-            tensordict,
+            tensordict.copy(),
             self._alpha,
             self.actor_network_params,
             self.target_qvalue_network_params,
@@ -722,7 +724,7 @@ class CQLLoss(LossModule):
         metadata = {"td_error": td_error.detach()}
         return loss_qval, metadata
 
-    def cql_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def cql_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         pred_q1 = tensordict.get(self.tensor_keys.pred_q1)
         pred_q2 = tensordict.get(self.tensor_keys.pred_q2)
 
@@ -746,12 +748,12 @@ class CQLLoss(LossModule):
             .to(tensordict.device)
         )
         curr_actions_td, curr_log_pis = self._get_policy_actions(
-            tensordict,
+            tensordict.copy(),
             self.actor_network_params,
             num_actions=self.num_random,
         )
         new_curr_actions_td, new_log_pis = self._get_policy_actions(
-            tensordict.get("next"),
+            tensordict.get("next").copy(),
             self.actor_network_params,
             num_actions=self.num_random,
         )

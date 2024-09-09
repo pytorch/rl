@@ -12,9 +12,11 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
+import torch.compiler
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
+from tensordict.utils import Buffer
 from torch import nn
 from torch.nn import Parameter
 from torchrl._utils import RL_WARNINGS
@@ -25,7 +27,11 @@ from torchrl.objectives.value import ValueEstimatorBase
 
 
 def _updater_check_forward_prehook(module, *args, **kwargs):
-    if not all(module._has_update_associated.values()) and RL_WARNINGS:
+    if (
+        not all(module._has_update_associated.values())
+        and RL_WARNINGS
+        and not torch.compiler.is_dynamo_compiling()
+    ):
         warnings.warn(
             module.TARGET_NET_WARNING,
             category=UserWarning,
@@ -36,6 +42,7 @@ def _forward_wrapper(func):
     @functools.wraps(func)
     def new_forward(self, *args, **kwargs):
         with set_exploration_type(self.deterministic_sampling_mode):
+            # with nullcontext():
             return func(self, *args, **kwargs)
 
     return new_forward
@@ -44,7 +51,7 @@ def _forward_wrapper(func):
 class _LossMeta(abc.ABCMeta):
     def __init__(cls, name, bases, attr_dict):
         super().__init__(name, bases, attr_dict)
-        cls.forward = _forward_wrapper(cls.forward)
+        # cls.forward = _forward_wrapper(cls.forward)
 
 
 class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
@@ -217,7 +224,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
         """
         for key, value in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
+            if key not in self._AcceptedKeys.__dataclass_fields__:
                 raise ValueError(f"{key} is not an accepted tensordict key")
             if value is not None:
                 setattr(self.tensor_keys, key, value)
@@ -415,7 +422,11 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 # no target param, take detached data
                 params = getattr(self, item[7:])
                 params = params.data
-            elif not self._has_update_associated[item[7:-7]] and RL_WARNINGS:
+            elif (
+                not self._has_update_associated[item[7:-7]]
+                and RL_WARNINGS
+                and not torch.compiler.is_dynamo_compiling()
+            ):
                 # no updater associated
                 warnings.warn(
                     self.TARGET_NET_WARNING,
@@ -433,7 +444,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     def _erase_cache(self):
         for key in list(self.__dict__):
             if key.startswith("_cache"):
-                del self.__dict__[key]
+                delattr(self, key)
 
     def _networks(self) -> Iterator[nn.Module]:
         for item in self.__dir__():
@@ -603,11 +614,10 @@ class _make_target_param:
         self.clone = clone
 
     def __call__(self, x):
+        x = x.data.clone() if self.clone else x.data
         if isinstance(x, nn.Parameter):
-            return nn.Parameter(
-                x.data.clone() if self.clone else x.data, requires_grad=False
-            )
-        return x.data.clone() if self.clone else x.data
+            return Buffer(x)
+        return x
 
 
 def add_ramdom_module(module):
