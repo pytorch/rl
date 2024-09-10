@@ -44,6 +44,7 @@ fi
 
 # Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
 pip install -U charset-normalizer
+pip install "numpy<2.0"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
