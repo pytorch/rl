@@ -6,6 +6,7 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 set -e
+set -v
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env

@@ -7,6 +7,7 @@ unset PYTORCH_VERSION
 apt-get update && apt-get install -y git wget gcc g++
 
 set -e
+set -v
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
@@ -39,12 +40,11 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     conda install pytorch==2.0 torchvision==0.15 cpuonly -c pytorch -y
 else
-    conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 -c pytorch -c nvidia -y
+    conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 -c pytorch numpy<2.0 numpy-base<2.0 -c nvidia -y
 fi
 
 # Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
 pip install -U charset-normalizer
-pip install "numpy<2.0"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
