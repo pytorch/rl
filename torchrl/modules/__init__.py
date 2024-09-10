@@ -21,6 +21,7 @@ from .distributions import (
 )
 from .models import (
     BatchRenorm1d,
+    ConsistentDropoutModule,
     Conv3dNet,
     ConvNet,
     DdpgCnnActor,
@@ -85,4 +86,5 @@ from .tensordict_module import (
     VmapModule,
     WorldModelWrapper,
 )
+from .utils import get_primers_from_module
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
