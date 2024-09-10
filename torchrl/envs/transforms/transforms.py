@@ -4597,7 +4597,7 @@ class TensorDictPrimer(Transform):
 
     .. note:: Some TorchRL modules rely on specific keys being present in the environment TensorDicts,
         like :class:`~torchrl.modules.models.LSTM` or :class:`~torchrl.modules.models.GRU`.
-        To facilitate this process, the method :func:`~torchrl.models.utils.get_primers_from_module`
+        To facilitate this process, the method :func:`~torchrl.modules.utils.get_primers_from_module`
         automatically checks for required primer transforms in a module and its submodules and
         generates them.
     """
@@ -4664,10 +4664,15 @@ class TensorDictPrimer(Transform):
     def reset_key(self):
         reset_key = self.__dict__.get("_reset_key", None)
         if reset_key is None:
+            if self.parent is None:
+                raise RuntimeError(
+                    "Missing parent, cannot infer reset_key automatically."
+                )
             reset_keys = self.parent.reset_keys
             if len(reset_keys) > 1:
                 raise RuntimeError(
-                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
+                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. "
+                    f"Consider providing the reset key in the {type(self)} constructor."
                 )
             reset_key = self._reset_key = reset_keys[0]
         return reset_key
