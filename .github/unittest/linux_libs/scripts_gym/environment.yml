@@ -7,7 +7,6 @@ dependencies:
   - pip:
     # Initial version is required to install Atari ROMS in setup_env.sh
     - gym[atari]==0.13
-    - minigrid
     - hypothesis
     - future
     - cloudpickle
