@@ -10,7 +10,12 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict import (
+    is_tensor_collection,
+    TensorDict,
+    TensorDictBase,
+    TensorDictParams,
+)
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -191,6 +196,13 @@ class A2CLoss(LossModule):
         ...     next_reward = torch.randn(*batch, 1),
         ...     next_observation = torch.randn(*batch, n_obs))
         >>> loss_obj.backward()
+
+    .. note::
+      There is an exception regarding compatibility with non-tensordict-based modules.
+      If the actor network is probabilistic and uses a :class:`~tensordict.nn.distributions.CompositeDistribution`,
+      this class must be used with tensordicts and cannot function as a tensordict-independent module.
+      This is because composite action spaces inherently rely on the structured representation of data provided by
+      tensordicts to handle their actions.
     """
 
     @dataclass
@@ -390,7 +402,10 @@ class A2CLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            entropy = -dist.log_prob(x).mean(0)
+            log_prob = dist.log_prob(x)
+            if is_tensor_collection(log_prob):
+                log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+            entropy = -log_prob.mean(0)
         return entropy.unsqueeze(-1)
 
     def _log_probs(
@@ -398,10 +413,6 @@ class A2CLoss(LossModule):
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
         action = tensordict.get(self.tensor_keys.action)
-        if action.requires_grad:
-            raise RuntimeError(
-                f"tensordict stored {self.tensor_keys.action} require grad."
-            )
         tensordict_clone = tensordict.select(
             *self.actor_network.in_keys, strict=False
         ).clone()
@@ -409,7 +420,15 @@ class A2CLoss(LossModule):
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict_clone)
-        log_prob = dist.log_prob(action)
+        if action.requires_grad:
+            raise RuntimeError(
+                f"tensordict stored {self.tensor_keys.action} requires grad."
+            )
+        if isinstance(action, torch.Tensor):
+            log_prob = dist.log_prob(action)
+        else:
+            tensordict = dist.log_prob(tensordict)
+            log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
 

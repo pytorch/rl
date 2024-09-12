@@ -507,7 +507,8 @@ class SyncDataCollector(DataCollectorBase):
             # Cuda handles sync
             if torch.cuda.is_available():
                 self._sync_storage = torch.cuda.synchronize
-            elif torch.backends.mps.is_available():
+            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
+                # Will break for older PT versions which don't have torch.mps
                 self._sync_storage = torch.mps.synchronize
             elif self.storing_device.type == "cpu":
                 self._sync_storage = _do_nothing
@@ -521,7 +522,7 @@ class SyncDataCollector(DataCollectorBase):
             # Cuda handles sync
             if torch.cuda.is_available():
                 self._sync_env = torch.cuda.synchronize
-            elif torch.backends.mps.is_available():
+            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_env = torch.mps.synchronize
             elif self.env_device.type == "cpu":
                 self._sync_env = _do_nothing
@@ -534,7 +535,7 @@ class SyncDataCollector(DataCollectorBase):
             # Cuda handles sync
             if torch.cuda.is_available():
                 self._sync_policy = torch.cuda.synchronize
-            elif torch.backends.mps.is_available():
+            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_policy = torch.mps.synchronize
             elif self.policy_device.type == "cpu":
                 self._sync_policy = _do_nothing
