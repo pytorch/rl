@@ -804,7 +804,12 @@ class ClipPPOLoss(PPOLoss):
             clip_value=clip_value,
             **kwargs,
         )
-        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
+        for p in self.parameters():
+            device = p.device
+            break
+        else:
+            device = None
+        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon, device=device))
 
     @property
     def _clip_bounds(self):
