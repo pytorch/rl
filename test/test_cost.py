@@ -7565,6 +7565,7 @@ class TestPPO(LossModuleTestBase):
                     "action1": (action_key, "action1"),
                 },
                 log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -7634,6 +7635,7 @@ class TestPPO(LossModuleTestBase):
                     "action1": ("action", "action1"),
                 },
                 log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -7690,6 +7692,7 @@ class TestPPO(LossModuleTestBase):
                     "action1": ("action", "action1"),
                 },
                 log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -8627,6 +8630,7 @@ class TestA2C(LossModuleTestBase):
                     "action1": (action_key, "action1"),
                 },
                 log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -8727,6 +8731,7 @@ class TestA2C(LossModuleTestBase):
                     "action1": ("action", "action1"),
                 },
                 log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
