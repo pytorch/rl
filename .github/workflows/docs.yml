@@ -50,7 +50,7 @@ jobs:
         conda activate "${env_dir}"
         
         # 2. upgrade pip, ninja and packaging
-        apt-get install python3.9 python3-pip -y
+        # apt-get install python3.9 python3-pip -y
         python3 -m pip install --upgrade pip
         python3 -m pip install setuptools ninja packaging -U
         
