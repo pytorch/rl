@@ -12,7 +12,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
-import torch.compiler
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
@@ -25,12 +24,17 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.utils import RANDOM_MODULE_LIST, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
+
 
 def _updater_check_forward_prehook(module, *args, **kwargs):
     if (
         not all(module._has_update_associated.values())
         and RL_WARNINGS
-        and not torch.compiler.is_dynamo_compiling()
+        and not is_dynamo_compiling()
     ):
         warnings.warn(
             module.TARGET_NET_WARNING,
@@ -425,7 +429,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             elif (
                 not self._has_update_associated[item[7:-7]]
                 and RL_WARNINGS
-                and not torch.compiler.is_dynamo_compiling()
+                and not is_dynamo_compiling()
             ):
                 # no updater associated
                 warnings.warn(
