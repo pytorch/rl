@@ -490,8 +490,13 @@ class PPOLoss(LossModule):
         if isinstance(action, torch.Tensor):
             log_prob = dist.log_prob(action)
         else:
-            tensordict = dist.log_prob(tensordict)
-            log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
+            maybe_log_prob = dist.log_prob(tensordict)
+            if not isinstance(maybe_log_prob, torch.Tensor):
+                # In some cases (Composite distribution with aggregate_probabilities toggled off) the returned type may not
+                # be a tensor
+                log_prob = maybe_log_prob.get(self.tensor_keys.sample_log_prob)
+            else:
+                log_prob = maybe_log_prob
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
@@ -1130,7 +1135,7 @@ class KLPENPPOLoss(PPOLoss):
             x = previous_dist.sample((self.samples_mc_kl,))
             previous_log_prob = previous_dist.log_prob(x)
             current_log_prob = current_dist.log_prob(x)
-            if is_tensor_collection(x):
+            if is_tensor_collection(current_log_prob):
                 previous_log_prob = previous_log_prob.get(
                     self.tensor_keys.sample_log_prob
                 )
