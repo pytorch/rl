@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from typing import Optional, Tuple
 
 import torch
@@ -387,7 +389,7 @@ class LSTMModule(ModuleBase):
     .. note:: This module relies on specific ``recurrent_state`` keys being present in the input
         TensorDicts. To generate a :class:`~torchrl.envs.transforms.TensorDictPrimer` transform that will automatically
         add hidden states to the environment TensorDicts, use the method :func:`~torchrl.modules.rnn.LSTMModule.make_tensordict_primer`.
-        If this class is a submodule in a larger module, the method :func:`~torchrl.models.utils.get_primers_from_module` can be called
+        If this class is a submodule in a larger module, the method :func:`~torchrl.modules.utils.get_primers_from_module` can be called
         on the parent module to automatically generate the primer transforms required for all submodules, including this one.
 
 
@@ -533,6 +535,9 @@ class LSTMModule(ModuleBase):
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
         are not registered within the environment specs.
+
+        See :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given
+        module.
 
         Examples:
             >>> from torchrl.collectors import SyncDataCollector
@@ -1108,7 +1113,7 @@ class GRUModule(ModuleBase):
     .. note:: This module relies on specific ``recurrent_state`` keys being present in the input
         TensorDicts. To generate a :class:`~torchrl.envs.transforms.TensorDictPrimer` transform that will automatically
         add hidden states to the environment TensorDicts, use the method :func:`~torchrl.modules.rnn.GRUModule.make_tensordict_primer`.
-        If this class is a submodule in a larger module, the method :func:`~torchrl.models.utils.get_primers_from_module` can be called
+        If this class is a submodule in a larger module, the method :func:`~torchrl.modules.utils.get_primers_from_module` can be called
         on the parent module to automatically generate the primer transforms required for all submodules, including this one.
 
     Examples:
@@ -1279,6 +1284,9 @@ class GRUModule(ModuleBase):
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
         are not registered within the environment specs.
+
+        See :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given
+        module.
 
         Examples:
             >>> from torchrl.collectors import SyncDataCollector
