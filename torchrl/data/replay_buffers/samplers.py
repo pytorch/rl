@@ -22,7 +22,7 @@ from tensordict.utils import NestedKey
 
 from torchrl._extension import EXTENSION_WARNING
 
-from torchrl._utils import _replace_last, implement_for, logger
+from torchrl._utils import _replace_last, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import _is_int, unravel_index
 
@@ -1076,9 +1076,28 @@ class SliceSampler(Sampler):
         # seq_length is a 1d tensor indicating the desired length of each sequence
 
         if isinstance(seq_length, int):
-            result = torch.cat(
-                [self._start_to_end(_start, length=seq_length) for _start in start]
+            arange = torch.arange(seq_length, device=start.device, dtype=start.dtype)
+            ndims = start.shape[-1] - 1 if (start.ndim - 1) else 0
+            if ndims:
+                arange_reshaped = torch.empty(
+                    arange.shape + torch.Size([ndims + 1]),
+                    device=start.device,
+                    dtype=start.dtype,
+                )
+                arange_reshaped[..., 0] = arange
+                arange_reshaped[..., 1:] = 0
+            else:
+                arange_reshaped = arange.unsqueeze(-1)
+            arange_expanded = arange_reshaped.expand(
+                torch.Size([start.shape[0]]) + arange_reshaped.shape
             )
+            if start.shape != arange_expanded.shape:
+                n_missing_dims = arange_expanded.dim() - start.dim()
+                start_expanded = start[
+                    (slice(None),) + (None,) * n_missing_dims
+                ].expand_as(arange_expanded)
+            result = (start_expanded + arange_expanded).flatten(0, 1)
+
         else:
             # when padding is needed
             result = torch.cat(
@@ -1823,28 +1842,31 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     ) -> None:
         return PrioritizedSampler.mark_update(self, index, storage=storage)
 
-    @implement_for("torch", "2.4")
     def _padded_indices(self, shapes, arange) -> torch.Tensor:
         # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
         # tensor([[ 0,  1,  2,  3,  4],
         #         [-1, -1,  5,  6,  7],
         #         [-1,  8,  9, 10, 11]])
         # where the -1 items on the left are padded values
-        st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
-        nt = torch._nested_view_from_buffer(
-            arange.flip(0).contiguous(), shapes.flip(0), st, off
-        )
-        pad = nt.to_padded_tensor(-1).flip(-1).flip(0)
-        return pad
+        num_groups = shapes.shape[0]
+        max_group_len = shapes.max()
+        pad_lengths = max_group_len - shapes
 
-    @implement_for("torch", None, "2.4")
-    def _padded_indices(self, shapes, arange) -> torch.Tensor:  # noqa: F811
-        arange = arange.flip(0).split(shapes.flip(0).squeeze().unbind())
-        return (
-            torch.nn.utils.rnn.pad_sequence(arange, batch_first=True, padding_value=-1)
-            .flip(-1)
-            .flip(0)
+        # Get all the start and end indices within arange for each group
+        group_ends = shapes.cumsum(0)
+        group_starts = torch.empty_like(group_ends)
+        group_starts[0] = 0
+        group_starts[1:] = group_ends[:-1]
+        pad = torch.empty(
+            (num_groups, max_group_len), dtype=arange.dtype, device=arange.device
         )
+        for pad_row, group_start, group_end, pad_len in zip(
+            pad, group_starts, group_ends, pad_lengths
+        ):
+            pad_row[:pad_len] = -1
+            pad_row[pad_len:] = arange[group_start:group_end]
+
+        return pad
 
     def _preceding_stop_idx(self, storage, lengths, seq_length, start_idx):
         preceding_stop_idx = self._cache.get("preceding_stop_idx")

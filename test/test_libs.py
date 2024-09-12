@@ -153,6 +153,16 @@ elif _has_gym:
 
 _has_meltingpot = importlib.util.find_spec("meltingpot") is not None
 
+_has_minigrid = importlib.util.find_spec("minigrid") is not None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def maybe_init_minigrid():
+    if _has_minigrid and _has_gymnasium:
+        import minigrid
+
+        minigrid.register_minigrid_envs()
+
 
 def get_gym_pixel_wrapper():
     try:
@@ -1277,6 +1287,24 @@ class TestGym:
                     env.close()
                 del env
                 gc.collect()
+
+
+@pytest.mark.skipif(
+    not _has_minigrid or not _has_gymnasium, reason="MiniGrid not found"
+)
+class TestMiniGrid:
+    @pytest.mark.parametrize(
+        "id",
+        [
+            "BabyAI-KeyCorridorS6R3-v0",
+            "MiniGrid-Empty-16x16-v0",
+            "MiniGrid-BlockedUnlockPickup-v0",
+        ],
+    )
+    def test_minigrid(self, id):
+        env_base = gymnasium.make(id)
+        env = GymWrapper(env_base)
+        check_env_specs(env)
 
 
 @implement_for("gym", None, "0.26")

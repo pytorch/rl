@@ -47,7 +47,7 @@ class DQNLoss(LossModule):
             Defaults to "l2".
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
-            create a DQN with a target network. Default is ``False``.
+            create a DQN with a target network. Default is ``True``.
         double_dqn (bool, optional): whether to use Double DQN, as described in
             https://arxiv.org/abs/1509.06461. Defaults to ``False``.
         action_space (str or TensorSpec, optional): Action space. Must be one of
