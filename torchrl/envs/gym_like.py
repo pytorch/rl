@@ -12,10 +12,10 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import NonTensorData, TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
+from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.common import _EnvWrapper, EnvBase
 
 
@@ -283,9 +283,12 @@ class GymLikeEnv(_EnvWrapper):
             observations = observations_dict
         else:
             for key, val in observations.items():
-                observations[key] = self.observation_spec[key].encode(
-                    val, ignore_device=True
-                )
+                if isinstance(self.observation_spec[key], NonTensor):
+                    observations[key] = NonTensorData(val)
+                else:
+                    observations[key] = self.observation_spec[key].encode(
+                        val, ignore_device=True
+                    )
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
