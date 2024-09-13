@@ -12,7 +12,12 @@ from typing import Dict, Optional, Sequence, Tuple, Union
 import numpy as np
 import torch
 from torch import distributions as D, nn
-from torch.compiler import assume_constant_result
+
+try:
+    from torch.compiler import assume_constant_result
+except ImportError:
+    from torch._dynamo import assume_constant_result
+
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
 
