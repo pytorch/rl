@@ -127,13 +127,13 @@ if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu -U
   else
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION -U
   fi
 else
   printf "Failed to install pytorch"
