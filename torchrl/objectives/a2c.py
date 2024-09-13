@@ -427,8 +427,13 @@ class A2CLoss(LossModule):
         if isinstance(action, torch.Tensor):
             log_prob = dist.log_prob(action)
         else:
-            tensordict = dist.log_prob(tensordict)
-            log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
+            maybe_log_prob = dist.log_prob(tensordict)
+            if not isinstance(maybe_log_prob, torch.Tensor):
+                # In some cases (Composite distribution with aggregate_probabilities toggled off) the returned type may not
+                # be a tensor
+                log_prob = maybe_log_prob.get(self.tensor_keys.sample_log_prob)
+            else:
+                log_prob = maybe_log_prob
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
 
