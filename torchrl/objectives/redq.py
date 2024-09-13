@@ -453,6 +453,8 @@ class REDQLoss(LossModule):
         tensordict_select = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
         )
+        # We need to copy bc select does not copy sub-tds
+        tensordict_select = tensordict_select.copy()
 
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
