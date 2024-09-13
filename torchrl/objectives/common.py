@@ -46,7 +46,6 @@ def _forward_wrapper(func):
     @functools.wraps(func)
     def new_forward(self, *args, **kwargs):
         with set_exploration_type(self.deterministic_sampling_mode):
-            # with nullcontext():
             return func(self, *args, **kwargs)
 
     return new_forward
@@ -55,7 +54,7 @@ def _forward_wrapper(func):
 class _LossMeta(abc.ABCMeta):
     def __init__(cls, name, bases, attr_dict):
         super().__init__(name, bases, attr_dict)
-        # cls.forward = _forward_wrapper(cls.forward)
+        cls.forward = _forward_wrapper(cls.forward)
 
 
 class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
@@ -229,7 +228,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         """
         for key, value in kwargs.items():
             if key not in self._AcceptedKeys.__dataclass_fields__:
-                raise ValueError(f"{key} is not an accepted tensordict key")
+                raise ValueError(
+                    f"{key} is not an accepted tensordict key. Accepted keys are: {self._AcceptedKeys.__dataclass_fields__}."
+                )
             if value is not None:
                 setattr(self.tensor_keys, key, value)
             else:
