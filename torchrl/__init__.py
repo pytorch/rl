@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
+import weakref
 from warnings import warn
 
 import torch
@@ -10,6 +11,7 @@ import torch
 from tensordict import set_lazy_legacy
 
 from torch import multiprocessing as mp
+from torch.distributions.transforms import _InverseTransform, ComposeTransform
 
 set_lazy_legacy(False).set()
 
@@ -51,3 +53,42 @@ import torchrl.trainers
 filter_warnings_subprocess = True
 
 _THREAD_POOL_INIT = torch.get_num_threads()
+
+# monkey-patch dist transforms until https://github.com/pytorch/pytorch/pull/135001/ finds a home
+@property
+def inv(self):
+    """
+    Returns the inverse :class:`Transform` of this transform.
+    This should satisfy ``t.inv.inv is t``.
+    """
+    inv = None
+    if self._inv is not None:
+        inv = self._inv()
+    if inv is None:
+        inv = _InverseTransform(self)
+        if not torch.compiler.is_dynamo_compiling():
+            self._inv = weakref.ref(inv)
+    return inv
+
+
+torch.distributions.transforms.Transform.inv = inv
+
+
+@property
+def inv(self):
+    inv = None
+    if self._inv is not None:
+        inv = self._inv()
+    if inv is None:
+        inv = ComposeTransform([p.inv for p in reversed(self.parts)])
+        if not torch.compiler.is_dynamo_compiling():
+            self._inv = weakref.ref(inv)
+            inv._inv = weakref.ref(self)
+        else:
+            # We need inv.inv to be equal to self, but weakref can cause a graph break
+            inv._inv = lambda out=self: out
+
+    return inv
+
+
+ComposeTransform.inv = inv
