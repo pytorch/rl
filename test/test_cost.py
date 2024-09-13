@@ -146,6 +146,7 @@ from torchrl.objectives.value.utils import (
     _split_and_pad_sequence,
 )
 
+TORCH_VERSION = torch.__version__
 
 # Capture all warnings
 pytestmark = [
@@ -15644,6 +15645,7 @@ class TestBuffer:
                 assert p.device == dest
 
 
+@pytest.mark.skipif(TORCH_VERSION < "2.5", reason="requires torch>=2.5")
 def test_exploration_compile():
     m = ProbabilisticTensorDictModule(
         in_keys=["loc", "scale"],
