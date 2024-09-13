@@ -54,11 +54,14 @@ filter_warnings_subprocess = True
 
 _THREAD_POOL_INIT = torch.get_num_threads()
 
+
 # monkey-patch dist transforms until https://github.com/pytorch/pytorch/pull/135001/ finds a home
 @property
-def inv(self):
-    """
+def _inv(self):
+    """Patched version of Transform.inv.
+
     Returns the inverse :class:`Transform` of this transform.
+
     This should satisfy ``t.inv.inv is t``.
     """
     inv = None
@@ -71,11 +74,11 @@ def inv(self):
     return inv
 
 
-torch.distributions.transforms.Transform.inv = inv
+torch.distributions.transforms.Transform.inv = _inv
 
 
 @property
-def inv(self):
+def _inv(self):
     inv = None
     if self._inv is not None:
         inv = self._inv()
@@ -91,4 +94,4 @@ def inv(self):
     return inv
 
 
-ComposeTransform.inv = inv
+ComposeTransform.inv = _inv
