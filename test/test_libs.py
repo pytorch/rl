@@ -2857,12 +2857,8 @@ class TestMinari:
                 break
 
     def test_minari_preproc(self, tmpdir):
-        global _MINARI_DATASETS
-        if not _MINARI_DATASETS:
-            _minari_selected_datasets()
-        selected_dataset = _MINARI_DATASETS[0]
         dataset = MinariExperienceReplay(
-            selected_dataset,
+            "D4RL/pointmaze/large-v2",
             batch_size=32,
             split_trajs=False,
             download="force",
