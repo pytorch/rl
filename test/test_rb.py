@@ -546,6 +546,20 @@ class TestStorages:
         ):
             storage_type(data, max_size=4)
 
+    def test_existsok_lazymemmap(self, tmpdir):
+        storage0 = LazyMemmapStorage(10, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storage0)
+        rb.extend(TensorDict(a=torch.randn(3), batch_size=[3]))
+
+        storage1 = LazyMemmapStorage(10, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storage1)
+        with pytest.raises(RuntimeError, match="existsok"):
+            rb.extend(TensorDict(a=torch.randn(3), batch_size=[3]))
+
+        storage2 = LazyMemmapStorage(10, scratch_dir=tmpdir, existsok=True)
+        rb = ReplayBuffer(storage=storage2)
+        rb.extend(TensorDict(a=torch.randn(3), batch_size=[3]))
+
     @pytest.mark.parametrize(
         "data_type", ["tensor", "tensordict", "tensorclass", "pytree"]
     )
