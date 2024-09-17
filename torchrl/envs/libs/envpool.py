@@ -9,6 +9,7 @@ import importlib
 from typing import Any, Dict, Optional, Tuple, Union
 
 import jax.dlpack
+jax.config.update('jax_platform_name', 'cpu')
 import numpy as np
 import torch
 
@@ -21,15 +22,17 @@ from torchrl.envs.utils import _classproperty
 _has_envpool = importlib.util.find_spec("envpool") is not None
 
 
-@torch._dynamo.disable()
+# @torch._dynamo.disable()
 def _from_dlpack(jax_array):
-    # return torch.from_dlpack(jax.dlpack.to_dlpack(jax_array, copy=False))
-    return torch.from_dlpack(jax_array)
+    return torch.as_tensor(np.array(jax_array))
+    # return torch.from_dlpack(jax.dlpack.to_dlpack(jax_array))
+    # return torch.from_dlpack(jax_array)
 
-@torch._dynamo.disable()
+# @torch._dynamo.disable()
 def _to_dlpack(tensor):
+    return tensor.numpy()
     # return jax.dlpack.from_dlpack(torch.to_dlpack(tensor))
-    return jax.dlpack.from_dlpack(tensor)
+    # return jax.dlpack.from_dlpack(tensor)
 
 
 class MultiThreadedEnvWrapper(_EnvWrapper):
@@ -113,7 +116,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             def step(handle, action):
                 return step_env(handle, action)
 
-            self._step_jax = torch._dynamo.disable()(step)
+            # self._step_jax = torch._dynamo.disable()(step)
+            self._step_jax = step
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
