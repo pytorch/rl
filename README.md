@@ -540,7 +540,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
   <tr>
    <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/dqn">DQN</a>
    </td>
-   <td> 1.53x
+   <td> 1.9x
    </td>
    <td> +
    </td>
@@ -552,7 +552,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
   <tr>
    <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/ddpg/ddpg.py">DDPG</a>
    </td>
-   <td> 1.54x
+   <td> 1.87x
    </td>
    <td> +
    </td>
@@ -564,7 +564,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
   <tr>
    <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/iql/">IQL</a>
    </td>
-   <td> 2.55x
+   <td> 3.22x
    </td>
    <td> +
    </td>
@@ -576,7 +576,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
   <tr>
    <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/cql/cql_offline.py">CQL</a>
    </td>
-   <td> 1.91x
+   <td> 2.68x
    </td>
    <td> +
    </td>
@@ -588,7 +588,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
   <tr>
    <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/td3/td3.py">TD3</a>
    </td>
-   <td> 1.79x
+   <td> 2.27x
    </td>
    <td> +
    </td>
@@ -614,7 +614,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
    <td>
     <a href="https://github.com/pytorch/rl/blob/main/examples/a2c/">A2C</a>
    </td>
-   <td> 1.76x
+   <td> 2.67x
    </td>
    <td> +
    </td>
@@ -627,7 +627,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
    <td>
     <a href="https://github.com/pytorch/rl/blob/main/sota-implementations/ppo/">PPO</a>
    </td>
-   <td> 2.67x
+   <td> 2.42x
    </td>
    <td> +
    </td>
@@ -639,7 +639,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
   <tr>
    <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/sac/sac.py">SAC</a>
    </td>
-   <td> 2.01x
+   <td> 2.62x
    </td>
    <td> +
    </td>
@@ -651,7 +651,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
   <tr>
    <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/redq/redq.py">REDQ</a>
    </td>
-   <td> 2.35x
+   <td> 2.28x
    </td>
    <td> +
    </td>
@@ -795,7 +795,7 @@ A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are pr
 </table>
 
 ** The number indicates expected speed-up compared to eager mode when executed on CPU. Numbers may vary depending on
-  architecture and device
+  architecture and device.
 
 and many more to come!
 
