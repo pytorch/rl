@@ -6,6 +6,7 @@ import argparse
 
 import pytest
 import torch
+from packaging import version
 
 from tensordict import TensorDict
 from tensordict.nn import (
@@ -42,6 +43,11 @@ from torchrl.objectives.value.functional import (
     vec_td1_return_estimate,
     vec_td_lambda_return_estimate,
 )
+
+TORCH_VERSION = torch.__version__
+FULLGRAPH = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.parse(
+    "2.5.0"
+)  # Anything from 2.5, incl. nightlies, allows for fullgraph
 
 
 @pytest.fixture(scope="module")
@@ -147,7 +153,7 @@ def test_gae_speed(benchmark, gae_fn, gamma_tensor, batches, timesteps):
     )
 
 
-def _maybe_compile(fn, compile, td, fullgraph=True, warmup=3):
+def _maybe_compile(fn, compile, td, fullgraph=FULLGRAPH, warmup=3):
     if compile:
         if isinstance(compile, str):
             fn = torch.compile(fn, mode=compile, fullgraph=fullgraph)
