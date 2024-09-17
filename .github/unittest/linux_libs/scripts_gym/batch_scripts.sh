@@ -126,7 +126,7 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install 'gymnasium[atari,accept-rom-license,ale-py]'==$GYM_VERSION
+  pip3 install 'gymnasium[atari,accept-rom-license]'==$GYM_VERSION
 
   $DIR/run_test.sh
 
