@@ -40,6 +40,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
+          export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           python -m pytest --benchmark-json output.json
       - name: Store benchmark results
         if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
@@ -107,6 +108,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
+          export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           python3 -m pytest --benchmark-json output.json
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
