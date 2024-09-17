@@ -46,6 +46,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
+          export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           RUN_BENCHMARK="pytest --rank 0 --benchmark-json "
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
@@ -125,6 +126,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
+          export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           RUN_BENCHMARK="pytest --rank 0 --benchmark-json "
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
