@@ -34,3 +34,5 @@ dependencies:
     - transformers
     - ninja
     - timm
+    - gymnasium[atari,accept-rom-license]
+    - mo-gymnasium[mujoco]
