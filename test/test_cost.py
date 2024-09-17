@@ -146,6 +146,7 @@ from torchrl.objectives.value.utils import (
     _split_and_pad_sequence,
 )
 
+TORCH_VERSION = torch.__version__
 
 # Capture all warnings
 pytestmark = [
@@ -15282,7 +15283,7 @@ class TestBase:
         class MyLoss3(MyLoss2):
             @dataclass
             class _AcceptedKeys:
-                some_key = "some_value"
+                some_key: str = "some_value"
 
         loss_module = MyLoss3()
         assert loss_module.tensor_keys.some_key == "some_value"
@@ -15642,6 +15643,68 @@ class TestBuffer:
                 assert p.device == dest
             for p in mod.value_params.values(True, True):
                 assert p.device == dest
+
+
+@pytest.mark.skipif(TORCH_VERSION < "2.5", reason="requires torch>=2.5")
+def test_exploration_compile():
+    m = ProbabilisticTensorDictModule(
+        in_keys=["loc", "scale"],
+        out_keys=["sample"],
+        distribution_class=torch.distributions.Normal,
+    )
+
+    # class set_exploration_type_random(set_exploration_type):
+    #     __init__ = object.__init__
+    #     type = ExplorationType.RANDOM
+    it = exploration_type()
+
+    @torch.compile(fullgraph=True)
+    def func(t):
+        with set_exploration_type(ExplorationType.RANDOM):
+            t0 = m(t.clone())
+            t1 = m(t.clone())
+        return t0, t1
+
+    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
+    t0, t1 = func(t)
+    assert (t0["sample"] != t1["sample"]).any()
+    assert it == exploration_type()
+
+    @torch.compile(fullgraph=True)
+    def func(t):
+        with set_exploration_type(ExplorationType.MEAN):
+            t0 = m(t.clone())
+            t1 = m(t.clone())
+        return t0, t1
+
+    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
+    t0, t1 = func(t)
+    assert (t0["sample"] == t1["sample"]).all()
+    assert it == exploration_type()
+
+    @torch.compile(fullgraph=True)
+    @set_exploration_type(ExplorationType.RANDOM)
+    def func(t):
+        t0 = m(t.clone())
+        t1 = m(t.clone())
+        return t0, t1
+
+    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
+    t0, t1 = func(t)
+    assert (t0["sample"] != t1["sample"]).any()
+    assert it == exploration_type()
+
+    @torch.compile(fullgraph=True)
+    @set_exploration_type(ExplorationType.MEAN)
+    def func(t):
+        t0 = m(t.clone())
+        t1 = m(t.clone())
+        return t0, t1
+
+    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
+    t0, t1 = func(t)
+    assert (t0["sample"] == t1["sample"]).all()
+    assert it == exploration_type()
 
 
 def test_loss_exploration():

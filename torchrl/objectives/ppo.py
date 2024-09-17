@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import contextlib
 
-import math
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Tuple
@@ -80,7 +79,8 @@ class PPOLoss(LossModule):
         entropy_coef (scalar, optional): entropy multiplier when computing the total loss.
             Defaults to ``0.01``.
         critic_coef (scalar, optional): critic loss multiplier when computing the total
-            loss. Defaults to ``1.0``.
+            loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value
+            loss from the forward outputs.
         loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
@@ -371,7 +371,12 @@ class PPOLoss(LossModule):
             device = torch.device("cpu")
 
         self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
-        self.register_buffer("critic_coef", torch.tensor(critic_coef, device=device))
+        if critic_coef is not None:
+            self.register_buffer(
+                "critic_coef", torch.tensor(critic_coef, device=device)
+            )
+        else:
+            self.critic_coef = None
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
         if gamma is not None:
@@ -504,6 +509,7 @@ class PPOLoss(LossModule):
         return log_weight, dist, kl_approx
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+        """Returns the critic loss multiplied by ``critic_coef``, if it is not ``None``."""
         # TODO: if the advantage is gathered by forward, this introduces an
         # overhead that we could easily reduce.
         if self.separate_losses:
@@ -562,7 +568,9 @@ class PPOLoss(LossModule):
                 self.loss_critic_type,
             )
 
-        return self.critic_coef * loss_value, clip_fraction
+        if self.critic_coef is not None:
+            return self.critic_coef * loss_value, clip_fraction
+        return loss_value, clip_fraction
 
     @property
     @_cache_values
@@ -595,7 +603,7 @@ class PPOLoss(LossModule):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef:
+        if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
@@ -679,7 +687,8 @@ class ClipPPOLoss(PPOLoss):
         entropy_coef (scalar, optional): entropy multiplier when computing the total loss.
             Defaults to ``0.01``.
         critic_coef (scalar, optional): critic loss multiplier when computing the total
-            loss. Defaults to ``1.0``.
+            loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value
+            loss from the forward outputs.
         loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
@@ -800,13 +809,18 @@ class ClipPPOLoss(PPOLoss):
             clip_value=clip_value,
             **kwargs,
         )
-        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
+        for p in self.parameters():
+            device = p.device
+            break
+        else:
+            device = None
+        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon, device=device))
 
     @property
     def _clip_bounds(self):
         return (
-            math.log1p(-self.clip_epsilon),
-            math.log1p(self.clip_epsilon),
+            (-self.clip_epsilon).log1p(),
+            self.clip_epsilon.log1p(),
         )
 
     @property
@@ -869,7 +883,7 @@ class ClipPPOLoss(PPOLoss):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef:
+        if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
@@ -1163,7 +1177,7 @@ class KLPENPPOLoss(PPOLoss):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef:
+        if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
