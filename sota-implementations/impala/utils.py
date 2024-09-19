@@ -100,7 +100,7 @@ def make_ppo_modules_pixels(proof_environment):
         out_keys=["common_features"],
     )
 
-    # Define on head for the policy
+    # Define one head for the policy
     policy_net = MLP(
         in_features=common_mlp_output.shape[-1],
         out_features=num_outputs,
