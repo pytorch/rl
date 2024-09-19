@@ -6743,7 +6743,7 @@ class RenameTransform(Transform):
             )
             for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
                 try:
-                    out.rename_key_(in_key, out_key)
+                    out.rename_key_(out_key, in_key)
                 except KeyError:
                     if not self._missing_tolerance:
                         raise
@@ -6752,7 +6752,7 @@ class RenameTransform(Transform):
         else:
             for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
                 try:
-                    tensordict.rename_key_(in_key, out_key)
+                    tensordict.rename_key_(out_key, in_key)
                 except KeyError:
                     if not self._missing_tolerance:
                         raise
@@ -6802,29 +6802,29 @@ class RenameTransform(Transform):
 
     def transform_input_spec(self, input_spec: Composite) -> Composite:
         for action_key in self.parent.action_keys:
-            if action_key in self.out_keys_inv:
-                for i, in_key_inv in enumerate(self.in_keys_inv):  # noqa: B007
-                    if self.out_keys_inv[i] == action_key:
+            if action_key in self.in_keys_inv:
+                for i, out_key in enumerate(self.out_keys_inv):  # noqa: B007
+                    if self.in_keys_inv[i] == action_key:
                         break
                 else:
                     # unreachable
                     raise RuntimeError
-                input_spec["full_action_spec"][in_key_inv] = input_spec[
+                input_spec["full_action_spec"][out_key] = input_spec[
                     "full_action_spec"
                 ][action_key].clone()
                 if not self.create_copy:
                     del input_spec["full_action_spec"][action_key]
         for state_key in self.parent.full_state_spec.keys(True):
-            if state_key in self.out_keys_inv:
-                for i, in_key_inv in enumerate(self.in_keys_inv):  # noqa: B007
-                    if self.out_keys_inv[i] == state_key:
+            if state_key in self.in_keys_inv:
+                for i, out_key in enumerate(self.out_keys_inv):  # noqa: B007
+                    if self.in_keys_inv[i] == state_key:
                         break
                 else:
                     # unreachable
                     raise RuntimeError
-                input_spec["full_state_spec"][in_key_inv] = input_spec[
-                    "full_state_spec"
-                ][state_key].clone()
+                input_spec["full_state_spec"][out_key] = input_spec["full_state_spec"][
+                    state_key
+                ].clone()
                 if not self.create_copy:
                     del input_spec["full_state_spec"][state_key]
         return input_spec
