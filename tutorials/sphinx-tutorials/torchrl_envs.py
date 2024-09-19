@@ -608,7 +608,7 @@ from matplotlib import pyplot as plt
 ###############################################################################
 # Transforming parallel environments
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# There are two equivalent ways of transforming parallen environments: in each
+# There are two equivalent ways of transforming parallel environments: in each
 # process separately, or on the main process. It is even possible to do both.
 # One can therefore think carefully about the transform design to leverage the
 # device capabilities (e.g. transforms on cuda devices) and vectorizing
