@@ -9046,7 +9046,6 @@ class TestRenameTransform(TransformBase):
         if compose:
             t = Compose(t)
         env = TransformedEnv(ContinuousActionVecMockEnv(), t)
-
         check_env_specs(env)
 
     def test_serial_trans_env_check(self, create_copy):

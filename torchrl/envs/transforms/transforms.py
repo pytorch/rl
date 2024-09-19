@@ -6634,15 +6634,16 @@ class InitTracker(Transform):
 
 
 class RenameTransform(Transform):
-    """A transform to rename entries in the output tensordict.
+    """A transform to rename entries in the output tensordict (or input tensordict
+    via the inverse keys).
 
     Args:
-        in_keys (sequence of NestedKey): the entries to rename
+        in_keys (sequence of NestedKey): the entries to rename.
         out_keys (sequence of NestedKey): the name of the entries after renaming.
-        in_keys_inv (sequence of NestedKey, optional): the entries to rename before
-            passing the input tensordict to :meth:`EnvBase._step`.
-        out_keys_inv (sequence of NestedKey, optional): the names of the renamed
-            entries passed to :meth:`EnvBase._step`.
+        in_keys_inv (sequence of NestedKey, optional): the entries to rename
+            in the input tensordict, which will be passed to :meth:`EnvBase._step`.
+        out_keys_inv (sequence of NestedKey, optional): the names of the entries
+            in the input tensordict after renaming.
         create_copy (bool, optional): if ``True``, the entries will be copied
             with a different name rather than being renamed. This allows for
             renaming immutable entries such as ``"reward"`` and ``"done"``.
