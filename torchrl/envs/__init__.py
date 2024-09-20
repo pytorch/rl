@@ -102,12 +102,10 @@ from .transforms import (
 from .utils import (
     check_env_specs,
     check_marl_grouping,
-    exploration_mode,
     exploration_type,
     ExplorationType,
     make_composite_from_td,
     MarlGroupMapType,
-    set_exploration_mode,
     set_exploration_type,
     step_mdp,
 )

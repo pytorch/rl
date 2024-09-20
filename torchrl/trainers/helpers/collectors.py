@@ -304,7 +304,7 @@ def make_collector_offpolicy(
         "init_random_frames": cfg.init_random_frames,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
-        "exploration_type": ExplorationType.from_str(cfg.exploration_mode),
+        "exploration_type": cfg.exploration_type,
     }
 
     collector = collector_helper(**collector_helper_kwargs)
@@ -358,7 +358,7 @@ def make_collector_onpolicy(
         "storing_device": cfg.collector_device,
         "split_trajs": True,
         # trajectories must be separated in online settings
-        "exploration_mode": cfg.exploration_mode,
+        "exploration_type": cfg.exploration_type,
     }
 
     collector = collector_helper(**collector_helper_kwargs)
@@ -398,7 +398,7 @@ class OnPolicyCollectorConfig:
     # for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created
     seed: int = 42
     # seed used for the environment, pytorch and numpy.
-    exploration_mode: str = "random"
+    exploration_type: str = "random"
     # exploration mode of the data collector.
     async_collection: bool = False
     # whether data collection should be done asynchrously. Asynchrounous data collection means

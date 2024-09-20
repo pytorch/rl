@@ -444,7 +444,6 @@ class SyncDataCollector(DataCollectorBase):
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         split_trajs: bool | None = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
-        exploration_mode: str | None = None,
         return_same_td: bool = False,
         reset_when_done: bool = True,
         interruptor=None,
@@ -456,9 +455,6 @@ class SyncDataCollector(DataCollectorBase):
         from torchrl.envs.batched_envs import BatchedEnvBase
 
         self.closed = True
-        exploration_type = _convert_exploration_type(
-            exploration_mode=exploration_mode, exploration_type=exploration_type
-        )
         if create_env_kwargs is None:
             create_env_kwargs = {}
         if not isinstance(create_env_fn, EnvBase):
@@ -1421,7 +1417,7 @@ class _MultiDataCollector(DataCollectorBase):
             A ``cat_results`` value of ``-1`` will always concatenate results along the
             time dimension. This should be preferred over the default. Intermediate values
             are also accepted.
-            Defaults to ``0``.
+            Defaults to ``"stack"``.
 
             .. note:: From v0.5, this argument will default to ``"stack"`` for a better
                 interoperability with the rest of the library.
@@ -1462,7 +1458,6 @@ class _MultiDataCollector(DataCollectorBase):
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
-        exploration_mode=None,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
         preemptive_threshold: float = None,
@@ -1474,9 +1469,6 @@ class _MultiDataCollector(DataCollectorBase):
         replay_buffer: ReplayBuffer | None = None,
         replay_buffer_chunk: bool = True,
     ):
-        exploration_type = _convert_exploration_type(
-            exploration_mode=exploration_mode, exploration_type=exploration_type
-        )
         self.closed = True
         self.num_workers = len(create_env_fn)
 
@@ -2156,19 +2148,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
         cat_results = self.cat_results
         if cat_results is None:
             cat_results = "stack"
-            warnings.warn(
-                f"`cat_results` was not specified in the constructor of {type(self).__name__}. "
-                f"For MultiSyncDataCollector, `cat_results` indicates how the data should "
-                f"be packed: the preferred option and current default is `cat_results='stack'` "
-                f"which provides the best interoperability across torchrl components. "
-                f"Other accepted values are `cat_results=0` (previous behavior) and "
-                f"`cat_results=-1` (cat along time dimension). Among these two, the latter "
-                f"should be preferred for consistency across environment configurations. "
-                f"Currently, the default value is `'stack'`."
-                f"From v0.6 onward, this warning will be removed. "
-                f"To suppress this warning, set `cat_results` to the desired value.",
-                category=DeprecationWarning,
-            )
 
         self.buffers = {}
         dones = [False for _ in range(self.num_workers)]
@@ -2749,7 +2728,6 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
-        exploration_mode=None,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
         preemptive_threshold: float = None,
@@ -2774,7 +2752,6 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             env_device=env_device,
             storing_device=storing_device,
             exploration_type=exploration_type,
-            exploration_mode=exploration_mode,
             reset_when_done=reset_when_done,
             update_at_each_batch=update_at_each_batch,
             preemptive_threshold=preemptive_threshold,

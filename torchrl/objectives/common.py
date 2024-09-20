@@ -97,8 +97,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         >>> loss.set_keys(action="action2")
 
     .. note:: When a policy that is wrapped or augmented with an exploration module is passed
-        to the loss, we want to deactivate the exploration through ``set_exploration_mode(<mode>)`` where
-        ``<mode>`` is either ``ExplorationType.MEAN``, ``ExplorationType.MODE`` or
+        to the loss, we want to deactivate the exploration through ``set_exploration_type(<exploration>)`` where
+        ``<exploration>`` is either ``ExplorationType.MEAN``, ``ExplorationType.MODE`` or
         ``ExplorationType.DETERMINISTIC``. The default value is ``DETERMINISTIC`` and it is set
         through the ``deterministic_sampling_mode`` loss attribute. If another
         exploration mode is required (or if ``DETERMINISTIC`` is not available), one can

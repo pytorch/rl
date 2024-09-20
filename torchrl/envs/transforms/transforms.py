@@ -2136,15 +2136,23 @@ class UnsqueezeTransform(Transform):
     """Inserts a dimension of size one at the specified position.
 
     Args:
-        unsqueeze_dim (int): dimension to unsqueeze. Must be negative (or allow_positive_dim
+        dim (int): dimension to unsqueeze. Must be negative (or allow_positive_dim
             must be turned on).
+
+    Keyword Args:
         allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
-            :obj:`UnsqueezeTransform` will map these to the n^th feature dimension
+            `UnsqueezeTransform`` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor,
-            independently from the tensordict batch size (ie positive dims may be
+            independently of the tensordict batch size (ie positive dims may be
             dangerous in contexts where tensordict of different batch dimension
             are passed).
             Defaults to False, ie. non-negative dimensions are not permitted.
+        in_keys (list of NestedKeys): input entries (read).
+        out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
+            not provided.
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+            Defaults to ``in_keys_in`` if not provided.
     """
 
     invertible = True
@@ -2157,20 +2165,13 @@ class UnsqueezeTransform(Transform):
     def __init__(
         self,
         dim: int = None,
+        *,
         allow_positive_dim: bool = False,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
-        **kwargs,
     ):
-        if "unsqueeze_dim" in kwargs:
-            warnings.warn(
-                "The `unsqueeze_dim` kwarg will be removed in v0.6. Please use `dim` instead."
-            )
-            dim = kwargs["unsqueeze_dim"]
-        elif dim is None:
-            raise TypeError("dim must be provided.")
         if in_keys is None:
             in_keys = []  # default
         if out_keys is None:
