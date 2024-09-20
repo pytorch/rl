@@ -24,7 +24,6 @@ from torchrl.collectors.distributed.default_configs import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
-from torchrl.envs.utils import _convert_exploration_type
 
 SUBMITIT_ERR = None
 try:

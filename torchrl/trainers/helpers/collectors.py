@@ -19,7 +19,6 @@ from torchrl.collectors.collectors import (
 from torchrl.data.postprocs import MultiStep
 from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.common import EnvBase
-from torchrl.envs.utils import ExplorationType
 
 
 def sync_async_collector(

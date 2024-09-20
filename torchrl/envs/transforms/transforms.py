@@ -1347,11 +1347,11 @@ class ToTensorImage(ObservationTransform):
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         observation_spec = self._pixel_observation(observation_spec)
-        unsqueeze_dim = [1] if self._should_unsqueeze(observation_spec) else []
+        dim = [1] if self._should_unsqueeze(observation_spec) else []
         if not self.shape_tolerant or observation_spec.shape[-1] == 3:
             observation_spec.shape = torch.Size(
                 [
-                    *unsqueeze_dim,
+                    *dim,
                     *observation_spec.shape[:-3],
                     observation_spec.shape[-1],
                     observation_spec.shape[-3],
@@ -2159,7 +2159,7 @@ class UnsqueezeTransform(Transform):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._unsqueeze_dim = None
+        cls._dim = None
         return super().__new__(cls)
 
     def __init__(
@@ -2191,22 +2191,26 @@ class UnsqueezeTransform(Transform):
             raise RuntimeError(
                 "dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes. Turn allow_positive_dim to accommodate "
-                "for positive unsqueeze_dim."
+                "for positive dim."
             )
         self._dim = dim
 
     @property
     def unsqueeze_dim(self):
+        return self.dim
+
+    @property
+    def dim(self):
         if self._dim >= 0 and self.parent is not None:
             return len(self.parent.batch_size) + self._dim
         return self._dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        observation = observation.unsqueeze(self.unsqueeze_dim)
+        observation = observation.unsqueeze(self.dim)
         return observation
 
     def _inv_apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        observation = observation.squeeze(self.unsqueeze_dim)
+        observation = observation.squeeze(self.dim)
         return observation
 
     def _transform_spec(self, spec: TensorSpec):
@@ -2253,7 +2257,7 @@ class UnsqueezeTransform(Transform):
 
     def __repr__(self) -> str:
         s = (
-            f"{self.__class__.__name__}(unsqueeze_dim={self.unsqueeze_dim}, in_keys={self.in_keys}, out_keys={self.out_keys},"
+            f"{self.__class__.__name__}(dim={self.dim}, in_keys={self.in_keys}, out_keys={self.out_keys},"
             f" in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
         )
         return s
@@ -2263,14 +2267,14 @@ class SqueezeTransform(UnsqueezeTransform):
     """Removes a dimension of size one at the specified position.
 
     Args:
-        squeeze_dim (int): dimension to squeeze.
+        dim (int): dimension to squeeze.
     """
 
     invertible = True
 
     def __init__(
         self,
-        squeeze_dim: int,
+        dim: int | None = None,
         *args,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
@@ -2278,8 +2282,19 @@ class SqueezeTransform(UnsqueezeTransform):
         out_keys_inv: Optional[Sequence[str]] = None,
         **kwargs,
     ):
+        if dim is None:
+            if "squeeze_dim" in kwargs:
+                warnings.warn(
+                    f"squeeze_dim will be deprecated in favor of dim arg in {type(self).__name__}."
+                )
+                dim = kwargs.pop("squeeze_dim")
+            else:
+                raise TypeError(
+                    f"dim must be passed to {type(self).__name__} constructor."
+                )
+
         super().__init__(
-            squeeze_dim,
+            dim,
             *args,
             in_keys=in_keys,
             out_keys=out_keys,
@@ -2290,7 +2305,7 @@ class SqueezeTransform(UnsqueezeTransform):
 
     @property
     def squeeze_dim(self):
-        return super().unsqueeze_dim
+        return super().dim
 
     _apply_transform = UnsqueezeTransform._inv_apply_transform
     _inv_apply_transform = UnsqueezeTransform._apply_transform

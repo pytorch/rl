@@ -5627,7 +5627,7 @@ class TestReward2Go(TransformBase):
 
 
 class TestUnsqueezeTransform(TransformBase):
-    @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
+    @pytest.mark.parametrize("dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
@@ -5635,14 +5635,10 @@ class TestUnsqueezeTransform(TransformBase):
         "keys", [["observation", ("some_other", "nested_key")], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_transform_no_env(
-        self, keys, size, nchannels, batch, device, unsqueeze_dim
-    ):
+    def test_transform_no_env(self, keys, size, nchannels, batch, device, dim):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
-        unsqueeze = UnsqueezeTransform(
-            unsqueeze_dim, in_keys=keys, allow_positive_dim=True
-        )
+        unsqueeze = UnsqueezeTransform(dim, in_keys=keys, allow_positive_dim=True)
         td = TensorDict(
             {
                 key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
@@ -5652,16 +5648,16 @@ class TestUnsqueezeTransform(TransformBase):
             device=device,
         )
         td.set("dont touch", dont_touch.clone())
-        if unsqueeze_dim >= 0 and unsqueeze_dim < len(batch):
+        if dim >= 0 and dim < len(batch):
             with pytest.raises(RuntimeError, match="batch dimension mismatch"):
                 unsqueeze(td)
             return
         unsqueeze(td)
         expected_size = [*batch, *size, nchannels, 16, 16]
-        if unsqueeze_dim < 0:
-            expected_size.insert(len(expected_size) + unsqueeze_dim + 1, 1)
+        if dim < 0:
+            expected_size.insert(len(expected_size) + dim + 1, 1)
         else:
-            expected_size.insert(unsqueeze_dim, 1)
+            expected_size.insert(dim, 1)
         expected_size = torch.Size(expected_size)
 
         for key in keys:
@@ -5669,7 +5665,7 @@ class TestUnsqueezeTransform(TransformBase):
                 batch,
                 size,
                 nchannels,
-                unsqueeze_dim,
+                dim,
             )
         assert (td.get("dont touch") == dont_touch).all()
 
@@ -5688,7 +5684,7 @@ class TestUnsqueezeTransform(TransformBase):
             for key in keys:
                 assert observation_spec[key].shape == expected_size
 
-    @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
+    @pytest.mark.parametrize("dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
@@ -5704,13 +5700,11 @@ class TestUnsqueezeTransform(TransformBase):
             [("next", "observation_pixels")],
         ],
     )
-    def test_unsqueeze_inv(
-        self, keys, keys_inv, size, nchannels, batch, device, unsqueeze_dim
-    ):
+    def test_unsqueeze_inv(self, keys, keys_inv, size, nchannels, batch, device, dim):
         torch.manual_seed(0)
         keys_total = set(keys + keys_inv)
         unsqueeze = UnsqueezeTransform(
-            unsqueeze_dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
+            dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
         )
         td = TensorDict(
             {
@@ -5726,8 +5720,8 @@ class TestUnsqueezeTransform(TransformBase):
         for key in keys_total.difference(keys_inv):
             assert td.get(key).shape == torch.Size(expected_size)
 
-        if expected_size[unsqueeze_dim] == 1:
-            del expected_size[unsqueeze_dim]
+        if expected_size[dim] == 1:
+            del expected_size[dim]
         for key in keys_inv:
             assert td_modif.get(key).shape == torch.Size(expected_size)
         # for key in keys_inv:
@@ -5787,7 +5781,7 @@ class TestUnsqueezeTransform(TransformBase):
             except RuntimeError:
                 pass
 
-    @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
+    @pytest.mark.parametrize("dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
@@ -5795,13 +5789,11 @@ class TestUnsqueezeTransform(TransformBase):
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_transform_compose(
-        self, keys, size, nchannels, batch, device, unsqueeze_dim
-    ):
+    def test_transform_compose(self, keys, size, nchannels, batch, device, dim):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
         unsqueeze = Compose(
-            UnsqueezeTransform(unsqueeze_dim, in_keys=keys, allow_positive_dim=True)
+            UnsqueezeTransform(dim, in_keys=keys, allow_positive_dim=True)
         )
         td = TensorDict(
             {
@@ -5812,16 +5804,16 @@ class TestUnsqueezeTransform(TransformBase):
             device=device,
         )
         td.set("dont touch", dont_touch.clone())
-        if unsqueeze_dim >= 0 and unsqueeze_dim < len(batch):
+        if dim >= 0 and dim < len(batch):
             with pytest.raises(RuntimeError, match="batch dimension mismatch"):
                 unsqueeze(td)
             return
         unsqueeze(td)
         expected_size = [*batch, *size, nchannels, 16, 16]
-        if unsqueeze_dim < 0:
-            expected_size.insert(len(expected_size) + unsqueeze_dim + 1, 1)
+        if dim < 0:
+            expected_size.insert(len(expected_size) + dim + 1, 1)
         else:
-            expected_size.insert(unsqueeze_dim, 1)
+            expected_size.insert(dim, 1)
         expected_size = torch.Size(expected_size)
 
         for key in keys:
@@ -5829,7 +5821,7 @@ class TestUnsqueezeTransform(TransformBase):
                 batch,
                 size,
                 nchannels,
-                unsqueeze_dim,
+                dim,
             )
         assert (td.get("dont touch") == dont_touch).all()
 
@@ -5865,10 +5857,10 @@ class TestUnsqueezeTransform(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
-    @pytest.mark.parametrize("unsqueeze_dim", [-1, 1])
-    def test_transform_model(self, out_keys, unsqueeze_dim):
+    @pytest.mark.parametrize("dim", [-1, 1])
+    def test_transform_model(self, out_keys, dim):
         t = UnsqueezeTransform(
-            unsqueeze_dim,
+            dim,
             in_keys=["observation"],
             out_keys=out_keys,
             allow_positive_dim=True,
@@ -5878,21 +5870,21 @@ class TestUnsqueezeTransform(TransformBase):
         )
         t(td)
         expected_shape = [3, 4]
-        if unsqueeze_dim >= 0:
-            expected_shape.insert(unsqueeze_dim, 1)
+        if dim >= 0:
+            expected_shape.insert(dim, 1)
         else:
-            expected_shape.insert(len(expected_shape) + unsqueeze_dim + 1, 1)
+            expected_shape.insert(len(expected_shape) + dim + 1, 1)
         if out_keys is None:
             assert td["observation"].shape == torch.Size(expected_shape)
         else:
             assert td[out_keys[0]].shape == torch.Size(expected_shape)
 
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
-    @pytest.mark.parametrize("unsqueeze_dim", [-1, 1])
+    @pytest.mark.parametrize("dim", [-1, 1])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
-    def test_transform_rb(self, rbclass, out_keys, unsqueeze_dim):
+    def test_transform_rb(self, rbclass, out_keys, dim):
         t = UnsqueezeTransform(
-            unsqueeze_dim,
+            dim,
             in_keys=["observation"],
             out_keys=out_keys,
             allow_positive_dim=True,
@@ -5905,10 +5897,10 @@ class TestUnsqueezeTransform(TransformBase):
         rb.extend(td)
         td = rb.sample(2)
         expected_shape = [2, 3, 4]
-        if unsqueeze_dim >= 0:
-            expected_shape.insert(unsqueeze_dim, 1)
+        if dim >= 0:
+            expected_shape.insert(dim, 1)
         else:
-            expected_shape.insert(len(expected_shape) + unsqueeze_dim + 1, 1)
+            expected_shape.insert(len(expected_shape) + dim + 1, 1)
         if out_keys is None:
             assert td["observation"].shape == torch.Size(expected_shape)
         else:
@@ -5932,7 +5924,7 @@ class TestUnsqueezeTransform(TransformBase):
 
 
 class TestSqueezeTransform(TransformBase):
-    @pytest.mark.parametrize("squeeze_dim", [1, -2])
+    @pytest.mark.parametrize("dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
@@ -5953,12 +5945,12 @@ class TestSqueezeTransform(TransformBase):
         ],
     )
     def test_transform_no_env(
-        self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
+        self, keys, keys_inv, size, nchannels, batch, device, dim
     ):
         torch.manual_seed(0)
         keys_total = set(keys + keys_inv)
         squeeze = SqueezeTransform(
-            squeeze_dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
+            dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
         )
         td = TensorDict(
             {
@@ -5973,12 +5965,12 @@ class TestSqueezeTransform(TransformBase):
         for key in keys_total.difference(keys):
             assert td.get(key).shape == torch.Size(expected_size)
 
-        if expected_size[squeeze_dim] == 1:
-            del expected_size[squeeze_dim]
+        if expected_size[dim] == 1:
+            del expected_size[dim]
         for key in keys:
             assert td.get(key).shape == torch.Size(expected_size)
 
-    @pytest.mark.parametrize("squeeze_dim", [1, -2])
+    @pytest.mark.parametrize("dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
@@ -5998,15 +5990,13 @@ class TestSqueezeTransform(TransformBase):
             [("next", "observation_pixels")],
         ],
     )
-    def test_squeeze_inv(
-        self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
-    ):
+    def test_squeeze_inv(self, keys, keys_inv, size, nchannels, batch, device, dim):
         torch.manual_seed(0)
-        if squeeze_dim >= 0:
-            squeeze_dim = squeeze_dim + len(batch)
+        if dim >= 0:
+            dim = dim + len(batch)
         keys_total = set(keys + keys_inv)
         squeeze = SqueezeTransform(
-            squeeze_dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
+            dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
         )
         td = TensorDict(
             {
@@ -6021,14 +6011,14 @@ class TestSqueezeTransform(TransformBase):
         for key in keys_total.difference(keys_inv):
             assert td.get(key).shape == torch.Size(expected_size)
 
-        if squeeze_dim < 0:
-            expected_size.insert(len(expected_size) + squeeze_dim + 1, 1)
+        if dim < 0:
+            expected_size.insert(len(expected_size) + dim + 1, 1)
         else:
-            expected_size.insert(squeeze_dim, 1)
+            expected_size.insert(dim, 1)
         expected_size = torch.Size(expected_size)
 
         for key in keys_inv:
-            assert td.get(key).shape == torch.Size(expected_size), squeeze_dim
+            assert td.get(key).shape == torch.Size(expected_size), dim
 
     @property
     def _circular_transform(self):
@@ -6101,7 +6091,7 @@ class TestSqueezeTransform(TransformBase):
             except RuntimeError:
                 pass
 
-    @pytest.mark.parametrize("squeeze_dim", [1, -2])
+    @pytest.mark.parametrize("dim", [1, -2])
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
@@ -6114,13 +6104,13 @@ class TestSqueezeTransform(TransformBase):
         "keys_inv", [[], ["action", "some_other_key"], [("next", "observation_pixels")]]
     )
     def test_transform_compose(
-        self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
+        self, keys, keys_inv, size, nchannels, batch, device, dim
     ):
         torch.manual_seed(0)
         keys_total = set(keys + keys_inv)
         squeeze = Compose(
             SqueezeTransform(
-                squeeze_dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
+                dim, in_keys=keys, in_keys_inv=keys_inv, allow_positive_dim=True
             )
         )
         td = TensorDict(
@@ -6136,8 +6126,8 @@ class TestSqueezeTransform(TransformBase):
         for key in keys_total.difference(keys):
             assert td.get(key).shape == torch.Size(expected_size)
 
-        if expected_size[squeeze_dim] == 1:
-            del expected_size[squeeze_dim]
+        if expected_size[dim] == 1:
+            del expected_size[dim]
         for key in keys:
             assert td.get(key).shape == torch.Size(expected_size)
 
@@ -6154,9 +6144,9 @@ class TestSqueezeTransform(TransformBase):
 
     @pytest.mark.parametrize("out_keys", [None, ["obs_sq"]])
     def test_transform_model(self, out_keys):
-        squeeze_dim = 1
+        dim = 1
         t = SqueezeTransform(
-            squeeze_dim,
+            dim,
             in_keys=["observation"],
             out_keys=out_keys,
             allow_positive_dim=True,
@@ -6175,9 +6165,9 @@ class TestSqueezeTransform(TransformBase):
     @pytest.mark.parametrize("out_keys", [None, ["obs_sq"]])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, out_keys, rbclass):
-        squeeze_dim = -2
+        dim = -2
         t = SqueezeTransform(
-            squeeze_dim,
+            dim,
             in_keys=["observation"],
             out_keys=out_keys,
             allow_positive_dim=True,
@@ -8896,10 +8886,8 @@ transforms = [
     pytest.param(
         partial(FlattenObservation, first_dim=-3, last_dim=-3), id="FlattenObservation"
     ),
-    pytest.param(
-        partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
-    ),
-    pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
+    pytest.param(partial(UnsqueezeTransform, dim=-1), id="UnsqueezeTransform"),
+    pytest.param(partial(SqueezeTransform, dim=-1), id="SqueezeTransform"),
     GrayScale,
     pytest.param(
         partial(ObservationNorm, in_keys=["observation"]), id="ObservationNorm"

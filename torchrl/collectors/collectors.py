@@ -58,7 +58,6 @@ from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
-    _convert_exploration_type,
     _make_compatible_policy,
     _NonParametricPolicyWrapper,
     ExplorationType,
