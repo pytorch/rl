@@ -6634,8 +6634,7 @@ class InitTracker(Transform):
 
 
 class RenameTransform(Transform):
-    """A transform to rename entries in the output tensordict (or input tensordict
-    via the inverse keys).
+    """A transform to rename entries in the output tensordict (or input tensordict via the inverse keys).
 
     Args:
         in_keys (sequence of NestedKey): the entries to rename.
