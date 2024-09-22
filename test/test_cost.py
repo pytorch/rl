@@ -3565,7 +3565,7 @@ class TestSAC(LossModuleTestBase):
             depth=1,
             out_features=2 * n_act,
         )
-        qvalue = QValueClass
+        qvalue = QValueClass()
         batch = [batch]
         action = torch.randn(*batch, n_act)
         td = TensorDict(
