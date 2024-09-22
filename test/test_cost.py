@@ -48,7 +48,7 @@ from _utils_internal import (  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
 
 # from torchrl.data.postprocs.utils import expand_as_right
-from tensordict import assert_allclose_td, TensorDict
+from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict.nn import NormalParamExtractor, TensorDictModule
 from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
@@ -3465,9 +3465,6 @@ class TestSAC(LossModuleTestBase):
                 distribution_map={
                     "action1": TanhNormal,
                 },
-                name_map={
-                    "action1": (action_key, "action1"),
-                },
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -3505,7 +3502,7 @@ class TestSAC(LossModuleTestBase):
                 self.linear = nn.Linear(obs_dim + action_dim, 1)
 
             def forward(self, obs, act):
-                if isinstance(act, TensorDict):
+                if isinstance(act, TensorDictBase):
                     act = act.get("action1")
                 return self.linear(torch.cat([obs, act], -1))
 
@@ -3535,7 +3532,13 @@ class TestSAC(LossModuleTestBase):
         return value.to(device)
 
     def _create_mock_common_layer_setup(
-        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2, composite_action_dist=False,
+        self,
+        n_obs=3,
+        n_act=4,
+        ncells=4,
+        batch=2,
+        n_hidden=2,
+        composite_action_dist=False,
     ):
         common = MLP(
             num_cells=ncells,
@@ -3653,7 +3656,14 @@ class TestSAC(LossModuleTestBase):
         return td
 
     def _create_seq_mock_data_sac(
-        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu", composite_action_dist=False
+        self,
+        batch=8,
+        T=4,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
+        composite_action_dist=False,
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -3710,9 +3720,13 @@ class TestSAC(LossModuleTestBase):
             pytest.skip("incompatible config")
 
         torch.manual_seed(self.seed)
-        td = self._create_mock_data_sac(device=device, composite_action_dist=composite_action_dist)
+        td = self._create_mock_data_sac(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor = self._create_mock_actor(device=device, composite_action_dist=composite_action_dist)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -3878,7 +3892,9 @@ class TestSAC(LossModuleTestBase):
 
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(device=device, composite_action_dist=composite_action_dist)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -3924,7 +3940,9 @@ class TestSAC(LossModuleTestBase):
         n_act=4,
     ):
         torch.manual_seed(self.seed)
-        actor, qvalue, common, td = self._create_mock_common_layer_setup(n_act=n_act, composite_action_dist=composite_action_dist)
+        actor, qvalue, common, td = self._create_mock_common_layer_setup(
+            n_act=n_act, composite_action_dist=composite_action_dist
+        )
 
         loss_fn = SACLoss(
             actor_network=actor,
@@ -4025,9 +4043,13 @@ class TestSAC(LossModuleTestBase):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_sac(device=device, composite_action_dist=composite_action_dist)
+        td = self._create_seq_mock_data_sac(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor = self._create_mock_actor(device=device, composite_action_dist=composite_action_dist)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4372,8 +4394,12 @@ class TestSAC(LossModuleTestBase):
             if torch.cuda.device_count() == 0
             else torch.device("cuda")
         )
-        td = self._create_mock_data_sac(device=device, composite_action_dist=composite_action_dist)
-        actor = self._create_mock_actor(device=device, composite_action_dist=composite_action_dist)
+        td = self._create_mock_data_sac(
+            device=device, composite_action_dist=composite_action_dist
+        )
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)

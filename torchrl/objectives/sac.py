@@ -45,20 +45,20 @@ def _delezify(func):
 
     return new_func
 
+
 def compute_log_prob(action_dist, action_or_tensordict, tensor_key):
     if isinstance(action_or_tensordict, torch.Tensor):
         log_p = action_dist.log_prob(action_or_tensordict)
     else:
         tensordict = action_dist.log_prob(action_or_tensordict)
-        import ipdb; ipdb.set_trace()
-        log_p = tensordict.get(tensor_key)        
+        log_p = tensordict.get(tensor_key)
         maybe_log_prob = action_dist.log_prob(tensordict)
         if not isinstance(maybe_log_prob, torch.Tensor):
-            import ipdb; ipdb.set_trace()
             log_p = maybe_log_prob.get(tensor_key)
         else:
             log_p = maybe_log_prob
     return log_p
+
 
 class SACLoss(LossModule):
     """TorchRL implementation of the SAC loss.
