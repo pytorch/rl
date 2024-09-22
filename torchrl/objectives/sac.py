@@ -265,7 +265,7 @@ class SACLoss(LossModule):
             state_action_value (NestedKey): The input tensordict key where the
                 state action value is expected.  Defaults to ``"state_action_value"``.
             log_prob (NestedKey): The input tensordict key where the log probability is expected.
-                Defaults to ``"_log_prob"``.
+                Defaults to ``"sample_log_prob"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
@@ -281,7 +281,7 @@ class SACLoss(LossModule):
         action: NestedKey = "action"
         value: NestedKey = "state_value"
         state_action_value: NestedKey = "state_action_value"
-        log_prob: NestedKey = "_log_prob"
+        log_prob: NestedKey = "sample_log_prob"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"

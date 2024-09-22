@@ -3505,6 +3505,8 @@ class TestSAC(LossModuleTestBase):
                 self.linear = nn.Linear(obs_dim + action_dim, 1)
 
             def forward(self, obs, act):
+                if isinstance(act, TensorDict):
+                    act = act.get("action1")
                 return self.linear(torch.cat([obs, act], -1))
 
         module = ValueClass()
