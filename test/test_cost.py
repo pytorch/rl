@@ -3465,6 +3465,7 @@ class TestSAC(LossModuleTestBase):
                 distribution_map={
                     "action1": TanhNormal,
                 },
+                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -3582,9 +3583,7 @@ class TestSAC(LossModuleTestBase):
                 distribution_map={
                     "action1": TanhNormal,
                 },
-                name_map={
-                    "action1": ("action", "action1"),
-                },
+                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -4224,7 +4223,7 @@ class TestSAC(LossModuleTestBase):
             "value": "state_value",
             "state_action_value": "state_action_value",
             "action": "action",
-            "log_prob": "_log_prob",
+            "log_prob": "sample_log_prob",
             "reward": "reward",
             "done": "done",
             "terminated": "terminated",
