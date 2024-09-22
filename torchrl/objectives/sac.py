@@ -45,6 +45,20 @@ def _delezify(func):
 
     return new_func
 
+def compute_log_prob(action_dist, action_or_tensordict, tensor_key):
+    if isinstance(action_or_tensordict, torch.Tensor):
+        log_p = action_dist.log_prob(action_or_tensordict)
+    else:
+        tensordict = action_dist.log_prob(action_or_tensordict)
+        import ipdb; ipdb.set_trace()
+        log_p = tensordict.get(tensor_key)        
+        maybe_log_prob = action_dist.log_prob(tensordict)
+        if not isinstance(maybe_log_prob, torch.Tensor):
+            import ipdb; ipdb.set_trace()
+            log_p = maybe_log_prob.get(tensor_key)
+        else:
+            log_p = maybe_log_prob
+    return log_p
 
 class SACLoss(LossModule):
     """TorchRL implementation of the SAC loss.
@@ -622,7 +636,7 @@ class SACLoss(LossModule):
         ), self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict)
             a_reparm = dist.rsample()
-        log_prob = dist.log_prob(a_reparm)
+        log_prob = compute_log_prob(dist, a_reparm, self.tensor_keys.log_prob)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
@@ -713,7 +727,9 @@ class SACLoss(LossModule):
                 next_dist = self.actor_network.get_dist(next_tensordict)
                 next_action = next_dist.rsample()
                 next_tensordict.set(self.tensor_keys.action, next_action)
-                next_sample_log_prob = next_dist.log_prob(next_action)
+                next_sample_log_prob = compute_log_prob(
+                    next_dist, next_action, self.tensor_keys.log_prob
+                )
 
             # get q-values
             next_tensordict_expand = self._vmap_qnetworkN0(
@@ -780,7 +796,8 @@ class SACLoss(LossModule):
             td_copy.get(self.tensor_keys.state_action_value).squeeze(-1).min(0)[0]
         )
 
-        log_p = action_dist.log_prob(action)
+        log_p = compute_log_prob(action_dist, action, self.tensor_keys.log_prob)
+
         if log_p.shape != min_qval.shape:
             raise RuntimeError(
                 f"Losses shape mismatch: {min_qval.shape} and {log_p.shape}"

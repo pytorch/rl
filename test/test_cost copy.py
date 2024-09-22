@@ -3450,42 +3450,21 @@ class TestSAC(LossModuleTestBase):
         device="cpu",
         observation_key="observation",
         action_key="action",
-        composite_action_dist=False,
     ):
         # Actor
         action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        if composite_action_dist:
-            action_spec = Composite({action_key: {"action1": action_spec}})
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
-        if composite_action_dist:
-            distribution_class = functools.partial(
-                CompositeDistribution,
-                distribution_map={
-                    "action1": TanhNormal,
-                },
-                name_map={
-                    "action1": (action_key, "action1"),
-                },
-            )
-            module_out_keys = [
-                ("params", "action1", "loc"),
-                ("params", "action1", "scale"),
-            ]
-            actor_in_keys = ["params"]
-        else:
-            distribution_class = TanhNormal
-            module_out_keys = actor_in_keys = ["loc", "scale"]
         module = TensorDictModule(
-            net, in_keys=[observation_key], out_keys=module_out_keys
+            net, in_keys=[observation_key], out_keys=["loc", "scale"]
         )
         actor = ProbabilisticActor(
             module=module,
-            distribution_class=distribution_class,
-            in_keys=actor_in_keys,
-            out_keys=[action_key],
+            in_keys=["loc", "scale"],
             spec=action_spec,
+            distribution_class=TanhNormal,
+            out_keys=[action_key],
         )
         return actor.to(device)
 
@@ -3533,7 +3512,7 @@ class TestSAC(LossModuleTestBase):
         return value.to(device)
 
     def _create_mock_common_layer_setup(
-        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2, composite_action_dist=False,
+        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2
     ):
         common = MLP(
             num_cells=ncells,
@@ -3554,11 +3533,10 @@ class TestSAC(LossModuleTestBase):
             out_features=1,
         )
         batch = [batch]
-        action = torch.randn(*batch, n_act)
         td = TensorDict(
             {
                 "obs": torch.randn(*batch, n_obs),
-                "action": {"action1": action} if composite_action_dist else action,
+                "action": torch.randn(*batch, n_act),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
                 "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
@@ -3571,32 +3549,14 @@ class TestSAC(LossModuleTestBase):
             batch,
         )
         common = Mod(common, in_keys=["obs"], out_keys=["hidden"])
-        if composite_action_dist:
-            distribution_class = functools.partial(
-                CompositeDistribution,
-                distribution_map={
-                    "action1": TanhNormal,
-                },
-                name_map={
-                    "action1": ("action", "action1"),
-                },
-            )
-            module_out_keys = [
-                ("params", "action1", "loc"),
-                ("params", "action1", "scale"),
-            ]
-            actor_in_keys = ["params"]
-        else:
-            distribution_class = TanhNormal
-            module_out_keys = actor_in_keys = ["loc", "scale"]
         actor = ProbSeq(
             common,
             Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
-            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=module_out_keys),
+            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
             ProbMod(
-                in_keys=actor_in_keys,
+                in_keys=["loc", "scale"],
                 out_keys=["action"],
-                distribution_class=distribution_class,
+                distribution_class=TanhNormal,
             ),
         )
         qvalue_head = Mod(
@@ -3622,7 +3582,6 @@ class TestSAC(LossModuleTestBase):
         done_key="done",
         terminated_key="terminated",
         reward_key="reward",
-        composite_action_dist=False,
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
@@ -3644,14 +3603,14 @@ class TestSAC(LossModuleTestBase):
                     terminated_key: terminated,
                     reward_key: reward,
                 },
-                action_key: {"action1": action} if composite_action_dist else action,
+                action_key: action,
             },
             device=device,
         )
         return td
 
     def _create_seq_mock_data_sac(
-        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu", composite_action_dist=False
+        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -3667,7 +3626,6 @@ class TestSAC(LossModuleTestBase):
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = torch.ones(batch, T, dtype=torch.bool, device=device)
-        action = action.masked_fill_(~mask.unsqueeze(-1), 0.0)
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -3679,7 +3637,7 @@ class TestSAC(LossModuleTestBase):
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
-                "action": {"action1": action} if composite_action_dist else action,
+                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             names=[None, "time"],
             device=device,
@@ -3692,7 +3650,6 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac(
         self,
         delay_value,
@@ -3702,15 +3659,14 @@ class TestSAC(LossModuleTestBase):
         device,
         version,
         td_est,
-        composite_action_dist,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
 
         torch.manual_seed(self.seed)
-        td = self._create_mock_data_sac(device=device, composite_action_dist=composite_action_dist)
+        td = self._create_mock_data_sac(device=device)
 
-        actor = self._create_mock_actor(device=device, composite_action_dist=composite_action_dist)
+        actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -3860,7 +3816,6 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac_state_dict(
         self,
         delay_value,
@@ -3869,14 +3824,13 @@ class TestSAC(LossModuleTestBase):
         num_qvalue,
         device,
         version,
-        composite_action_dist,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
 
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(device=device, composite_action_dist=composite_action_dist)
+        actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -3912,17 +3866,15 @@ class TestSAC(LossModuleTestBase):
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [False, True])
-    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac_separate_losses(
         self,
         device,
         separate_losses,
         version,
-        composite_action_dist,
         n_act=4,
     ):
         torch.manual_seed(self.seed)
-        actor, qvalue, common, td = self._create_mock_common_layer_setup(n_act=n_act, composite_action_dist=composite_action_dist)
+        actor, qvalue, common, td = self._create_mock_common_layer_setup(n_act=n_act)
 
         loss_fn = SACLoss(
             actor_network=actor,
@@ -4008,7 +3960,6 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac_batcher(
         self,
         n,
@@ -4018,14 +3969,13 @@ class TestSAC(LossModuleTestBase):
         num_qvalue,
         device,
         version,
-        composite_action_dist,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_sac(device=device, composite_action_dist=composite_action_dist)
+        td = self._create_seq_mock_data_sac(device=device)
 
-        actor = self._create_mock_actor(device=device, composite_action_dist=composite_action_dist)
+        actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4176,11 +4126,10 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize(
         "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
     )
-    @pytest.mark.parametrize("composite_action_dist", [True, False])
-    def test_sac_tensordict_keys(self, td_est, version, composite_action_dist):
-        td = self._create_mock_data_sac(composite_action_dist=composite_action_dist)
+    def test_sac_tensordict_keys(self, td_est, version):
+        td = self._create_mock_data_sac()
 
-        actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
+        actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
         if version == 1:
             value = self._create_mock_value()
@@ -4362,16 +4311,15 @@ class TestSAC(LossModuleTestBase):
         loss.load_state_dict(state)
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    @pytest.mark.parametrize("composite_action_dist", [True, False])
-    def test_sac_reduction(self, reduction, version, composite_action_dist):
+    def test_sac_reduction(self, reduction, version):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
             if torch.cuda.device_count() == 0
             else torch.device("cuda")
         )
-        td = self._create_mock_data_sac(device=device, composite_action_dist=composite_action_dist)
-        actor = self._create_mock_actor(device=device, composite_action_dist=composite_action_dist)
+        td = self._create_mock_data_sac(device=device)
+        actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
