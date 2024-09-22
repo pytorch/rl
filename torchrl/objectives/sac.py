@@ -47,6 +47,7 @@ def _delezify(func):
 
 
 def compute_log_prob(action_dist, action_or_tensordict, tensor_key):
+    """Compute the log probability of an action given a distribution."""
     if isinstance(action_or_tensordict, torch.Tensor):
         log_p = action_dist.log_prob(action_or_tensordict)
     else:
@@ -464,9 +465,7 @@ class SACLoss(LossModule):
             else:
                 action_container_shape = action_spec.shape
             target_entropy = -float(
-                action_spec[self.tensor_keys.action]
-                .shape[len(action_container_shape) :]
-                .numel()
+                action_spec.shape[len(action_container_shape) :].numel()
             )
         delattr(self, "_target_entropy")
         self.register_buffer(
