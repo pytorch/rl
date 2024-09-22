@@ -3541,6 +3541,18 @@ class TestSAC(LossModuleTestBase):
         n_hidden=2,
         composite_action_dist=False,
     ):
+        class QValueClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear1 = nn.Linear(n_hidden + n_act, n_hidden)
+                self.relu = nn.ReLU()
+                self.linear2 = nn.Linear(n_hidden, 1)
+
+            def forward(self, obs, act):
+                if isinstance(act, TensorDictBase):
+                    act = act.get("action1")
+                return self.linear2(self.relu(self.linear1(torch.cat([obs, act], -1))))
+
         common = MLP(
             num_cells=ncells,
             in_features=n_obs,
@@ -3553,12 +3565,7 @@ class TestSAC(LossModuleTestBase):
             depth=1,
             out_features=2 * n_act,
         )
-        qvalue = MLP(
-            in_features=n_hidden + n_act,
-            num_cells=ncells,
-            depth=1,
-            out_features=1,
-        )
+        qvalue = QValueClass()
         batch = [batch]
         action = torch.randn(*batch, n_act)
         td = TensorDict(

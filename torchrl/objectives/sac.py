@@ -51,9 +51,7 @@ def compute_log_prob(action_dist, action_or_tensordict, tensor_key):
     if isinstance(action_or_tensordict, torch.Tensor):
         log_p = action_dist.log_prob(action_or_tensordict)
     else:
-        tensordict = action_dist.log_prob(action_or_tensordict)
-        log_p = tensordict.get(tensor_key)
-        maybe_log_prob = action_dist.log_prob(tensordict)
+        maybe_log_prob = action_dist.log_prob(action_or_tensordict)
         if not isinstance(maybe_log_prob, torch.Tensor):
             log_p = maybe_log_prob.get(tensor_key)
         else:
