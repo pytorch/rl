@@ -100,10 +100,11 @@ class OnlineDTLoss(LossModule):
             "actor_network",
             create_target_params=False,
         )
-        try:
-            device = next(self.parameters()).device
-        except AttributeError:
-            device = torch.device("cpu")
+        p = next(self.parameters())
+        if hasattr(p, "device"):
+            device = p.device
+        else:
+            device = torch.get_default_device()
 
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         if bool(min_alpha) ^ bool(max_alpha):

@@ -64,5 +64,8 @@ loss:
   max_q_backup: False
   deterministic_backup: False
   num_random: 10
-  with_lagrange: True
+  with_lagrange: False
   lagrange_thresh: 10.0
+  compile: False
+  compile_mode: reduce-overhead
+  cudagraphs: False

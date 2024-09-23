@@ -12,11 +12,11 @@ from typing import Dict, Optional, Sequence, Tuple, Union
 import numpy as np
 import torch
 from torch import distributions as D, nn
-
+from torch.cuda import is_current_stream_capturing
 try:
-    from torch.compiler import assume_constant_result
+    from torch.compiler import assume_constant_result, is_dynamo_compiling
 except ImportError:
-    from torch._dynamo import assume_constant_result
+    from torch._dynamo import assume_constant_result, is_compiling as is_dynamo_compiling
 
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
@@ -426,7 +426,9 @@ class TanhNormal(FasterTransformedDistribution):
             event_dims = min(1, loc.ndim)
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
-        if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
+        if is_current_stream_capturing():
+            pass
+        elif isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
             if not (high > low).all():
                 raise RuntimeError(err_msg)
         elif isinstance(high, Number) and isinstance(low, Number):
@@ -436,8 +438,10 @@ class TanhNormal(FasterTransformedDistribution):
             if not all(high > low):
                 raise RuntimeError(err_msg)
 
-        high = torch.as_tensor(high, device=loc.device)
-        low = torch.as_tensor(low, device=loc.device)
+        if not isinstance(high, (torch.Tensor, Number)):
+            high = torch.as_tensor(high, device=loc.device)
+        if not isinstance(low, (torch.Tensor, Number)):
+            low = torch.as_tensor(low, device=loc.device)
         self.non_trivial_max = (high != 1.0).any()
 
         self.non_trivial_min = (low != -1.0).any()
@@ -452,9 +456,9 @@ class TanhNormal(FasterTransformedDistribution):
             else upscale.to(self.device)
         )
 
-        if isinstance(high, torch.Tensor):
+        if isinstance(high, torch.Tensor) and high.device != self.device:
             high = high.to(loc.device)
-        if isinstance(low, torch.Tensor):
+        if isinstance(low, torch.Tensor) and low.device != self.device:
             low = low.to(loc.device)
         self.low = low
         self.high = high
@@ -465,8 +469,8 @@ class TanhNormal(FasterTransformedDistribution):
             t = SafeTanhTransform()
         else:
             t = D.TanhTransform()
-        # t = D.TanhTransform()
-        if torch.compiler.is_dynamo_compiling() or (
+        t = D.TanhTransform()
+        if is_current_stream_capturing() or is_dynamo_compiling() or (
             self.non_trivial_max or self.non_trivial_min
         ):
             t = _PatchedComposeTransform(
@@ -495,7 +499,7 @@ class TanhNormal(FasterTransformedDistribution):
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
             # loc must be rescaled if tanh_loc
-            if torch.compiler.is_dynamo_compiling() or (
+            if is_dynamo_compiling() or (
                 self.non_trivial_max or self.non_trivial_min
             ):
                 loc = loc + (self.high - self.low) / 2 + self.low
@@ -820,7 +824,7 @@ uniform_sample_delta = _uniform_sample_delta
 
 def _err_compile_safetanh():
     raise RuntimeError(
-        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass"
+        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass "
         "safe_tanh=False. "
         "If you are using a ProbabilisticTensorDictModule, this can be done via "
         "`distribution_kwargs={'safe_tanh': False}`. "

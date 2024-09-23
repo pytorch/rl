@@ -306,10 +306,11 @@ class REDQLoss(LossModule):
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
         self.loss_function = loss_function
 
-        try:
-            device = next(self.parameters()).device
-        except AttributeError:
-            device = torch.device("cpu")
+        p = next(self.parameters())
+        if hasattr(p, "device"):
+            device = p.device
+        else:
+            device = torch.get_default_device()
 
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         self.register_buffer(

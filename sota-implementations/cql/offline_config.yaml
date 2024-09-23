@@ -52,5 +52,7 @@ loss:
   max_q_backup: False
   deterministic_backup: False
   num_random: 10
-  with_lagrange: True
+  with_lagrange: False
   lagrange_thresh: 5.0 # tau
+  compile: False
+  compile_mode: reduce-overhead
