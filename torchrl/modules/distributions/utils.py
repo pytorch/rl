@@ -8,7 +8,10 @@ from typing import Union
 import torch
 from torch import autograd, distributions as d
 from torch.distributions import Independent, Transform, TransformedDistribution
-
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 def _cast_device(elt: Union[torch.Tensor, float], device) -> Union[torch.Tensor, float]:
     if isinstance(elt, torch.Tensor):

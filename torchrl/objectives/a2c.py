@@ -316,10 +316,11 @@ class A2CLoss(LossModule):
         self.entropy_bonus = entropy_bonus and entropy_coef
         self.reduction = reduction
 
-        try:
-            device = next(self.parameters()).device
-        except AttributeError:
-            device = torch.device("cpu")
+        p = next(self.parameters())
+        if hasattr(p, "device"):
+            device = p.device
+        else:
+            device = torch.get_default_device()
 
         self.register_buffer(
             "entropy_coef", torch.as_tensor(entropy_coef, device=device)

@@ -320,10 +320,11 @@ class CQLLoss(LossModule):
         )
 
         self.loss_function = loss_function
-        try:
-            device = next(self.parameters()).device
-        except AttributeError:
-            device = torch.device("cpu")
+        p = next(self.parameters())
+        if hasattr(p, "device"):
+            device = p.device
+        else:
+            device = torch.get_default_device()
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         if bool(min_alpha) ^ bool(max_alpha):
             min_alpha = min_alpha if min_alpha else 0.0
@@ -540,6 +541,8 @@ class CQLLoss(LossModule):
         )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
+        entropy = -actor_metadata.get(self.tensor_keys.log_prob).mean().detach()
+
         out = {
             "loss_actor": loss_actor,
             "loss_actor_bc": loss_actor_bc,
@@ -547,7 +550,7 @@ class CQLLoss(LossModule):
             "loss_cql": cql_loss,
             "loss_alpha": loss_alpha,
             "alpha": self._alpha,
-            "entropy": -actor_metadata.get(self.tensor_keys.log_prob).mean().detach(),
+            "entropy": entropy,
         }
         if self.with_lagrange:
             out["loss_alpha_prime"] = alpha_prime_loss.mean()
@@ -579,7 +582,7 @@ class CQLLoss(LossModule):
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(
-                tensordict,
+                tensordict
             )
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
@@ -740,12 +743,12 @@ class CQLLoss(LossModule):
             )
 
         random_actions_tensor = (
-            torch.FloatTensor(
+            torch.empty(
                 tensordict.shape[0] * self.num_random,
                 tensordict[self.tensor_keys.action].shape[-1],
+                device=tensordict.device,
             )
             .uniform_(-1, 1)
-            .to(tensordict.device)
         )
         curr_actions_td, curr_log_pis = self._get_policy_actions(
             tensordict.copy(),
@@ -884,15 +887,18 @@ class CQLLoss(LossModule):
             )
 
         alpha_prime = torch.clamp_max(self.log_alpha_prime.exp(), max=1000000.0)
-        min_qf1_loss = alpha_prime * (cql_q1_loss.mean() - self.target_action_gap)
-        min_qf2_loss = alpha_prime * (cql_q2_loss.mean() - self.target_action_gap)
+        with torch.no_grad():
+            min_qf1_loss = (cql_q1_loss.mean() - self.target_action_gap)
+            min_qf2_loss = (cql_q2_loss.mean() - self.target_action_gap)
 
-        alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
+        alpha_prime_loss = alpha_prime * (-min_qf1_loss - min_qf2_loss) * 0.5
         alpha_prime_loss = _reduce(alpha_prime_loss, reduction=self.reduction)
         return alpha_prime_loss, {}
 
     def alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
         log_pi = tensordict.get(self.tensor_keys.log_prob)
+        if log_pi is None:
+            log_pi = tensordict.get("bc_log_prob")
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
             alpha_loss = -self.log_alpha * (log_pi.detach() + self.target_entropy)
@@ -1080,9 +1086,9 @@ class DiscreteCQLLoss(LossModule):
         self.loss_function = loss_function
         if action_space is None:
             # infer from value net
-            try:
+            if hasattr(value_network, "spec"):
                 action_space = value_network.spec
-            except AttributeError:
+            else:
                 # let's try with action_space then
                 try:
                     action_space = value_network.action_space
@@ -1205,8 +1211,6 @@ class DiscreteCQLLoss(LossModule):
         with torch.no_grad():
             td_error = (pred_val_index - target_value).pow(2)
             td_error = td_error.unsqueeze(-1)
-        if tensordict.device is not None:
-            td_error = td_error.to(tensordict.device)
 
         tensordict.set(
             self.tensor_keys.priority,

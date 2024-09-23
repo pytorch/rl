@@ -69,6 +69,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         entropy_coef=cfg.loss.entropy_coef,
         critic_coef=cfg.loss.critic_coef,
     )
+    if cfg.loss.compile:
+        loss_module = torch.compile(loss_module)
 
     # Create optimizers
     actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr)
