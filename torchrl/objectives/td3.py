@@ -391,7 +391,7 @@ class TD3Loss(LossModule):
             .get(self.tensor_keys.state_action_value)
             .squeeze(-1)
         )
-        loss_actor = -(state_action_value_actor[0])
+        loss_actor = -state_action_value_actor[0]
         metadata = {
             "state_action_value_actor": state_action_value_actor.detach(),
         }

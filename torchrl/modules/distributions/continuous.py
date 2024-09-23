@@ -14,9 +14,9 @@ import torch
 from torch import distributions as D, nn
 
 try:
-    from torch.compiler import assume_constant_result
+    from torch.compiler import assume_constant_result, is_dynamo_compiling
 except ImportError:
-    from torch._dynamo import assume_constant_result
+    from torch._dynamo import assume_constant_result, is_compiling as is_dynamo_compiling
 
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
@@ -465,8 +465,8 @@ class TanhNormal(FasterTransformedDistribution):
             t = SafeTanhTransform()
         else:
             t = D.TanhTransform()
-        # t = D.TanhTransform()
-        if torch.compiler.is_dynamo_compiling() or (
+        t = D.TanhTransform()
+        if is_dynamo_compiling() or (
             self.non_trivial_max or self.non_trivial_min
         ):
             t = _PatchedComposeTransform(
@@ -495,7 +495,7 @@ class TanhNormal(FasterTransformedDistribution):
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
             # loc must be rescaled if tanh_loc
-            if torch.compiler.is_dynamo_compiling() or (
+            if is_dynamo_compiling() or (
                 self.non_trivial_max or self.non_trivial_min
             ):
                 loc = loc + (self.high - self.low) / 2 + self.low
@@ -820,7 +820,7 @@ uniform_sample_delta = _uniform_sample_delta
 
 def _err_compile_safetanh():
     raise RuntimeError(
-        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass"
+        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass "
         "safe_tanh=False. "
         "If you are using a ProbabilisticTensorDictModule, this can be done via "
         "`distribution_kwargs={'safe_tanh': False}`. "

@@ -202,17 +202,21 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
     # We use a ProbabilisticActor to make sure that we map the
     # network output to the right space using a TanhDelta
     # distribution.
+    high = action_spec.space.high
+    low = action_spec.space.low
+    if train_env.batch_size:
+        high = high[(0,) * len(train_env.batch_size)]
+        low = low[(0,) * len(train_env.batch_size)]
     actor = ProbabilisticActor(
         module=actor_module,
         in_keys=["loc", "scale"],
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "low": action_spec.space.low[len(train_env.batch_size) :],
-            "high": action_spec.space.high[
-                len(train_env.batch_size) :
-            ],  # remove batch-size
+            "low": low,
+            "high": high,
             "tanh_loc": False,
+            "safe_tanh": not cfg.loss.compile,
         },
         default_interaction_type=ExplorationType.RANDOM,
     )
@@ -334,6 +338,8 @@ def make_discrete_loss(loss_cfg, model):
     )
     loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
+    if loss_cfg.compile:
+        loss_module = torch.compile(loss_module)
 
     return loss_module, target_net_updater
 

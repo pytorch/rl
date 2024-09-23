@@ -87,6 +87,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.eps,
     )
+    if cfg.loss.compile:
+        loss_module = torch.compile(loss_module)
 
     # Create logger
     logger = None
