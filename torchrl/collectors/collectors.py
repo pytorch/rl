@@ -230,7 +230,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             policy = deepcopy(policy)
 
         param_and_buf.apply(
-            functools.partial(map_weight, device=policy_device),
+            functools.partial(map_weight),
             filter_empty=False,
         ).to_module(policy)
         return policy, get_original_weights
