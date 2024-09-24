@@ -7,7 +7,6 @@ from __future__ import annotations
 import abc
 import contextlib
 import functools
-
 import importlib.util
 import inspect
 import os
@@ -30,7 +29,7 @@ from tensordict import (
     unravel_key,
 )
 from tensordict.base import _is_leaf_nontensor
-from tensordict.nn import TensorDictModule, TensorDictModuleBase
+from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.

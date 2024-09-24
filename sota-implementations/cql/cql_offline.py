@@ -15,6 +15,8 @@ import hydra
 import numpy as np
 import torch
 import tqdm
+from tensordict import TensorDict
+
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -81,66 +83,67 @@ def main(cfg: "DictConfig"):  # noqa: F821
         alpha_prime_optim,
     ) = make_continuous_cql_optimizer(cfg, loss_module)
 
-    pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
-
     gradient_steps = cfg.optim.gradient_steps
     policy_eval_start = cfg.optim.policy_eval_start
     evaluation_interval = cfg.logger.eval_iter
     eval_steps = cfg.logger.eval_steps
 
-    # Training loop
-    start_time = time.time()
-    for i in range(gradient_steps):
-        pbar.update(1)
-        # sample data
-        data = replay_buffer.sample()
-        # compute loss
-        loss_vals = loss_module(data.clone().to(device))
-
-        # official cql implementation uses behavior cloning loss for first few updating steps as it helps for some tasks
-        if i >= policy_eval_start:
-            actor_loss = loss_vals["loss_actor"]
-        else:
-            actor_loss = loss_vals["loss_actor_bc"]
-        q_loss = loss_vals["loss_qvalue"]
-        cql_loss = loss_vals["loss_cql"]
-
+    def update(data, i):
+        critic_optim.zero_grad()
+        q_loss, metadata = loss_module.q_loss(data)
+        cql_loss, cql_metadata = loss_module.cql_loss(data)
         q_loss = q_loss + cql_loss
-
-        # update model
-        alpha_loss = loss_vals["loss_alpha"]
-        alpha_prime_loss = loss_vals["loss_alpha_prime"]
-
-        alpha_optim.zero_grad()
-        alpha_loss.backward()
-        alpha_optim.step()
+        q_loss.backward()
+        critic_optim.step()
+        metadata.update(cql_metadata)
 
         policy_optim.zero_grad()
+        if i >= policy_eval_start:
+            actor_loss, actor_metadata = loss_module.actor_loss(data)
+        else:
+            actor_loss, actor_metadata = loss_module.actor_bc_loss(data)
         actor_loss.backward()
         policy_optim.step()
+        metadata.update(actor_metadata)
+
+        alpha_optim.zero_grad()
+        alpha_loss, alpha_metadata = loss_module.alpha_loss(actor_metadata)
+        alpha_loss.backward()
+        alpha_optim.step()
+        metadata.update(alpha_metadata)
 
         if alpha_prime_optim is not None:
             alpha_prime_optim.zero_grad()
-            alpha_prime_loss.backward(retain_graph=True)
+            alpha_prime_loss, alpha_prime_metadata = loss_module.alpha_prime_loss(data)
+            alpha_prime_loss.backward()
             alpha_prime_optim.step()
+            metadata.update(alpha_prime_metadata)
 
-        critic_optim.zero_grad()
-        # TODO: we have the option to compute losses independently retain is not needed?
-        q_loss.backward(retain_graph=False)
-        critic_optim.step()
+        loss_vals = TensorDict(metadata)
+        loss_vals["loss_qvalue"] = q_loss
+        loss_vals["loss_cql"] = cql_loss
+        loss_vals["loss_alpha"] = alpha_loss
+        loss = actor_loss + q_loss + alpha_loss
+        if alpha_prime_optim is not None:
+            loss_vals["loss_alpha_prime"] = alpha_prime_loss
+            loss = loss + alpha_prime_loss
+        loss_vals["loss"] = loss
 
-        loss = actor_loss + q_loss + alpha_loss + alpha_prime_loss
+        return loss_vals.detach()
+
+    if cfg.loss.compile:
+        update = torch.compile(update, mode=cfg.loss.compile_mode)
+
+    # Training loop
+    start_time = time.time()
+    pbar = tqdm.tqdm(range(gradient_steps))
+    for i in pbar:
+        # sample data
+        data = replay_buffer.sample().to(device)
+        loss_vals = update(data, i)
 
         # log metrics
-        to_log = {
-            "loss": loss.item(),
-            "loss_actor_bc": loss_vals["loss_actor_bc"].item(),
-            "loss_actor": loss_vals["loss_actor"].item(),
-            "loss_qvalue": q_loss.item(),
-            "loss_cql": cql_loss.item(),
-            "loss_alpha": alpha_loss.item(),
-            "loss_alpha_prime": alpha_prime_loss.item(),
-        }
+        to_log = loss_vals.mean().to_dict()
 
         # update qnet_target params
         target_net_updater.step()

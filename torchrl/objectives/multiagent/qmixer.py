@@ -243,9 +243,9 @@ class QMixerLoss(LossModule):
         self.loss_function = loss_function
         if action_space is None:
             # infer from value net
-            try:
+            if hasattr(local_value_network, "spec"):
                 action_space = local_value_network.spec
-            except AttributeError:
+            else:
                 # let's try with action_space then
                 try:
                     action_space = local_value_network.action_space

@@ -30,7 +30,7 @@ optim:
   device: null
   actor_lr: 3e-4
   critic_lr: 3e-4
-  weight_decay: 0.0
+  weight_decay: 1e-8
   gradient_steps: 1_000_000
   policy_eval_start: 40_000
 
@@ -52,5 +52,8 @@ loss:
   max_q_backup: False
   deterministic_backup: False
   num_random: 10
-  with_lagrange: True
+  with_lagrange: False
   lagrange_thresh: 5.0 # tau
+  compile: False
+  compile_mode: reduce-overhead
+  cudagraphs: False

@@ -549,3 +549,10 @@ def _clip_value_loss(
     # Chose the most pessimistic value prediction between clipped and non-clipped
     loss_value = torch.max(loss_value, loss_value_clipped)
     return loss_value, clip_fraction
+
+
+def _get_default_device(net):
+    for p in net.parameters():
+        return p.device
+    else:
+        return torch.get_default_device()

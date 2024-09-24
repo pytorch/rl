@@ -18,7 +18,9 @@ import numpy as np
 import torch
 import tqdm
 from tensordict import TensorDict
-from torchrl._utils import logger as torchrl_logger
+from tensordict.nn import CudaGraphModule
+
+from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -111,17 +113,82 @@ def main(cfg: "DictConfig"):  # noqa: F821
     evaluation_interval = cfg.logger.log_interval
     eval_rollout_steps = cfg.logger.eval_steps
 
+    def update(sampled_tensordict):
+
+        sampled_tensordict_input = sampled_tensordict.copy()
+        critic_optim.zero_grad()
+        q_loss, metadata = loss_module.q_loss(sampled_tensordict_input)
+        cql_loss, metadata_cql = loss_module.cql_loss(sampled_tensordict_input)
+        metadata.update(metadata)
+        q_loss = q_loss + cql_loss
+        q_loss.backward()
+        # torch.nn.utils.clip_grad_norm_(critic_optim.param_groups[0]["params"], 1.0)
+        critic_optim.step()
+
+        if loss_module.with_lagrange:
+            alpha_prime_optim.zero_grad()
+            alpha_prime_loss, metadata_aprime = loss_module.alpha_prime_loss(
+                sampled_tensordict_input
+            )
+            metadata.update(metadata_aprime)
+            alpha_prime_loss.backward()
+            # torch.nn.utils.clip_grad_norm_(alpha_prime_optim.param_groups[0]["params"], 1.0)
+            alpha_prime_optim.step()
+
+        policy_optim.zero_grad()
+        # loss_actor_bc, _ = loss_module.actor_bc_loss(sampled_tensordict)
+        actor_loss, actor_metadata = loss_module.actor_loss(sampled_tensordict_input)
+        metadata.update(actor_metadata)
+        actor_loss.backward()
+        # torch.nn.utils.clip_grad_norm_(policy_optim.param_groups[0]["params"], 1.0)
+        policy_optim.step()
+
+        alpha_optim.zero_grad()
+        alpha_loss, metadata_actor = loss_module.alpha_loss(actor_metadata)
+        metadata.update(metadata_actor)
+        alpha_loss.backward()
+        # torch.nn.utils.clip_grad_norm_(alpha_optim.param_groups[0]["params"], 1.0)
+        alpha_optim.step()
+        loss_td = TensorDict(metadata)
+
+        loss_td["loss_actor"] = actor_loss
+        loss_td["loss_qvalue"] = q_loss
+        loss_td["loss_cql"] = cql_loss
+        loss_td["loss_alpha"] = alpha_loss
+        if alpha_prime_optim:
+            alpha_prime_loss = loss_td["loss_alpha_prime"]
+
+        loss = actor_loss + alpha_loss + q_loss
+        if alpha_prime_optim is not None:
+            loss = loss + alpha_prime_loss
+
+        loss_td["loss"] = loss
+        return loss_td.detach()
+
+    if cfg.loss.compile:
+        update = torch.compile(update, mode=cfg.loss.compile_mode)
+
+    if cfg.loss.cudagraphs:
+        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
+
     sampling_start = time.time()
-    for i, tensordict in enumerate(collector):
+    collector_iter = iter(collector)
+    for i in range(cfg.collector.total_frames):
+        timeit.print()
+        timeit.erase()
+        with timeit("collection"):
+            tensordict = next(collector_iter)
         sampling_time = time.time() - sampling_start
         pbar.update(tensordict.numel())
-        # update weights of the inference policy
-        collector.update_policy_weights_()
+        with timeit("update policies"):
+            # update weights of the inference policy
+            collector.update_policy_weights_()
 
-        tensordict = tensordict.view(-1)
+        tensordict = tensordict.reshape(-1)
         current_frames = tensordict.numel()
         # add to replay buffer
-        replay_buffer.extend(tensordict.cpu())
+        with timeit("extend"):
+            replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
 
         # optimization steps
@@ -130,7 +197,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_loss_td = TensorDict({}, [num_updates])
             for j in range(num_updates):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample()
+                with timeit("sample"):
+                    sampled_tensordict = replay_buffer.sample()
                 if sampled_tensordict.device != device:
                     sampled_tensordict = sampled_tensordict.to(
                         device, non_blocking=True
@@ -138,36 +206,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 else:
                     sampled_tensordict = sampled_tensordict.clone()
 
-                loss_td = loss_module(sampled_tensordict)
+                with timeit("update"):
+                    loss_td = update(sampled_tensordict)
+                log_loss_td[j] = loss_td
 
-                actor_loss = loss_td["loss_actor"]
-                q_loss = loss_td["loss_qvalue"]
-                cql_loss = loss_td["loss_cql"]
-                q_loss = q_loss + cql_loss
-                alpha_loss = loss_td["loss_alpha"]
-                alpha_prime_loss = loss_td["loss_alpha_prime"]
-
-                alpha_optim.zero_grad()
-                alpha_loss.backward()
-                alpha_optim.step()
-
-                policy_optim.zero_grad()
-                actor_loss.backward()
-                policy_optim.step()
-
-                if alpha_prime_optim is not None:
-                    alpha_prime_optim.zero_grad()
-                    alpha_prime_loss.backward(retain_graph=True)
-                    alpha_prime_optim.step()
-
-                critic_optim.zero_grad()
-                q_loss.backward(retain_graph=False)
-                critic_optim.step()
-
-                log_loss_td[j] = loss_td.detach()
-
-                # update qnet_target params
-                target_net_updater.step()
+                with timeit("target net"):
+                    # update qnet_target params
+                    target_net_updater.step()
 
                 # update priority
                 if prb:
@@ -191,10 +236,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/loss_actor"] = log_loss_td.get("loss_actor").mean()
             metrics_to_log["train/loss_qvalue"] = log_loss_td.get("loss_qvalue").mean()
             metrics_to_log["train/loss_alpha"] = log_loss_td.get("loss_alpha").mean()
-            metrics_to_log["train/loss_alpha_prime"] = log_loss_td.get(
-                "loss_alpha_prime"
-            ).mean()
-            metrics_to_log["train/entropy"] = log_loss_td.get("entropy").mean()
+            if alpha_prime_optim is not None:
+                metrics_to_log["train/loss_alpha_prime"] = log_loss_td.get(
+                    "loss_alpha_prime"
+                ).mean()
+            # metrics_to_log["train/entropy"] = log_loss_td.get("entropy").mean()
             metrics_to_log["train/sampling_time"] = sampling_time
             metrics_to_log["train/training_time"] = training_time
 
@@ -204,7 +250,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cur_test_frame = (i * frames_per_batch) // evaluation_interval
         final = current_frames >= collector.total_frames
         if (i >= 1 and (prev_test_frame < cur_test_frame)) or final:
-            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+            with set_exploration_type(
+                ExplorationType.DETERMINISTIC
+            ), torch.no_grad(), timeit("eval"):
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,

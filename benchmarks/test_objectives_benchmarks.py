@@ -50,7 +50,7 @@ FULLGRAPH = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.par
 )  # Anything from 2.5, incl. nightlies, allows for fullgraph
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", autouse=True)
 def set_default_device():
     cur_device = torch.get_default_device()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

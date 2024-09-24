@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import hydra
+from tensordict.nn import CudaGraphModule
 from torchrl._utils import logger as torchrl_logger
 from torchrl.record import VideoRecorder
 
@@ -17,7 +18,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
-    from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+    from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
     from torchrl.objectives import A2CLoss
@@ -33,8 +34,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     ) * num_mini_batches
 
     # Create models (check utils_mujoco.py)
-    actor, critic = make_ppo_models(cfg.env.env_name)
-    actor, critic = actor.to(device), critic.to(device)
+    actor, critic = make_ppo_models(cfg.env.env_name, device=device)
 
     # Create collector
     collector = SyncDataCollector(
@@ -50,7 +50,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(cfg.collector.frames_per_batch),
+        storage=LazyTensorStorage(cfg.collector.frames_per_batch, device=device),
         sampler=sampler,
         batch_size=cfg.loss.mini_batch_size,
     )
@@ -69,10 +69,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
         entropy_coef=cfg.loss.entropy_coef,
         critic_coef=cfg.loss.critic_coef,
     )
+    if cfg.loss.compile:
+        loss_module = torch.compile(loss_module)
 
     # Create optimizers
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr)
-    critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr)
+    actor_optim = torch.optim.Adam(
+        actor.parameters(),
+        lr=torch.tensor(cfg.optim.lr, device=device),
+        capturable=True,
+    )
+    critic_optim = torch.optim.Adam(
+        critic.parameters(),
+        lr=torch.tensor(cfg.optim.lr, device=device),
+        capturable=True,
+    )
 
     # Create logger
     logger = None
@@ -99,7 +109,32 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 logger, tag=f"rendered/{cfg.env.env_name}", in_keys=["pixels"]
             ),
         )
+
+    def update(batch):
+        actor_optim.zero_grad()
+        critic_optim.zero_grad()
+
+        # Forward pass A2C loss
+        loss = loss_module(batch)
+        critic_loss = loss["loss_critic"]
+        actor_loss = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+
+        # Backward pass
+        (actor_loss + critic_loss).backward()
+
+        # Update the networks
+        actor_optim.step()
+        critic_optim.step()
+        return loss.select("loss_critic", "loss_objective").detach()  # , "loss_entropy"
+
+    if cfg.loss.compile:
+        update = torch.compile(update, mode=cfg.loss.compile_mode)
+
+    if cfg.loss.cudagraphs:
+        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
+
     test_env.eval()
+    lr = cfg.optim.lr
 
     # Main loop
     collected_frames = 0
@@ -128,7 +163,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
             )
 
-        losses = TensorDict({}, batch_size=[num_mini_batches])
+        losses = []
         training_start = time.time()
 
         # Compute GAE
@@ -141,40 +176,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         for k, batch in enumerate(data_buffer):
 
-            # Get a data batch
-            batch = batch.to(device)
-
             # Linearly decrease the learning rate and clip epsilon
             alpha = 1.0
             if cfg.optim.anneal_lr:
                 alpha = 1 - (num_network_updates / total_network_updates)
                 for group in actor_optim.param_groups:
-                    group["lr"] = cfg.optim.lr * alpha
+                    group["lr"].copy_(lr * alpha)
                 for group in critic_optim.param_groups:
-                    group["lr"] = cfg.optim.lr * alpha
+                    group["lr"].copy_(lr * alpha)
             num_network_updates += 1
 
-            # Forward pass A2C loss
-            loss = loss_module(batch)
-            losses[k] = loss.select(
-                "loss_critic", "loss_objective"  # , "loss_entropy"
-            ).detach()
-            critic_loss = loss["loss_critic"]
-            actor_loss = loss["loss_objective"]  # + loss["loss_entropy"]
-
-            # Backward pass
-            actor_loss.backward()
-            critic_loss.backward()
-
-            # Update the networks
-            actor_optim.step()
-            critic_optim.step()
-            actor_optim.zero_grad()
-            critic_optim.zero_grad()
+            loss = update(batch)
+            losses.append(loss)
 
         # Get training losses
         training_time = time.time() - training_start
-        losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
+        losses = torch.stack(losses).float().mean()
         for key, value in losses.items():
             log_info.update({f"train/{key}": value.item()})
         log_info.update(

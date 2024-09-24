@@ -202,17 +202,21 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
     # We use a ProbabilisticActor to make sure that we map the
     # network output to the right space using a TanhDelta
     # distribution.
+    high = action_spec.space.high
+    low = action_spec.space.low
+    if train_env.batch_size:
+        high = high[(0,) * len(train_env.batch_size)]
+        low = low[(0,) * len(train_env.batch_size)]
     actor = ProbabilisticActor(
         module=actor_module,
         in_keys=["loc", "scale"],
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "low": action_spec.space.low[len(train_env.batch_size) :],
-            "high": action_spec.space.high[
-                len(train_env.batch_size) :
-            ],  # remove batch-size
+            "low": low.to(device),
+            "high": high.to(device),
             "tanh_loc": False,
+            "safe_tanh": True,
         },
         default_interaction_type=ExplorationType.RANDOM,
     )
@@ -334,6 +338,8 @@ def make_discrete_loss(loss_cfg, model):
     )
     loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
+    if loss_cfg.compile:
+        loss_module = torch.compile(loss_module)
 
     return loss_module, target_net_updater
 
@@ -343,6 +349,8 @@ def make_discrete_cql_optimizer(cfg, loss_module):
         loss_module.parameters(),
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
+        capturable=cfg.loss.cudagraphs,
+        eps=1e-6,
     )
     return optim
 
@@ -354,21 +362,30 @@ def make_continuous_cql_optimizer(cfg, loss_module):
         actor_params,
         lr=cfg.optim.actor_lr,
         weight_decay=cfg.optim.weight_decay,
+        capturable=cfg.loss.cudagraphs,
+        eps=1e-6,
     )
     critic_optim = torch.optim.Adam(
         critic_params,
         lr=cfg.optim.critic_lr,
         weight_decay=cfg.optim.weight_decay,
+        capturable=cfg.loss.cudagraphs,
+        eps=1e-6,
     )
     alpha_optim = torch.optim.Adam(
         [loss_module.log_alpha],
         lr=cfg.optim.actor_lr,
         weight_decay=cfg.optim.weight_decay,
+        capturable=cfg.loss.cudagraphs,
+        eps=1e-6,
     )
     if loss_module.with_lagrange:
         alpha_prime_optim = torch.optim.Adam(
             [loss_module.log_alpha_prime],
             lr=cfg.optim.critic_lr,
+            weight_decay=cfg.optim.weight_decay,
+            capturable=cfg.loss.cudagraphs,
+            eps=1e-6,
         )
     else:
         alpha_prime_optim = None
