@@ -1427,18 +1427,61 @@ def _repr_by_depth(key):
         return (len(key) - 1, ".".join(key))
 
 
-def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False):
+def _make_compatible_policy(
+    policy,
+    observation_spec,
+    env=None,
+    fast_wrap=False,
+    trust_policy=False,
+    env_maker=None,
+    env_maker_kwargs=None,
+):
+    if trust_policy:
+        return policy
     if policy is None:
-        if env is None:
-            raise ValueError(
-                "env must be provided to _get_policy_and_device if policy is None"
-            )
-        policy = RandomPolicy(env.input_spec["full_action_spec"])
+        input_spec = None
+        if env_maker is not None:
+            from torchrl.envs import EnvBase, EnvCreator
+
+            if isinstance(env_maker, EnvBase):
+                env = env_maker
+                input_spec = env.input_spec["full_action_spec"]
+            elif isinstance(env_maker, EnvCreator):
+                input_spec = env_maker._meta_data.specs[
+                    "input_spec", "full_action_spec"
+                ]
+            else:
+                env = env_maker(**env_maker_kwargs)
+                input_spec = env.full_action_spec
+        if input_spec is None:
+            if env is not None:
+                input_spec = env.input_spec["full_action_spec"]
+            else:
+                raise ValueError(
+                    "env must be provided to _get_policy_and_device if policy is None"
+                )
+
+        policy = RandomPolicy(input_spec)
 
     # make sure policy is an nn.Module - this will return the same policy if conditions are met
     policy = _NonParametricPolicyWrapper(policy)
 
     if not _policy_is_tensordict_compatible(policy):
+        if observation_spec is None:
+            if env is not None:
+                observation_spec = env.observation_spec
+            elif env_maker is not None:
+                from torchrl.envs import EnvBase, EnvCreator
+
+                if isinstance(env_maker, EnvBase):
+                    observation_spec = env_maker.observation_spec
+                elif isinstance(env_maker, EnvCreator):
+                    observation_spec = env_maker._meta_data.specs[
+                        "output_spec", "full_observation_spec"
+                    ]
+                else:
+                    observation_spec = env_maker(**env_maker_kwargs).observation_spec
+
         # policy is a nn.Module that doesn't operate on tensordicts directly
         # so we attempt to auto-wrap policy with TensorDictModule
         if observation_spec is None:
@@ -1447,7 +1490,9 @@ def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False)
                 "required to check compatibility of the environment and policy "
                 "since the policy is a nn.Module that operates on tensors "
                 "rather than a TensorDictModule or a nn.Module that accepts a "
-                "TensorDict as input and defines in_keys and out_keys."
+                "TensorDict as input and defines in_keys and out_keys. "
+                "If your policy is compatible with the environment, you can solve this warning by setting "
+                "trust_policy=True in the constructor."
             )
 
         try:

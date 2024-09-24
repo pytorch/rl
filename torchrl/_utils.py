@@ -785,4 +785,6 @@ def _make_ordinal_device(device: torch.device):
         return device
     if device.type == "cuda" and device.index is None:
         return torch.device("cuda", index=torch.cuda.current_device())
+    if device.type == "mps" and device.index is None:
+        return torch.device("mps", index=0)
     return device

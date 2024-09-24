@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
 import typing
 from typing import Any, Callable, List, Tuple, Union
 
@@ -235,6 +236,8 @@ class CloudpickleWrapper(object):
         self.fn = fn
         self.kwargs = kwargs
 
+        functools.update_wrapper(self, fn)
+
     def __getstate__(self):
         import cloudpickle
 
@@ -244,6 +247,7 @@ class CloudpickleWrapper(object):
         import pickle
 
         self.fn, self.kwargs = pickle.loads(ob)
+        functools.update_wrapper(self, self.fn)
 
     def __call__(self, *args, **kwargs) -> Any:
         kwargs.update(self.kwargs)

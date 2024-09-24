@@ -10,9 +10,7 @@ import abc
 import contextlib
 
 import functools
-
 import os
-from torchrl.envs.utils import RandomPolicy
 import queue
 import sys
 import time
@@ -34,7 +32,8 @@ from tensordict import (
     TensorDictBase,
     TensorDictParams,
 )
-from tensordict.nn import TensorDictModule, CudaGraphModule
+from tensordict.base import NO_DEFAULT
+from tensordict.nn import CudaGraphModule, TensorDictModule
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
@@ -61,12 +60,13 @@ from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     _convert_exploration_type,
     _make_compatible_policy,
-    _NonParametricPolicyWrapper,
     ExplorationType,
+    RandomPolicy,
     set_exploration_type,
 )
 
 _TIMEOUT = 1.0
+INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 # MAX_IDLE_COUNT is the maximum number of times a Dataloader worker can timeout with his queue.
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
@@ -142,24 +142,32 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         self,
         policy: Callable[[Any], Any] | None = None,
         observation_spec: TensorSpec = None,
-        policy_device: torch.device | None = None,
+        policy_device: Any = NO_DEFAULT,
+        env_maker: Any | None = None,
+        env_maker_kwargs: dict | None = None,
     ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
         Args:
-            create_env_fn (Callable or list of callables): an env creator
-                function (or a list of creators)
-            create_env_kwargs (dictionary): kwargs for the env creator
             policy (TensorDictModule, optional): a policy to be used
             observation_spec (TensorSpec, optional): spec of the observations
+            policy_device (torch.device, optional): the device where the policy should be placed.
+                Defaults to self.policy_device
+            env_maker (a callable or a batched env, optional): the env_maker function for this device/policy pair.
+            env_maker_kwargs (a dict, optional): the env_maker function kwargs.
 
         """
-        if policy_device is None:
+        if policy_device is NO_DEFAULT:
             policy_device = self.policy_device
 
         if not self.trust_policy:
+            env = getattr(self, "env", None)
             policy = _make_compatible_policy(
-                policy, observation_spec, env=getattr(self, "env", None)
+                policy,
+                observation_spec,
+                env=env,
+                env_maker=env_maker,
+                env_maker_kwargs=env_maker_kwargs,
             )
         if not policy_device:
             return policy, None
@@ -170,17 +178,19 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             param_and_buf = TensorDict()
 
         i = -1
-        for i, p in enumerate(param_and_buf.values(True, True)):
+        for p in param_and_buf.values(True, True):
             if p.device != policy_device:
                 # Then we need casting
                 break
         else:
             if i == -1 and not self.trust_policy:
                 # We trust that the policy policy device is adequate
-                warnings.warn("A policy device was provided but no parameter/buffer could be found in "
-                              "the policy. Casting to policy_device is therefore impossible. "
-                              "The collector will trust that the devices match. To suppress this "
-                              "warning, set `trust_policy=True` when building the collector.")
+                warnings.warn(
+                    "A policy device was provided but no parameter/buffer could be found in "
+                    "the policy. Casting to policy_device is therefore impossible. "
+                    "The collector will trust that the devices match. To suppress this "
+                    "warning, set `trust_policy=True` when building the collector."
+                )
             else:
                 # We checked and all params are on the appropriate device
                 pass
@@ -193,9 +203,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         # TODO: merge these two funcs
         has_different_device = False
+
         def map_weight(
-                weight,
-                policy_device=policy_device,
+            weight,
+            policy_device=policy_device,
         ):
             nonlocal has_different_device
 
@@ -496,7 +507,7 @@ class SyncDataCollector(DataCollectorBase):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
-        trust_policy: bool=None,
+        trust_policy: bool = None,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -1524,7 +1535,7 @@ class _MultiDataCollector(DataCollectorBase):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         replay_buffer_chunk: bool = True,
-        trust_policy: bool=None,
+        trust_policy: bool = None,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1586,12 +1597,20 @@ class _MultiDataCollector(DataCollectorBase):
         self.trust_policy = trust_policy
 
         self.policy = policy
-        for policy_device in self.policy_device:
+        for policy_device, env_maker, env_maker_kwargs in zip(
+            self.policy_device, self.create_env_fn, self.create_env_kwargs
+        ):
             (policy_copy, get_weights_fn,) = self._get_policy_and_device(
                 policy=policy,
                 policy_device=policy_device,
+                env_maker=env_maker,
+                env_maker_kwargs=env_maker_kwargs,
             )
-            weights = TensorDict.from_module(policy_copy) if get_weights_fn is not None else None
+            weights = (
+                TensorDict.from_module(policy_copy)
+                if get_weights_fn is not None
+                else None
+            )
             self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn_dict[policy_device] = get_weights_fn
 
@@ -1666,6 +1685,8 @@ class _MultiDataCollector(DataCollectorBase):
             if not self.replay_buffer._storage.initialized:
                 if isinstance(self.create_env_fn, EnvCreator):
                     fake_td = self.create_env_fn.tensordict
+                elif isinstance(self.create_env_fn, EnvBase):
+                    fake_td = self.create_env_fn.fake_tensordict()
                 else:
                     fake_td = self.create_env_fn[0](
                         **self.create_env_kwargs[0]
@@ -1838,6 +1859,7 @@ also that the state dict is synchronised across processes if needed."""
                 self.procs.append(proc)
                 self.pipes.append(pipe_parent)
         for pipe_parent in self.pipes:
+            pipe_parent.poll(timeout=INSTANTIATE_TIMEOUT)
             msg = pipe_parent.recv()
             if msg != "instantiated":
                 raise RuntimeError(msg)
@@ -2535,9 +2557,13 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
         workers_frames = [0 for _ in range(self.num_workers)]
         while self._frames < self.total_frames:
-            _check_for_faulty_process(self.procs)
             self._iter += 1
-            idx, j, out = self._get_from_queue()
+            while True:
+                try:
+                    idx, j, out = self._get_from_queue(timeout=10.0)
+                    break
+                except TimeoutError:
+                    _check_for_faulty_process(self.procs)
             if self.replay_buffer is None:
                 worker_frames = out.numel()
                 if self.split_trajs:
@@ -2945,10 +2971,16 @@ def _main_async_collector(
                     # if policy is on cuda and env on cuda, we are fine with this
                     # If policy is on cuda and env on cpu (or opposite) we put tensors that
                     # are on cpu in shared mem.
+                    MPS_ERROR = (
+                        "tensors on mps device cannot be put in shared memory. Make sure "
+                        "the shared device (aka storing_device) is set to CPU."
+                    )
                     if collected_tensordict.device is not None:
                         # placehoder in case we need different behaviors
-                        if collected_tensordict.device.type in ("cpu", "mps"):
+                        if collected_tensordict.device.type in ("cpu",):
                             collected_tensordict.share_memory_()
+                        elif collected_tensordict.device.type in ("mps",):
+                            raise RuntimeError(MPS_ERROR)
                         elif collected_tensordict.device.type == "cuda":
                             collected_tensordict.share_memory_()
                         else:
@@ -2957,11 +2989,13 @@ def _main_async_collector(
                             )
                     else:
                         # make sure each cpu tensor is shared - assuming non-cpu devices are shared
-                        collected_tensordict.apply(
-                            lambda x: x.share_memory_()
-                            if x.device.type in ("cpu", "mps")
-                            else x
-                        )
+                        def cast_tensor(x, MPS_ERROR=MPS_ERROR):
+                            if x.device.type in ("cpu",):
+                                x.share_memory_()
+                            if x.device.type in ("mps",):
+                                RuntimeError(MPS_ERROR)
+
+                        collected_tensordict.apply(cast_tensor, filter_empty=True)
                 data = (collected_tensordict, idx)
             else:
                 if next_data is not collected_tensordict:
