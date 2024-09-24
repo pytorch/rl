@@ -1,14 +1,15 @@
+from typing import Any, Callable, Dict
+
 import numpy as np
-from typing import Callable, Dict, Any
 
 from .replay_buffers import ReplayBuffer
 from .samplers import Sampler
 
 
 class ParameterScheduler:
+    """Scheduler to adjust the value of a given parameter of a replay buffer's sampler.
 
-    """Scheduler to adjust the value of a given parameter of a replay buffer's sampler, e.g. the 
-    alpha and beta values in the PrioritizedSampler.
+    Scheduler can for example be used to alter the alpha and beta values in the PrioritizedSampler.
 
     Args:
         rb (ReplayBuffer): the replay buffer whose sampler to adjust
@@ -21,11 +22,11 @@ class ParameterScheduler:
     """
 
     def __init__(
-        self, 
-        obj: ReplayBuffer | Sampler, 
+        self,
+        obj: ReplayBuffer | Sampler,
         param_name: str,
-        min_value: int | float = None, 
-        max_value: int | float = None
+        min_value: int | float = None,
+        max_value: int | float = None,
     ):
         if not isinstance(obj, ReplayBuffer) and not isinstance(obj, Sampler):
             raise TypeError(
@@ -36,7 +37,9 @@ class ParameterScheduler:
         self._min_val = min_value
         self._max_val = max_value
         if not hasattr(self.sampler, self.param_name):
-            raise ValueError(f"Provided class {obj.__name__} does not have an attribute {param_name}")
+            raise ValueError(
+                f"Provided class {obj.__name__} does not have an attribute {param_name}"
+            )
         self.initial_val = getattr(self.sampler, self.param_name)
         self._step_cnt = 0
 
@@ -46,9 +49,7 @@ class ParameterScheduler:
         It contains an entry for every variable in self.__dict__ which
         is not the optimizer.
         """
-        return {
-            key: value for key, value in self.__dict__.items() if key != "sampler"
-        }
+        return {key: value for key, value in self.__dict__.items() if key != "sampler"}
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
         """Load the scheduler's state.
@@ -73,29 +74,30 @@ class ParameterScheduler:
 
 
 class LambdaScheduler(ParameterScheduler):
-    """Similar to torch.optim.LambdaLR, this class sets a parameter to its initial value
-    times a given function. 
+    """Sets a parameter to its initial value times a given function.
+
+    Similar to torch.optim.LambdaLR.
 
     Args:
         obj (ReplayBuffer | Sampler): the replay buffer whose sampler to adjust (or the sampler itself)
-        param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the 
+        param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the
             beta parameter
-        lambda_fn (function): A function which computes a multiplicative factor given an integer 
+        lambda_fn (function): A function which computes a multiplicative factor given an integer
             parameter step_count
         min_value (Union[int, float], optional): a lower bound for the parameter to be adjusted
             Defaults to None.
         max_value (Union[int, float], optional): an upper bound for the parameter to be adjusted
             Defaults to None
-    
+
     """
 
     def __init__(
-        self, 
-        obj: ReplayBuffer | Sampler, 
-        param_name: str, 
+        self,
+        obj: ReplayBuffer | Sampler,
+        param_name: str,
         lambda_fn: Callable[[int], float],
-        min_value: int | float = None, 
-        max_value: int | float = None
+        min_value: int | float = None,
+        max_value: int | float = None,
     ):
         super().__init__(obj, param_name, min_value, max_value)
         self.lambda_fn = lambda_fn
@@ -104,20 +106,20 @@ class LambdaScheduler(ParameterScheduler):
         return self.initial_val * self.lambda_fn(self._step_cnt)
 
 
-
 class LinearScheduler(ParameterScheduler):
     """A linear scheduler for gradually altering a parameter in an object over a given number of steps.
+
     This scheduler linearly interpolates between the initial value of the parameter and a final target value.
-    
+
     Args:
         obj (ReplayBuffer | Sampler): the replay buffer whose sampler to adjust (or the sampler itself)
-        param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the 
+        param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the
             beta parameter
-        final_value (Union[int, float]): The final value that the parameter will reach after the 
+        final_value (Union[int, float]): The final value that the parameter will reach after the
             specified number of steps.
-        num_steps (Union[int, float], optional): The total number of steps over which the parameter 
-            will be linearly altered. 
-    
+        num_steps (Union[int, float], optional): The total number of steps over which the parameter
+            will be linearly altered.
+
     Example:
         >>> # xdoctest: +SKIP
         >>> # Assuming sampler uses initial beta = 0.6
@@ -131,12 +133,13 @@ class LinearScheduler(ParameterScheduler):
         >>>     validate(...)
         >>>     scheduler.step()
     """
+
     def __init__(
-        self, 
-        obj: ReplayBuffer | Sampler, 
-        param_name: str, 
+        self,
+        obj: ReplayBuffer | Sampler,
+        param_name: str,
         final_value: int | float,
-        num_steps: int
+        num_steps: int,
     ):
         super().__init__(obj, param_name)
         self.final_val = final_value
@@ -150,21 +153,19 @@ class LinearScheduler(ParameterScheduler):
             return self.final_val
 
 
-
 class StepScheduler(ParameterScheduler):
-    """
-    A step scheduler that alters a parameter after every n steps using either multiplicative or additive changes.
-    
+    """A step scheduler that alters a parameter after every n steps using either multiplicative or additive changes.
+
     The scheduler can apply:
     1. Multiplicative changes: `new_val = curr_val * gamma`
     2. Additive changes: `new_val = curr_val + gamma`
-    
+
     Args:
         obj (ReplayBuffer | Sampler): the replay buffer whose sampler to adjust (or the sampler itself)
-        param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the 
+        param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the
             beta parameter
-        gamma (int | float, optional): The value by which to adjust the parameter, 
-            either multiplicatively or additive
+        gamma (int | float, optional): The value by which to adjust the parameter,
+            either in a multiplicative or additive way
         n_steps (int, optional): The number of steps after which the parameter should be altered.
             Defaults to 1
         mode (str, optional): The mode of scheduling. Can be either 'multiplicative' or 'additive'.
@@ -172,16 +173,16 @@ class StepScheduler(ParameterScheduler):
         min_value (int | float, optional): a lower bound for the parameter to be adjusted
             Defaults to None.
         max_value (int | float, optional): an upper bound for the parameter to be adjusted
-            Defaults to None 
+            Defaults to None
 
     Example:
         >>> # xdoctest: +SKIP
         >>> # Assuming sampler uses initial beta = 0.6
-        >>> # beta = 0.6   if step  <  10
-        >>> # beta = 0.7   if step  == 10
-        >>> # beta = 0.8   if step  == 20
-        >>> # beta = 0.9   if step  == 30
-        >>> # beta = 1.0   if step  >= 40
+        >>> # beta = 0.6   if  0 <= step < 10
+        >>> # beta = 0.7   if 10 <= step < 20
+        >>> # beta = 0.8   if 20 <= step < 30
+        >>> # beta = 0.9   if 30 <= step < 40
+        >>> # beta = 1.0   if 40 <= step
         >>> scheduler = StepScheduler(sampler, param_name='beta', gamma=0.1, mode='additive', max_value=1.0)
         >>> for epoch in range(100):
         >>>     train(...)
@@ -191,24 +192,26 @@ class StepScheduler(ParameterScheduler):
 
     def __init__(
         self,
-        obj: ReplayBuffer | Sampler, 
-        param_name: str, 
-        gamma: int | float = 0.9, 
-        n_steps: int = 1, 
+        obj: ReplayBuffer | Sampler,
+        param_name: str,
+        gamma: int | float = 0.9,
+        n_steps: int = 1,
         mode: str = "multiplicative",
-        min_value: int | float = None, 
-        max_value: int | float = None
+        min_value: int | float = None,
+        max_value: int | float = None,
     ):
 
         super().__init__(obj, param_name, min_value, max_value)
         self.gamma = gamma
         self.n_steps = n_steps
-        if mode == "additive": 
+        if mode == "additive":
             operator = np.add
         elif mode == "multiplicative":
             operator = np.multiply
         else:
-            raise ValueError(f"Invalid mode: {self.mode}. Choose 'multiplicative' or 'additive'.")
+            raise ValueError(
+                f"Invalid mode: {self.mode}. Choose 'multiplicative' or 'additive'."
+            )
         self.operator = operator
 
     def _step(self):
@@ -222,14 +225,16 @@ class StepScheduler(ParameterScheduler):
 
 
 class SchedulerList:
-    def __init__(self, scheduler: list[ParameterScheduler]) -> None:
-        if isinstance(scheduler, ParameterScheduler):
-            scheduler = [scheduler]
-        self.scheduler = scheduler
+    """Simple container abstracting a list of schedulers."""
+
+    def __init__(self, schedulers: list[ParameterScheduler]) -> None:
+        if isinstance(schedulers, ParameterScheduler):
+            schedulers = [schedulers]
+        self.schedulers = schedulers
 
     def append(self, scheduler: ParameterScheduler):
-        self.scheduler.append(scheduler)
+        self.schedulers.append(scheduler)
 
     def step(self):
-        for scheduler in self.scheduler:
+        for scheduler in self.schedulers:
             scheduler.step()

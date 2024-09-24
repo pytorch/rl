@@ -58,6 +58,11 @@ from torchrl.data.replay_buffers.samplers import (
     SliceSampler,
     SliceSamplerWithoutReplacement,
 )
+from torchrl.data.replay_buffers.scheduler import (
+    LinearScheduler,
+    SchedulerList,
+    StepScheduler,
+)
 
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
@@ -97,11 +102,6 @@ from torchrl.envs.transforms.transforms import (
     ToTensorImage,
     UnsqueezeTransform,
     VecNorm,
-)
-from torchrl.data.replay_buffers.scheduler import (
-    LinearScheduler, 
-    StepScheduler, 
-    SchedulerList
 )
 
 
@@ -3040,33 +3040,39 @@ def test_prioritized_parameter_scheduler():
     LINEAR_STEPS = 100
     TOTAL_STEPS = 200
     rb = TensorDictPrioritizedReplayBuffer(
-        alpha=INIT_ALPHA, 
-        beta=INIT_BETA, 
-        storage=ListStorage(max_size=2000)
+        alpha=INIT_ALPHA, beta=INIT_BETA, storage=ListStorage(max_size=2000)
     )
-    data = TensorDict(
-        {
-            "data": torch.randn(1000, 5)
-        }, 
-        batch_size=1000
-    )
+    data = TensorDict({"data": torch.randn(1000, 5)}, batch_size=1000)
     rb.extend(data)
     alpha_scheduler = LinearScheduler(
         rb, param_name="alpha", final_value=0.0, num_steps=LINEAR_STEPS
     )
     beta_scheduler = StepScheduler(
-        rb, param_name="beta", gamma=GAMMA, n_steps=EVERY_N_STEPS, max_value=1.0, mode="additive"
+        rb,
+        param_name="beta",
+        gamma=GAMMA,
+        n_steps=EVERY_N_STEPS,
+        max_value=1.0,
+        mode="additive",
     )
-    scheduler = SchedulerList(scheduler=(alpha_scheduler, beta_scheduler))
-    expected_alpha_vals = np.linspace(INIT_ALPHA, 0.0, num=LINEAR_STEPS+1)
-    expected_alpha_vals = np.pad(expected_alpha_vals, (0, TOTAL_STEPS-LINEAR_STEPS), constant_values=0.0)
+    scheduler = SchedulerList(schedulers=(alpha_scheduler, beta_scheduler))
+    expected_alpha_vals = np.linspace(INIT_ALPHA, 0.0, num=LINEAR_STEPS + 1)
+    expected_alpha_vals = np.pad(
+        expected_alpha_vals, (0, TOTAL_STEPS - LINEAR_STEPS), constant_values=0.0
+    )
     expected_beta_vals = [INIT_BETA]
-    for _ in range((TOTAL_STEPS // EVERY_N_STEPS -1)):
+    for _ in range((TOTAL_STEPS // EVERY_N_STEPS - 1)):
         expected_beta_vals.append(expected_beta_vals[-1] + GAMMA)
-    expected_beta_vals = np.atleast_2d(expected_beta_vals).repeat(EVERY_N_STEPS).clip(None, 1.0)
+    expected_beta_vals = (
+        np.atleast_2d(expected_beta_vals).repeat(EVERY_N_STEPS).clip(None, 1.0)
+    )
     for i in range(TOTAL_STEPS):
-        assert np.isclose(rb.sampler.alpha, expected_alpha_vals[i]), f"expected {expected_alpha_vals[i]}, got {rb.sampler.alpha}"
-        assert np.isclose(rb.sampler.beta, expected_beta_vals[i]), f"expected {expected_beta_vals[i]}, got {rb.sampler.beta}"
+        assert np.isclose(
+            rb.sampler.alpha, expected_alpha_vals[i]
+        ), f"expected {expected_alpha_vals[i]}, got {rb.sampler.alpha}"
+        assert np.isclose(
+            rb.sampler.beta, expected_beta_vals[i]
+        ), f"expected {expected_beta_vals[i]}, got {rb.sampler.beta}"
         rb.sample(20)
         scheduler.step()
 
