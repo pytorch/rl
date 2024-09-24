@@ -12,6 +12,7 @@ import contextlib
 import functools
 
 import os
+from torchrl.envs.utils import RandomPolicy
 import queue
 import sys
 import time
@@ -33,7 +34,7 @@ from tensordict import (
     TensorDictBase,
     TensorDictParams,
 )
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, CudaGraphModule
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
@@ -133,16 +134,15 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     """Base class for data collectors."""
 
     _iterator = None
+    total_frames: int
+    frames_per_batch: int
+    trust_policy: bool
 
     def _get_policy_and_device(
         self,
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ] = None,
+        policy: Callable[[Any], Any] | None = None,
         observation_spec: TensorSpec = None,
+        policy_device: torch.device | None = None,
     ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
@@ -154,38 +154,75 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             observation_spec (TensorSpec, optional): spec of the observations
 
         """
-        policy = _make_compatible_policy(
-            policy, observation_spec, env=getattr(self, "env", None)
-        )
-        param_and_buf = TensorDict.from_module(policy, as_module=True)
+        if policy_device is None:
+            policy_device = self.policy_device
+
+        if not self.trust_policy:
+            policy = _make_compatible_policy(
+                policy, observation_spec, env=getattr(self, "env", None)
+            )
+        if not policy_device:
+            return policy, None
+
+        if isinstance(policy, nn.Module):
+            param_and_buf = TensorDict.from_module(policy, as_module=True)
+        else:
+            param_and_buf = TensorDict()
+
+        i = -1
+        for i, p in enumerate(param_and_buf.values(True, True)):
+            if p.device != policy_device:
+                # Then we need casting
+                break
+        else:
+            if i == -1 and not self.trust_policy:
+                # We trust that the policy policy device is adequate
+                warnings.warn("A policy device was provided but no parameter/buffer could be found in "
+                              "the policy. Casting to policy_device is therefore impossible. "
+                              "The collector will trust that the devices match. To suppress this "
+                              "warning, set `trust_policy=True` when building the collector.")
+            else:
+                # We checked and all params are on the appropriate device
+                pass
+            return policy, None
 
         def get_weights_fn(param_and_buf=param_and_buf):
             return param_and_buf.data
 
-        if self.policy_device:
-            # create a stateless policy and populate it with params
-            def _map_to_device_params(param, device):
-                is_param = isinstance(param, nn.Parameter)
+        # create a stateless policy and populate it with params
 
-                pd = param.detach().to(device, non_blocking=True)
+        # TODO: merge these two funcs
+        has_different_device = False
+        def map_weight(
+                weight,
+                policy_device=policy_device,
+        ):
+            nonlocal has_different_device
 
-                if is_param:
-                    pd = nn.Parameter(pd, requires_grad=False)
-                return pd
+            is_param = isinstance(weight, nn.Parameter)
+            is_buffer = isinstance(weight, nn.Buffer)
+            weight = weight.data
+            if weight.device != policy_device:
+                has_different_device = True
+                weight = weight.to(policy_device)
+            elif weight.device.type in ("cpu", "mps"):
+                weight = weight.share_memory_()
+            if is_param:
+                weight = nn.Parameter(weight, requires_grad=False)
+            elif is_buffer:
+                weight = nn.Buffer(weight)
+            return weight
 
-            # Create a stateless policy, then populate this copy with params on device
-            with param_and_buf.apply(
-                functools.partial(_map_to_device_params, device="meta"),
-                filter_empty=False,
-            ).to_module(policy):
-                policy = deepcopy(policy)
+        # Create a stateless policy, then populate this copy with params on device
+        get_original_weights = functools.partial(TensorDict.from_module, policy)
+        with param_and_buf.to("meta").to_module(policy):
+            policy = deepcopy(policy)
 
-            param_and_buf.apply(
-                functools.partial(_map_to_device_params, device=self.policy_device),
-                filter_empty=False,
-            ).to_module(policy)
-
-        return policy, get_weights_fn
+        param_and_buf.apply(
+            functools.partial(map_weight, device=policy_device),
+            filter_empty=False,
+        ).to_module(policy)
+        return policy, get_original_weights
 
     def update_policy_weights_(
         self, policy_weights: Optional[TensorDictBase] = None
@@ -242,6 +279,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     def __class_getitem__(self, index):
         raise NotImplementedError
+
+    def __len__(self) -> int:
+        if self.total_frames > 0:
+            return -(self.total_frames // -self.frames_per_batch)
+        raise RuntimeError("Non-terminating collectors do not have a length")
 
 
 @accept_remote_rref_udf_invocation
@@ -361,6 +403,9 @@ class SyncDataCollector(DataCollectorBase):
             for envs without dynamic specs, ``False`` for others.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
             but populate the buffer instead. Defaults to ``None``.
+        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
+            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
+            and ``False`` otherwise.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -451,6 +496,7 @@ class SyncDataCollector(DataCollectorBase):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        trust_policy: bool=None,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -474,9 +520,11 @@ class SyncDataCollector(DataCollectorBase):
                 env.update_kwargs(create_env_kwargs)
 
         if policy is None:
-            from torchrl.collectors import RandomPolicy
 
             policy = RandomPolicy(env.full_action_spec)
+        if trust_policy is None:
+            trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
+        self.trust_policy = trust_policy
 
         ##########################
         # Trajectory pool
@@ -1436,6 +1484,9 @@ class _MultiDataCollector(DataCollectorBase):
             for envs without dynamic specs, ``False`` for others.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
             but populate the buffer instead. Defaults to ``None``.
+        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
+            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
+            and ``False`` otherwise.
 
     """
 
@@ -1473,6 +1524,7 @@ class _MultiDataCollector(DataCollectorBase):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         replay_buffer_chunk: bool = True,
+        trust_policy: bool=None,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
@@ -1526,78 +1578,22 @@ class _MultiDataCollector(DataCollectorBase):
         ):
             replay_buffer.share()
 
-        _policy_weights_dict = {}
-        _get_weights_fn_dict = {}
+        self._policy_weights_dict = {}
+        self._get_weights_fn_dict = {}
 
-        if policy is not None:
-            policy = _NonParametricPolicyWrapper(policy)
-            policy_weights = TensorDict.from_module(policy, as_module=True)
+        if trust_policy is None:
+            trust_policy = isinstance(policy, CudaGraphModule)
+        self.trust_policy = trust_policy
 
-            # store a stateless policy
-            with policy_weights.apply(_make_meta_params).to_module(policy):
-                # TODO:
-                self.policy = deepcopy(policy)
-
-        else:
-            policy_weights = TensorDict()
-            self.policy = None
-
-        for policy_device in policy_devices:
-            # if we have already mapped onto that device, get that value
-            if policy_device in _policy_weights_dict:
-                continue
-            # If policy device is None, the only thing we need to do is
-            # make sure that the weights are shared.
-            if policy_device is None:
-
-                def map_weight(
-                    weight,
-                ):
-                    is_param = isinstance(weight, nn.Parameter)
-                    weight = weight.data
-                    if weight.device.type in ("cpu", "mps"):
-                        weight = weight.share_memory_()
-                    if is_param:
-                        weight = nn.Parameter(weight, requires_grad=False)
-                    return weight
-
-            # in other cases, we need to cast the policy if and only if not all the weights
-            # are on the appropriate device
-            else:
-                # check the weights devices
-                has_different_device = [False]
-
-                def map_weight(
-                    weight,
-                    policy_device=policy_device,
-                    has_different_device=has_different_device,
-                ):
-                    is_param = isinstance(weight, nn.Parameter)
-                    weight = weight.data
-                    if weight.device != policy_device:
-                        has_different_device[0] = True
-                        weight = weight.to(policy_device)
-                    elif weight.device.type in ("cpu", "mps"):
-                        weight = weight.share_memory_()
-                    if is_param:
-                        weight = nn.Parameter(weight, requires_grad=False)
-                    return weight
-
-            local_policy_weights = TensorDictParams(
-                policy_weights.apply(map_weight, filter_empty=False)
+        self.policy = policy
+        for policy_device in self.policy_device:
+            (policy_copy, get_weights_fn,) = self._get_policy_and_device(
+                policy=policy,
+                policy_device=policy_device,
             )
-
-            def _get_weight_fn(weights=policy_weights):
-                # This function will give the local_policy_weight the original weights.
-                # see self.update_policy_weights_ to see how this is used
-                return weights
-
-            # We lock the weights to be able to cache a bunch of ops and to avoid modifying it
-            _policy_weights_dict[policy_device] = local_policy_weights.lock_()
-            _get_weights_fn_dict[policy_device] = _get_weight_fn
-
-        self._policy_weights_dict = _policy_weights_dict
-        self._get_weights_fn_dict = _get_weights_fn_dict
+            weights = TensorDict.from_module(policy_copy) if get_weights_fn is not None else None
+            self._policy_weights_dict[policy_device] = weights
+            self._get_weights_fn_dict[policy_device] = get_weights_fn
 
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
@@ -1792,9 +1788,10 @@ class _MultiDataCollector(DataCollectorBase):
             storing_device = self.storing_device[i]
             env_device = self.env_device[i]
             policy = self.policy
-            with self._policy_weights_dict[policy_device].to_module(
+            policy_weights = self._policy_weights_dict[policy_device]
+            with policy_weights.to_module(
                 policy
-            ) if policy is not None else contextlib.nullcontext():
+            ) if policy is not None and policy_weights is not None else contextlib.nullcontext():
                 kwargs = {
                     "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,

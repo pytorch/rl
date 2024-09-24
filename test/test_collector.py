@@ -94,6 +94,7 @@ from torchrl.envs.utils import (
     RandomPolicy,
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
+from tensordict.nn import CudaGraphModule
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"
@@ -2907,6 +2908,85 @@ class TestCollectorRB:
                     (step_countdiff == 1) | (step_countdiff < 0)
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
+
+
+def test_no_deepcopy_policy():
+    # Tests that the collector instantiation does not make a deepcopy of the policy if not necessary.
+    #
+    # The only situation where we want to deepcopy the policy is when the policy_device differs from the actual device
+    # of the policy. This can only be checked if the policy is an nn.Module and any of the params is not on the desired
+    # device.
+    #
+    # If the policy is not a nn.Module or has no parameter, policy_device should warn (we don't know what to do but we
+    # can trust that the user knows what to do).
+
+    shared_device = torch.device("cpu")
+    if torch.cuda.is_available():
+        original_device = torch.device("cuda:0")
+    elif torch.mps.is_available():
+        original_device = torch.device("mps")
+    else:
+        pytest.skip("No GPU or MPS device")
+
+    def make_policy(device=None, nn_module=True):
+        if nn_module:
+            return TensorDictModule(nn.Linear(7, 7, device=device), in_keys=["observation"], out_keys=["action"])
+        policy = make_policy(device=device)
+        return lambda *args, **kwargs: policy(*args, **kwargs)
+
+    def make_and_test_policy(policy, policy_device=None, env_device=None, device=None, collector_type=SyncDataCollector, trust_policy=None):
+        # make sure policy errors when copied
+        def _dc(*args, **kwargs):
+            raise RuntimeError("deepcopy not allowed")
+        policy.__deepcopy__ = _dc
+        envs = ContinuousActionVecMockEnv(device=env_device)
+        if collector_type is not SyncDataCollector:
+            envs = [envs, envs]
+        c = collector_type(policy=policy, env=envs, total_frames=1000, frames_per_batch=100, policy_device=policy_device, env_device=env_device, device=device, trust_policy=trust_policy)
+        for data in c:
+            return
+
+    # Simplest use cases
+    policy = make_policy()
+    make_and_test_policy(policy)
+
+    policy = make_policy(device=original_device)
+    make_and_test_policy(policy, env_device=original_device)
+
+    policy = make_policy(device=original_device)
+    make_and_test_policy(policy, policy_device=original_device, env_device=original_device)
+
+    # a deepcopy must occur when the policy_device differs from the actual device
+    with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        policy = make_policy(device=original_device)
+        make_and_test_policy(policy, policy_device=shared_device, env_device=shared_device)
+
+    # a deepcopy must occur when device differs from the actual device
+    with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        policy = make_policy(device=original_device)
+        make_and_test_policy(policy, device=shared_device)
+
+    # If the policy is not an nn.Module, we can't cast it to device, so we assume that the policy device
+    # is there to inform us
+    policy = make_policy(original_device, nn_module=False)
+    with pytest.warns(UserWarning):
+        make_and_test_policy(policy, policy_device=original_device, env_device=original_device)
+    # For instance, if the env is on CPU, knowing the policy device helps with casting stuff on the right device
+    with pytest.warns(UserWarning):
+        make_and_test_policy(policy, policy_device=original_device, env_device=shared_device)
+    # TODO: add a no warning check here
+    make_and_test_policy(policy, policy_device=original_device, env_device=shared_device, trust_policy=True)
+
+    # If there is not policy_device, we assume that the user is doing things right too but don't warn
+    policy = make_policy(original_device, nn_module=False)
+    make_and_test_policy(policy, env_device=original_device)
+
+    # If the policy is a CudaGraphModule, we know it's on cuda - no need to warn
+    if torch.cuda.is_available():
+        policy = make_policy(original_device)
+        cudagraph_policy = CudaGraphModule(policy)
+        make_and_test_collector(cudagraph_policy, policy_device=original_device)
+
 
 
 if __name__ == "__main__":

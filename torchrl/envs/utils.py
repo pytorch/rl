@@ -1434,8 +1434,10 @@ def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False)
                 "env must be provided to _get_policy_and_device if policy is None"
             )
         policy = RandomPolicy(env.input_spec["full_action_spec"])
-    # make sure policy is an nn.Module
+
+    # make sure policy is an nn.Module - this will return the same policy if conditions are met
     policy = _NonParametricPolicyWrapper(policy)
+
     if not _policy_is_tensordict_compatible(policy):
         # policy is a nn.Module that doesn't operate on tensordicts directly
         # so we attempt to auto-wrap policy with TensorDictModule
