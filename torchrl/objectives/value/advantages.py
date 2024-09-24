@@ -167,6 +167,16 @@ def _call_actor_net(
     return log_pi
 
 
+_GAMMA_DEVICE_WARN = (
+    "The device of the {} tensor mismatches the reward. From v0.7, this will raise an exception"
+    "(because the device must be known in advance for cudagraphs modules to be used and casting to "
+    "device may induce synchronizations and speed issues). "
+    "You can solve this warning by "
+    "registering the device within the value estimator class during construction. "
+    "In Losses, this can be achieved via the `make_value_estimator(..., device=device)` method."
+)
+
+
 class ValueEstimatorBase(TensorDictModuleBase):
     """An abstract parent class for value function modules.
 
@@ -656,8 +666,10 @@ class TD0Estimator(ValueEstimatorBase):
         **kwargs,
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
-        device = reward.device
-        gamma = self.gamma.to(device)
+        gamma = self.gamma
+        if gamma.device != reward.device:
+            warnings.warn(_GAMMA_DEVICE_WARN.format("gamma"))
+            gamma = gamma.to(reward.device)
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -872,8 +884,10 @@ class TD1Estimator(ValueEstimatorBase):
         **kwargs,
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
-        device = reward.device
-        gamma = self.gamma.to(device)
+        gamma = self.gamma
+        if gamma.device != reward.device:
+            warnings.warn(_GAMMA_DEVICE_WARN.format("gamma"))
+            gamma = gamma.to(reward.device)
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -1097,8 +1111,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
         **kwargs,
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
-        device = reward.device
-        gamma = self.gamma.to(device)
+        gamma = self.gamma
+        if gamma.device != reward.device:
+            warnings.warn(_GAMMA_DEVICE_WARN.format("gamma"))
+            gamma = gamma.to(reward.device)
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -1673,8 +1689,7 @@ class VTrace(ValueEstimatorBase):
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
-        device = reward.device
-        gamma = self.gamma.to(device)
+        gamma = self.gamma
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)

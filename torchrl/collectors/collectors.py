@@ -133,6 +133,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     """Base class for data collectors."""
 
     _iterator = None
+    total_frames: int
+    frames_per_batch: int
 
     def _get_policy_and_device(
         self,
@@ -242,6 +244,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     def __class_getitem__(self, index):
         raise NotImplementedError
+
+    def __len__(self) -> int:
+        if self.total_frames > 0:
+            return -(self.total_frames // -self.frames_per_batch)
+        raise RuntimeError("Non-terminating collectors do not have a length")
 
 
 @accept_remote_rref_udf_invocation

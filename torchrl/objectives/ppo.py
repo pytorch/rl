@@ -365,10 +365,11 @@ class PPOLoss(LossModule):
         self.separate_losses = separate_losses
         self.reduction = reduction
 
-        try:
-            device = next(self.parameters()).device
-        except AttributeError:
-            device = torch.device("cpu")
+        p = next(self.parameters())
+        if hasattr(p, "device"):
+            device = p.device
+        else:
+            device = torch.get_default_device()
 
         self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
         if critic_coef is not None:

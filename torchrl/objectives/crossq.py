@@ -303,10 +303,11 @@ class CrossQLoss(LossModule):
         )
 
         self.loss_function = loss_function
-        try:
-            device = next(self.parameters()).device
-        except AttributeError:
-            device = torch.device("cpu")
+        p = next(self.parameters())
+        if hasattr(p, "device"):
+            device = p.device
+        else:
+            device = torch.get_default_device()
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         if bool(min_alpha) ^ bool(max_alpha):
             min_alpha = min_alpha if min_alpha else 0.0

@@ -44,7 +44,7 @@ optim:
   utd_ratio: 1
   device: null
   lr: 1e-3
-  weight_decay: 0.0
+  weight_decay: 1e-8
   batch_size: 256
 
 # Policy and model
@@ -57,3 +57,6 @@ loss:
   loss_function: l2
   gamma: 0.99
   tau: 0.005
+  compile: False
+  compile_mode: reduce-overhead
+  cudagraphs: False

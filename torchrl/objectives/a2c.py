@@ -26,6 +26,7 @@ from torchrl.objectives.utils import (
     _cache_values,
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _get_default_device,
     _reduce,
     default_value_kwargs,
     distance_loss,
@@ -316,10 +317,7 @@ class A2CLoss(LossModule):
         self.entropy_bonus = entropy_bonus and entropy_coef
         self.reduction = reduction
 
-        try:
-            device = next(self.parameters()).device
-        except AttributeError:
-            device = torch.device("cpu")
+        device = _get_default_device(self)
 
         self.register_buffer(
             "entropy_coef", torch.as_tensor(entropy_coef, device=device)
@@ -347,7 +345,11 @@ class A2CLoss(LossModule):
                 raise ValueError(
                     f"clip_value must be a float or a scalar tensor, got {clip_value}."
                 )
-        self.register_buffer("clip_value", clip_value)
+            self.register_buffer(
+                "clip_value", torch.as_tensor(clip_value, device=device)
+            )
+        else:
+            self.clip_value = None
 
     @property
     def functional(self):
@@ -456,7 +458,7 @@ class A2CLoss(LossModule):
             old_state_value = old_state_value.clone()
 
         # TODO: if the advantage is gathered by forward, this introduces an
-        # overhead that we could easily reduce.
+        #  overhead that we could easily reduce.
         target_return = tensordict.get(
             self.tensor_keys.value_target, None
         )  # TODO: None soon to be removed
@@ -487,7 +489,7 @@ class A2CLoss(LossModule):
             loss_value, clip_fraction = _clip_value_loss(
                 old_state_value,
                 state_value,
-                self.clip_value.to(state_value.device),
+                self.clip_value,
                 target_return,
                 loss_value,
                 self.loss_critic_type,
@@ -540,6 +542,9 @@ class A2CLoss(LossModule):
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
+
+        device = _get_default_device(self)
+        hp["device"] = device
 
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
