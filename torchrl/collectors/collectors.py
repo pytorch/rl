@@ -638,7 +638,7 @@ class SyncDataCollector(DataCollectorBase):
         if isinstance(self.policy, nn.Module):
             self.policy_weights = TensorDict.from_module(self.policy, as_module=True)
         else:
-            self.policy_weights = TensorDict({}, [])
+            self.policy_weights = TensorDict()
 
         if self.env_device:
             self.env: EnvBase = self.env.to(self.env_device)
@@ -1608,8 +1608,8 @@ class _MultiDataCollector(DataCollectorBase):
             )
             weights = (
                 TensorDict.from_module(policy_copy)
-                if get_weights_fn is not None
-                else None
+                if isinstance(policy_copy, nn.Module)
+                else TensorDict()
             )
             self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn_dict[policy_device] = get_weights_fn
@@ -1764,10 +1764,10 @@ class _MultiDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def update_policy_weights_(self, policy_weights=None) -> None:
+        if isinstance(policy_weights, TensorDictParams):
+            policy_weights = policy_weights.data
         for _device in self._policy_weights_dict:
             if policy_weights is not None:
-                if isinstance(policy_weights, TensorDictParams):
-                    policy_weights = policy_weights.data
                 self._policy_weights_dict[_device].data.update_(policy_weights)
             elif self._get_weights_fn_dict[_device] is not None:
                 original_weights = self._get_weights_fn_dict[_device]()

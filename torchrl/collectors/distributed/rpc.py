@@ -22,6 +22,7 @@ from torchrl.collectors.distributed.default_configs import (
     IDLE_TIMEOUT,
     TCP_PORT,
 )
+from torchrl.collectors.distributed.utils import _NON_NN_POLICY_WEIGHTS
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.utils import _convert_exploration_type
@@ -301,9 +302,11 @@ class RPCDataCollector(DataCollectorBase):
         self.env_constructors = create_env_fn
         self.policy = policy
         if isinstance(policy, nn.Module):
-            policy_weights = TensorDict(dict(policy.named_parameters()), [])
+            policy_weights = TensorDict.from_module(policy)
+            policy_weights = policy_weights.data
         else:
-            policy_weights = TensorDict({}, [])
+            warnings.warn(_NON_NN_POLICY_WEIGHTS)
+            policy_weights = TensorDict()
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch

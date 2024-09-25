@@ -26,6 +26,7 @@ from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
     is_tensorclass,
+    LazyStackedTensorDict,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -714,6 +715,20 @@ class TestStorages:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample()
         assert (s.exclude("index") == 1).all()
+
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    def test_extend_lazystack(self, storage_type):
+
+        rb = ReplayBuffer(
+            storage=storage_type(6),
+            batch_size=2,
+        )
+        td1 = TensorDict(a=torch.rand(5, 4, 8), batch_size=5)
+        td2 = TensorDict(a=torch.rand(5, 3, 8), batch_size=5)
+        ltd = LazyStackedTensorDict(td1, td2, stack_dim=1)
+        rb.extend(ltd)
+        rb.sample(3)
+        assert len(rb) == 5
 
     @pytest.mark.parametrize("device_data", get_default_devices())
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])

@@ -18,6 +18,11 @@ except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
 
+_NON_NN_POLICY_WEIGHTS = (
+    "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
+    "update_policy_weights_ will be a no-op."
+)
+
 
 class submitit_delayed_launcher:
     """Delayed launcher for submitit.

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import socket
+import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
 from typing import Callable, List, OrderedDict
@@ -29,6 +30,7 @@ from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     MAX_TIME_TO_CONNECT,
 )
+from torchrl.collectors.distributed.utils import _NON_NN_POLICY_WEIGHTS
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
@@ -78,18 +80,11 @@ def _distributed_init_collection_node(
             )
 
     if isinstance(policy, nn.Module):
-        policy_weights = TensorDict(dict(policy.named_parameters()), [])
-        # TODO: Do we want this?
-        # updates the policy weights to avoid them to be shared
-        if all(
-            param.device == torch.device("cpu") for param in policy_weights.values()
-        ):
-            policy = deepcopy(policy)
-            policy_weights = TensorDict(dict(policy.named_parameters()), [])
-
-        policy_weights = policy_weights.apply(lambda x: x.data)
+        policy_weights = TensorDict.from_module(policy)
+        policy_weights = policy_weights.data
     else:
-        policy_weights = TensorDict({}, [])
+        warnings.warn(_NON_NN_POLICY_WEIGHTS)
+        policy_weights = TensorDict()
 
     collector = collector_class(
         env_make,
