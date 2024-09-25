@@ -1596,7 +1596,6 @@ class _MultiDataCollector(DataCollectorBase):
             trust_policy = isinstance(policy, CudaGraphModule)
         self.trust_policy = trust_policy
 
-        self.policy = policy
         for policy_device, env_maker, env_maker_kwargs in zip(
             self.policy_device, self.create_env_fn, self.create_env_kwargs
         ):
@@ -1606,6 +1605,8 @@ class _MultiDataCollector(DataCollectorBase):
                 env_maker=env_maker,
                 env_maker_kwargs=env_maker_kwargs,
             )
+            if type(policy_copy) is not type(policy):
+                policy = policy_copy
             weights = (
                 TensorDict.from_module(policy_copy)
                 if isinstance(policy_copy, nn.Module)
@@ -1613,6 +1614,7 @@ class _MultiDataCollector(DataCollectorBase):
             )
             self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn_dict[policy_device] = get_weights_fn
+        self.policy = policy
 
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
@@ -1810,9 +1812,11 @@ class _MultiDataCollector(DataCollectorBase):
             env_device = self.env_device[i]
             policy = self.policy
             policy_weights = self._policy_weights_dict[policy_device]
-            with policy_weights.to_module(
-                policy
-            ) if policy is not None and policy_weights is not None else contextlib.nullcontext():
+            if policy is not None and policy_weights is not None:
+                cm = policy_weights.to_module(policy)
+            else:
+                cm = contextlib.nullcontext()
+            with cm:
                 kwargs = {
                     "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,
