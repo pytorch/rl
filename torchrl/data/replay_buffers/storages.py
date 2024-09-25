@@ -1118,7 +1118,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             out = data.clone().to(self.device)
             out = out.expand(max_size_along_dim0(data.shape))
             out = out.memmap_like(prefix=self.scratch_dir, existsok=self.existsok)
-            if torchrl_logger.getEffectiveLevel() == logging.DEBUG:
+            if torchrl_logger.isEnabledFor(logging.DEBUG):
                 for key, tensor in sorted(
                     out.items(include_nested=True, leaves_only=True), key=str
                 ):
