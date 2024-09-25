@@ -1772,12 +1772,15 @@ class _MultiDataCollector(DataCollectorBase):
             if policy_weights is not None:
                 self._policy_weights_dict[_device].data.update_(policy_weights)
             elif self._get_weights_fn_dict[_device] is not None:
+                print(1, self._get_weights_fn_dict[_device])
                 original_weights = self._get_weights_fn_dict[_device]()
+                print(2, original_weights)
                 if original_weights is None:
                     # if the weights match in identity, we can spare a call to update_
                     continue
                 if isinstance(original_weights, TensorDictParams):
                     original_weights = original_weights.data
+                print(3, 'self._policy_weights_dict[_device]', self._policy_weights_dict[_device])
                 self._policy_weights_dict[_device].data.update_(original_weights)
 
     @property

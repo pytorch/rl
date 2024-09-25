@@ -46,7 +46,7 @@ formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
+VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DEBUG))))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
 if RL_WARNINGS:

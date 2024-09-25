@@ -2153,7 +2153,7 @@ class TestMultiKeyEnvsCollector:
         assert_allclose_td(c2.unsqueeze(0), d2)
 
 
-@pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
+@pytest.mark.skipif(not torch.cuda.is_available() and not torch.mps.is_available(), reason="No casting if no cuda")
 class TestUpdateParams:
     class DummyEnv(EnvBase):
         def __init__(self, device, batch_size=[]):  # noqa: B006
@@ -2211,8 +2211,8 @@ class TestUpdateParams:
     @pytest.mark.parametrize(
         "policy_device,env_device",
         [
-            ["cpu", "cuda"],
-            ["cuda", "cpu"],
+            ["cpu", get_default_devices()[0]],
+            [get_default_devices()[0], "cpu"],
             # ["cpu", "cuda:0"],  # 1226: faster execution
             # ["cuda:0", "cpu"],
             # ["cuda", "cuda:0"],
@@ -2236,9 +2236,7 @@ class TestUpdateParams:
                     policy.param.data += 1
                     policy.buf.data += 2
                     if give_weights:
-                        d = dict(policy.named_parameters())
-                        d.update(policy.named_buffers())
-                        p_w = TensorDict(d, [])
+                        p_w = TensorDict.from_module(policy)
                     else:
                         p_w = None
                     col.update_policy_weights_(p_w)

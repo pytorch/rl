@@ -813,6 +813,8 @@ class DistributedDataCollector(DataCollectorBase):
 
         for i in range(self.num_workers):
             rank = i + 1
+            if self._VERBOSE:
+                torchrl_logger.info(f"shutting down rank {rank}.")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
 
     def _next_sync(self, total_frames):
