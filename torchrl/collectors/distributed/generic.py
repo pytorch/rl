@@ -30,8 +30,7 @@ from torchrl.collectors.distributed.default_configs import (
     MAX_TIME_TO_CONNECT,
     TCP_PORT,
 )
-from torchrl.collectors.distributed.utils import _NON_NN_POLICY_WEIGHTS
-from torchrl.collectors.utils import split_trajectories
+from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
