@@ -37,7 +37,7 @@ jobs:
             post-script: "python packaging/wheel/relocate.py"
             smoke-test-script: test/smoke_test.py
             package-name: torchrl
-    name: pytorch/rl
+    name: ${{ matrix.repository }}
     uses: pytorch/test-infra/.github/workflows/build_wheels_windows.yml@main
     with:
       repository: ${{ matrix.repository }}

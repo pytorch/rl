@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import abc
+
+import logging
 import os
 import textwrap
 import warnings
@@ -1116,16 +1118,17 @@ class LazyMemmapStorage(LazyTensorStorage):
             out = data.clone().to(self.device)
             out = out.expand(max_size_along_dim0(data.shape))
             out = out.memmap_like(prefix=self.scratch_dir, existsok=self.existsok)
-            for key, tensor in sorted(
-                out.items(include_nested=True, leaves_only=True), key=str
-            ):
-                try:
-                    filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    torchrl_logger.debug(
-                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                    )
-                except (AttributeError, RuntimeError):
-                    pass
+            if torchrl_logger.getEffectiveLevel() == logging.DEBUG:
+                for key, tensor in sorted(
+                    out.items(include_nested=True, leaves_only=True), key=str
+                ):
+                    try:
+                        filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+                        torchrl_logger.debug(
+                            f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                        )
+                    except (AttributeError, RuntimeError):
+                        pass
         else:
             out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
