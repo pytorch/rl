@@ -3032,47 +3032,73 @@ def test_prioritized_slice_sampler_episodes(device):
     ), "after priority update, only episode 1 and 3 are expected to be sampled"
 
 
-def test_prioritized_parameter_scheduler():
-    INIT_ALPHA = 0.7
-    INIT_BETA = 0.6
-    GAMMA = 0.1
-    EVERY_N_STEPS = 10
-    LINEAR_STEPS = 100
-    TOTAL_STEPS = 200
+@pytest.mark.parametrize("alpha", [0.6, torch.tensor(1.0)])
+@pytest.mark.parametrize("beta", [0.7, torch.tensor(0.1)])
+@pytest.mark.parametrize("gamma", [0.1])
+@pytest.mark.parametrize("total_steps", [200])
+@pytest.mark.parametrize("n_annealing_steps", [100])
+@pytest.mark.parametrize("anneal_every_n", [10, 159])
+@pytest.mark.parametrize("alpha_min", [0, 0.2])
+@pytest.mark.parametrize("beta_max", [1, 1.4])
+def test_prioritized_parameter_scheduler(
+    alpha,
+    beta,
+    gamma,
+    total_steps,
+    n_annealing_steps,
+    anneal_every_n,
+    alpha_min,
+    beta_max,
+):
     rb = TensorDictPrioritizedReplayBuffer(
-        alpha=INIT_ALPHA, beta=INIT_BETA, storage=ListStorage(max_size=2000)
+        alpha=alpha, beta=beta, storage=ListStorage(max_size=1000)
     )
     data = TensorDict({"data": torch.randn(1000, 5)}, batch_size=1000)
     rb.extend(data)
     alpha_scheduler = LinearScheduler(
-        rb, param_name="alpha", final_value=0.0, num_steps=LINEAR_STEPS
+        rb, param_name="alpha", final_value=alpha_min, num_steps=n_annealing_steps
     )
     beta_scheduler = StepScheduler(
         rb,
         param_name="beta",
-        gamma=GAMMA,
-        n_steps=EVERY_N_STEPS,
-        max_value=1.0,
+        gamma=gamma,
+        n_steps=anneal_every_n,
+        max_value=beta_max,
         mode="additive",
     )
+
     scheduler = SchedulerList(schedulers=(alpha_scheduler, beta_scheduler))
-    expected_alpha_vals = np.linspace(INIT_ALPHA, 0.0, num=LINEAR_STEPS + 1)
-    expected_alpha_vals = np.pad(
-        expected_alpha_vals, (0, TOTAL_STEPS - LINEAR_STEPS), constant_values=0.0
+
+    alpha = alpha if torch.is_tensor(alpha) else torch.tensor(alpha)
+    alpha_min = torch.tensor(alpha_min)
+    expected_alpha_vals = torch.linspace(alpha, alpha_min, n_annealing_steps + 1)
+    expected_alpha_vals = torch.nn.functional.pad(
+        expected_alpha_vals, (0, total_steps - n_annealing_steps), value=alpha_min
     )
-    expected_beta_vals = [INIT_BETA]
-    for _ in range((TOTAL_STEPS // EVERY_N_STEPS - 1)):
-        expected_beta_vals.append(expected_beta_vals[-1] + GAMMA)
+
+    expected_beta_vals = [beta]
+    annealing_steps = total_steps // anneal_every_n
+    gammas = torch.arange(0, annealing_steps + 1, dtype=torch.float32) * gamma
     expected_beta_vals = (
-        np.atleast_2d(expected_beta_vals).repeat(EVERY_N_STEPS).clip(None, 1.0)
+        (beta + gammas).repeat_interleave(anneal_every_n).clip(None, beta_max)
     )
-    for i in range(TOTAL_STEPS):
-        assert np.isclose(
-            rb.sampler.alpha, expected_alpha_vals[i]
-        ), f"expected {expected_alpha_vals[i]}, got {rb.sampler.alpha}"
-        assert np.isclose(
-            rb.sampler.beta, expected_beta_vals[i]
-        ), f"expected {expected_beta_vals[i]}, got {rb.sampler.beta}"
+    for i in range(total_steps):
+        curr_alpha = rb.sampler.alpha
+        torch.testing.assert_close(
+            curr_alpha
+            if torch.is_tensor(curr_alpha)
+            else torch.tensor(curr_alpha).float(),
+            expected_alpha_vals[i],
+            msg=f"expected {expected_alpha_vals[i]}, got {curr_alpha}",
+        )
+        curr_beta = rb.sampler.beta
+        torch.testing.assert_close(
+            curr_beta
+            if torch.is_tensor(curr_beta)
+            else torch.tensor(curr_beta).float(),
+            expected_beta_vals[i],
+            msg=f"expected {expected_beta_vals[i]}, got {curr_beta}",
+        )
         rb.sample(20)
         scheduler.step()
 

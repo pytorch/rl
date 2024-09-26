@@ -1,12 +1,22 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+
 from typing import Any, Callable, Dict
 
 import numpy as np
+
+import torch
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 
 
-class ParameterScheduler:
+class ParameterScheduler(ABC):
     """Scheduler to adjust the value of a given parameter of a replay buffer's sampler.
 
     Scheduler can for example be used to alter the alpha and beta values in the PrioritizedSampler.
@@ -34,13 +44,19 @@ class ParameterScheduler:
             )
         self.sampler = obj.sampler if isinstance(obj, ReplayBuffer) else obj
         self.param_name = param_name
-        self._min_val = min_value
-        self._max_val = max_value
+        self._min_val = min_value or float("-inf")
+        self._max_val = max_value or float("inf")
         if not hasattr(self.sampler, self.param_name):
             raise ValueError(
                 f"Provided class {type(obj).__name__} does not have an attribute {param_name}"
             )
-        self.initial_val = getattr(self.sampler, self.param_name)
+        initial_val = getattr(self.sampler, self.param_name)
+        if isinstance(initial_val, torch.Tensor):
+            initial_val = initial_val.clone()
+            self.backend = torch
+        else:
+            self.backend = np
+        self.initial_val = initial_val
         self._step_cnt = 0
 
     def state_dict(self):
@@ -67,13 +83,14 @@ class ParameterScheduler:
         # Apply the step function
         new_value = self._step()
         # clip value to specified range
-        new_value_clipped = np.clip(new_value, a_min=self._min_val, a_max=self._max_val)
+        new_value_clipped = self.backend.clip(new_value, self._min_val, self._max_val)
         # Set the new value of the parameter dynamically
         setattr(self.sampler, self.param_name, new_value_clipped)
 
     @abstractmethod
     def _step(self):
         ...
+
 
 class LambdaScheduler(ParameterScheduler):
     """Sets a parameter to its initial value times a given function.
@@ -144,6 +161,9 @@ class LinearScheduler(ParameterScheduler):
         num_steps: int,
     ):
         super().__init__(obj, param_name)
+        if isinstance(self.initial_val, torch.Tensor):
+            # cast to same type as initial value
+            final_value = torch.tensor(final_value).to(self.initial_val)
         self.final_val = final_value
         self.num_steps = num_steps
         self._delta = (self.final_val - self.initial_val) / self.num_steps
@@ -208,9 +228,9 @@ class StepScheduler(ParameterScheduler):
         self.n_steps = n_steps
         self.mode = mode
         if mode == "additive":
-            operator = np.add
+            operator = self.backend.add
         elif mode == "multiplicative":
-            operator = np.multiply
+            operator = self.backend.multiply
         else:
             raise ValueError(
                 f"Invalid mode: {mode}. Choose 'multiplicative' or 'additive'."
