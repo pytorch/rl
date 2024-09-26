@@ -179,6 +179,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         i = -1
         for p in param_and_buf.values(True, True):
+            i += 1
             if p.device != policy_device:
                 # Then we need casting
                 break
@@ -1772,15 +1773,12 @@ class _MultiDataCollector(DataCollectorBase):
             if policy_weights is not None:
                 self._policy_weights_dict[_device].data.update_(policy_weights)
             elif self._get_weights_fn_dict[_device] is not None:
-                print(1, self._get_weights_fn_dict[_device])
                 original_weights = self._get_weights_fn_dict[_device]()
-                print(2, original_weights)
                 if original_weights is None:
                     # if the weights match in identity, we can spare a call to update_
                     continue
                 if isinstance(original_weights, TensorDictParams):
                     original_weights = original_weights.data
-                print(3, 'self._policy_weights_dict[_device]', self._policy_weights_dict[_device])
                 self._policy_weights_dict[_device].data.update_(original_weights)
 
     @property
@@ -1842,6 +1840,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "replay_buffer": self.replay_buffer,
                     "replay_buffer_chunk": self.replay_buffer_chunk,
                     "traj_pool": self._traj_pool,
+                    "trust_policy": self.trust_policy,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2857,6 +2856,7 @@ def _main_async_collector(
     replay_buffer: ReplayBuffer | None = None,
     replay_buffer_chunk: bool = True,
     traj_pool: _TrajectoryPool = None,
+    trust_policy: bool = False,
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
@@ -2883,6 +2883,7 @@ def _main_async_collector(
         use_buffers=use_buffers,
         replay_buffer=replay_buffer if replay_buffer_chunk else None,
         traj_pool=traj_pool,
+        trust_policy=trust_policy,
     )
     use_buffers = inner_collector._use_buffers
     if verbose:

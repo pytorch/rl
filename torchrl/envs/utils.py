@@ -52,7 +52,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     Unbounded,
 )
-from torchrl.data.utils import check_no_exclusive_keys
+from torchrl.data.utils import check_no_exclusive_keys, CloudpickleWrapper
 
 __all__ = [
     "exploration_mode",
@@ -1464,7 +1464,9 @@ def _make_compatible_policy(
         policy = RandomPolicy(input_spec)
 
     # make sure policy is an nn.Module - this will return the same policy if conditions are met
-    policy = _NonParametricPolicyWrapper(policy)
+    # policy = CloudpickleWrapper(policy)
+
+    caller = getattr(policy, "forward", policy)
 
     if not _policy_is_tensordict_compatible(policy):
         if observation_spec is None:
@@ -1496,9 +1498,9 @@ def _make_compatible_policy(
             )
 
         try:
-            sig = policy.forward.__signature__
+            sig = caller.__signature__
         except AttributeError:
-            sig = inspect.signature(policy.forward)
+            sig = inspect.signature(caller)
         # we check if all the mandatory params are there
         params = list(sig.parameters.keys())
         if (
@@ -1527,7 +1529,7 @@ def _make_compatible_policy(
                 out_keys = ["action"]
             else:
                 out_keys = list(env.action_keys)
-            for p in policy.parameters():
+            for p in getattr(policy, "parameters", list)():
                 policy_device = p.device
                 break
             else:
@@ -1559,15 +1561,21 @@ def _make_compatible_policy(
 
 
 def _policy_is_tensordict_compatible(policy: nn.Module):
-    if isinstance(policy, _NonParametricPolicyWrapper) and isinstance(
-        policy.policy, RandomPolicy
+
+    def is_compatible(policy):
+        return isinstance(policy, (RandomPolicy, TensorDictModuleBase))
+
+    if (
+        is_compatible(policy)
+        or (
+            isinstance(policy, _NonParametricPolicyWrapper)
+            and is_compatible(policy.policy)
+        )
+        or (isinstance(policy, CloudpickleWrapper) and is_compatible(policy.fn))
     ):
         return True
 
-    if isinstance(policy, TensorDictModuleBase):
-        return True
-
-    sig = inspect.signature(policy.forward)
+    sig = inspect.signature(getattr(policy, "forward", policy))
 
     if (
         len(sig.parameters) == 1
@@ -1640,19 +1648,10 @@ class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
 
     def __init__(self, policy):
         super().__init__()
-        self.policy = policy
-
-    @property
-    def forward(self):
-        forward = self.__dict__.get("_forward", None)
-        if forward is None:
-
-            @functools.wraps(self.policy)
-            def forward(*input, **kwargs):
-                return self.policy.__call__(*input, **kwargs)
-
-            self.__dict__["_forward"] = forward
-        return forward
+        functools.update_wrapper(self, policy)
+        self.policy = CloudpickleWrapper(policy)
+        if hasattr(policy, "forward"):
+            self.forward = self.policy.forward
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():

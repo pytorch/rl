@@ -236,7 +236,7 @@ class CloudpickleWrapper(object):
         self.fn = fn
         self.kwargs = kwargs
 
-        functools.update_wrapper(self, fn)
+        functools.update_wrapper(self, getattr(fn, "forward", fn))
 
     def __getstate__(self):
         import cloudpickle

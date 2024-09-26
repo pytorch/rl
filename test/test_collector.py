@@ -1833,10 +1833,15 @@ def test_set_truncated(collector_cls):
         NestedCountingEnv(), InitTracker()
     ).add_truncated_keys()
     env = env_fn()
-    policy = env.rand_action
+    policy = CloudpickleWrapper(env.rand_action)
     if collector_cls == SyncDataCollector:
         collector = collector_cls(
-            env, policy=policy, frames_per_batch=20, total_frames=-1, set_truncated=True
+            env,
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=-1,
+            set_truncated=True,
+            trust_policy=True,
         )
     else:
         collector = collector_cls(
@@ -1846,6 +1851,7 @@ def test_set_truncated(collector_cls):
             total_frames=-1,
             cat_results="stack",
             set_truncated=True,
+            trust_policy=True,
         )
     try:
         for data in collector:
@@ -2153,7 +2159,10 @@ class TestMultiKeyEnvsCollector:
         assert_allclose_td(c2.unsqueeze(0), d2)
 
 
-@pytest.mark.skipif(not torch.cuda.is_available() and not torch.mps.is_available(), reason="No casting if no cuda")
+@pytest.mark.skipif(
+    not torch.cuda.is_available() and not torch.mps.is_available(),
+    reason="No casting if no cuda",
+)
 class TestUpdateParams:
     class DummyEnv(EnvBase):
         def __init__(self, device, batch_size=[]):  # noqa: B006
@@ -2952,7 +2961,7 @@ def test_no_deepcopy_policy(collector_type):
                 out_keys=["action"],
             )
         policy = make_policy(device=device)
-        return CloudpickleWrapper(lambda tensordict: policy(tensordict))
+        return CloudpickleWrapper(policy)
 
     def make_and_test_policy(
         policy,
