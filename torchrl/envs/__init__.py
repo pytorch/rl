@@ -36,6 +36,8 @@ from .libs import (
     set_gym_backend,
     SMACv2Env,
     SMACv2Wrapper,
+    UnityMLAgentsEnv,
+    UnityMLAgentsWrapper,
     VmasEnv,
     VmasWrapper,
 )
