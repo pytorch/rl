@@ -2,8 +2,8 @@ from typing import Any, Callable, Dict
 
 import numpy as np
 
-from .replay_buffers import ReplayBuffer
-from .samplers import Sampler
+from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
+from torchrl.data.replay_buffers.samplers import Sampler
 
 
 class ParameterScheduler:
@@ -12,12 +12,12 @@ class ParameterScheduler:
     Scheduler can for example be used to alter the alpha and beta values in the PrioritizedSampler.
 
     Args:
-        rb (ReplayBuffer): the replay buffer whose sampler to adjust
+        obj (ReplayBuffer or Sampler): the replay buffer or sampler whose sampler to adjust
         param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the beta parameter
         min_value (Union[int, float], optional): a lower bound for the parameter to be adjusted
-            Defaults to None.
+            Defaults to `None`.
         max_value (Union[int, float], optional): an upper bound for the parameter to be adjusted
-            Defaults to None
+            Defaults to `None`.
 
     """
 
@@ -25,12 +25,12 @@ class ParameterScheduler:
         self,
         obj: ReplayBuffer | Sampler,
         param_name: str,
-        min_value: int | float = None,
-        max_value: int | float = None,
+        min_value: int | float | None = None,
+        max_value: int | float | None = None,
     ):
-        if not isinstance(obj, ReplayBuffer) and not isinstance(obj, Sampler):
+        if not isinstance(obj, (ReplayBuffer, Sampler)):
             raise TypeError(
-                f"ParameterScheduler only supports Sampler class. Pass either ReplayBuffer or Sampler object. Got {type(obj)}"
+                f"ParameterScheduler only supports Sampler class. Pass either `ReplayBuffer` or `Sampler` object. Got {type(obj)} instead."
             )
         self.sampler = obj.sampler if isinstance(obj, ReplayBuffer) else obj
         self.param_name = param_name
@@ -38,18 +38,20 @@ class ParameterScheduler:
         self._max_val = max_value
         if not hasattr(self.sampler, self.param_name):
             raise ValueError(
-                f"Provided class {obj.__name__} does not have an attribute {param_name}"
+                f"Provided class {type(obj).__name__} does not have an attribute {param_name}"
             )
         self.initial_val = getattr(self.sampler, self.param_name)
         self._step_cnt = 0
 
     def state_dict(self):
-        """Return the state of the scheduler as a :class:`dict`.
+        """Returns the state of the scheduler as a :class:`dict`.
 
-        It contains an entry for every variable in self.__dict__ which
-        is not the optimizer.
+        It contains an entry for every variable in ``self.__dict__`` which
+        is not the sampler.
         """
-        return {key: value for key, value in self.__dict__.items() if key != "sampler"}
+        sd = dict(self.__dict__)
+        del sd["sampler"]
+        return sd
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
         """Load the scheduler's state.
@@ -69,25 +71,25 @@ class ParameterScheduler:
         # Set the new value of the parameter dynamically
         setattr(self.sampler, self.param_name, new_value_clipped)
 
+    @abstractmethod
     def _step(self):
-        raise NotImplementedError
-
+        ...
 
 class LambdaScheduler(ParameterScheduler):
     """Sets a parameter to its initial value times a given function.
 
-    Similar to torch.optim.LambdaLR.
+    Similar to :class:`~torch.optim.LambdaLR`.
 
     Args:
-        obj (ReplayBuffer | Sampler): the replay buffer whose sampler to adjust (or the sampler itself)
+        obj (ReplayBuffer or Sampler): the replay buffer whose sampler to adjust (or the sampler itself).
         param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the
-            beta parameter
-        lambda_fn (function): A function which computes a multiplicative factor given an integer
-            parameter step_count
+            beta parameter.
+        lambda_fn (Callable[[int], float]): A function which computes a multiplicative factor given an integer
+            parameter ``step_count``.
         min_value (Union[int, float], optional): a lower bound for the parameter to be adjusted
-            Defaults to None.
+            Defaults to `None`.
         max_value (Union[int, float], optional): an upper bound for the parameter to be adjusted
-            Defaults to None
+            Defaults to `None`.
 
     """
 
@@ -96,8 +98,8 @@ class LambdaScheduler(ParameterScheduler):
         obj: ReplayBuffer | Sampler,
         param_name: str,
         lambda_fn: Callable[[int], float],
-        min_value: int | float = None,
-        max_value: int | float = None,
+        min_value: int | float | None = None,
+        max_value: int | float | None = None,
     ):
         super().__init__(obj, param_name, min_value, max_value)
         self.lambda_fn = lambda_fn
@@ -112,12 +114,12 @@ class LinearScheduler(ParameterScheduler):
     This scheduler linearly interpolates between the initial value of the parameter and a final target value.
 
     Args:
-        obj (ReplayBuffer | Sampler): the replay buffer whose sampler to adjust (or the sampler itself)
+        obj (ReplayBuffer or Sampler): the replay buffer whose sampler to adjust (or the sampler itself).
         param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the
-            beta parameter
-        final_value (Union[int, float]): The final value that the parameter will reach after the
+            beta parameter.
+        final_value (number): The final value that the parameter will reach after the
             specified number of steps.
-        num_steps (Union[int, float], optional): The total number of steps over which the parameter
+        num_steps (number, optional): The total number of steps over which the parameter
             will be linearly altered.
 
     Example:
@@ -161,19 +163,19 @@ class StepScheduler(ParameterScheduler):
     2. Additive changes: `new_val = curr_val + gamma`
 
     Args:
-        obj (ReplayBuffer | Sampler): the replay buffer whose sampler to adjust (or the sampler itself)
+        obj (ReplayBuffer or Sampler): the replay buffer whose sampler to adjust (or the sampler itself).
         param_name (str): the name of the attribute to adjust, e.g. `beta` to adjust the
-            beta parameter
-        gamma (int | float, optional): The value by which to adjust the parameter,
-            either in a multiplicative or additive way
+            beta parameter.
+        gamma (int or float, optional): The value by which to adjust the parameter,
+            either in a multiplicative or additive way.
         n_steps (int, optional): The number of steps after which the parameter should be altered.
-            Defaults to 1
-        mode (str, optional): The mode of scheduling. Can be either 'multiplicative' or 'additive'.
-            Defaults to 'multiplicative'
-        min_value (int | float, optional): a lower bound for the parameter to be adjusted
-            Defaults to None.
-        max_value (int | float, optional): an upper bound for the parameter to be adjusted
-            Defaults to None
+            Defaults to 1.
+        mode (str, optional): The mode of scheduling. Can be either `'multiplicative'` or `'additive'`.
+            Defaults to `'multiplicative'`.
+        min_value (int or float, optional): a lower bound for the parameter to be adjusted.
+            Defaults to `None`.
+        max_value (int or float, optional): an upper bound for the parameter to be adjusted.
+            Defaults to `None`.
 
     Example:
         >>> # xdoctest: +SKIP
@@ -197,20 +199,21 @@ class StepScheduler(ParameterScheduler):
         gamma: int | float = 0.9,
         n_steps: int = 1,
         mode: str = "multiplicative",
-        min_value: int | float = None,
-        max_value: int | float = None,
+        min_value: int | float | None = None,
+        max_value: int | float | None = None,
     ):
 
         super().__init__(obj, param_name, min_value, max_value)
         self.gamma = gamma
         self.n_steps = n_steps
+        self.mode = mode
         if mode == "additive":
             operator = np.add
         elif mode == "multiplicative":
             operator = np.multiply
         else:
             raise ValueError(
-                f"Invalid mode: {self.mode}. Choose 'multiplicative' or 'additive'."
+                f"Invalid mode: {mode}. Choose 'multiplicative' or 'additive'."
             )
         self.operator = operator
 
