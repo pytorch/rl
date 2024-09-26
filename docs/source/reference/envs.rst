@@ -1120,6 +1120,8 @@ the following function will return ``1`` when queried:
     RoboHiveEnv
     SMACv2Env
     SMACv2Wrapper
+    UnityMLAgentsEnv
+    UnityMLAgentsWrapper
     VmasEnv
     VmasWrapper
     gym_backend
