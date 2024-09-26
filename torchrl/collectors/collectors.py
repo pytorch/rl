@@ -1542,7 +1542,6 @@ class _MultiDataCollector(DataCollectorBase):
 
             # store a stateless policy
             with policy_weights.apply(_make_meta_params).to_module(policy):
-                # TODO:
                 self.policy = deepcopy(policy)
 
         else:
