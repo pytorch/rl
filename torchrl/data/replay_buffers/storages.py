@@ -902,9 +902,7 @@ class LazyTensorStorage(TensorStorage):
 
         if is_tensor_collection(data):
             out = data.to(self.device)
-            out = out.expand(max_size_along_dim0(data.shape))
-            out = out.clone()
-            out = out.zero_()
+            out = torch.empty_like(out.expand(max_size_along_dim0(data.shape)))
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
