@@ -24,6 +24,7 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
+from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.memmap import MemoryMappedTensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
@@ -901,9 +902,7 @@ class LazyTensorStorage(TensorStorage):
 
         if is_tensor_collection(data):
             out = data.to(self.device)
-            out = out.expand(max_size_along_dim0(data.shape))
-            out = out.clone()
-            out = out.zero_()
+            out = torch.empty_like(out.expand(max_size_along_dim0(data.shape)))
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
@@ -1120,7 +1119,12 @@ class LazyMemmapStorage(LazyTensorStorage):
             out = out.memmap_like(prefix=self.scratch_dir, existsok=self.existsok)
             if torchrl_logger.isEnabledFor(logging.DEBUG):
                 for key, tensor in sorted(
-                    out.items(include_nested=True, leaves_only=True), key=str
+                    out.items(
+                        include_nested=True,
+                        leaves_only=True,
+                        is_leaf=_NESTED_TENSORS_AS_LISTS,
+                    ),
+                    key=str,
                 ):
                     try:
                         filesize = os.path.getsize(tensor.filename) / 1024 / 1024
