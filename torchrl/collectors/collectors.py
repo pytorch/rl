@@ -169,13 +169,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 env_maker=env_maker,
                 env_maker_kwargs=env_maker_kwargs,
             )
-        if not policy_device:
+        if not policy_device or not isinstance(policy, nn.Module):
             return policy, None
 
-        if isinstance(policy, nn.Module):
-            param_and_buf = TensorDict.from_module(policy, as_module=True)
-        else:
-            param_and_buf = TensorDict()
+        param_and_buf = TensorDict.from_module(policy, as_module=True)
 
         i = -1
         for p in param_and_buf.values(True, True):
@@ -192,24 +189,12 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     "The collector will trust that the devices match. To suppress this "
                     "warning, set `trust_policy=True` when building the collector."
                 )
-            else:
-                # We checked and all params are on the appropriate device
-                pass
-            return policy, None
-
-        def get_weights_fn(param_and_buf=param_and_buf):
-            return param_and_buf.data
-
-        # create a stateless policy and populate it with params
-
-        # TODO: merge these two funcs
-        has_different_device = False
+                return policy, None
 
         def map_weight(
             weight,
             policy_device=policy_device,
         ):
-            nonlocal has_different_device
 
             is_param = isinstance(weight, nn.Parameter)
             is_buffer = isinstance(weight, nn.Buffer)
