@@ -1561,7 +1561,6 @@ def _make_compatible_policy(
 
 
 def _policy_is_tensordict_compatible(policy: nn.Module):
-
     def is_compatible(policy):
         return isinstance(policy, (RandomPolicy, TensorDictModuleBase))
 

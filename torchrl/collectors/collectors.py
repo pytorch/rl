@@ -200,7 +200,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             is_buffer = isinstance(weight, nn.Buffer)
             weight = weight.data
             if weight.device != policy_device:
-                has_different_device = True
                 weight = weight.to(policy_device)
             elif weight.device.type in ("cpu", "mps"):
                 weight = weight.share_memory_()

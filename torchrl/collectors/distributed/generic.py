@@ -173,10 +173,10 @@ def _run_collector(
 
     if isinstance(policy, nn.Module):
         policy_weights = TensorDict.from_module(policy)
-        policy_weights = policy_weights.data
+        policy_weights = policy_weights.data.lock_()
     else:
         warnings.warn(_NON_NN_POLICY_WEIGHTS)
-        policy_weights = TensorDict()
+        policy_weights = TensorDict(lock=True)
 
     collector = collector_class(
         env_make,

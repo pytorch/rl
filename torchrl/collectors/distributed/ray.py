@@ -402,10 +402,10 @@ class RayCollector(DataCollectorBase):
         self._local_policy = policy
         if isinstance(self._local_policy, nn.Module):
             policy_weights = TensorDict.from_module(policy)
-            policy_weights = policy_weights.data
+            policy_weights = policy_weights.data.lock_()
         else:
             warnings.warn(_NON_NN_POLICY_WEIGHTS)
-            policy_weights = TensorDict()
+            policy_weights = TensorDict(lock=True)
         self.policy_weights = policy_weights
         self.collector_class = collector_class
         self.collected_frames = 0

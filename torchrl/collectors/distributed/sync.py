@@ -80,10 +80,10 @@ def _distributed_init_collection_node(
 
     if isinstance(policy, nn.Module):
         policy_weights = TensorDict.from_module(policy)
-        policy_weights = policy_weights.data
+        policy_weights = policy_weights.data.lock_()
     else:
         warnings.warn(_NON_NN_POLICY_WEIGHTS)
-        policy_weights = TensorDict()
+        policy_weights = TensorDict(lock=True)
 
     collector = collector_class(
         env_make,
@@ -309,11 +309,14 @@ class DistributedSyncDataCollector(DataCollectorBase):
         self.collector_class = collector_class
         self.env_constructors = create_env_fn
         self.policy = policy
+
         if isinstance(policy, nn.Module):
-            policy_weights = TensorDict(dict(policy.named_parameters()), [])
-            policy_weights = policy_weights.apply(lambda x: x.data)
+            policy_weights = TensorDict.from_module(policy)
+            policy_weights = policy_weights.data.lock_()
         else:
-            policy_weights = TensorDict({}, [])
+            warnings.warn(_NON_NN_POLICY_WEIGHTS)
+            policy_weights = TensorDict(lock=True)
+
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
