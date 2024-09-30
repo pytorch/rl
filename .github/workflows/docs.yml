@@ -18,18 +18,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-docs:
-    strategy:
-      matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+  build:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
       upload-artifact: docs
-      runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
-      timeout: 120
+      test-infra-ref: main
       script: |
         set -e
         set -v
@@ -102,7 +96,7 @@ jobs:
         fi
 
   upload:
-    needs: build-docs
+    needs: build
     if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
