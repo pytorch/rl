@@ -18,12 +18,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-docs:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
       upload-artifact: docs
-      test-infra-ref: main
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
       script: |
         set -e
         set -v
@@ -55,8 +61,8 @@ jobs:
         git version
         
         # 5. Install PyTorch
-        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
-
+        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+        
         # 6. Install tensordict
         python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
         
@@ -96,7 +102,7 @@ jobs:
         fi
 
   upload:
-    needs: build
+    needs: build-docs
     if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
