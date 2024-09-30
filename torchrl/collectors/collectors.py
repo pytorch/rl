@@ -189,7 +189,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     "The collector will trust that the devices match. To suppress this "
                     "warning, set `trust_policy=True` when building the collector."
                 )
-                return policy, None
+            return policy, None
 
         def map_weight(
             weight,
