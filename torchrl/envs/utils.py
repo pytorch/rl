@@ -69,13 +69,13 @@ __all__ = [
 
 
 ACTION_MASK_ERROR = RuntimeError(
-    "An out-of-bounds actions has been provided to an env with an 'action_mask' output."
-    " If you are using a custom policy, make sure to take the action mask into account when computing the output."
-    " If you are using a default policy, please add the torchrl.envs.transforms.ActionMask transform to your environment."
+    "An out-of-bounds actions has been provided to an env with an 'action_mask' output. "
+    "If you are using a custom policy, make sure to take the action mask into account when computing the output. "
+    "If you are using a default policy, please add the torchrl.envs.transforms.ActionMask transform to your environment. "
     "If you are using a ParallelEnv or another batched inventor, "
-    "make sure to add the transform to the ParallelEnv (and not to the sub-environments)."
-    " For more info on using action masks, see the docs at: "
-    "https://pytorch.org/rl/reference/envs.html#environments-with-masked-actions"
+    "make sure to add the transform to the ParallelEnv (and not to the sub-environments). "
+    "For more info on using action masks, see the docs at: "
+    "https://pytorch.org/rl/main/reference/envs.html#environments-with-masked-actions"
 )
 
 

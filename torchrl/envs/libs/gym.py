@@ -1281,7 +1281,7 @@ class GymEnv(GymWrapper):
         pixels_only (bool, optional): if ``True``, only the pixel observations will
             be returned (by default under the ``"pixels"`` entry in the output tensordict).
             If ``False``, observations (eg, states) and pixels will be returned
-            whenever ``from_pixels=True``. Defaults to ``True``.
+            whenever ``from_pixels=True``. Defaults to ``False``.
         frame_skip (int, optional): if provided, indicates for how many steps the
             same action is to be repeated. The observation returned will be the
             last observation of the sequence, whereas the reward will be the sum
