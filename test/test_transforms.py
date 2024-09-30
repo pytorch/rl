@@ -9331,6 +9331,28 @@ class TestRenameTransform(TransformBase):
         else:
             assert "b" not in tensordict.keys()
 
+    def test_rename_action(self, create_copy):
+        base_env = ContinuousActionVecMockEnv()
+        env = base_env.append_transform(
+            RenameTransform(
+                in_keys=[],
+                out_keys=[],
+                in_keys_inv=["action"],
+                out_keys_inv=[("renamed", "action")],
+                create_copy=create_copy,
+            )
+        )
+        r = env.rollout(3)
+        assert ("renamed", "action") in env.action_keys, env.action_keys
+        assert ("renamed", "action") in r
+        assert env.full_action_spec[("renamed", "action")] is not None
+        if create_copy:
+            assert "action" in env.action_keys
+            assert "action" in r
+        else:
+            assert "action" not in env.action_keys
+            assert "action" not in r
+
 
 class TestInitTracker(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="no gym detected")

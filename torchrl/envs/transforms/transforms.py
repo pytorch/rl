@@ -6634,15 +6634,15 @@ class InitTracker(Transform):
 
 
 class RenameTransform(Transform):
-    """A transform to rename entries in the output tensordict.
+    """A transform to rename entries in the output tensordict (or input tensordict via the inverse keys).
 
     Args:
-        in_keys (sequence of NestedKey): the entries to rename
+        in_keys (sequence of NestedKey): the entries to rename.
         out_keys (sequence of NestedKey): the name of the entries after renaming.
-        in_keys_inv (sequence of NestedKey, optional): the entries to rename before
-            passing the input tensordict to :meth:`EnvBase._step`.
-        out_keys_inv (sequence of NestedKey, optional): the names of the renamed
-            entries passed to :meth:`EnvBase._step`.
+        in_keys_inv (sequence of NestedKey, optional): the entries to rename
+            in the input tensordict, which will be passed to :meth:`EnvBase._step`.
+        out_keys_inv (sequence of NestedKey, optional): the names of the entries
+            in the input tensordict after renaming.
         create_copy (bool, optional): if ``True``, the entries will be copied
             with a different name rather than being renamed. This allows for
             renaming immutable entries such as ``"reward"`` and ``"done"``.
@@ -6713,7 +6713,7 @@ class RenameTransform(Transform):
             out = tensordict.select(*self.in_keys, strict=not self._missing_tolerance)
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 try:
-                    tensordict.rename_key_(in_key, out_key)
+                    out.rename_key_(in_key, out_key)
                 except KeyError:
                     if not self._missing_tolerance:
                         raise
@@ -6802,9 +6802,9 @@ class RenameTransform(Transform):
 
     def transform_input_spec(self, input_spec: Composite) -> Composite:
         for action_key in self.parent.action_keys:
-            if action_key in self.in_keys:
-                for i, out_key in enumerate(self.out_keys):  # noqa: B007
-                    if self.in_keys[i] == action_key:
+            if action_key in self.in_keys_inv:
+                for i, out_key in enumerate(self.out_keys_inv):  # noqa: B007
+                    if self.in_keys_inv[i] == action_key:
                         break
                 else:
                     # unreachable
@@ -6815,9 +6815,9 @@ class RenameTransform(Transform):
                 if not self.create_copy:
                     del input_spec["full_action_spec"][action_key]
         for state_key in self.parent.full_state_spec.keys(True):
-            if state_key in self.in_keys:
-                for i, out_key in enumerate(self.out_keys):  # noqa: B007
-                    if self.in_keys[i] == state_key:
+            if state_key in self.in_keys_inv:
+                for i, out_key in enumerate(self.out_keys_inv):  # noqa: B007
+                    if self.in_keys_inv[i] == state_key:
                         break
                 else:
                     # unreachable
