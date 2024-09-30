@@ -395,6 +395,22 @@ class PrioritizedSampler(Sampler):
     def max_size(self):
         return self._max_capacity
 
+    @property
+    def alpha(self):
+        return self._alpha
+
+    @alpha.setter
+    def alpha(self, value):
+        self._alpha = value
+
+    @property
+    def beta(self):
+        return self._beta
+
+    @beta.setter
+    def beta(self, value):
+        self._beta = value
+
     def __getstate__(self):
         if get_spawning_popen() is not None:
             raise RuntimeError(
