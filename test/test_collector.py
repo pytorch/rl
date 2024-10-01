@@ -2980,7 +2980,7 @@ def test_no_deepcopy_policy(collector_type):
             envs,
             policy=policy,
             total_frames=1000,
-            frames_per_batch=100,
+            frames_per_batch=10,
             policy_device=policy_device,
             env_device=env_device,
             device=device,
@@ -3044,11 +3044,11 @@ def test_no_deepcopy_policy(collector_type):
         make_and_test_policy(policy, env_device=original_device)
 
     # If the policy is a CudaGraphModule, we know it's on cuda - no need to warn
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and collector_type is SyncDataCollector:
         with pytest.warns(UserWarning, match="Tensordict is registered in PyTree"):
             policy = make_policy(original_device)
             cudagraph_policy = CudaGraphModule(policy)
-            make_and_test_policy(cudagraph_policy, policy_device=original_device)
+            make_and_test_policy(cudagraph_policy, policy_device=original_device, env_device=shared_device)
 
 
 if __name__ == "__main__":

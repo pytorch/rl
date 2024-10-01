@@ -832,11 +832,12 @@ class SyncDataCollector(DataCollectorBase):
                 # changed them here).
                 # This will cause a failure to update entries when policy and env device mismatch and
                 # casting is necessary.
-                def filter_policy(value_output, value_input, value_input_clone):
+                def filter_policy(name, value_output, value_input, value_input_clone):
                     if (
                         (value_input is None)
-                        or (value_output is not value_input)
-                        or ~torch.isclose(value_output, value_input_clone).any()
+                        or ((value_output is not value_input)
+                        and (value_output.device != value_input_clone.device
+                        or ~torch.isclose(value_output, value_input_clone).any()))
                     ):
                         return value_output
 
@@ -846,6 +847,7 @@ class SyncDataCollector(DataCollectorBase):
                     policy_input_clone,
                     default=None,
                     filter_empty=True,
+                    named=True,
                 )
                 self._policy_output_keys = list(
                     self._policy_output_keys.union(
