@@ -3048,7 +3048,11 @@ def test_no_deepcopy_policy(collector_type):
         with pytest.warns(UserWarning, match="Tensordict is registered in PyTree"):
             policy = make_policy(original_device)
             cudagraph_policy = CudaGraphModule(policy)
-            make_and_test_policy(cudagraph_policy, policy_device=original_device, env_device=shared_device)
+            make_and_test_policy(
+                cudagraph_policy,
+                policy_device=original_device,
+                env_device=shared_device,
+            )
 
 
 if __name__ == "__main__":
