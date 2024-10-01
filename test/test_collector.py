@@ -50,7 +50,12 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
+from tensordict.nn import (
+    CudaGraphModule,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictSequential,
+)
 
 from torch import nn
 from torchrl._utils import (
@@ -76,6 +81,7 @@ from torchrl.data import (
     TensorSpec,
     Unbounded,
 )
+from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
     EnvBase,
     EnvCreator,
@@ -1597,8 +1603,8 @@ class TestAutoWrap:
         policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])
         with pytest.raises(
             TypeError,
-            match=(r"Arguments to policy.forward are incompatible with entries in"),
-        ) if collector_class is SyncDataCollector else pytest.raises(EOFError):
+            match=("Arguments to policy.forward are incompatible with entries in"),
+        ):
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
             )
@@ -1827,10 +1833,15 @@ def test_set_truncated(collector_cls):
         NestedCountingEnv(), InitTracker()
     ).add_truncated_keys()
     env = env_fn()
-    policy = env.rand_action
+    policy = CloudpickleWrapper(env.rand_action)
     if collector_cls == SyncDataCollector:
         collector = collector_cls(
-            env, policy=policy, frames_per_batch=20, total_frames=-1, set_truncated=True
+            env,
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=-1,
+            set_truncated=True,
+            trust_policy=True,
         )
     else:
         collector = collector_cls(
@@ -1840,6 +1851,7 @@ def test_set_truncated(collector_cls):
             total_frames=-1,
             cat_results="stack",
             set_truncated=True,
+            trust_policy=True,
         )
     try:
         for data in collector:
@@ -2147,7 +2159,10 @@ class TestMultiKeyEnvsCollector:
         assert_allclose_td(c2.unsqueeze(0), d2)
 
 
-@pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
+@pytest.mark.skipif(
+    not torch.cuda.is_available() and not torch.mps.is_available(),
+    reason="No casting if no cuda",
+)
 class TestUpdateParams:
     class DummyEnv(EnvBase):
         def __init__(self, device, batch_size=[]):  # noqa: B006
@@ -2205,8 +2220,8 @@ class TestUpdateParams:
     @pytest.mark.parametrize(
         "policy_device,env_device",
         [
-            ["cpu", "cuda"],
-            ["cuda", "cpu"],
+            ["cpu", get_default_devices()[0]],
+            [get_default_devices()[0], "cpu"],
             # ["cpu", "cuda:0"],  # 1226: faster execution
             # ["cuda:0", "cpu"],
             # ["cuda", "cuda:0"],
@@ -2230,9 +2245,7 @@ class TestUpdateParams:
                     policy.param.data += 1
                     policy.buf.data += 2
                     if give_weights:
-                        d = dict(policy.named_parameters())
-                        d.update(policy.named_buffers())
-                        p_w = TensorDict(d, [])
+                        p_w = TensorDict.from_module(policy)
                     else:
                         p_w = None
                     col.update_policy_weights_(p_w)
@@ -2907,6 +2920,135 @@ class TestCollectorRB:
                     (step_countdiff == 1) | (step_countdiff < 0)
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
+
+
+def __deepcopy_error__(*args, **kwargs):
+    raise RuntimeError("deepcopy not allowed")
+
+
+@pytest.mark.filterwarnings("error")
+@pytest.mark.parametrize(
+    "collector_type",
+    [
+        SyncDataCollector,
+        MultiaSyncDataCollector,
+        functools.partial(MultiSyncDataCollector, cat_results="stack"),
+    ],
+)
+def test_no_deepcopy_policy(collector_type):
+    # Tests that the collector instantiation does not make a deepcopy of the policy if not necessary.
+    #
+    # The only situation where we want to deepcopy the policy is when the policy_device differs from the actual device
+    # of the policy. This can only be checked if the policy is an nn.Module and any of the params is not on the desired
+    # device.
+    #
+    # If the policy is not a nn.Module or has no parameter, policy_device should warn (we don't know what to do but we
+    # can trust that the user knows what to do).
+
+    shared_device = torch.device("cpu")
+    if torch.cuda.is_available():
+        original_device = torch.device("cuda:0")
+    elif torch.mps.is_available():
+        original_device = torch.device("mps")
+    else:
+        pytest.skip("No GPU or MPS device")
+
+    def make_policy(device=None, nn_module=True):
+        if nn_module:
+            return TensorDictModule(
+                nn.Linear(7, 7, device=device),
+                in_keys=["observation"],
+                out_keys=["action"],
+            )
+        policy = make_policy(device=device)
+        return CloudpickleWrapper(policy)
+
+    def make_and_test_policy(
+        policy,
+        policy_device=None,
+        env_device=None,
+        device=None,
+        trust_policy=None,
+    ):
+        # make sure policy errors when copied
+
+        policy.__deepcopy__ = __deepcopy_error__
+        envs = ContinuousActionVecMockEnv(device=env_device)
+        if collector_type is not SyncDataCollector:
+            envs = [envs, envs]
+        c = collector_type(
+            envs,
+            policy=policy,
+            total_frames=1000,
+            frames_per_batch=100,
+            policy_device=policy_device,
+            env_device=env_device,
+            device=device,
+            trust_policy=trust_policy,
+        )
+        for _ in c:
+            return
+
+    # Simplest use cases
+    policy = make_policy()
+    make_and_test_policy(policy)
+
+    if collector_type is SyncDataCollector or original_device.type != "mps":
+        # mps cannot be shared
+        policy = make_policy(device=original_device)
+        make_and_test_policy(policy, env_device=original_device)
+
+    if collector_type is SyncDataCollector or original_device.type != "mps":
+        policy = make_policy(device=original_device)
+        make_and_test_policy(
+            policy, policy_device=original_device, env_device=original_device
+        )
+
+    # a deepcopy must occur when the policy_device differs from the actual device
+    with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        policy = make_policy(device=original_device)
+        make_and_test_policy(
+            policy, policy_device=shared_device, env_device=shared_device
+        )
+
+    # a deepcopy must occur when device differs from the actual device
+    with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        policy = make_policy(device=original_device)
+        make_and_test_policy(policy, device=shared_device)
+
+    # If the policy is not an nn.Module, we can't cast it to device, so we assume that the policy device
+    # is there to inform us
+    substitute_device = (
+        original_device if torch.cuda.is_available() else torch.device("cpu")
+    )
+    policy = make_policy(substitute_device, nn_module=False)
+    with pytest.warns(UserWarning):
+        make_and_test_policy(
+            policy, policy_device=substitute_device, env_device=substitute_device
+        )
+    # For instance, if the env is on CPU, knowing the policy device helps with casting stuff on the right device
+    with pytest.warns(UserWarning):
+        make_and_test_policy(
+            policy, policy_device=substitute_device, env_device=shared_device
+        )
+    make_and_test_policy(
+        policy,
+        policy_device=substitute_device,
+        env_device=shared_device,
+        trust_policy=True,
+    )
+
+    # If there is no policy_device, we assume that the user is doing things right too but don't warn
+    if collector_type is SyncDataCollector or original_device.type != "mps":
+        policy = make_policy(original_device, nn_module=False)
+        make_and_test_policy(policy, env_device=original_device)
+
+    # If the policy is a CudaGraphModule, we know it's on cuda - no need to warn
+    if torch.cuda.is_available():
+        with pytest.warns(UserWarning, match="Tensordict is registered in PyTree"):
+            policy = make_policy(original_device)
+            cudagraph_policy = CudaGraphModule(policy)
+            make_and_test_policy(cudagraph_policy, policy_device=original_device)
 
 
 if __name__ == "__main__":

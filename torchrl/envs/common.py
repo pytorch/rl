@@ -2326,6 +2326,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict: Optional[TensorDictBase] = None,
         set_truncated: bool = False,
         out=None,
+        trust_policy: bool = False,
     ):
         """Executes a rollout in the environment.
 
@@ -2367,6 +2368,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 ``done_spec``, an exception is raised.
                 Truncated keys can be set through ``env.add_truncated_keys``.
                 Defaults to ``False``.
+            trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
+                assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
+                and ``False`` otherwise.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -2565,7 +2569,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         if policy is not None:
             policy = _make_compatible_policy(
-                policy, self.observation_spec, env=self, fast_wrap=True
+                policy,
+                self.observation_spec,
+                env=self,
+                fast_wrap=True,
+                trust_policy=trust_policy,
             )
             if auto_cast_to_device:
                 try:
