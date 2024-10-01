@@ -169,10 +169,14 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 env_maker=env_maker,
                 env_maker_kwargs=env_maker_kwargs,
             )
-        if not policy_device or not isinstance(policy, nn.Module):
+        if not policy_device:
             return policy, None
 
-        param_and_buf = TensorDict.from_module(policy, as_module=True)
+        if isinstance(policy, nn.Module):
+            param_and_buf = TensorDict.from_module(policy, as_module=True)
+        else:
+            # Because we want to reach the warning
+            param_and_buf = TensorDict()
 
         i = -1
         for p in param_and_buf.values(True, True):
