@@ -133,7 +133,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     if cfg.loss.cudagraphs:
         update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=10)
-        actor = CudaGraphModule(update, warmup=10)
+        actor = CudaGraphModule(actor, warmup=10)
         adv_module = CudaGraphModule(adv_module)
 
     # Create collector
@@ -200,7 +200,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 for group in critic_optim.param_groups:
                     group["lr"].copy_(lr * alpha)
             num_network_updates += 1
-
+            torch.compiler.cudagraph_mark_step_begin()
             loss = update(batch)
             losses.append(loss)
 

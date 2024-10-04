@@ -222,6 +222,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 num_network_updates += 1
 
                 with timeit("optim - update"):
+                    torch.compiler.cudagraph_mark_step_begin()
                     loss = update(batch)
                 losses.append(loss)
 
