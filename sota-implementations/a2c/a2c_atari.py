@@ -61,6 +61,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         lmbda=cfg.loss.gae_lambda,
         value_network=critic,
         average_gae=True,
+        vectorized=not cfg.loss.compile,
     )
     loss_module = A2CLoss(
         actor_network=actor,
@@ -157,7 +158,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         total_frames=total_frames,
         device=device,
         storing_device=device,
-        max_frames_per_traj=-1,
         policy_device=device,
     )
 
