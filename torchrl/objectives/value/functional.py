@@ -12,6 +12,10 @@ from typing import Optional, Tuple, Union
 
 import torch
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -147,7 +151,7 @@ def generalized_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -181,19 +185,25 @@ def generalized_advantage_estimate(
 def _geom_series_like(t, r, thr):
     """Creates a geometric series of the form [1, gammalmbda, gammalmbda**2] with the shape of `t`.
 
-    Drops all elements which are smaller than `thr`.
+    Drops all elements which are smaller than `thr` (unless in compile mode).
     """
-    if isinstance(r, torch.Tensor):
-        r = r.item()
-
-    if r == 0.0:
-        return torch.zeros_like(t)
-    elif r >= 1.0:
-        lim = t.numel()
+    if is_dynamo_compiling():
+        if isinstance(r, torch.Tensor):
+            rs = r.expand_as(t)
+        else:
+            rs = torch.full_like(t, r)
     else:
-        lim = int(math.log(thr) / math.log(r))
+        if isinstance(r, torch.Tensor):
+            r = r.item()
 
-    rs = torch.full_like(t[:lim], r)
+        if r == 0.0:
+            return torch.zeros_like(t)
+        elif r >= 1.0:
+            lim = t.numel()
+        else:
+            lim = int(math.log(thr) / math.log(r))
+
+        rs = torch.full_like(t[:lim], r)
     rs[0] = 1.0
     rs = rs.cumprod(0)
     rs = rs.unsqueeze(-1)
@@ -292,7 +302,7 @@ def vec_generalized_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -391,7 +401,7 @@ def td0_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -435,7 +445,7 @@ def td0_return_estimate(
 
     """
     if done is not None and terminated is None:
-        terminated = done
+        terminated = done.clone()
         warnings.warn(
             "done for td0_return_estimate is deprecated. Pass ``terminated`` instead."
         )
@@ -499,7 +509,7 @@ def td1_return_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     not_done = (~done).int()
@@ -596,7 +606,7 @@ def td1_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -726,7 +736,7 @@ def vec_td1_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -804,7 +814,7 @@ def td_lambda_return_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
 
@@ -910,7 +920,7 @@ def td_lambda_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -1046,7 +1056,7 @@ def vec_td_lambda_return_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
 
@@ -1196,7 +1206,7 @@ def vec_td_lambda_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
