@@ -491,6 +491,26 @@ class TestModelBasedEnvBase:
 
 
 class TestParallel:
+    def test_create_env_fn(self, maybe_fork_ParallelEnv):
+        def make_env():
+            return GymEnv(PENDULUM_VERSIONED())
+
+        with pytest.raises(
+            RuntimeError, match="len\\(create_env_fn\\) and num_workers mismatch"
+        ):
+            maybe_fork_ParallelEnv(4, [make_env, make_env])
+
+    def test_create_env_kwargs(self, maybe_fork_ParallelEnv):
+        def make_env():
+            return GymEnv(PENDULUM_VERSIONED())
+
+        with pytest.raises(
+            RuntimeError, match="len\\(create_env_kwargs\\) and num_workers mismatch"
+        ):
+            maybe_fork_ParallelEnv(
+                4, make_env, create_env_kwargs=[{"seed": 0}, {"seed": 1}]
+            )
+
     @pytest.mark.skipif(
         not torch.cuda.device_count(), reason="No cuda device detected."
     )
@@ -1120,6 +1140,25 @@ class TestParallel:
 
         env1.close()
         env2.close()
+
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_parallel_env_update_kwargs(self, parallel, maybe_fork_ParallelEnv):
+        def make_env(seed=None):
+            env = DiscreteActionConvMockEnv()
+            if seed is not None:
+                env.set_seed(seed)
+            return env
+
+        _class = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = _class(
+            num_workers=2,
+            create_env_fn=make_env,
+            create_env_kwargs=[{"seed": 0}, {"seed": 1}],
+        )
+        with pytest.raises(
+            RuntimeError, match="len\\(kwargs\\) and num_workers mismatch"
+        ):
+            env.update_kwargs([{"seed": 42}])
 
     @pytest.mark.parametrize("batch_size", [(32, 5), (4,), (1,), ()])
     @pytest.mark.parametrize("n_workers", [2, 1])
