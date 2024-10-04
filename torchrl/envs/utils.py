@@ -52,7 +52,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     Unbounded,
 )
-from torchrl.data.utils import check_no_exclusive_keys
+from torchrl.data.utils import check_no_exclusive_keys, CloudpickleWrapper
 
 __all__ = [
     "exploration_mode",
@@ -69,13 +69,13 @@ __all__ = [
 
 
 ACTION_MASK_ERROR = RuntimeError(
-    "An out-of-bounds actions has been provided to an env with an 'action_mask' output."
-    " If you are using a custom policy, make sure to take the action mask into account when computing the output."
-    " If you are using a default policy, please add the torchrl.envs.transforms.ActionMask transform to your environment."
+    "An out-of-bounds actions has been provided to an env with an 'action_mask' output. "
+    "If you are using a custom policy, make sure to take the action mask into account when computing the output. "
+    "If you are using a default policy, please add the torchrl.envs.transforms.ActionMask transform to your environment. "
     "If you are using a ParallelEnv or another batched inventor, "
-    "make sure to add the transform to the ParallelEnv (and not to the sub-environments)."
-    " For more info on using action masks, see the docs at: "
-    "https://pytorch.org/rl/reference/envs.html#environments-with-masked-actions"
+    "make sure to add the transform to the ParallelEnv (and not to the sub-environments). "
+    "For more info on using action masks, see the docs at: "
+    "https://pytorch.org/rl/main/reference/envs.html#environments-with-masked-actions"
 )
 
 
@@ -1427,16 +1427,63 @@ def _repr_by_depth(key):
         return (len(key) - 1, ".".join(key))
 
 
-def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False):
+def _make_compatible_policy(
+    policy,
+    observation_spec,
+    env=None,
+    fast_wrap=False,
+    trust_policy=False,
+    env_maker=None,
+    env_maker_kwargs=None,
+):
+    if trust_policy:
+        return policy
     if policy is None:
-        if env is None:
-            raise ValueError(
-                "env must be provided to _get_policy_and_device if policy is None"
-            )
-        policy = RandomPolicy(env.input_spec["full_action_spec"])
-    # make sure policy is an nn.Module
-    policy = _NonParametricPolicyWrapper(policy)
+        input_spec = None
+        if env_maker is not None:
+            from torchrl.envs import EnvBase, EnvCreator
+
+            if isinstance(env_maker, EnvBase):
+                env = env_maker
+                input_spec = env.input_spec["full_action_spec"]
+            elif isinstance(env_maker, EnvCreator):
+                input_spec = env_maker._meta_data.specs[
+                    "input_spec", "full_action_spec"
+                ]
+            else:
+                env = env_maker(**env_maker_kwargs)
+                input_spec = env.full_action_spec
+        if input_spec is None:
+            if env is not None:
+                input_spec = env.input_spec["full_action_spec"]
+            else:
+                raise ValueError(
+                    "env must be provided to _get_policy_and_device if policy is None"
+                )
+
+        policy = RandomPolicy(input_spec)
+
+    # make sure policy is an nn.Module - this will return the same policy if conditions are met
+    # policy = CloudpickleWrapper(policy)
+
+    caller = getattr(policy, "forward", policy)
+
     if not _policy_is_tensordict_compatible(policy):
+        if observation_spec is None:
+            if env is not None:
+                observation_spec = env.observation_spec
+            elif env_maker is not None:
+                from torchrl.envs import EnvBase, EnvCreator
+
+                if isinstance(env_maker, EnvBase):
+                    observation_spec = env_maker.observation_spec
+                elif isinstance(env_maker, EnvCreator):
+                    observation_spec = env_maker._meta_data.specs[
+                        "output_spec", "full_observation_spec"
+                    ]
+                else:
+                    observation_spec = env_maker(**env_maker_kwargs).observation_spec
+
         # policy is a nn.Module that doesn't operate on tensordicts directly
         # so we attempt to auto-wrap policy with TensorDictModule
         if observation_spec is None:
@@ -1445,13 +1492,15 @@ def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False)
                 "required to check compatibility of the environment and policy "
                 "since the policy is a nn.Module that operates on tensors "
                 "rather than a TensorDictModule or a nn.Module that accepts a "
-                "TensorDict as input and defines in_keys and out_keys."
+                "TensorDict as input and defines in_keys and out_keys. "
+                "If your policy is compatible with the environment, you can solve this warning by setting "
+                "trust_policy=True in the constructor."
             )
 
         try:
-            sig = policy.forward.__signature__
+            sig = caller.__signature__
         except AttributeError:
-            sig = inspect.signature(policy.forward)
+            sig = inspect.signature(caller)
         # we check if all the mandatory params are there
         params = list(sig.parameters.keys())
         if (
@@ -1480,7 +1529,7 @@ def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False)
                 out_keys = ["action"]
             else:
                 out_keys = list(env.action_keys)
-            for p in policy.parameters():
+            for p in getattr(policy, "parameters", list)():
                 policy_device = p.device
                 break
             else:
@@ -1512,15 +1561,20 @@ def _make_compatible_policy(policy, observation_spec, env=None, fast_wrap=False)
 
 
 def _policy_is_tensordict_compatible(policy: nn.Module):
-    if isinstance(policy, _NonParametricPolicyWrapper) and isinstance(
-        policy.policy, RandomPolicy
+    def is_compatible(policy):
+        return isinstance(policy, (RandomPolicy, TensorDictModuleBase))
+
+    if (
+        is_compatible(policy)
+        or (
+            isinstance(policy, _NonParametricPolicyWrapper)
+            and is_compatible(policy.policy)
+        )
+        or (isinstance(policy, CloudpickleWrapper) and is_compatible(policy.fn))
     ):
         return True
 
-    if isinstance(policy, TensorDictModuleBase):
-        return True
-
-    sig = inspect.signature(policy.forward)
+    sig = inspect.signature(getattr(policy, "forward", policy))
 
     if (
         len(sig.parameters) == 1
@@ -1593,19 +1647,10 @@ class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
 
     def __init__(self, policy):
         super().__init__()
-        self.policy = policy
-
-    @property
-    def forward(self):
-        forward = self.__dict__.get("_forward", None)
-        if forward is None:
-
-            @functools.wraps(self.policy)
-            def forward(*input, **kwargs):
-                return self.policy.__call__(*input, **kwargs)
-
-            self.__dict__["_forward"] = forward
-        return forward
+        functools.update_wrapper(self, policy)
+        self.policy = CloudpickleWrapper(policy)
+        if hasattr(policy, "forward"):
+            self.forward = self.policy.forward
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():

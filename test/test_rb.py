@@ -26,6 +26,7 @@ from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
     is_tensorclass,
+    LazyStackedTensorDict,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -57,6 +58,11 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+)
+from torchrl.data.replay_buffers.scheduler import (
+    LinearScheduler,
+    SchedulerList,
+    StepScheduler,
 )
 
 from torchrl.data.replay_buffers.storages import (
@@ -98,6 +104,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
+
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
@@ -714,6 +721,20 @@ class TestStorages:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample()
         assert (s.exclude("index") == 1).all()
+
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    def test_extend_lazystack(self, storage_type):
+
+        rb = ReplayBuffer(
+            storage=storage_type(6),
+            batch_size=2,
+        )
+        td1 = TensorDict(a=torch.rand(5, 4, 8), batch_size=5)
+        td2 = TensorDict(a=torch.rand(5, 3, 8), batch_size=5)
+        ltd = LazyStackedTensorDict(td1, td2, stack_dim=1)
+        rb.extend(ltd)
+        rb.sample(3)
+        assert len(rb) == 5
 
     @pytest.mark.parametrize("device_data", get_default_devices())
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
@@ -3024,6 +3045,77 @@ def test_prioritized_slice_sampler_episodes(device):
     assert {1, 3} == set(
         torch.cat(episodes).cpu().tolist()
     ), "after priority update, only episode 1 and 3 are expected to be sampled"
+
+
+@pytest.mark.parametrize("alpha", [0.6, torch.tensor(1.0)])
+@pytest.mark.parametrize("beta", [0.7, torch.tensor(0.1)])
+@pytest.mark.parametrize("gamma", [0.1])
+@pytest.mark.parametrize("total_steps", [200])
+@pytest.mark.parametrize("n_annealing_steps", [100])
+@pytest.mark.parametrize("anneal_every_n", [10, 159])
+@pytest.mark.parametrize("alpha_min", [0, 0.2])
+@pytest.mark.parametrize("beta_max", [1, 1.4])
+def test_prioritized_parameter_scheduler(
+    alpha,
+    beta,
+    gamma,
+    total_steps,
+    n_annealing_steps,
+    anneal_every_n,
+    alpha_min,
+    beta_max,
+):
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=alpha, beta=beta, storage=ListStorage(max_size=1000)
+    )
+    data = TensorDict({"data": torch.randn(1000, 5)}, batch_size=1000)
+    rb.extend(data)
+    alpha_scheduler = LinearScheduler(
+        rb, param_name="alpha", final_value=alpha_min, num_steps=n_annealing_steps
+    )
+    beta_scheduler = StepScheduler(
+        rb,
+        param_name="beta",
+        gamma=gamma,
+        n_steps=anneal_every_n,
+        max_value=beta_max,
+        mode="additive",
+    )
+
+    scheduler = SchedulerList(schedulers=(alpha_scheduler, beta_scheduler))
+
+    alpha = alpha if torch.is_tensor(alpha) else torch.tensor(alpha)
+    alpha_min = torch.tensor(alpha_min)
+    expected_alpha_vals = torch.linspace(alpha, alpha_min, n_annealing_steps + 1)
+    expected_alpha_vals = torch.nn.functional.pad(
+        expected_alpha_vals, (0, total_steps - n_annealing_steps), value=alpha_min
+    )
+
+    expected_beta_vals = [beta]
+    annealing_steps = total_steps // anneal_every_n
+    gammas = torch.arange(0, annealing_steps + 1, dtype=torch.float32) * gamma
+    expected_beta_vals = (
+        (beta + gammas).repeat_interleave(anneal_every_n).clip(None, beta_max)
+    )
+    for i in range(total_steps):
+        curr_alpha = rb.sampler.alpha
+        torch.testing.assert_close(
+            curr_alpha
+            if torch.is_tensor(curr_alpha)
+            else torch.tensor(curr_alpha).float(),
+            expected_alpha_vals[i],
+            msg=f"expected {expected_alpha_vals[i]}, got {curr_alpha}",
+        )
+        curr_beta = rb.sampler.beta
+        torch.testing.assert_close(
+            curr_beta
+            if torch.is_tensor(curr_beta)
+            else torch.tensor(curr_beta).float(),
+            expected_beta_vals[i],
+            msg=f"expected {expected_beta_vals[i]}, got {curr_beta}",
+        )
+        rb.sample(20)
+        scheduler.step()
 
 
 class TestEnsemble:
