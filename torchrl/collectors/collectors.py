@@ -1675,21 +1675,22 @@ class _MultiDataCollector(DataCollectorBase):
         self.cat_results = cat_results
 
     def _check_replay_buffer_init(self):
-        try:
-            if not self.replay_buffer._storage.initialized:
-                if isinstance(self.create_env_fn, EnvCreator):
-                    fake_td = self.create_env_fn.tensordict
-                elif isinstance(self.create_env_fn, EnvBase):
-                    fake_td = self.create_env_fn.fake_tensordict()
-                else:
-                    fake_td = self.create_env_fn[0](
-                        **self.create_env_kwargs[0]
-                    ).fake_tensordict()
-                fake_td["collector", "traj_ids"] = torch.zeros((), dtype=torch.long)
+        is_init = getattr(self.replay_buffer._storage, "initialized", True)
+        if not is_init:
+            if isinstance(self.create_env_fn[0], EnvCreator):
+                fake_td = self.create_env_fn[0].tensordict
+            elif isinstance(self.create_env_fn[0], EnvBase):
+                fake_td = self.create_env_fn[0].fake_tensordict()
+            else:
+                fake_td = self.create_env_fn[0](
+                    **self.create_env_kwargs[0]
+                ).fake_tensordict()
+            fake_td["collector", "traj_ids"] = torch.zeros(
+                fake_td.shape, dtype=torch.long
+            )
 
-                self.replay_buffer._storage._init(fake_td)
-        except AttributeError:
-            pass
+            self.replay_buffer.add(fake_td)
+            self.replay_buffer.empty()
 
     @classmethod
     def _total_workers_from_env(cls, env_creators):

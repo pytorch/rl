@@ -8678,8 +8678,18 @@ class TestTransforms:
     def test_compose_action_spec(self):
         # Create a Compose transform that renames "action" to "action_1" and then to "action_2"
         c = Compose(
-            RenameTransform(in_keys=(), out_keys=(), in_keys_inv=("action",), out_keys_inv=("action_1",)),
-            RenameTransform(in_keys=(), out_keys=(), in_keys_inv=("action_1",), out_keys_inv=("action_2",)),
+            RenameTransform(
+                in_keys=(),
+                out_keys=(),
+                in_keys_inv=("action",),
+                out_keys_inv=("action_1",),
+            ),
+            RenameTransform(
+                in_keys=(),
+                out_keys=(),
+                in_keys_inv=("action_1",),
+                out_keys_inv=("action_2",),
+            ),
         )
         base_env = ContinuousActionVecMockEnv()
         env = TransformedEnv(base_env, c)
