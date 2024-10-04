@@ -99,10 +99,15 @@ class timeit:
             logger.info(" -- ".join(strings))
 
     @classmethod
-    def todict(cls, percall=True):
+    def todict(cls, percall=True, prefix=None):
+        def _make_key(key):
+            if prefix:
+                return f"{prefix}/{key}"
+            return key
+
         if percall:
-            return {key: val[0] for key, val in cls._REG.items()}
-        return {key: val[1] for key, val in cls._REG.items()}
+            return {_make_key(key): val[0] for key, val in cls._REG.items()}
+        return {_make_key(key): val[1] for key, val in cls._REG.items()}
 
     @staticmethod
     def erase():

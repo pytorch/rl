@@ -1436,7 +1436,7 @@ def _make_compatible_policy(
     env_maker=None,
     env_maker_kwargs=None,
 ):
-    if trust_policy:
+    if trust_policy or isinstance(policy, torch._dynamo.eval_frame.OptimizedModule):
         return policy
     if policy is None:
         input_spec = None
