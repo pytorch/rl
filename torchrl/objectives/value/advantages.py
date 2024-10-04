@@ -38,6 +38,10 @@ from torchrl.objectives.value.functional import (
     vtrace_advantage_estimate,
 )
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 try:
     from torch import vmap
@@ -1161,7 +1165,7 @@ class GAE(ValueEstimatorBase):
               pass detached parameters for functional modules.
 
         vectorized (bool, optional): whether to use the vectorized version of the
-            lambda return. Default is `True`.
+            lambda return. Default is `True` if not compiling.
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, i.e., the value of :func:`tensordict.nn.skip_existing()`
@@ -1211,7 +1215,7 @@ class GAE(ValueEstimatorBase):
         value_network: TensorDictModule,
         average_gae: bool = False,
         differentiable: bool = False,
-        vectorized: bool = True,
+        vectorized: bool | None = None,
         skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
@@ -1234,6 +1238,16 @@ class GAE(ValueEstimatorBase):
         self.average_gae = average_gae
         self.vectorized = vectorized
         self.time_dim = time_dim
+
+    @property
+    def vectorized(self):
+        if is_dynamo_compiling():
+            return False
+        return self._vectorized
+
+    @vectorized.setter
+    def vectorize(self, value):
+        self._vectorized = value
 
     @_self_set_skip_existing
     @_self_set_grad_enabled

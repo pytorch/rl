@@ -151,7 +151,7 @@ def generalized_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -302,7 +302,7 @@ def vec_generalized_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -401,7 +401,7 @@ def td0_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -445,7 +445,7 @@ def td0_return_estimate(
 
     """
     if done is not None and terminated is None:
-        terminated = done
+        terminated = done.clone()
         warnings.warn(
             "done for td0_return_estimate is deprecated. Pass ``terminated`` instead."
         )
@@ -509,7 +509,7 @@ def td1_return_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     not_done = (~done).int()
@@ -606,7 +606,7 @@ def td1_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -736,7 +736,7 @@ def vec_td1_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -814,7 +814,7 @@ def td_lambda_return_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
 
@@ -920,7 +920,7 @@ def td_lambda_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -1056,7 +1056,7 @@ def vec_td_lambda_return_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
 
@@ -1206,7 +1206,7 @@ def vec_td_lambda_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
