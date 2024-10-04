@@ -155,6 +155,8 @@ def get_default_devices():
         return [torch.device("cpu")]
     elif num_cuda == 1:
         return [torch.device("cuda:0")]
+    elif torch.mps.is_available():
+        return [torch.device("mps:0")]
     else:
         # then run on all devices
         return get_available_devices()

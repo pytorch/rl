@@ -360,8 +360,8 @@ class TanhNormal(FasterTransformedDistribution):
             .. math::
                 loc = tanh(loc / upscale) * upscale.
 
-        min (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
-        max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
+        low (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
+        high (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1. Setting ``event_dims`` to ``0`` will result in a log-probability that has the same shape
             as the input, ``1`` will reduce (sum over) the last dimension, ``2`` the last two etc.
