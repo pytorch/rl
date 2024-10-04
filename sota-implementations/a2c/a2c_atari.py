@@ -267,8 +267,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for key, value in log_info.items():
                 logger.log_scalar(key, value, collected_frames)
 
-        collector.update_policy_weights_()
         sampling_start = time.time()
+        torch.compiler.cudagraph_mark_step_begin()
 
     collector.shutdown()
     if not test_env.is_closed:
