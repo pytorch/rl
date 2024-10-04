@@ -8675,6 +8675,25 @@ class TestTransforms:
         assert last_t.scale == 4
         assert last_t2.scale == 4
 
+    def test_compose_action_spec(self):
+        # Create a Compose transform that renames "action" to "action_1" and then to "action_2"
+        c = Compose(
+            RenameTransform(in_keys=(), out_keys=(), in_keys_inv=("action",), out_keys_inv=("action_1",)),
+            RenameTransform(in_keys=(), out_keys=(), in_keys_inv=("action_1",), out_keys_inv=("action_2",)),
+        )
+        base_env = ContinuousActionVecMockEnv()
+        env = TransformedEnv(base_env, c)
+
+        # Check the `full_action_spec`s
+        assert "action_2" in env.full_action_spec
+        # Ensure intermediate keys are no longer in the action spec
+        assert "action_1" not in env.full_action_spec
+        assert "action" not in env.full_action_spec
+
+        # Final check to ensure clean sampling from the action_spec
+        action = env.rand_action()
+        assert "action_2"
+
     @pytest.mark.parametrize("device", get_default_devices())
     def test_finitetensordictcheck(self, device):
         ftd = FiniteTensorDictCheck()

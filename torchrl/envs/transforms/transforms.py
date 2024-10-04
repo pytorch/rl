@@ -1094,7 +1094,7 @@ class Compose(Transform):
         return batch_size
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        for t in self.transforms[::-1]:
+        for t in self.transforms:
             input_spec = t.transform_input_spec(input_spec)
         return input_spec
 
