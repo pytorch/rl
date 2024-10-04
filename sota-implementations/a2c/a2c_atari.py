@@ -174,6 +174,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     c_iter = iter(collector)
     for i in range(len(collector)):
         with timeit("collecting"):
+            torch.compiler.cudagraph_mark_step_begin()
             data = next(c_iter)
 
         log_info = {}
@@ -268,7 +269,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 logger.log_scalar(key, value, collected_frames)
 
         sampling_start = time.time()
-        torch.compiler.cudagraph_mark_step_begin()
 
     collector.shutdown()
     if not test_env.is_closed:
