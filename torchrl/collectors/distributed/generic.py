@@ -34,7 +34,6 @@ from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
-from torchrl.envs.utils import _convert_exploration_type
 
 SUBMITIT_ERR = None
 try:
@@ -419,7 +418,6 @@ class DistributedDataCollector(DataCollectorBase):
         postproc: Callable | None = None,
         split_trajs: bool = False,
         exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
-        exploration_mode: str = None,
         collector_class: Type = SyncDataCollector,
         collector_kwargs: dict = None,
         num_workers_per_collector: int = 1,
@@ -431,9 +429,6 @@ class DistributedDataCollector(DataCollectorBase):
         launcher: str = "submitit",
         tcp_port: int = None,
     ):
-        exploration_type = _convert_exploration_type(
-            exploration_mode=exploration_mode, exploration_type=exploration_type
-        )
 
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector

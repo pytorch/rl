@@ -190,8 +190,8 @@ class TestTruncatedNormal:
         d = TruncatedNormal(
             *vecs,
             upscale=upscale,
-            min=min,
-            max=max,
+            low=min,
+            high=max,
         )
         assert d.device == device
         for _ in range(100):
@@ -218,7 +218,7 @@ class TestTruncatedNormal:
         high = 2
         low = -1
         log_pi_x = TruncatedNormal(
-            mu, sigma, min=low, max=high, tanh_loc=False
+            mu, sigma, low=low, high=high, tanh_loc=False
         ).log_prob(x)
         pi_x = torch.exp(log_pi_x)
         log_pi_x.backward(torch.ones_like(log_pi_x))
@@ -264,8 +264,8 @@ class TestTruncatedNormal:
         d = TruncatedNormal(
             *vecs,
             upscale=upscale,
-            min=min,
-            max=max,
+            low=min,
+            high=max,
         )
         assert d.mode is not None
         assert d.entropy() is not None

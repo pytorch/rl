@@ -1348,11 +1348,11 @@ class ToTensorImage(ObservationTransform):
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         observation_spec = self._pixel_observation(observation_spec)
-        unsqueeze_dim = [1] if self._should_unsqueeze(observation_spec) else []
+        dim = [1] if self._should_unsqueeze(observation_spec) else []
         if not self.shape_tolerant or observation_spec.shape[-1] == 3:
             observation_spec.shape = torch.Size(
                 [
-                    *unsqueeze_dim,
+                    *dim,
                     *observation_spec.shape[:-3],
                     observation_spec.shape[-1],
                     observation_spec.shape[-3],
@@ -2137,41 +2137,42 @@ class UnsqueezeTransform(Transform):
     """Inserts a dimension of size one at the specified position.
 
     Args:
-        unsqueeze_dim (int): dimension to unsqueeze. Must be negative (or allow_positive_dim
+        dim (int): dimension to unsqueeze. Must be negative (or allow_positive_dim
             must be turned on).
+
+    Keyword Args:
         allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
-            :obj:`UnsqueezeTransform` will map these to the n^th feature dimension
+            `UnsqueezeTransform`` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor,
-            independently from the tensordict batch size (ie positive dims may be
+            independently of the tensordict batch size (ie positive dims may be
             dangerous in contexts where tensordict of different batch dimension
             are passed).
             Defaults to False, ie. non-negative dimensions are not permitted.
+        in_keys (list of NestedKeys): input entries (read).
+        out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
+            not provided.
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+            Defaults to ``in_keys_in`` if not provided.
     """
 
     invertible = True
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._unsqueeze_dim = None
+        cls._dim = None
         return super().__new__(cls)
 
     def __init__(
         self,
         dim: int = None,
+        *,
         allow_positive_dim: bool = False,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
-        **kwargs,
     ):
-        if "unsqueeze_dim" in kwargs:
-            warnings.warn(
-                "The `unsqueeze_dim` kwarg will be removed in v0.6. Please use `dim` instead."
-            )
-            dim = kwargs["unsqueeze_dim"]
-        elif dim is None:
-            raise TypeError("dim must be provided.")
         if in_keys is None:
             in_keys = []  # default
         if out_keys is None:
@@ -2191,22 +2192,26 @@ class UnsqueezeTransform(Transform):
             raise RuntimeError(
                 "dim should be smaller than 0 to accommodate for "
                 "envs of different batch_sizes. Turn allow_positive_dim to accommodate "
-                "for positive unsqueeze_dim."
+                "for positive dim."
             )
         self._dim = dim
 
     @property
     def unsqueeze_dim(self):
+        return self.dim
+
+    @property
+    def dim(self):
         if self._dim >= 0 and self.parent is not None:
             return len(self.parent.batch_size) + self._dim
         return self._dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        observation = observation.unsqueeze(self.unsqueeze_dim)
+        observation = observation.unsqueeze(self.dim)
         return observation
 
     def _inv_apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        observation = observation.squeeze(self.unsqueeze_dim)
+        observation = observation.squeeze(self.dim)
         return observation
 
     def _transform_spec(self, spec: TensorSpec):
@@ -2253,7 +2258,7 @@ class UnsqueezeTransform(Transform):
 
     def __repr__(self) -> str:
         s = (
-            f"{self.__class__.__name__}(unsqueeze_dim={self.unsqueeze_dim}, in_keys={self.in_keys}, out_keys={self.out_keys},"
+            f"{self.__class__.__name__}(dim={self.dim}, in_keys={self.in_keys}, out_keys={self.out_keys},"
             f" in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
         )
         return s
@@ -2263,14 +2268,14 @@ class SqueezeTransform(UnsqueezeTransform):
     """Removes a dimension of size one at the specified position.
 
     Args:
-        squeeze_dim (int): dimension to squeeze.
+        dim (int): dimension to squeeze.
     """
 
     invertible = True
 
     def __init__(
         self,
-        squeeze_dim: int,
+        dim: int | None = None,
         *args,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
@@ -2278,8 +2283,19 @@ class SqueezeTransform(UnsqueezeTransform):
         out_keys_inv: Optional[Sequence[str]] = None,
         **kwargs,
     ):
+        if dim is None:
+            if "squeeze_dim" in kwargs:
+                warnings.warn(
+                    f"squeeze_dim will be deprecated in favor of dim arg in {type(self).__name__}."
+                )
+                dim = kwargs.pop("squeeze_dim")
+            else:
+                raise TypeError(
+                    f"dim must be passed to {type(self).__name__} constructor."
+                )
+
         super().__init__(
-            squeeze_dim,
+            dim,
             *args,
             in_keys=in_keys,
             out_keys=out_keys,
@@ -2290,7 +2306,7 @@ class SqueezeTransform(UnsqueezeTransform):
 
     @property
     def squeeze_dim(self):
-        return super().unsqueeze_dim
+        return super().dim
 
     _apply_transform = UnsqueezeTransform._inv_apply_transform
     _inv_apply_transform = UnsqueezeTransform._apply_transform
