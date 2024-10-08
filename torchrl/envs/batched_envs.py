@@ -22,6 +22,7 @@ from warnings import warn
 import torch
 
 from tensordict import (
+    _zip_strict,
     is_tensor_collection,
     LazyStackedTensorDict,
     TensorDict,
@@ -544,9 +545,7 @@ class BatchedEnvBase(EnvBase):
                 raise RuntimeError(
                     f"len(kwargs) and num_workers mismatch, got {len(kwargs)} and {self.num_workers}."
                 )
-            for _kwargs, _new_kwargs in zip(
-                self.create_env_kwargs, kwargs, strict=True
-            ):
+            for _kwargs, _new_kwargs in _zip_strict(self.create_env_kwargs, kwargs):
                 _kwargs.update(_new_kwargs)
 
     def _get_in_keys_to_exclude(self, tensordict):
