@@ -3,6 +3,7 @@ name: Generate documentation
 on:
   push:
     branches:
+      - nightly
       - main
       - release/*
     tags:
@@ -21,7 +22,7 @@ jobs:
   build-docs:
     strategy:
       matrix:
-        python_version: ["3.9"]
+        python_version: ["3.10"]
         cuda_arch_version: ["12.1"]
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
@@ -33,7 +34,7 @@ jobs:
       script: |
         set -e
         set -v
-        apt-get update && apt-get install -y git wget gcc g++
+        apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"
         env_dir="${root_dir}/env"
@@ -45,10 +46,10 @@ jobs:
         bash ./miniconda.sh -b -f -p "${conda_dir}"
         eval "$(${conda_dir}/bin/conda shell.bash hook)"
         printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python=3.8
+        conda create --prefix "${env_dir}" -y python=3.10
         printf "* Activating\n"
         conda activate "${env_dir}"
-        
+
         # 2. upgrade pip, ninja and packaging
         # apt-get install python3.9 python3-pip -y
         python3 -m pip install --upgrade pip
