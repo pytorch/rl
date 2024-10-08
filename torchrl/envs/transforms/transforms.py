@@ -42,6 +42,7 @@ from tensordict import (
 from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.utils import (
     _unravel_key_to_tuple,
+    _zip_strict,
     expand_as_right,
     expand_right,
     NestedKey,
@@ -88,7 +89,7 @@ def _apply_to_composite(function):
             _specs = observation_spec._specs
             in_keys = self.in_keys
             out_keys = self.out_keys
-            for in_key, out_key in zip(in_keys, out_keys, strict=True):
+            for in_key, out_key in _zip_strict(in_keys, out_keys):
                 if in_key in observation_spec.keys(True, True):
                     _specs[out_key] = function(self, observation_spec[in_key].clone())
             return Composite(
@@ -118,7 +119,7 @@ def _apply_to_composite_inv(function):
             state_spec = state_spec.clone()
         in_keys_inv = self.in_keys_inv
         out_keys_inv = self.out_keys_inv
-        for in_key, out_key in zip(in_keys_inv, out_keys_inv, strict=True):
+        for in_key, out_key in _zip_strict(in_keys_inv, out_keys_inv):
             if in_key != out_key:
                 # we only change the input spec if the key is the same
                 continue
@@ -274,7 +275,7 @@ class Transform(nn.Module):
         :meth:`TransformedEnv.reset`.
 
         """
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             value = tensordict.get(in_key, default=None)
             if value is not None:
                 observation = self._apply_transform(value)
@@ -291,7 +292,7 @@ class Transform(nn.Module):
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             data = tensordict.get(in_key, None)
             if data is not None:
                 data = self._apply_transform(data)
@@ -332,7 +333,7 @@ class Transform(nn.Module):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self.in_keys_inv:
             return tensordict
-        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
             data = tensordict.get(in_key, None)
             if data is not None:
                 item = self._inv_apply_transform(data)
@@ -1637,7 +1638,7 @@ class TargetReturn(Transform):
         return tensordict_reset
 
     def _call(self, tensordict: TensorDict) -> TensorDict:
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             val_in = tensordict.get(in_key, None)
             val_out = tensordict.get(out_key, None)
             if val_in is not None:
@@ -1679,7 +1680,7 @@ class TargetReturn(Transform):
         )
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if in_key in self.parent.full_observation_spec.keys(True):
                 target = self.parent.full_observation_spec[in_key]
             elif in_key in self.parent.full_reward_spec.keys(True):
@@ -3004,7 +3005,7 @@ class CatFrames(ObservationTransform):
     def _call(self, tensordict: TensorDictBase, _reset=None) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
         _just_reset = _reset is not None
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             # Lazy init of buffers
             buffer_name = f"_cat_buffers_{in_key}"
             data = tensordict.get(in_key)
@@ -3139,12 +3140,12 @@ class CatFrames(ObservationTransform):
         # first sort the in_keys with strings and non-strings
         keys = [
             (in_key, out_key)
-            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True)
+            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys)
             if isinstance(in_key, str)
         ]
         keys += [
             (in_key, out_key)
-            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True)
+            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys)
             if not isinstance(in_key, str)
         ]
 
@@ -3180,7 +3181,7 @@ class CatFrames(ObservationTransform):
             first_val = None
             if isinstance(in_key, tuple) and in_key[0] == "next":
                 # let's get the out_key we have already processed
-                prev_out_key = dict(zip(self.in_keys, self.out_keys, strict=True)).get(
+                prev_out_key = dict(_zip_strict(self.in_keys, self.out_keys)).get(
                     in_key[1], None
                 )
                 if prev_out_key is not None:
@@ -3613,7 +3614,7 @@ class DTypeCastTransform(Transform):
             return tensordict
         else:
             # we made sure that if in_keys is not None, out_keys is not None either
-            for in_key, out_key in zip(in_keys, out_keys, strict=True):
+            for in_key, out_key in _zip_strict(in_keys, out_keys):
                 item = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(out_key, item)
             return tensordict
@@ -3672,9 +3673,7 @@ class DTypeCastTransform(Transform):
             raise NotImplementedError(
                 f"Calling transform_input_spec without a parent environment isn't supported yet for {type(self)}."
             )
-        for in_key_inv, out_key_inv in zip(
-            self.in_keys_inv, self.out_keys_inv, strict=True
-        ):
+        for in_key_inv, out_key_inv in _zip_strict(self.in_keys_inv, self.out_keys_inv):
             if in_key_inv in full_action_spec.keys(True):
                 _spec = full_action_spec[in_key_inv]
                 target = "action"
@@ -3708,7 +3707,7 @@ class DTypeCastTransform(Transform):
         full_observation_spec = output_spec["full_observation_spec"]
         for reward_key, reward_spec in list(full_reward_spec.items(True, True)):
             # find out_key that match the in_key
-            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
                 if reward_key == in_key:
                     if reward_spec.dtype != self.dtype_in:
                         raise TypeError(f"reward_spec.dtype is not {self.dtype_in}")
@@ -3724,7 +3723,7 @@ class DTypeCastTransform(Transform):
             full_observation_spec.items(True, True)
         ):
             # find out_key that match the in_key
-            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
                 if observation_key == in_key:
                     if observation_spec.dtype != self.dtype_in:
                         raise TypeError(
@@ -3957,7 +3956,7 @@ class DeviceCastTransform(Transform):
             return result
         tensordict_t = tensordict.named_apply(self._to, nested_keys=True, device=None)
         if self._rename_keys:
-            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
                 if out_key != in_key:
                     tensordict_t.rename_key_(in_key, out_key)
                     tensordict_t.set(in_key, tensordict.get(in_key))
@@ -3971,7 +3970,7 @@ class DeviceCastTransform(Transform):
             return result
         tensordict_t = tensordict.named_apply(self._to, nested_keys=True, device=None)
         if self._rename_keys:
-            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
                 if out_key != in_key:
                     tensordict_t.rename_key_(in_key, out_key)
                     tensordict_t.set(in_key, tensordict.get(in_key))
@@ -3999,9 +3998,7 @@ class DeviceCastTransform(Transform):
             device=None,
         )
         if self._rename_keys_inv:
-            for in_key, out_key in zip(
-                self.in_keys_inv, self.out_keys_inv, strict=True
-            ):
+            for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
                 if out_key != in_key:
                     tensordict_t.rename_key_(in_key, out_key)
                     tensordict_t.set(in_key, tensordict.get(in_key))
@@ -4034,7 +4031,7 @@ class DeviceCastTransform(Transform):
 
     def transform_action_spec(self, full_action_spec: Composite) -> Composite:
         full_action_spec = full_action_spec.clear_device_()
-        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
             if in_key not in full_action_spec.keys(True, True):
                 continue
             full_action_spec[out_key] = full_action_spec[in_key].to(self.device)
@@ -4042,7 +4039,7 @@ class DeviceCastTransform(Transform):
 
     def transform_state_spec(self, full_state_spec: Composite) -> Composite:
         full_state_spec = full_state_spec.clear_device_()
-        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
             if in_key not in full_state_spec.keys(True, True):
                 continue
             full_state_spec[out_key] = full_state_spec[in_key].to(self.device)
@@ -4056,7 +4053,7 @@ class DeviceCastTransform(Transform):
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         observation_spec = observation_spec.clear_device_()
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if in_key not in observation_spec.keys(True, True):
                 continue
             observation_spec[out_key] = observation_spec[in_key].to(self.device)
@@ -4064,7 +4061,7 @@ class DeviceCastTransform(Transform):
 
     def transform_done_spec(self, full_done_spec: Composite) -> Composite:
         full_done_spec = full_done_spec.clear_device_()
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if in_key not in full_done_spec.keys(True, True):
                 continue
             full_done_spec[out_key] = full_done_spec[in_key].to(self.device)
@@ -4072,7 +4069,7 @@ class DeviceCastTransform(Transform):
 
     def transform_reward_spec(self, full_reward_spec: Composite) -> Composite:
         full_reward_spec = full_reward_spec.clear_device_()
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if in_key not in full_reward_spec.keys(True, True):
                 continue
             full_reward_spec[out_key] = full_reward_spec[in_key].to(self.device)
@@ -5027,7 +5024,7 @@ class VecNorm(Transform):
         if self.lock is not None:
             self.lock.acquire()
 
-        for key, key_out in zip(self.in_keys, self.out_keys, strict=True):
+        for key, key_out in _zip_strict(self.in_keys, self.out_keys):
             if key not in tensordict.keys(include_nested=True):
                 # TODO: init missing rewards with this
                 # for key_suffix in [_append_last(key, suffix) for suffix in ("_sum", "_ssq", "_count")]:
@@ -5165,7 +5162,7 @@ class VecNorm(Transform):
         out = []
         loc = self.loc
         scale = self.scale
-        for key, key_out in zip(self.in_keys, self.out_keys, strict=True):
+        for key, key_out in _zip_strict(self.in_keys, self.out_keys):
             _out = ObservationNorm(
                 loc=loc.get(key),
                 scale=scale.get(key),
@@ -5484,7 +5481,7 @@ class RewardSum(Transform):
 
             def _check_match(reset_keys, in_keys):
                 # if this is called, the length of reset_keys and in_keys must match
-                for reset_key, in_key in zip(reset_keys, in_keys, strict=True):
+                for reset_key, in_key in _zip_strict(reset_keys, in_keys):
                     # having _reset at the root and the reward_key ("agent", "reward") is allowed
                     # but having ("agent", "_reset") and "reward" isn't
                     if isinstance(reset_key, tuple) and isinstance(in_key, str):
@@ -5528,8 +5525,8 @@ class RewardSum(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         """Resets episode rewards."""
-        for in_key, reset_key, out_key in zip(
-            self.in_keys, self.reset_keys, self.out_keys, strict=True
+        for in_key, reset_key, out_key in _zip_strict(
+            self.in_keys, self.reset_keys, self.out_keys
         ):
             _reset = _get_reset(reset_key, tensordict)
             value = tensordict.get(out_key, default=None)
@@ -5545,7 +5542,7 @@ class RewardSum(Transform):
     ) -> TensorDictBase:
         """Updates the episode rewards with the step rewards."""
         # Update episode rewards
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if in_key in next_tensordict.keys(include_nested=True):
                 reward = next_tensordict.get(in_key)
                 prev_reward = tensordict.get(out_key, 0.0)
@@ -5567,7 +5564,7 @@ class RewardSum(Transform):
         reward_spec = self.parent.full_reward_spec
         reward_spec_keys = self.parent.reward_keys
         # Define episode specs for all out_keys
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if (
                 in_key in reward_spec_keys
             ):  # if this out_key has a corresponding key in reward_spec
@@ -5617,7 +5614,7 @@ class RewardSum(Transform):
                 "At least one dimension of the tensordict must be named 'time' in offline mode"
             )
         time_dim = time_dim[0] - 1
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             reward = tensordict[in_key]
             cumsum = reward.cumsum(time_dim)
             tensordict.set(out_key, cumsum)
@@ -5795,13 +5792,18 @@ class StepCounter(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         # get reset signal
-        for step_count_key, truncated_key, terminated_key, reset_key, done_key in zip(
+        for (
+            step_count_key,
+            truncated_key,
+            terminated_key,
+            reset_key,
+            done_key,
+        ) in _zip_strict(
             self.step_count_keys,
             self.truncated_keys,
             self.terminated_keys,
             self.reset_keys,
             self.done_keys,
-            strict=True,
         ):
             reset = tensordict.get(reset_key, default=None)
             if reset is None:
@@ -5837,8 +5839,8 @@ class StepCounter(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for step_count_key, truncated_key, done_key in zip(
-            self.step_count_keys, self.truncated_keys, self.done_keys, strict=True
+        for step_count_key, truncated_key, done_key in _zip_strict(
+            self.step_count_keys, self.truncated_keys, self.done_keys
         ):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
@@ -6337,7 +6339,7 @@ class TimeMaxPool(Transform):
 
     def _call(self, tensordict: TensorDictBase, _reset=None) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             # Lazy init of buffers
             buffer_name = self._buffer_name(in_key)
             buffer = getattr(self, buffer_name)
@@ -6578,7 +6580,7 @@ class InitTracker(Transform):
         device = tensordict.device
         if device is None:
             device = torch.device("cpu")
-        for reset_key, init_key in zip(self.reset_keys, self.init_keys, strict=True):
+        for reset_key, init_key in _zip_strict(self.reset_keys, self.init_keys):
             _reset = tensordict.get(reset_key, None)
             if _reset is None:
                 done_key = _replace_last(init_key, "done")
@@ -6714,7 +6716,7 @@ class RenameTransform(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.create_copy:
             out = tensordict.select(*self.in_keys, strict=not self._missing_tolerance)
-            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
                 try:
                     out.rename_key_(in_key, out_key)
                 except KeyError:
@@ -6722,7 +6724,7 @@ class RenameTransform(Transform):
                         raise
             tensordict = tensordict.update(out)
         else:
-            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
                 try:
                     tensordict.rename_key_(in_key, out_key)
                 except KeyError:
@@ -6744,9 +6746,7 @@ class RenameTransform(Transform):
             out = tensordict.select(
                 *self.out_keys_inv, strict=not self._missing_tolerance
             )
-            for in_key, out_key in zip(
-                self.in_keys_inv, self.out_keys_inv, strict=True
-            ):
+            for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
                 try:
                     out.rename_key_(out_key, in_key)
                 except KeyError:
@@ -6755,9 +6755,7 @@ class RenameTransform(Transform):
 
             tensordict = tensordict.update(out)
         else:
-            for in_key, out_key in zip(
-                self.in_keys_inv, self.out_keys_inv, strict=True
-            ):
+            for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
                 try:
                     tensordict.rename_key_(out_key, in_key)
                 except KeyError:
@@ -6978,7 +6976,7 @@ class Reward2GoTransform(Transform):
                 "No episode ends found to calculate the reward to go. Make sure that the number of frames_per_batch is larger than number of steps per episode."
             )
         found = False
-        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
+        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
             if in_key in tensordict.keys(include_nested=True):
                 found = True
                 item = self._inv_apply_transform(tensordict.get(in_key), done)
