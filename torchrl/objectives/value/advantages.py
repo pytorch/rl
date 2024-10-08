@@ -16,13 +16,12 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import (
     dispatch,
-    is_functional,
     set_skip_existing,
     TensorDictModule,
     TensorDictModuleBase,
 )
 from tensordict.utils import NestedKey
-from torch import nn, Tensor
+from torch import Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
