@@ -412,18 +412,13 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @property
     def is_functional(self):
-        if isinstance(self.value_network, nn.Module):
-            return is_functional(self.value_network)
-        elif self.value_network is None:
-            return None
-        else:
-            raise RuntimeError("Cannot determine if value network is functional.")
+        # legacy
+        return False
 
     @property
     def is_stateless(self):
-        if not self.is_functional:
-            return False
-        return self.value_network._is_stateless
+        # legacy
+        return False
 
     def _next_value(self, tensordict, target_params, kwargs):
         step_td = step_mdp(tensordict, keep_other=False)

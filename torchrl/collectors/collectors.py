@@ -1666,10 +1666,12 @@ class _MultiDataCollector(DataCollectorBase):
         self.cat_results = cat_results
 
     def _check_replay_buffer_init(self):
+        if self.replay_buffer is None:
+            return
         is_init = getattr(self.replay_buffer._storage, "initialized", True)
         if not is_init:
             if isinstance(self.create_env_fn[0], EnvCreator):
-                fake_td = self.create_env_fn[0].tensordict
+                fake_td = self.create_env_fn[0].meta_data.tensordict
             elif isinstance(self.create_env_fn[0], EnvBase):
                 fake_td = self.create_env_fn[0].fake_tensordict()
             else:
