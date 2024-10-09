@@ -147,7 +147,11 @@ class Storage:
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
             return torch.randint(
-                0, len(self), (batch_size,), generator=self._rng, device=self.device
+                0,
+                len(self),
+                (batch_size,),
+                generator=self._rng,
+                device=getattr(self, "device", None),
             )
         raise RuntimeError(
             f"Random number generation is not implemented for storage of type {type(self)} with ndim {self.ndim}. "
