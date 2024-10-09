@@ -1622,9 +1622,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
-        apply_api_compatibility: bool = False,
+        apply_api_compatibility: bool | None = None,
         **kwargs,
     ):
         """Registers an environment in gym(nasium).
@@ -1811,9 +1811,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
-        apply_api_compatibility: bool = False,
+        apply_api_compatibility: bool | None = None,
         **kwargs,
     ):
         import gym
@@ -1836,9 +1836,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
             disable_env_checker=disable_env_checker,
-            apply_api_compatibility=apply_api_compatibility,
+            apply_api_compatibility=bool(apply_api_compatibility),
         )
 
     @implement_for("gym", "0.25", "0.26", class_method=True)
@@ -1853,14 +1853,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
-        apply_api_compatibility: bool = False,
+        apply_api_compatibility: bool | None = None,
         **kwargs,
     ):
         import gym
 
-        if apply_api_compatibility is not False:
+        if apply_api_compatibility is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format(
                     "apply_api_compatibility", gym.__version__
@@ -1901,14 +1901,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
-        apply_api_compatibility: bool = False,
+        apply_api_compatibility: bool | None = None,
         **kwargs,
     ):
         import gym
 
-        if apply_api_compatibility is not False:
+        if apply_api_compatibility is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format(
                     "apply_api_compatibility", gym.__version__
@@ -1954,14 +1954,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
-        apply_api_compatibility: bool = False,
+        apply_api_compatibility: bool | None = None,
         **kwargs,
     ):
         import gym
 
-        if apply_api_compatibility is not False:
+        if apply_api_compatibility is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format(
                     "apply_api_compatibility", gym.__version__
@@ -1973,7 +1973,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     "disable_env_checker", gym.__version__
                 )
             )
-        if autoreset is not False:
+        if autoreset is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format("autoreset", gym.__version__)
             )
@@ -2010,9 +2010,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
-        apply_api_compatibility: bool = False,
+        apply_api_compatibility: bool | None = None,
         **kwargs,
     ):
         import gym
@@ -2028,11 +2028,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     "disable_env_checker", gym.__version__
                 )
             )
-        if autoreset is not False:
+        if autoreset is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format("autoreset", gym.__version__)
             )
-        if apply_api_compatibility is not False:
+        if apply_api_compatibility is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format(
                     "apply_api_compatibility", gym.__version__
@@ -2056,7 +2056,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             max_episode_steps=max_episode_steps,
         )
 
-    @implement_for("gymnasium", class_method=True)
+    @implement_for("gymnasium", None, "1.0", class_method=True)
     def _register_gym(  # noqa: F811
         cls,
         id,
@@ -2068,9 +2068,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
-        apply_api_compatibility: bool = False,
+        apply_api_compatibility: bool | None = None,
         **kwargs,
     ):
         import gymnasium
@@ -2094,9 +2094,54 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
             disable_env_checker=disable_env_checker,
-            apply_api_compatibility=apply_api_compatibility,
+            apply_api_compatibility=bool(apply_api_compatibility),
+        )
+
+    @implement_for("gymnasium", "1.0", class_method=True)
+    def _register_gym(  # noqa: F811
+        cls,
+        id,
+        entry_point: Callable | None = None,
+        transform: "Transform" | None = None,  # noqa: F821
+        info_keys: List[NestedKey] | None = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool | None = False,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool | None = None,
+        **kwargs,
+    ):
+        import gymnasium
+        from torchrl.envs.libs._gym_utils import _TorchRLGymnasiumWrapper
+
+        if entry_point is None:
+            entry_point = cls
+
+        entry_point = functools.partial(
+            _TorchRLGymnasiumWrapper,
+            entry_point=entry_point,
+            info_keys=info_keys,
+            to_numpy=to_numpy,
+            transform=transform,
+            **kwargs,
+        )
+        if autoreset is not None:
+            raise TypeError("autoreset is only compatible with gymnasium<1.0.")
+        if apply_api_compatibility is not None:
+            raise TypeError("apply_api_compatibility is only compatible with gymnasium<1.0.")
+        return gymnasium.register(
+            id=id,
+            entry_point=entry_point,
+            reward_threshold=reward_threshold,
+            nondeterministic=nondeterministic,
+            max_episode_steps=max_episode_steps,
+            order_enforce=order_enforce,
+            disable_env_checker=disable_env_checker,
         )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:

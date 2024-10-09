@@ -118,7 +118,7 @@ do
 done
 
 # For this version "gym[accept-rom-license]" is required.
-for GYM_VERSION in '0.27' '0.28'
+for GYM_VERSION in '0.27' '0.28' '0.29'
 do
   # Create a copy of the conda env and work with this
   conda deactivate
@@ -140,7 +140,7 @@ conda deactivate
 conda create --prefix ./cloned_env --clone ./env -y
 conda activate ./cloned_env
 
-pip3 install 'gymnasium[accept-rom-license,ale-py,atari]<1.0' mo-gymnasium gymnasium-robotics -U
+pip3 install 'gymnasium[accept-rom-license,ale-py,atari]' mo-gymnasium gymnasium-robotics -U
 
 $DIR/run_test.sh
 

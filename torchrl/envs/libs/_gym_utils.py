@@ -154,7 +154,11 @@ if _has_gymnasium:
             return out
 
         @implement_for("gymnasium")
-        def reset(self):  # noqa: F811
+        def reset(self, seed=None, options=None):  # noqa: F811
+            if seed is not None:
+                self.torchrl_env.set_seed(seed)
+            if options is not None:
+                raise TypeError("options is not supported in torchrl envs.")
             self._tensordict = self.torchrl_env.reset()
             observation = self._tensordict
             if self.info_keys:
