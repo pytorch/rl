@@ -212,6 +212,13 @@ class TruncatedNormal(D.Independent):
         "scale": constraints.greater_than(1e-6),
     }
 
+    def _warn_minmax(self):
+        warnings.warn(
+            f"the min / high keyword arguments are deprecated in favor of low / high in {type(self).__name__} "
+            f"and will be removed entirely in v0.6. ",
+            DeprecationWarning,
+        )
+
     def __init__(
         self,
         loc: torch.Tensor,
@@ -220,7 +227,14 @@ class TruncatedNormal(D.Independent):
         low: Union[torch.Tensor, float] = -1.0,
         high: Union[torch.Tensor, float] = 1.0,
         tanh_loc: bool = False,
+        **kwargs,
     ):
+        if "max" in kwargs:
+            self._warn_minmax()
+            high = kwargs.pop("max")
+        if "min" in kwargs:
+            self._warn_minmax()
+            low = kwargs.pop("min")
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
@@ -378,6 +392,13 @@ class TanhNormal(FasterTransformedDistribution):
 
     num_params = 2
 
+    def _warn_minmax(self):
+        warnings.warn(
+            f"the min / high keyword arguments are deprecated in favor of low / high in {type(self).__name__} "
+            f"and will be removed entirely in v0.6. ",
+            DeprecationWarning,
+        )
+
     def __init__(
         self,
         loc: torch.Tensor,
@@ -390,6 +411,13 @@ class TanhNormal(FasterTransformedDistribution):
         safe_tanh: bool = True,
         **kwargs,
     ):
+        if "max" in kwargs:
+            self._warn_minmax()
+            high = kwargs.pop("max")
+        if "min" in kwargs:
+            self._warn_minmax()
+            low = kwargs.pop("min")
+
         if not isinstance(loc, torch.Tensor):
             loc = torch.as_tensor(loc, dtype=torch.get_default_dtype())
         if not isinstance(scale, torch.Tensor):
@@ -502,10 +530,15 @@ class TanhNormal(FasterTransformedDistribution):
 
     @property
     def mode(self):
-        raise RuntimeError(
-            f"The distribution {type(self).__name__} has not analytical mode. "
-            f"Use ExplorationMode.DETERMINISTIC to get a deterministic sample from it."
+        warnings.warn(
+            "This computation of the mode is based on an inaccurate estimation of the mode "
+            "given the base_dist mode. "
+            "To use a more stable implementation of the mode, use dist.get_mode() method instead. "
+            "To silence this warning, consider using the DETERMINISTIC exploration_type."
+            "This implementation will be removed in v0.6.",
+            category=DeprecationWarning,
         )
+        return self.deterministic_sample
 
     @property
     def deterministic_sample(self):
@@ -669,6 +702,13 @@ class TanhDelta(FasterTransformedDistribution):
         "loc": constraints.real,
     }
 
+    def _warn_minmax(self):
+        warnings.warn(
+            f"the min / high keyword arguments are deprecated in favor of low / high in {type(self).__name__} "
+            f"and will be removed entirely in v0.6. ",
+            category=DeprecationWarning,
+        )
+
     def __init__(
         self,
         param: torch.Tensor,
@@ -677,7 +717,15 @@ class TanhDelta(FasterTransformedDistribution):
         event_dims: int = 1,
         atol: float = 1e-6,
         rtol: float = 1e-6,
+        **kwargs,
     ):
+        if "max" in kwargs:
+            self._warn_minmax()
+            high = kwargs.pop("max")
+        if "min" in kwargs:
+            self._warn_minmax()
+            low = kwargs.pop("min")
+
         minmax_msg = "high value has been found to be equal or less than low value"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
             if not (high > low).all():
@@ -719,6 +767,7 @@ class TanhDelta(FasterTransformedDistribution):
             rtol=rtol,
             batch_shape=batch_shape,
             event_shape=event_shape,
+            **kwargs,
         )
 
         super().__init__(base, t)

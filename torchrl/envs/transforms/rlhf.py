@@ -142,8 +142,8 @@ class KLRewardTransform(Transform):
         self.sample_log_prob_key = "sample_log_prob"
 
         def find_sample_log_prob(module):
-            if hasattr(module, "log_prob_key"):
-                self.sample_log_prob_key = module.log_prob_key
+            if hasattr(module, "SAMPLE_LOG_PROB_KEY"):
+                self.sample_log_prob_key = module.SAMPLE_LOG_PROB_KEY
 
         self.functional_actor.apply(find_sample_log_prob)
 

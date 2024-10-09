@@ -315,7 +315,7 @@ class R3MTransform(Compose):
             unsqueeze = UnsqueezeTransform(
                 in_keys=in_keys,
                 out_keys=in_keys,
-                dim=-4,
+                unsqueeze_dim=-4,
             )
             transforms.append(unsqueeze)
 

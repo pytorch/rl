@@ -24,6 +24,7 @@ from torchrl.collectors.distributed.default_configs import (
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs.utils import _convert_exploration_type
 
 SUBMITIT_ERR = None
 try:
@@ -274,6 +275,7 @@ class RPCDataCollector(DataCollectorBase):
         postproc: Callable | None = None,
         split_trajs: bool = False,
         exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
+        exploration_mode: str = None,
         collector_class=SyncDataCollector,
         collector_kwargs=None,
         num_workers_per_collector=1,
@@ -286,6 +288,9 @@ class RPCDataCollector(DataCollectorBase):
         visible_devices=None,
         tensorpipe_options=None,
     ):
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
         elif collector_class == "sync":

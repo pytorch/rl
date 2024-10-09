@@ -16,12 +16,13 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import (
     dispatch,
+    is_functional,
     set_skip_existing,
     TensorDictModule,
     TensorDictModuleBase,
 )
 from tensordict.utils import NestedKey
-from torch import Tensor
+from torch import nn, Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
@@ -411,13 +412,18 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @property
     def is_functional(self):
-        # legacy
-        return False
+        if isinstance(self.value_network, nn.Module):
+            return is_functional(self.value_network)
+        elif self.value_network is None:
+            return None
+        else:
+            raise RuntimeError("Cannot determine if value network is functional.")
 
     @property
     def is_stateless(self):
-        # legacy
-        return False
+        if not self.is_functional:
+            return False
+        return self.value_network._is_stateless
 
     def _next_value(self, tensordict, target_params, kwargs):
         step_td = step_mdp(tensordict, keep_other=False)

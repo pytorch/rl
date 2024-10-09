@@ -119,7 +119,7 @@ if [[ $OSTYPE != 'darwin'* ]]; then
     rm ale_py-0.8.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
   fi
   echo "installing gymnasium"
-  pip install "gymnasium[atari,accept-rom-license]<1.0"
+  pip install "gymnasium[atari,accept-rom-license]"
 else
-  pip install "gymnasium[atari,accept-rom-license]<1.0"
+  pip install "gymnasium[atari,accept-rom-license]"
 fi

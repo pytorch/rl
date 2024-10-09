@@ -140,7 +140,7 @@ conda deactivate
 conda create --prefix ./cloned_env --clone ./env -y
 conda activate ./cloned_env
 
-pip3 install 'gymnasium[accept-rom-license,ale-py,atari]<1.0' mo-gymnasium gymnasium-robotics -U
+pip3 install 'gymnasium[accept-rom-license,ale-py,atari]' mo-gymnasium gymnasium-robotics -U
 
 $DIR/run_test.sh
 
