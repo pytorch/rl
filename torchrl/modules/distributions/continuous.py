@@ -36,6 +36,11 @@ from torchrl.modules.utils import mappings
 # speeds up distribution construction
 D.Distribution.set_default_validate_args(False)
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
+
 
 class IndependentNormal(D.Independent):
     """Implements a Normal distribution with location scaling.
@@ -112,7 +117,7 @@ class SafeTanhTransform(D.TanhTransform):
             inv = self._inv()
         if inv is None:
             inv = _InverseTransform(self)
-            if not torch.compiler.is_dynamo_compiling():
+            if not is_dynamo_compiling():
                 self._inv = weakref.ref(inv)
         return inv
 
@@ -320,7 +325,7 @@ class _PatchedComposeTransform(D.ComposeTransform):
             inv = self._inv()
         if inv is None:
             inv = _PatchedComposeTransform([p.inv for p in reversed(self.parts)])
-            if not torch.compiler.is_dynamo_compiling():
+            if not is_dynamo_compiling():
                 self._inv = weakref.ref(inv)
                 inv._inv = weakref.ref(self)
         return inv
@@ -334,7 +339,7 @@ class _PatchedAffineTransform(D.AffineTransform):
             inv = self._inv()
         if inv is None:
             inv = _InverseTransform(self)
-            if not torch.compiler.is_dynamo_compiling():
+            if not is_dynamo_compiling():
                 self._inv = weakref.ref(inv)
         return inv
 
@@ -432,15 +437,13 @@ class TanhNormal(FasterTransformedDistribution):
         self.high = high
 
         if safe_tanh:
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 _err_compile_safetanh()
             t = SafeTanhTransform()
         else:
             t = D.TanhTransform()
         # t = D.TanhTransform()
-        if torch.compiler.is_dynamo_compiling() or (
-            self.non_trivial_max or self.non_trivial_min
-        ):
+        if is_dynamo_compiling() or (self.non_trivial_max or self.non_trivial_min):
             t = _PatchedComposeTransform(
                 [
                     t,
@@ -467,9 +470,7 @@ class TanhNormal(FasterTransformedDistribution):
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
             # loc must be rescaled if tanh_loc
-            if torch.compiler.is_dynamo_compiling() or (
-                self.non_trivial_max or self.non_trivial_min
-            ):
+            if is_dynamo_compiling() or (self.non_trivial_max or self.non_trivial_min):
                 loc = loc + (self.high - self.low) / 2 + self.low
         self.loc = loc
         self.scale = scale
