@@ -2133,7 +2133,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if autoreset is not None:
             raise TypeError("autoreset is only compatible with gymnasium<1.0.")
         if apply_api_compatibility is not None:
-            raise TypeError("apply_api_compatibility is only compatible with gymnasium<1.0.")
+            raise TypeError(
+                "apply_api_compatibility is only compatible with gymnasium<1.0."
+            )
         return gymnasium.register(
             id=id,
             entry_point=entry_point,
