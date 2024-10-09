@@ -121,19 +121,6 @@ class WrappablePolicy(nn.Module):
         return self.linear(observation)
 
 
-class TensorDictCompatiblePolicy(nn.Module):
-    def __init__(self, out_features: int):
-        super().__init__()
-        self.in_keys = ["observation"]
-        self.out_keys = ["action"]
-        self.linear = nn.LazyLinear(out_features)
-
-    def forward(self, tensordict):
-        return tensordict.set(
-            self.out_keys[0], self.linear(tensordict.get(self.in_keys[0]))
-        )
-
-
 class UnwrappablePolicy(nn.Module):
     def __init__(self, out_features: int):
         super().__init__()
@@ -2665,6 +2652,84 @@ class TestDynamicEnvs:
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
             assert data.names[-1] == "time"
+
+
+class TestCompile:
+    @pytest.mark.parametrize(
+        "collector_cls",
+        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector],
+    )
+    @pytest.mark.parametrize("compile_policy", [True, {}, {"mode": "reduce-overhead"}])
+    @pytest.mark.parametrize(
+        "device", [torch.device("cuda:0" if torch.cuda.is_available() else "cpu")]
+    )
+    def test_compiled_policy(self, collector_cls, compile_policy, device):
+        policy = TensorDictModule(
+            nn.Linear(7, 7, device=device), in_keys=["observation"], out_keys=["action"]
+        )
+        make_env = functools.partial(ContinuousActionVecMockEnv, device=device)
+        if collector_cls is SyncDataCollector:
+            torch._dynamo.reset_code_caches()
+            collector = SyncDataCollector(
+                make_env(),
+                policy,
+                frames_per_batch=30,
+                total_frames=120,
+                compile_policy=compile_policy,
+            )
+            assert collector.compiled_policy
+        else:
+            collector = collector_cls(
+                [make_env] * 2,
+                policy,
+                frames_per_batch=30,
+                total_frames=120,
+                compile_policy=compile_policy,
+            )
+            assert collector.compiled_policy
+        try:
+            for data in collector:
+                assert data is not None
+        finally:
+            collector.shutdown()
+            del collector
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+    @pytest.mark.parametrize(
+        "collector_cls",
+        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector],
+    )
+    @pytest.mark.parametrize("cudagraph_policy", [True, {}, {"warmup": 10}])
+    def test_cudagraph_policy(self, collector_cls, cudagraph_policy):
+        device = torch.device("cuda:0")
+        policy = TensorDictModule(
+            nn.Linear(7, 7, device=device), in_keys=["observation"], out_keys=["action"]
+        )
+        make_env = functools.partial(ContinuousActionVecMockEnv, device=device)
+        if collector_cls is SyncDataCollector:
+            collector = SyncDataCollector(
+                make_env(),
+                policy,
+                frames_per_batch=30,
+                total_frames=120,
+                cudagraph_policy=cudagraph_policy,
+            )
+            assert collector.cudagraphed_policy
+        else:
+            collector = collector_cls(
+                [make_env] * 2,
+                policy,
+                frames_per_batch=30,
+                total_frames=120,
+                cudagraph_policy=cudagraph_policy,
+            )
+            assert collector.cudagraphed_policy
+        try:
+            for data in collector:
+                assert data is not None
+        finally:
+            collector.shutdown()
+            del collector
 
 
 @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
