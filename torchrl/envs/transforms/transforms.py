@@ -3893,6 +3893,19 @@ class DeviceCastTransform(Transform):
             a parent environment exists, it it retrieved from it. In all other cases,
             it remains unspecified.
 
+    Keyword Args:
+        in_keys (list of NestedKey): the list of entries to map to a different device.
+            Defaults to ``None``.
+        out_keys (list of NestedKey): the output names of the entries mapped onto a device.
+            Defaults to the values of ``in_keys``.
+        in_keys_inv (list of NestedKey): the list of entries to map to a different device.
+            ``in_keys_inv`` are the names expected by the base environment.
+            Defaults to ``None``.
+        out_keys_inv (list of NestedKey): the output names of the entries mapped onto a device.
+            ``out_keys_inv`` are the names of the keys as seen from outside the transformed env.
+            Defaults to the values of ``in_keys_inv``.
+
+
     Examples:
         >>> td = TensorDict(
         ...     {'obs': torch.ones(1, dtype=torch.double),
@@ -3920,6 +3933,10 @@ class DeviceCastTransform(Transform):
         self.orig_device = (
             torch.device(orig_device) if orig_device is not None else orig_device
         )
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        if out_keys_inv is None:
+            out_keys_inv = copy(in_keys_inv)
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -4043,52 +4060,54 @@ class DeviceCastTransform(Transform):
         if self._map_env_device:
             return input_spec.to(self.device)
         else:
+            input_spec.clear_device_()
             return super().transform_input_spec(input_spec)
 
     def transform_action_spec(self, full_action_spec: Composite) -> Composite:
         full_action_spec = full_action_spec.clear_device_()
         for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
-            if in_key not in full_action_spec.keys(True, True):
-                continue
-            full_action_spec[out_key] = full_action_spec[in_key].to(self.device)
+            local_action_spec = full_action_spec.get(in_key, None)
+            if local_action_spec is not None:
+                full_action_spec[out_key] = local_action_spec.to(self.device)
         return full_action_spec
 
     def transform_state_spec(self, full_state_spec: Composite) -> Composite:
         full_state_spec = full_state_spec.clear_device_()
         for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
-            if in_key not in full_state_spec.keys(True, True):
-                continue
-            full_state_spec[out_key] = full_state_spec[in_key].to(self.device)
+            local_state_spec = full_state_spec.get(in_key, None)
+            if local_state_spec is not None:
+                full_state_spec[out_key] = local_state_spec.to(self.device)
         return full_state_spec
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
         if self._map_env_device:
             return output_spec.to(self.device)
         else:
+            output_spec.clear_device_()
             return super().transform_output_spec(output_spec)
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         observation_spec = observation_spec.clear_device_()
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
-            if in_key not in observation_spec.keys(True, True):
-                continue
-            observation_spec[out_key] = observation_spec[in_key].to(self.device)
+            local_obs_spec = observation_spec.get(in_key, None)
+            if local_obs_spec is not None:
+                observation_spec[out_key] = local_obs_spec.to(self.device)
         return observation_spec
 
     def transform_done_spec(self, full_done_spec: Composite) -> Composite:
         full_done_spec = full_done_spec.clear_device_()
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
-            if in_key not in full_done_spec.keys(True, True):
-                continue
-            full_done_spec[out_key] = full_done_spec[in_key].to(self.device)
+            local_done_spec = full_done_spec.get(in_key, None)
+            if local_done_spec is not None:
+                full_done_spec[out_key] = local_done_spec.to(self.device)
         return full_done_spec
 
     def transform_reward_spec(self, full_reward_spec: Composite) -> Composite:
         full_reward_spec = full_reward_spec.clear_device_()
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
-            if in_key not in full_reward_spec.keys(True, True):
-                continue
-            full_reward_spec[out_key] = full_reward_spec[in_key].to(self.device)
+            local_reward_spec = full_reward_spec.get(in_key, None)
+            if local_reward_spec is not None:
+                full_reward_spec[out_key] = local_reward_spec.to(self.device)
         return full_reward_spec
 
     def transform_env_device(self, device):
@@ -5494,6 +5513,8 @@ class RewardSum(Transform):
             # We take the filtered reset keys, which are the only keys that really
             # matter when calling reset, and check that they match the in_keys root.
             reset_keys = parent._filtered_reset_keys
+            if len(reset_keys) == 1:
+                reset_keys = list(reset_keys) * len(self.in_keys)
 
             def _check_match(reset_keys, in_keys):
                 # if this is called, the length of reset_keys and in_keys must match

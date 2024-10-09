@@ -5114,7 +5114,9 @@ class TestRewardSum(TransformBase):
                 pass
 
     @pytest.mark.parametrize("has_in_keys,", [True, False])
-    @pytest.mark.parametrize("reset_keys,", [None, ["_reset"] * 3])
+    @pytest.mark.parametrize(
+        "reset_keys,", [[("some", "nested", "reset")], ["_reset"] * 3, None]
+    )
     def test_trans_multi_key(
         self, has_in_keys, reset_keys, n_workers=2, batch_size=(3, 2), max_steps=5
     ):
@@ -5136,9 +5138,9 @@ class TestRewardSum(TransformBase):
         )
         with pytest.raises(
             ValueError, match="Could not match the env reset_keys"
-        ) if reset_keys is None else contextlib.nullcontext():
+        ) if reset_keys == [("some", "nested", "reset")] else contextlib.nullcontext():
             check_env_specs(env)
-        if reset_keys is not None:
+        if reset_keys != [("some", "nested", "reset")]:
             td = env.rollout(max_steps, policy=policy)
             for reward_key in env.reward_keys:
                 reward_key = _unravel_key_to_tuple(reward_key)
@@ -9955,16 +9957,27 @@ class TestActionMask(TransformBase):
 
 
 class TestDeviceCastTransformPart(TransformBase):
+    @pytest.fixture(scope="class")
+    def _cast_device(self):
+        if torch.cuda.is_available():
+            yield torch.device("cuda:0")
+        elif torch.backends.mps.is_available():
+            yield torch.device("mps:0")
+        else:
+            yield torch.device("cpu:1")
+
     @pytest.mark.parametrize("in_keys", ["observation"])
     @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
     @pytest.mark.parametrize("in_keys_inv", ["action"])
     @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
-    def test_single_trans_env_check(self, in_keys, out_keys, in_keys_inv, out_keys_inv):
+    def test_single_trans_env_check(
+        self, in_keys, out_keys, in_keys_inv, out_keys_inv, _cast_device
+    ):
         env = ContinuousActionVecMockEnv(device="cpu:0")
         env = TransformedEnv(
             env,
             DeviceCastTransform(
-                "cpu:1",
+                _cast_device,
                 in_keys=in_keys,
                 out_keys=out_keys,
                 in_keys_inv=in_keys_inv,
@@ -9978,12 +9991,14 @@ class TestDeviceCastTransformPart(TransformBase):
     @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
     @pytest.mark.parametrize("in_keys_inv", ["action"])
     @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
-    def test_serial_trans_env_check(self, in_keys, out_keys, in_keys_inv, out_keys_inv):
+    def test_serial_trans_env_check(
+        self, in_keys, out_keys, in_keys_inv, out_keys_inv, _cast_device
+    ):
         def make_env():
             return TransformedEnv(
                 ContinuousActionVecMockEnv(device="cpu:0"),
                 DeviceCastTransform(
-                    "cpu:1",
+                    _cast_device,
                     in_keys=in_keys,
                     out_keys=out_keys,
                     in_keys_inv=in_keys_inv,
@@ -10000,13 +10015,13 @@ class TestDeviceCastTransformPart(TransformBase):
     @pytest.mark.parametrize("in_keys_inv", ["action"])
     @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
     def test_parallel_trans_env_check(
-        self, in_keys, out_keys, in_keys_inv, out_keys_inv
+        self, in_keys, out_keys, in_keys_inv, out_keys_inv, _cast_device
     ):
         def make_env():
             return TransformedEnv(
                 ContinuousActionVecMockEnv(device="cpu:0"),
                 DeviceCastTransform(
-                    "cpu:1",
+                    _cast_device,
                     in_keys=in_keys,
                     out_keys=out_keys,
                     in_keys_inv=in_keys_inv,
@@ -10032,14 +10047,16 @@ class TestDeviceCastTransformPart(TransformBase):
     @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
     @pytest.mark.parametrize("in_keys_inv", ["action"])
     @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
-    def test_trans_serial_env_check(self, in_keys, out_keys, in_keys_inv, out_keys_inv):
+    def test_trans_serial_env_check(
+        self, in_keys, out_keys, in_keys_inv, out_keys_inv, _cast_device
+    ):
         def make_env():
             return ContinuousActionVecMockEnv(device="cpu:0")
 
         env = TransformedEnv(
             SerialEnv(2, make_env),
             DeviceCastTransform(
-                "cpu:1",
+                _cast_device,
                 in_keys=in_keys,
                 out_keys=out_keys,
                 in_keys_inv=in_keys_inv,
@@ -10054,7 +10071,7 @@ class TestDeviceCastTransformPart(TransformBase):
     @pytest.mark.parametrize("in_keys_inv", ["action"])
     @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
     def test_trans_parallel_env_check(
-        self, in_keys, out_keys, in_keys_inv, out_keys_inv
+        self, in_keys, out_keys, in_keys_inv, out_keys_inv, _cast_device
     ):
         def make_env():
             return ContinuousActionVecMockEnv(device="cpu:0")
@@ -10066,7 +10083,7 @@ class TestDeviceCastTransformPart(TransformBase):
                 mp_start_method=mp_ctx if not torch.cuda.is_available() else "spawn",
             ),
             DeviceCastTransform(
-                "cpu:1",
+                _cast_device,
                 in_keys=in_keys,
                 out_keys=out_keys,
                 in_keys_inv=in_keys_inv,
@@ -10082,8 +10099,8 @@ class TestDeviceCastTransformPart(TransformBase):
             except RuntimeError:
                 pass
 
-    def test_transform_no_env(self):
-        t = DeviceCastTransform("cpu:1", "cpu:0", in_keys=["a"], out_keys=["b"])
+    def test_transform_no_env(self, _cast_device):
+        t = DeviceCastTransform(_cast_device, "cpu:0", in_keys=["a"], out_keys=["b"])
         td = TensorDict({"a": torch.randn((), device="cpu:0")}, [], device="cpu:0")
         tdt = t._call(td)
         assert tdt.device is None
@@ -10092,12 +10109,14 @@ class TestDeviceCastTransformPart(TransformBase):
     @pytest.mark.parametrize("out_keys", [None, ["obs_device"]])
     @pytest.mark.parametrize("in_keys_inv", ["action"])
     @pytest.mark.parametrize("out_keys_inv", [None, ["action_device"]])
-    def test_transform_env(self, in_keys, out_keys, in_keys_inv, out_keys_inv):
+    def test_transform_env(
+        self, in_keys, out_keys, in_keys_inv, out_keys_inv, _cast_device
+    ):
         env = ContinuousActionVecMockEnv(device="cpu:0")
         env = TransformedEnv(
             env,
             DeviceCastTransform(
-                "cpu:1",
+                _cast_device,
                 in_keys=in_keys,
                 out_keys=out_keys,
                 in_keys_inv=in_keys_inv,
@@ -10105,13 +10124,13 @@ class TestDeviceCastTransformPart(TransformBase):
             ),
         )
         assert env.device is None
-        assert env.transform.device == torch.device("cpu:1")
+        assert env.transform.device == _cast_device
         assert env.transform.orig_device == torch.device("cpu:0")
 
-    def test_transform_compose(self):
+    def test_transform_compose(self, _cast_device):
         t = Compose(
             DeviceCastTransform(
-                "cpu:1",
+                _cast_device,
                 "cpu:0",
                 in_keys=["a"],
                 out_keys=["b"],
@@ -10123,7 +10142,7 @@ class TestDeviceCastTransformPart(TransformBase):
         td = TensorDict(
             {
                 "a": torch.randn((), device="cpu:0"),
-                "c": torch.randn((), device="cpu:1"),
+                "c": torch.randn((), device=_cast_device),
             },
             [],
             device="cpu:0",
@@ -10134,11 +10153,11 @@ class TestDeviceCastTransformPart(TransformBase):
         assert tdt.device is None
         assert tdit.device is None
 
-    def test_transform_model(self):
+    def test_transform_model(self, _cast_device):
         t = nn.Sequential(
             Compose(
                 DeviceCastTransform(
-                    "cpu:1",
+                    _cast_device,
                     "cpu:0",
                     in_keys=["a"],
                     out_keys=["b"],
@@ -10161,11 +10180,11 @@ class TestDeviceCastTransformPart(TransformBase):
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     @pytest.mark.parametrize("storage", [LazyTensorStorage])
-    def test_transform_rb(self, rbclass, storage):
+    def test_transform_rb(self, rbclass, storage, _cast_device):
         # we don't test casting to cuda on Memmap tensor storage since it's discouraged
         t = Compose(
             DeviceCastTransform(
-                "cpu:1",
+                _cast_device,
                 "cpu:0",
                 in_keys=["a"],
                 out_keys=["b"],
@@ -10178,7 +10197,7 @@ class TestDeviceCastTransformPart(TransformBase):
         td = TensorDict(
             {
                 "a": torch.randn((), device="cpu:0"),
-                "c": torch.randn((), device="cpu:1"),
+                "c": torch.randn((), device=_cast_device),
             },
             [],
             device="cpu:0",
