@@ -365,7 +365,7 @@ except ModuleNotFoundError:
 # Envs
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-from torchrl.envs.libs.gym import GymEnv, GymWrapper
+from torchrl.envs.libs.gym import GymEnv, GymWrapper, set_gym_backend
 
 gym_env = gym.make("Pendulum-v1")
 env = GymWrapper(gym_env)
@@ -434,9 +434,16 @@ print("last transform parent: ", env.transform[2].parent)
 
 from torchrl.envs import ParallelEnv
 
+
+def make_env():
+    # You can control whether to use gym or gymnasium for your env
+    with set_gym_backend("gym"):
+        return GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False)
+
+
 base_env = ParallelEnv(
     4,
-    lambda: GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False),
+    make_env,
     mp_start_method="fork",  # This will break on Windows machines! Remove and decorate with if __name__ == "__main__"
 )
 env = TransformedEnv(
@@ -655,10 +662,6 @@ with set_exploration_type(ExplorationType.RANDOM):
 with set_exploration_type(ExplorationType.DETERMINISTIC):
     td_module(td)
     print("mode:", td["action"])
-
-with set_exploration_type(ExplorationType.MODE):
-    td_module(td)
-    print("mean:", td["action"])
 
 ###############################################################################
 # Using Environments and Modules
