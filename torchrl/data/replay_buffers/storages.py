@@ -146,7 +146,13 @@ class Storage:
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
-            return torch.randint(0, len(self), (batch_size,), generator=self._rng)
+            return torch.randint(
+                0,
+                len(self),
+                (batch_size,),
+                generator=self._rng,
+                device=getattr(self, "device", None),
+            )
         raise RuntimeError(
             f"Random number generation is not implemented for storage of type {type(self)} with ndim {self.ndim}. "
             f"Please report this exception as well as the use case (incl. buffer construction) on github."
@@ -507,7 +513,8 @@ class TensorStorage(Storage):
             return super()._rand_given_ndim(batch_size)
         shape = self.shape
         return tuple(
-            torch.randint(_dim, (batch_size,), generator=self._rng) for _dim in shape
+            torch.randint(_dim, (batch_size,), generator=self._rng, device=self.device)
+            for _dim in shape
         )
 
     def flatten(self):
