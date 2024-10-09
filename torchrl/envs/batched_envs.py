@@ -22,13 +22,13 @@ from warnings import warn
 import torch
 
 from tensordict import (
-    _zip_strict,
     is_tensor_collection,
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
     unravel_key,
 )
+from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torchrl._utils import (
     _check_for_faulty_process,
