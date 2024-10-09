@@ -82,9 +82,9 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   fi
   echo "installing gym"
   # envpool does not currently work with gymnasium
-  pip install "gym[atari,accept-rom-license]"
+  pip install "gym[atari,accept-rom-license]<1.0"
 else
-  pip install "gym[atari,accept-rom-license]"
+  pip install "gym[atari,accept-rom-license]<1.0"
 fi
 pip install envpool treevalue
 

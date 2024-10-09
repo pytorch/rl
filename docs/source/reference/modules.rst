@@ -62,13 +62,13 @@ Exploration wrappers and modules
 
 To efficiently explore the environment, TorchRL proposes a series of modules
 that will override the action sampled by the policy by a noisier version.
-Their behavior is controlled by :func:`~torchrl.envs.utils.exploration_mode`:
-if the exploration is set to ``"random"``, the exploration is active. In all
+Their behavior is controlled by :func:`~torchrl.envs.utils.exploration_type`:
+if the exploration is set to ``ExplorationType.RANDOM``, the exploration is active. In all
 other cases, the action written in the tensordict is simply the network output.
 
 .. note:: Unlike other exploration modules, :class:`~torchrl.modules.ConsistentDropoutModule`
   uses the ``train``/``eval`` mode to comply with the regular `Dropout` API in PyTorch.
-  The :func:`~torchrl.envs.utils.set_exploration_mode` context manager will have no effect on
+  The :func:`~torchrl.envs.utils.set_exploration_type` context manager will have no effect on
   this module.
 
 .. currentmodule:: torchrl.modules

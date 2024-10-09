@@ -172,7 +172,7 @@ print(rollout)
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
-with set_exploration_type(ExplorationType.MEAN):
+with set_exploration_type(ExplorationType.DETERMINISTIC):
     # takes the mean as action
     rollout = env.rollout(max_steps=10, policy=policy)
 with set_exploration_type(ExplorationType.RANDOM):
@@ -221,7 +221,7 @@ exploration_module = EGreedyModule(
 
 exploration_policy = TensorDictSequential(policy, exploration_module)
 
-with set_exploration_type(ExplorationType.MEAN):
+with set_exploration_type(ExplorationType.DETERMINISTIC):
     # Turns off exploration
     rollout = env.rollout(max_steps=10, policy=exploration_policy)
 with set_exploration_type(ExplorationType.RANDOM):

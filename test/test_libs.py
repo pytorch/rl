@@ -3065,7 +3065,7 @@ class TestAtariDQN:
 
         t = Compose(
             UnsqueezeTransform(
-                unsqueeze_dim=-3, in_keys=["observation", ("next", "observation")]
+                dim=-3, in_keys=["observation", ("next", "observation")]
             ),
             Resize(32, in_keys=["observation", ("next", "observation")]),
             RenameTransform(in_keys=["action"], out_keys=["other_action"]),
