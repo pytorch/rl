@@ -26,6 +26,11 @@ except ImportError as err:
         raise err_ft from err
 from torchrl.envs.utils import step_mdp
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
+
 _GAMMA_LMBDA_DEPREC_ERROR = (
     "Passing gamma / lambda parameters through the loss constructor "
     "is a deprecated feature. To customize your value function, "
@@ -460,7 +465,7 @@ def _cache_values(func):
 
     @functools.wraps(func)
     def new_func(self, netname=None):
-        if torch.compiler.is_dynamo_compiling():
+        if is_dynamo_compiling():
             if netname is not None:
                 return func(self, netname)
             else:
