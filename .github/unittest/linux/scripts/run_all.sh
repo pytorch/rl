@@ -88,7 +88,13 @@ conda deactivate
 conda activate "${env_dir}"
 
 echo "installing gymnasium"
-pip3 install "gymnasium[atari,accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+if [[ "$PYTHON_VERSION" == "3.12" ]]; then
+  pip3 install ale-py
+  pip3 install sympy
+  pip3 install "gymnasium[accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+else
+  pip3 install "gymnasium[atari,accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+fi
 pip3 install "mujoco" -U
 
 # sanity check: remove?
