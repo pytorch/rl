@@ -130,7 +130,7 @@ elif [[ $PY_VERSION == *"3.11"* ]]; then
   pip install ale_py-0.8.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
   rm ale_py-0.8.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
 fi
-pip install "gymnasium[atari,accept-rom-license]"
+pip install "gymnasium[atari,accept-rom-license]<1.0"
 
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
