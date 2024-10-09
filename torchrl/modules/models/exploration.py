@@ -553,7 +553,7 @@ class ConsistentDropout(_DropoutNd):
 
     .. note:: Unlike other exploration modules, :class:`~torchrl.modules.ConsistentDropoutModule`
       uses the ``train``/``eval`` mode to comply with the regular `Dropout` API in PyTorch.
-      The :func:`~torchrl.envs.utils.set_exploration_mode` context manager will have no effect on
+      The :func:`~torchrl.envs.utils.set_exploration_type` context manager will have no effect on
       this module.
 
     Args:
