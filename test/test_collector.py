@@ -2716,6 +2716,7 @@ class TestCompile:
                 frames_per_batch=30,
                 total_frames=120,
                 cudagraph_policy=cudagraph_policy,
+                device=device,
             )
             assert collector.cudagraphed_policy
         else:
@@ -2725,6 +2726,7 @@ class TestCompile:
                 frames_per_batch=30,
                 total_frames=120,
                 cudagraph_policy=cudagraph_policy,
+                device=device,
             )
             assert collector.cudagraphed_policy
         try:
