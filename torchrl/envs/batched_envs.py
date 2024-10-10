@@ -28,6 +28,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
+from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torchrl._utils import (
     _check_for_faulty_process,
@@ -318,14 +319,20 @@ class BatchedEnvBase(EnvBase):
             create_env_fn = [create_env_fn for _ in range(num_workers)]
         elif len(create_env_fn) != num_workers:
             raise RuntimeError(
-                f"num_workers and len(create_env_fn) mismatch, "
-                f"got {len(create_env_fn)} and {num_workers}"
+                f"len(create_env_fn) and num_workers mismatch, "
+                f"got {len(create_env_fn)} and {num_workers}."
             )
+
         create_env_kwargs = {} if create_env_kwargs is None else create_env_kwargs
         if isinstance(create_env_kwargs, dict):
             create_env_kwargs = [
                 deepcopy(create_env_kwargs) for _ in range(num_workers)
             ]
+        elif len(create_env_kwargs) != num_workers:
+            raise RuntimeError(
+                f"len(create_env_kwargs) and num_workers mismatch, "
+                f"got {len(create_env_kwargs)} and {num_workers}."
+            )
 
         self.policy_proof = policy_proof
         self.num_workers = num_workers
@@ -534,7 +541,11 @@ class BatchedEnvBase(EnvBase):
             for _kwargs in self.create_env_kwargs:
                 _kwargs.update(kwargs)
         else:
-            for _kwargs, _new_kwargs in zip(self.create_env_kwargs, kwargs):
+            if len(kwargs) != self.num_workers:
+                raise RuntimeError(
+                    f"len(kwargs) and num_workers mismatch, got {len(kwargs)} and {self.num_workers}."
+                )
+            for _kwargs, _new_kwargs in _zip_strict(self.create_env_kwargs, kwargs):
                 _kwargs.update(_new_kwargs)
 
     def _get_in_keys_to_exclude(self, tensordict):
