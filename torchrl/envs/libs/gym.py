@@ -59,6 +59,22 @@ _has_sb3 = importlib.util.find_spec("stable_baselines3") is not None
 _has_minigrid = importlib.util.find_spec("minigrid") is not None
 
 
+GYMNASIUM_1_ERROR = """RuntimeError: TorchRL does not support gymnasium 1.0 or later versions due to incompatible
+changes in the Gym API.
+Using gymnasium 1.0 with TorchRL would require significant modifications to your code and may result in:
+* Inaccurate step counting, as the auto-reset feature can cause unpredictable numbers of steps to be executed.
+* Potential data corruption, as the environment may require/produce garbage data during reset steps.
+* Trajectory overlap during data collection.
+* Increased computational overhead, as the library would need to handle the additional complexity of auto-resets.
+* Manual filtering and boilerplate code to mitigate these issues, which would compromise the modularity and ease of
+use of TorchRL.
+To maintain the integrity and efficiency of our library, we cannot support this version of gymnasium at this time.
+If you need to use gymnasium 1.0 or later, we recommend exploring alternative solutions or waiting for future updates
+to TorchRL and gymnasium that may address this compatibility issue.
+For more information, please refer to discussion https://github.com/pytorch/rl/discussions/2483 in torchrl.
+"""
+
+
 def _minigrid_lib():
     assert _has_minigrid, "minigrid not found"
     import minigrid
@@ -400,11 +416,16 @@ def _box_convert(spec, gym_spaces, shape):  # noqa: F811
     return gym_spaces.Box(low=low, high=high, shape=shape)
 
 
-@implement_for("gymnasium")
+@implement_for("gymnasium", None, "1.0.0")
 def _box_convert(spec, gym_spaces, shape):  # noqa: F811
     low = spec.low.detach().cpu().numpy()
     high = spec.high.detach().cpu().numpy()
     return gym_spaces.Box(low=low, high=high, shape=shape)
+
+
+@implement_for("gymnasium", "1.0.0")
+def _box_convert(spec, gym_spaces, shape):  # noqa: F811
+    raise ImportError(GYMNASIUM_1_ERROR)
 
 
 @implement_for("gym", "0.21", None)
@@ -414,11 +435,16 @@ def _multidiscrete_convert(gym_spaces, spec):
     )
 
 
-@implement_for("gymnasium")
+@implement_for("gymnasium", None, "1.0.0")
 def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
     return gym_spaces.multi_discrete.MultiDiscrete(
         spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
     )
+
+
+@implement_for("gymnasium", "1.0.0")
+def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
+    raise ImportError(GYMNASIUM_1_ERROR)
 
 
 @implement_for("gym", None, "0.21")
@@ -519,10 +545,15 @@ def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 
 
-@implement_for("gymnasium")
+@implement_for("gymnasium", None, "1.0.0")
 def _get_gym_envs():  # noqa: F811
     gym = gym_backend()
     return gym.envs.registration.registry.keys()
+
+
+@implement_for("gymnasium", "1.0.0")
+def _get_gym_envs():  # noqa: F811
+    raise ImportError(GYMNASIUM_1_ERROR)
 
 
 def _is_from_pixels(env):
@@ -835,7 +866,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             batch_size = self.batch_size
         return batch_size
 
-    @implement_for("gymnasium")  # gymnasium wants the unwrapped env
+    @implement_for("gymnasium", None, "1.0.0")  # gymnasium wants the unwrapped env
     def _get_batch_size(self, env):  # noqa: F811
         env_unwrapped = env.unwrapped
         if hasattr(env_unwrapped, "num_envs"):
@@ -843,6 +874,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         else:
             batch_size = self.batch_size
         return batch_size
+
+    @implement_for("gymnasium", "1.0.0")
+    def _get_batch_size(self, env):  # noqa: F811
+        raise ImportError(GYMNASIUM_1_ERROR)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -920,7 +955,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", "1.0.0")
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
+        raise ImportError(GYMNASIUM_1_ERROR)
+
+    @implement_for("gymnasium", None, "1.0.0")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
         compatibility = gym_backend("wrappers.compatibility")
         pixel_observation = gym_backend("wrappers.pixel_observation")
@@ -985,7 +1024,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             except AttributeError as err2:
                 raise err from err2
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", "1.0.0")
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        raise ImportError(GYMNASIUM_1_ERROR)
+
+    @implement_for("gymnasium", None, "1.0.0")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         try:
             self.reset(seed=seed)
@@ -1003,7 +1046,11 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if hasattr(env, "reward_space") and env.reward_space is not None:
             return env.reward_space
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", "1.0.0")
+    def _reward_space(self, env):  # noqa: F811
+        raise ImportError(GYMNASIUM_1_ERROR)
+
+    @implement_for("gymnasium", None, "1.0.0")
     def _reward_space(self, env):  # noqa: F811
         env = env.unwrapped
         if hasattr(env, "reward_space") and env.reward_space is not None:
@@ -1397,7 +1444,14 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", "1.0.0")
+    def _set_gym_args(  # noqa: F811
+        self,
+        kwargs,
+    ) -> None:
+        raise ImportError(GYMNASIUM_1_ERROR)
+
+    @implement_for("gymnasium", None, "1.0.0")
     def _set_gym_args(  # noqa: F811
         self,
         kwargs,

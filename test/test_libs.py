@@ -277,7 +277,7 @@ class TestGym:
             shape=batch_size,
         )
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     def _make_spec(  # noqa: F811
         self, batch_size, cat, cat_shape, multicat, multicat_shape
     ):
@@ -322,7 +322,7 @@ class TestGym:
 
     # @pytest.mark.parametrize("order", ["seq_tuple", "tuple_seq"])
     @pytest.mark.parametrize("order", ["tuple_seq"])
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     def test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
         with set_gym_backend("gymnasium"):
             if order == "seq_tuple":
@@ -838,7 +838,7 @@ class TestGym:
         finally:
             set_gym_backend(gb).set()
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     def test_one_hot_and_categorical(self):
         # tests that one-hot and categorical work ok when an integer is expected as action
         cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
@@ -857,7 +857,7 @@ class TestGym:
         # versions.
         return
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     @pytest.mark.parametrize(
         "envname",
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
@@ -883,7 +883,7 @@ class TestGym:
         assert env.batch_size == torch.Size([2])
         check_env_specs(env)
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
@@ -1045,7 +1045,7 @@ class TestGym:
         finally:
             set_gym_backend(gym).set()
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     @pytest.mark.parametrize("wrapper", [True, False])
     def test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
@@ -1148,7 +1148,7 @@ class TestGym:
         del c
         return
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     def test_vecenvs_nan(self):  # noqa: F811
         # new versions of gym must never return nan for next values when there is a done state
         torch.manual_seed(0)
@@ -1319,7 +1319,7 @@ def _make_gym_environment(env_name):  # noqa: F811
     return gym.make(env_name, render_mode="rgb_array")
 
 
-@implement_for("gymnasium")
+@implement_for("gymnasium", None, "1.0.0")
 def _make_gym_environment(env_name):  # noqa: F811
     gym = gym_backend()
     return gym.make(env_name, render_mode="rgb_array")
