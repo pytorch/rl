@@ -390,10 +390,7 @@ class PettingZooWrapper(_EnvWrapper):
                 n=2,
                 shape=group_action_spec["action"].shape
                 if not self.categorical_actions
-                else (
-                    *group_action_spec["action"].shape,
-                    group_action_spec["action"].space.n,
-                ),
+                else group_action_spec["action"].to_one_hot_spec().shape,
                 dtype=torch.bool,
                 device=self.device,
             )
@@ -494,7 +491,7 @@ class PettingZooWrapper(_EnvWrapper):
                         n=2,
                         shape=group_action_spec.shape
                         if not self.categorical_actions
-                        else (*group_action_spec.shape, group_action_spec.space.n),
+                        else group_action_spec.to_one_hot_spec().shape,
                         dtype=torch.bool,
                         device=self.device,
                     )
