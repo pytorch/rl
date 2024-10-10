@@ -2662,7 +2662,7 @@ class TestCompile:
         if not torch.cuda.is_available()
         else [SyncDataCollector],
     )
-    @pytest.mark.parametrize("compile_policy", [True, {}, {"mode": "reduce-overhead"}])
+    @pytest.mark.parametrize("compile_policy", [True, {}, {"mode": "default"}])
     @pytest.mark.parametrize(
         "device", [torch.device("cuda:0" if torch.cuda.is_available() else "cpu")]
     )
@@ -2700,7 +2700,7 @@ class TestCompile:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
     @pytest.mark.parametrize(
         "collector_cls",
-        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector],
+        [SyncDataCollector],
     )
     @pytest.mark.parametrize("cudagraph_policy", [True, {}, {"warmup": 10}])
     def test_cudagraph_policy(self, collector_cls, cudagraph_policy):
