@@ -648,7 +648,7 @@ class SyncDataCollector(DataCollectorBase):
         if self.compiled_policy:
             self.policy = torch.compile(self.policy, **self.compiled_policy_kwargs)
         if self.cudagraphed_policy:
-            self.policy = CudaGraphModule(self.policy, **self.cudagraphd_policy_kwargs)
+            self.policy = CudaGraphModule(self.policy, **self.cudagraphed_policy_kwargs)
 
         if self.env_device:
             self.env: EnvBase = self.env.to(self.env_device)
@@ -1864,7 +1864,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "compile_policy": self.compiled_policy_kwargs
                     if self.compiled_policy
                     else False,
-                    "cudagraph_policy": self.cudagraphd_policy_kwargs
+                    "cudagraph_policy": self.cudagraphed_policy_kwargs
                     if self.cudagraphed_policy
                     else False,
                 }
