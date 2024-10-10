@@ -155,8 +155,8 @@ jobs:
   tests-optdeps:
     strategy:
       matrix:
-        python_version: ["3.10"] # "3.9", "3.10", "3.11"
-        cuda_arch_version: ["12.1"] # "11.6", "11.7"
+        python_version: ["3.11"]
+        cuda_arch_version: ["12.1"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
@@ -172,9 +172,6 @@ jobs:
         # Commenting these out for now because the GPU test are not working inside docker
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-        # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
-        #export CU_VERSION="cpu"
-
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
           export TORCH_VERSION=stable
@@ -182,10 +179,10 @@ jobs:
           export RELEASE=0
           export TORCH_VERSION=nightly
         fi
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
-        export TD_GET_DEFAULTS_TO_NONE=1
 
         ## setup_env.sh
         bash .github/unittest/linux_optdeps/scripts/run_all.sh

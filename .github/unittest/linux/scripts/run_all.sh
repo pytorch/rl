@@ -3,8 +3,8 @@
 set -euxo pipefail
 set -v
 
-# ==================================================================================== #
-# ================================ Setup env ========================================= #
+# =============================================================================== #
+# ================================ Init ========================================= #
 
 
 if [[ $OSTYPE != 'darwin'* ]]; then
@@ -30,6 +30,10 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   # from cudagl docker image
   cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 fi
+
+
+# ==================================================================================== #
+# ================================ Setup env ========================================= #
 
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
@@ -61,7 +65,7 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-# 4. Install Conda dependencies
+# 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
@@ -185,7 +189,9 @@ fi
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
-# Avoid error: "fatal: unsafe repository"
+## Avoid error: "fatal: unsafe repository"
+#git config --global --add safe.directory '*'
+#root_dir="$(git rev-parse --show-toplevel)"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
 #export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
@@ -202,7 +208,8 @@ if [ "${CU_VERSION:-}" != cpu ] ; then
     --timeout=120 --mp_fork_if_no_cuda
 else
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py --ignore test/test_distributed.py \
+    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
+    --ignore test/test_distributed.py \
     --timeout=120 --mp_fork_if_no_cuda
 fi
 
