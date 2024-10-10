@@ -203,7 +203,7 @@ def _main(argv):
             "pygame",
         ],
         "dm_control": ["dm_control"],
-        "gym_continuous": ["gymnasium", "mujoco"],
+        "gym_continuous": ["gymnasium<1.0", "mujoco"],
         "rendering": ["moviepy"],
         "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
         "utils": [

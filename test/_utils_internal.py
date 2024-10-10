@@ -132,6 +132,11 @@ def _set_gym_environments():  # noqa: F811
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
+@implement_for("gymnasium", "1.0.0", None)
+def _set_gym_environments():  # noqa: F811
+    raise ImportError
+
+
 if _has_gym:
     _set_gym_environments()
 
