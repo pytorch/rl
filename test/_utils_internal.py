@@ -121,7 +121,7 @@ def _set_gym_environments():  # noqa: F811
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
-@implement_for("gymnasium")
+@implement_for("gymnasium", None, "1.0.0")
 def _set_gym_environments():  # noqa: F811
     global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
 
