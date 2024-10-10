@@ -2657,7 +2657,10 @@ class TestDynamicEnvs:
 class TestCompile:
     @pytest.mark.parametrize(
         "collector_cls",
-        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector],
+        # Clearing compiled policies causes segfault on machines with cuda
+        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+        if not torch.cuda.is_available()
+        else [SyncDataCollector],
     )
     @pytest.mark.parametrize("compile_policy", [True, {}, {"mode": "reduce-overhead"}])
     @pytest.mark.parametrize(
