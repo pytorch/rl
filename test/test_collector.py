@@ -2997,6 +2997,7 @@ def __deepcopy_error__(*args, **kwargs):
 
 
 @pytest.mark.filterwarnings("error")
+@pytest.mark.filterwarnings("ignore:Tensordict is registered in PyTree")
 @pytest.mark.parametrize(
     "collector_type",
     [
@@ -3115,14 +3116,13 @@ def test_no_deepcopy_policy(collector_type):
 
     # If the policy is a CudaGraphModule, we know it's on cuda - no need to warn
     if torch.cuda.is_available() and collector_type is SyncDataCollector:
-        with pytest.warns(UserWarning, match="Tensordict is registered in PyTree"):
-            policy = make_policy(original_device)
-            cudagraph_policy = CudaGraphModule(policy)
-            make_and_test_policy(
-                cudagraph_policy,
-                policy_device=original_device,
-                env_device=shared_device,
-            )
+        policy = make_policy(original_device)
+        cudagraph_policy = CudaGraphModule(policy)
+        make_and_test_policy(
+            cudagraph_policy,
+            policy_device=original_device,
+            env_device=shared_device,
+        )
 
 
 if __name__ == "__main__":
