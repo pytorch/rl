@@ -77,6 +77,17 @@ jobs:
       image: nvidia/cuda:12.3.0-base-ubuntu22.04
       options: --gpus all
     steps:
+      - name: Set GITHUB_BRANCH environment variable
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            export GITHUB_BRANCH=${{ github.event.branch }}
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            export GITHUB_BRANCH=${{ github.event.pull_request.head.ref }}
+          else
+            echo "Unsupported event type"
+            exit 1
+          fi
+          echo "GITHUB_BRANCH=$GITHUB_BRANCH" >> $GITHUB_ENV
       - name: Who triggered this?
         run: |
           echo "Action triggered by ${{ github.event.pull_request.html_url }}"
@@ -110,12 +121,12 @@ jobs:
           python3.10 -m venv ./py310
           source ./py310/bin/activate
 
-          python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121 -U
-          python3 -m pip install git+https://github.com/pytorch/tensordict 
-          python3 setup.py develop
-          python3 -m pip install pytest pytest-benchmark
-          python3 -m pip install "gym[accept-rom-license,atari]"
-          python3 -m pip install "dm_control" "mujoco"
+          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121 -U
+          python3.10 -m pip install git+https://github.com/pytorch/tensordict 
+          python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
+          python3.10 -m pip install pytest pytest-benchmark
+          python3.10 -m pip install "gym[accept-rom-license,atari]"
+          python3.10 -m pip install "dm_control" "mujoco"
 
           python3 -c """import torch
           assert torch.cuda.device_count()
