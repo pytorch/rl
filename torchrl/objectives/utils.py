@@ -257,6 +257,7 @@ class TargetNetUpdater:
                 "to True if it is not done by default. "
                 f"If no target parameter is needed, do not use a target updater such as {type(self)}."
             )
+
         # filter the target_ out
         def filter_target(key):
             if isinstance(key, tuple):
@@ -355,7 +356,7 @@ class SoftUpdate(TargetNetUpdater):
     def _step(
         self, p_source: Tensor | TensorDictBase, p_target: Tensor | TensorDictBase
     ) -> None:
-        p_target.data.mul_(self.eps).add_(p_source.data, (1 - self.eps))
+        p_target.data.lerp_(p_source.data, 1 - self.eps)
 
 
 class HardUpdate(TargetNetUpdater):
