@@ -26,7 +26,7 @@ from torchrl.objectives.value import ValueEstimatorBase
 
 try:
     from torch.compiler import is_dynamo_compiling
-except ModuleNotFoundError:
+except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
 
