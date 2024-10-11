@@ -24,10 +24,17 @@ jobs:
     name: CPU Pytest benchmark
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Who triggered this?
+        run: |
+          echo "Action triggered by ${{ github.event.pull_request.html_url }}"
+      - name: Checkout
+        uses: actions/checkout@v3
         with:
-          python-version: 3.9
+          fetch-depth: 50 # this is to make sure we obtain the target base commit
+      - name: Python Setup
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
       - name: Setup Environment
         run: |
           python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U 
@@ -36,15 +43,15 @@ jobs:
           python3 -m pip install pytest pytest-benchmark
           python3 -m pip install "gym[accept-rom-license,atari]"
           python3 -m pip install "dm_control" "mujoco"
-          export TD_GET_DEFAULTS_TO_NONE=1
       - name: Run benchmarks
         run: |
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
-          python -m pytest --benchmark-json output.json
+          export TD_GET_DEFAULTS_TO_NONE=1
+          python -m pytest -vvv --rank 0 --benchmark-json output.json
       - name: Store benchmark results
-        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
         uses: benchmark-action/github-action-benchmark@v1
+        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
         with:
           name: CPU Benchmark Results
           tool: 'pytest'
@@ -68,6 +75,9 @@ jobs:
       image: nvidia/cuda:12.3.0-base-ubuntu22.04
       options: --gpus all
     steps:
+      - name: Who triggered this?
+        run: |
+          echo "Action triggered by ${{ github.event.pull_request.html_url }}"
       - name: Install deps
         run: |
           export TZ=Europe/London
@@ -82,10 +92,12 @@ jobs:
         run: ldd --version
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 50 # this is to make sure we obtain the target base commit
       - name: Python Setup
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: '3.10'
       - name: Setup git
         run: git config --global --add safe.directory /__w/rl/rl
       - name: setup Path
@@ -99,7 +111,6 @@ jobs:
           python3 -m pip install pytest pytest-benchmark
           python3 -m pip install "gym[accept-rom-license,atari]"
           python3 -m pip install "dm_control" "mujoco"
-          export TD_GET_DEFAULTS_TO_NONE=1
       - name: check GPU presence
         run: |
           python -c """import torch
@@ -109,7 +120,8 @@ jobs:
         run: |
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
-          python3 -m pytest --benchmark-json output.json
+          export TD_GET_DEFAULTS_TO_NONE=1
+          python -m pytest -vvv --rank 0 --benchmark-json output.json
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}

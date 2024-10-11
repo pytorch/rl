@@ -1,5 +1,4 @@
 name: Continuous Benchmark (PR)
-
 on:
   pull_request:
 
@@ -12,6 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
   benchmark_cpu:
     name: CPU Pytest benchmark
     runs-on: ubuntu-20.04
@@ -26,7 +26,7 @@ jobs:
       - name: Python Setup
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: '3.10'
       - name: Setup Environment
         run: |
           python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U 
@@ -35,7 +35,6 @@ jobs:
           python3 -m pip install pytest pytest-benchmark
           python3 -m pip install "gym[accept-rom-license,atari]"
           python3 -m pip install "dm_control" "mujoco"
-          export TD_GET_DEFAULTS_TO_NONE=1
       - name: Setup benchmarks
         run: |
           echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
@@ -47,7 +46,8 @@ jobs:
         run: |
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
-          RUN_BENCHMARK="pytest --rank 0 --benchmark-json "
+          export TD_GET_DEFAULTS_TO_NONE=1
+          RUN_BENCHMARK="pytest -vvv --rank 0 --benchmark-json"
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
@@ -96,7 +96,7 @@ jobs:
       - name: Python Setup
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: '3.10'
       - name: Setup git
         run: git config --global --add safe.directory /__w/rl/rl
       - name: setup Path
@@ -110,7 +110,6 @@ jobs:
           python3 -m pip install pytest pytest-benchmark
           python3 -m pip install "gym[accept-rom-license,atari]"
           python3 -m pip install "dm_control" "mujoco"
-          export TD_GET_DEFAULTS_TO_NONE=1
       - name: check GPU presence
         run: |
           python -c """import torch
@@ -127,7 +126,8 @@ jobs:
         run: |
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
-          RUN_BENCHMARK="pytest --rank 0 --benchmark-json "
+          export TD_GET_DEFAULTS_TO_NONE=1
+          RUN_BENCHMARK="pytest -vvv --rank 0 --benchmark-json"
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
