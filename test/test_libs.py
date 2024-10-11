@@ -3950,13 +3950,17 @@ _mlagents_registered_envs = [
 class TestUnityMLAgents:
     @mock.patch("mlagents_envs.env_utils.launch_executable")
     @mock.patch("mlagents_envs.environment.UnityEnvironment._get_communicator")
-    def test_env(self, mock_communicator, mock_launcher):
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ONE_GROUP_PER_AGENT, MarlGroupMapType.ALL_IN_ONE_GROUP],
+    )
+    def test_env(self, mock_communicator, mock_launcher, group_map):
         from mlagents_envs.mock_communicator import MockCommunicator
 
         mock_communicator.return_value = MockCommunicator(
             discrete_action=False, visual_inputs=0
         )
-        env = UnityMLAgentsEnv(" ")
+        env = UnityMLAgentsEnv(" ", group_map=group_map)
         try:
             check_env_specs(env)
         finally:
@@ -3964,14 +3968,18 @@ class TestUnityMLAgents:
 
     @mock.patch("mlagents_envs.env_utils.launch_executable")
     @mock.patch("mlagents_envs.environment.UnityEnvironment._get_communicator")
-    def test_wrapper(self, mock_communicator, mock_launcher):
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ONE_GROUP_PER_AGENT, MarlGroupMapType.ALL_IN_ONE_GROUP],
+    )
+    def test_wrapper(self, mock_communicator, mock_launcher, group_map):
         from mlagents_envs.environment import UnityEnvironment
         from mlagents_envs.mock_communicator import MockCommunicator
 
         mock_communicator.return_value = MockCommunicator(
             discrete_action=False, visual_inputs=0
         )
-        env = UnityMLAgentsWrapper(UnityEnvironment(" "))
+        env = UnityMLAgentsWrapper(UnityEnvironment(" "), group_map=group_map)
         try:
             check_env_specs(env)
         finally:
@@ -3979,14 +3987,18 @@ class TestUnityMLAgents:
 
     @mock.patch("mlagents_envs.env_utils.launch_executable")
     @mock.patch("mlagents_envs.environment.UnityEnvironment._get_communicator")
-    def test_rollout(self, mock_communicator, mock_launcher):
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ONE_GROUP_PER_AGENT, MarlGroupMapType.ALL_IN_ONE_GROUP],
+    )
+    def test_rollout(self, mock_communicator, mock_launcher, group_map):
         from mlagents_envs.environment import UnityEnvironment
         from mlagents_envs.mock_communicator import MockCommunicator
 
         mock_communicator.return_value = MockCommunicator(
             discrete_action=False, visual_inputs=0
         )
-        env = UnityMLAgentsWrapper(UnityEnvironment(" "))
+        env = UnityMLAgentsWrapper(UnityEnvironment(" "), group_map=group_map)
         try:
             env.rollout(
                 max_steps=500, break_when_any_done=False, break_when_all_done=False
@@ -4031,10 +4043,15 @@ class TestUnityMLAgents:
         5,
     )
     @pytest.mark.parametrize("registered_name", _mlagents_registered_envs)
-    def test_registered_envs(self, registered_name):
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ONE_GROUP_PER_AGENT, MarlGroupMapType.ALL_IN_ONE_GROUP],
+    )
+    def test_registered_envs(self, registered_name, group_map):
         env = UnityMLAgentsEnv(
             registered_name=registered_name,
             no_graphics=True,
+            group_map=group_map,
         )
         try:
             check_env_specs(env)
