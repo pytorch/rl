@@ -37,7 +37,7 @@ jobs:
       - name: Setup Environment and tests
         run: |
           python3.10 -m venv ./py310
-          activate ./py310/bin/activate
+          source ./py310/bin/activate
 
           python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U 
           python3 -m pip install git+https://github.com/pytorch/tensordict 
@@ -114,7 +114,7 @@ jobs:
       - name: Setup Environment and tests
         run: |
           python3.10 -m venv ./py310
-          activate ./py310/bin/activate
+          source ./py310/bin/activate
 
           python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121 -U
           python3 -m pip install git+https://github.com/pytorch/tensordict 
