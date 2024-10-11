@@ -43,8 +43,7 @@ jobs:
           python3 -m pip install pytest pytest-benchmark
           python3 -m pip install "gym[accept-rom-license,atari]"
           python3 -m pip install "dm_control" "mujoco"
-      - name: Run benchmarks
-        run: |
+
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
@@ -111,13 +110,11 @@ jobs:
           python3 -m pip install pytest pytest-benchmark
           python3 -m pip install "gym[accept-rom-license,atari]"
           python3 -m pip install "dm_control" "mujoco"
-      - name: check GPU presence
-        run: |
+
           python3 -c """import torch
           assert torch.cuda.device_count()
           """
-      - name: Run benchmarks
-        run: |
+
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
