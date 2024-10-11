@@ -37,6 +37,9 @@ jobs:
           python-version: '3.10'
       - name: Setup Environment
         run: |
+          python3.10 -m venv ./py310
+          activate ./py310/bin/activate
+
           python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U 
           python3 -m pip install git+https://github.com/pytorch/tensordict 
           python3 setup.py develop
@@ -104,6 +107,9 @@ jobs:
           echo /usr/local/bin >> $GITHUB_PATH
       - name: Setup Environment
         run: |
+          python3.10 -m venv ./py310
+          activate ./py310/bin/activate
+
           python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121 -U
           python3 -m pip install git+https://github.com/pytorch/tensordict 
           python3 setup.py develop
