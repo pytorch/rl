@@ -124,7 +124,8 @@ jobs:
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121 -U
           python3.10 -m pip install cmake ninja
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
-          python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
+#          python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
+          python3.10 setup.py develop
           python3.10 -m pip install pytest pytest-benchmark
           python3.10 -m pip install "gym[accept-rom-license,atari]"
           python3.10 -m pip install "dm_control" "mujoco"
