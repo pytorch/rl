@@ -91,16 +91,6 @@ jobs:
       - name: Who triggered this?
         run: |
           echo "Action triggered by ${{ github.event.pull_request.html_url }}"
-      - name: Install deps
-        run: |
-          export TZ=Europe/London
-          export DEBIAN_FRONTEND=noninteractive  # tzdata bug
-          apt-get update -y
-          apt-get install software-properties-common -y
-          add-apt-repository ppa:git-core/candidate -y
-          apt-get update -y
-          apt-get upgrade -y
-          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
       - name: Check ldd --version
         run: ldd --version
       - name: Checkout
@@ -118,17 +108,22 @@ jobs:
           echo /usr/local/bin >> $GITHUB_PATH
       - name: Setup Environment
         run: |
+          export TZ=Europe/London
+          export DEBIAN_FRONTEND=noninteractive  # tzdata bug
+          apt-get update -y
+          apt-get install software-properties-common -y
+          add-apt-repository ppa:git-core/candidate -y
+          apt-get update -y
+          apt-get upgrade -y
+          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
+
           python3.10 -m venv ./py310
           source ./py310/bin/activate
 
-          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121 -U
-          python3.10 -m pip install cmake ninja
+          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 -U
+          python3.10 -m pip install cmake ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
-          # python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
-          python3.10 setup.py develop
-          python3.10 -m pip install pytest pytest-benchmark
-          python3.10 -m pip install "gym[accept-rom-license,atari]"
-          python3.10 -m pip install "dm_control" "mujoco"
+          python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
 
           python3 -c """import torch
           assert torch.cuda.device_count()
