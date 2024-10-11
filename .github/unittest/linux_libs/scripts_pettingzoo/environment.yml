@@ -20,3 +20,4 @@ dependencies:
     - pyyaml
     - autorom[accept-rom-license]
     - pettingzoo[all]==1.24.3
+    - gymnasium<1.0.0
