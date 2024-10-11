@@ -27,7 +27,14 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Setup Environment + benchmarks and tests
+      - name: Setup benchmarks
+        run: |
+          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
+      - name: Setup Environment and tests
         run: |
           python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U 
           python3 -m pip install git+https://github.com/pytorch/tensordict 
@@ -35,12 +42,6 @@ jobs:
           python3 -m pip install pytest pytest-benchmark
           python3 -m pip install "gym[accept-rom-license,atari]"
           python3 -m pip install "dm_control" "mujoco"
-          
-          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
-          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
-          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
-          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
-          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
           
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
@@ -100,7 +101,14 @@ jobs:
       - name: setup Path
         run: |
           echo /usr/local/bin >> $GITHUB_PATH
-      - name: Setup Environment + benchmarks and tests
+      - name: Setup benchmarks
+        run: |
+          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
+      - name: Setup Environment and tests
         run: |
           python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121 -U
           python3 -m pip install git+https://github.com/pytorch/tensordict 
@@ -113,12 +121,6 @@ jobs:
           python3 -c """import torch
           assert torch.cuda.device_count()
           """
-
-          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
-          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
-          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
-          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
-          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
 
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
