@@ -48,7 +48,7 @@ jobs:
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
-          python -m pytest -vvv --rank 0 --benchmark-json output.json
+          python3 -m pytest -vvv --rank 0 --benchmark-json output.json
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
@@ -113,7 +113,7 @@ jobs:
           python3 -m pip install "dm_control" "mujoco"
       - name: check GPU presence
         run: |
-          python -c """import torch
+          python3 -c """import torch
           assert torch.cuda.device_count()
           """
       - name: Run benchmarks
@@ -121,7 +121,7 @@ jobs:
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
-          python -m pytest -vvv --rank 0 --benchmark-json output.json
+          python3 -m pytest -vvv --rank 0 --benchmark-json output.json
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
