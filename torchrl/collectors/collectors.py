@@ -14,6 +14,7 @@ import os
 import queue
 import sys
 import time
+import typing
 import warnings
 from collections import defaultdict, OrderedDict
 from copy import deepcopy
@@ -136,6 +137,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     total_frames: int
     frames_per_batch: int
     trust_policy: bool
+    compiled_policy: bool
+    cudagraphed_policy: bool
 
     def _get_policy_and_device(
         self,
@@ -272,6 +275,16 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
+    def _read_compile_kwargs(self, compile_policy, cudagraph_policy):
+        self.compiled_policy = compile_policy not in (False, None)
+        self.cudagraphed_policy = cudagraph_policy not in (False, None)
+        self.compiled_policy_kwargs = (
+            {} if not isinstance(compile_policy, typing.Mapping) else compile_policy
+        )
+        self.cudagraphed_policy_kwargs = (
+            {} if not isinstance(cudagraph_policy, typing.Mapping) else cudagraph_policy
+        )
+
     def __repr__(self) -> str:
         string = f"{self.__class__.__name__}()"
         return string
@@ -405,6 +418,12 @@ class SyncDataCollector(DataCollectorBase):
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
+        compile_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be compiled
+            using :func:`~torch.compile` default behaviour. If a dictionary of kwargs is passed, it
+            will be used to compile the policy.
+        cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped
+            in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
+            If a dictionary of kwargs is passed, it will be used to wrap the policy.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -495,6 +514,8 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         trust_policy: bool = None,
+        compile_policy: bool | Dict[str, Any] | None = None,
+        cudagraph_policy: bool | Dict[str, Any] | None = None,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -520,6 +541,7 @@ class SyncDataCollector(DataCollectorBase):
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
         self.trust_policy = trust_policy
+        self._read_compile_kwargs(compile_policy, cudagraph_policy)
 
         ##########################
         # Trajectory pool
@@ -618,11 +640,15 @@ class SyncDataCollector(DataCollectorBase):
             policy=policy,
             observation_spec=self.env.observation_spec,
         )
-
         if isinstance(self.policy, nn.Module):
             self.policy_weights = TensorDict.from_module(self.policy, as_module=True)
         else:
             self.policy_weights = TensorDict()
+
+        if self.compiled_policy:
+            self.policy = torch.compile(self.policy, **self.compiled_policy_kwargs)
+        if self.cudagraphed_policy:
+            self.policy = CudaGraphModule(self.policy, **self.cudagraphed_policy_kwargs)
 
         if self.env_device:
             self.env: EnvBase = self.env.to(self.env_device)
@@ -1485,6 +1511,12 @@ class _MultiDataCollector(DataCollectorBase):
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
+        compile_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be compiled
+            using :func:`~torch.compile` default behaviour. If a dictionary of kwargs is passed, it
+            will be used to compile the policy.
+        cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped
+            in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
+            If a dictionary of kwargs is passed, it will be used to wrap the policy.
 
     """
 
@@ -1522,6 +1554,8 @@ class _MultiDataCollector(DataCollectorBase):
         replay_buffer: ReplayBuffer | None = None,
         replay_buffer_chunk: bool = True,
         trust_policy: bool = None,
+        compile_policy: bool | Dict[str, Any] | None = None,
+        cudagraph_policy: bool | Dict[str, Any] | None = None,
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
@@ -1530,6 +1564,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self.create_env_fn = create_env_fn
+        self._read_compile_kwargs(compile_policy, cudagraph_policy)
         self.create_env_kwargs = (
             create_env_kwargs
             if create_env_kwargs is not None
@@ -1826,6 +1861,12 @@ class _MultiDataCollector(DataCollectorBase):
                     "replay_buffer_chunk": self.replay_buffer_chunk,
                     "traj_pool": self._traj_pool,
                     "trust_policy": self.trust_policy,
+                    "compile_policy": self.compiled_policy_kwargs
+                    if self.compiled_policy
+                    else False,
+                    "cudagraph_policy": self.cudagraphed_policy_kwargs
+                    if self.cudagraphed_policy
+                    else False,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2827,6 +2868,8 @@ def _main_async_collector(
     replay_buffer_chunk: bool = True,
     traj_pool: _TrajectoryPool = None,
     trust_policy: bool = False,
+    compile_policy: bool = False,
+    cudagraph_policy: bool = False,
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
@@ -2854,6 +2897,8 @@ def _main_async_collector(
         replay_buffer=replay_buffer if replay_buffer_chunk else None,
         traj_pool=traj_pool,
         trust_policy=trust_policy,
+        compile_policy=compile_policy,
+        cudagraph_policy=cudagraph_policy,
     )
     use_buffers = inner_collector._use_buffers
     if verbose:
