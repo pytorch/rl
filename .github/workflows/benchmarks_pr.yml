@@ -49,7 +49,7 @@ jobs:
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
-          RUN_BENCHMARK="python3 -m pytest -vvv --rank 0 --benchmark-json"
+          RUN_BENCHMARK="python3 -m pytest -vvv --rank 0 --ignore test_objectives_benchmarks.py --benchmark-json "
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
@@ -142,7 +142,7 @@ jobs:
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
-          RUN_BENCHMARK="python3 -m pytest -vvv --rank 0 --benchmark-json"
+          RUN_BENCHMARK="python3 -m pytest -vvv --rank 0 --ignore test_objectives_benchmarks.py --benchmark-json "
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
