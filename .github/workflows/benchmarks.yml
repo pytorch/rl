@@ -122,6 +122,7 @@ jobs:
           source ./py310/bin/activate
 
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121 -U
+          python3.10 -m pip install cmake ninja
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
           python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
           python3.10 -m pip install pytest pytest-benchmark
