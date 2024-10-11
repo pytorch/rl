@@ -71,7 +71,7 @@ jobs:
       run:
         shell: bash -l {0}
     container:
-      image: nvidia/cuda:12.3.0-base-ubuntu22.04
+      image: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
       options: --gpus all
     steps:
       - name: Who triggered this?
