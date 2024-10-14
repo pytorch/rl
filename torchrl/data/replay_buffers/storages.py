@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import abc
+
+import logging
 import os
 import textwrap
 import warnings
@@ -22,6 +24,7 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
+from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.memmap import MemoryMappedTensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
@@ -54,6 +57,7 @@ class Storage:
     ndim = 1
     max_size: int
     _default_checkpointer: StorageCheckpointerBase = StorageCheckpointerBase
+    _rng: torch.Generator | None = None
 
     def __init__(
         self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
@@ -142,7 +146,13 @@ class Storage:
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
-            return torch.randint(0, len(self), (batch_size,))
+            return torch.randint(
+                0,
+                len(self),
+                (batch_size,),
+                generator=self._rng,
+                device=getattr(self, "device", None),
+            )
         raise RuntimeError(
             f"Random number generation is not implemented for storage of type {type(self)} with ndim {self.ndim}. "
             f"Please report this exception as well as the use case (incl. buffer construction) on github."
@@ -184,6 +194,11 @@ class Storage:
     def load(self, *args, **kwargs):
         """Alias for :meth:`~.loads`."""
         return self.loads(*args, **kwargs)
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        state["_rng"] = None
+        return state
 
 
 class ListStorage(Storage):
@@ -299,7 +314,7 @@ class ListStorage(Storage):
             raise RuntimeError(
                 f"Cannot share a storage of type {type(self)} between processes."
             )
-        state = copy(self.__dict__)
+        state = super().__getstate__()
         return state
 
     def __repr__(self):
@@ -497,7 +512,10 @@ class TensorStorage(Storage):
         if self.ndim == 1:
             return super()._rand_given_ndim(batch_size)
         shape = self.shape
-        return tuple(torch.randint(_dim, (batch_size,)) for _dim in shape)
+        return tuple(
+            torch.randint(_dim, (batch_size,), generator=self._rng, device=self.device)
+            for _dim in shape
+        )
 
     def flatten(self):
         if self.ndim == 1:
@@ -522,7 +540,7 @@ class TensorStorage(Storage):
         )
 
     def __getstate__(self):
-        state = copy(self.__dict__)
+        state = super().__getstate__()
         if get_spawning_popen() is None:
             length = self._len
             del state["_len_value"]
@@ -539,15 +557,24 @@ class TensorStorage(Storage):
             # check that the content is shared, otherwise tell the user we can't help
             storage = self._storage
             STORAGE_ERR = "The storage must be place in shared memory or memmapped before being shared between processes."
-            if is_tensor_collection(storage):
-                if not storage.is_memmap() and not storage.is_shared():
-                    raise RuntimeError(STORAGE_ERR)
-            else:
-                if (
-                    not isinstance(storage, MemoryMappedTensor)
-                    and not storage.is_shared()
+
+            # If the content is on cpu, it will be placed in shared memory.
+            # If it's on cuda it's already shared.
+            # If it's memmaped no worry in this case either.
+            # Only if the device is not "cpu" or "cuda" we may have a problem.
+            def assert_is_sharable(tensor):
+                if tensor.device is None or tensor.device.type in (
+                    "cuda",
+                    "cpu",
+                    "meta",
                 ):
-                    raise RuntimeError(STORAGE_ERR)
+                    return
+                raise RuntimeError(STORAGE_ERR)
+
+            if is_tensor_collection(storage):
+                storage.apply(assert_is_sharable, filter_empty=True)
+            else:
+                tree_map(storage, assert_is_sharable)
 
         return state
 
@@ -722,7 +749,7 @@ class TensorStorage(Storage):
                     "A cursor of length superior to the storage capacity was provided. "
                     "To accommodate for this, the cursor will be truncated to its last "
                     "element such that its length matched the length of the storage. "
-                    "This may **not** be the optimal behaviour for your application! "
+                    "This may **not** be the optimal behavior for your application! "
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )
@@ -882,9 +909,7 @@ class LazyTensorStorage(TensorStorage):
 
         if is_tensor_collection(data):
             out = data.to(self.device)
-            out = out.expand(max_size_along_dim0(data.shape))
-            out = out.clone()
-            out = out.zero_()
+            out = torch.empty_like(out.expand(max_size_along_dim0(data.shape)))
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
@@ -906,6 +931,8 @@ class LazyMemmapStorage(LazyTensorStorage):
     Args:
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
+
+    Keyword Args:
         scratch_dir (str or path): directory where memmap-tensors will be written.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
@@ -916,6 +943,9 @@ class LazyMemmapStorage(LazyTensorStorage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+        existsok (bool, optional): whether an error should be raised if any of the
+            tensors already exists on disk. Defaults to ``True``. If ``False``, the
+            tensor will be opened as is, not overewritten.
 
     .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is
         already stored to avoid executing long copies of data that is already stored on disk.
@@ -992,10 +1022,12 @@ class LazyMemmapStorage(LazyTensorStorage):
         scratch_dir=None,
         device: torch.device = "cpu",
         ndim: int = 1,
+        existsok: bool = False,
     ):
         super().__init__(max_size, ndim=ndim)
         self.initialized = False
         self.scratch_dir = None
+        self.existsok = existsok
         if scratch_dir is not None:
             self.scratch_dir = str(scratch_dir)
             if self.scratch_dir[-1] != "/":
@@ -1091,17 +1123,23 @@ class LazyMemmapStorage(LazyTensorStorage):
         if is_tensor_collection(data):
             out = data.clone().to(self.device)
             out = out.expand(max_size_along_dim0(data.shape))
-            out = out.memmap_like(prefix=self.scratch_dir)
-            for key, tensor in sorted(
-                out.items(include_nested=True, leaves_only=True), key=str
-            ):
-                try:
-                    filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    torchrl_logger.debug(
-                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                    )
-                except (AttributeError, RuntimeError):
-                    pass
+            out = out.memmap_like(prefix=self.scratch_dir, existsok=self.existsok)
+            if torchrl_logger.isEnabledFor(logging.DEBUG):
+                for key, tensor in sorted(
+                    out.items(
+                        include_nested=True,
+                        leaves_only=True,
+                        is_leaf=_NESTED_TENSORS_AS_LISTS,
+                    ),
+                    key=str,
+                ):
+                    try:
+                        filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+                        torchrl_logger.debug(
+                            f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                        )
+                    except (AttributeError, RuntimeError):
+                        pass
         else:
             out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
@@ -1142,12 +1180,23 @@ class StorageEnsemble(Storage):
         *storages: Storage,
         transforms: List["Transform"] = None,  # noqa: F821
     ):
+        self._rng_private = None
         self._storages = storages
         self._transforms = transforms
         if transforms is not None and len(transforms) != len(storages):
             raise TypeError(
                 "transforms must have the same length as the storages " "provided."
             )
+
+    @property
+    def _rng(self):
+        return self._rng_private
+
+    @_rng.setter
+    def _rng(self, value):
+        self._rng_private = value
+        for storage in self._storages:
+            storage._rng = value
 
     @property
     def _attached_entities(self):

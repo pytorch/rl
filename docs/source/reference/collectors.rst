@@ -45,7 +45,7 @@ worker) may also impact the memory management. The key parameters to control are
 :obj:`devices` which controls the execution devices (ie the device of the policy)
 and :obj:`storing_device` which will control the device where the environment and
 data are stored during a rollout. A good heuristic is usually to use the same device
-for storage and compute, which is the default behaviour when only the `devices` argument
+for storage and compute, which is the default behavior when only the `devices` argument
 is being passed.
 
 Besides those compute parameters, users may choose to configure the following parameters:
@@ -98,6 +98,25 @@ is easily understood when considering that :class:`~torchrl.collectors.MultiaSyn
 delivers batches of data on a first-come, first-serve basis, whereas
 :class:`~torchrl.collectors.MultiSyncDataCollector` gathers data from
 each sub-collector before delivering it.
+
+Collectors and policy copies
+----------------------------
+
+When passing a policy to a collector, we can choose the device on which this policy will be run. This can be used to
+keep the training version of the policy on a device and the inference version on another. For example, if you have two
+CUDA devices, it may be wise to train on one device and execute the policy for inference on the other. If that is the
+case, a :meth:`~torchrl.collectors.DataCollector.update_policy_weights_` can be used to copy the parameters from one
+device to the other (if no copy is required, this method is a no-op).
+
+Since the goal is to avoid calling `policy.to(policy_device)` explicitly, the collector will do a deepcopy of the
+policy structure and copy the parameters placed on the new device during instantiation if necessary.
+Since not all policies support deepcopies (e.g., policies using CUDA graphs or relying on third-party libraries), we
+try to limit the cases where a deepcopy will be executed. The following chart shows when this will occur.
+
+.. figure:: /_static/img/collector-copy.png
+
+   Policy copy decision tree in Collectors.
+
 
 Collectors and replay buffers interoperability
 ----------------------------------------------

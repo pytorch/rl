@@ -12,7 +12,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
@@ -94,14 +94,14 @@ class TD3BCLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import Actor, ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.td3_bc import TD3BCLoss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> module = nn.Linear(n_obs, n_act)
         >>> actor = Actor(
         ...     module=module,
@@ -152,11 +152,11 @@ class TD3BCLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
         >>> from torchrl.objectives.td3_bc import TD3BCLoss
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> module = nn.Linear(n_obs, n_act)
         >>> actor = Actor(
         ...     module=module,
@@ -299,7 +299,7 @@ class TD3BCLoss(LossModule):
                 f"but not both or none. Got bounds={bounds} and action_spec={action_spec}."
             )
         elif action_spec is not None:
-            if isinstance(action_spec, CompositeSpec):
+            if isinstance(action_spec, Composite):
                 if (
                     isinstance(self.tensor_keys.action, tuple)
                     and len(self.tensor_keys.action) > 1
@@ -312,9 +312,9 @@ class TD3BCLoss(LossModule):
                 action_spec = action_spec[self.tensor_keys.action][
                     (0,) * len(action_container_shape)
                 ]
-            if not isinstance(action_spec, BoundedTensorSpec):
+            if not isinstance(action_spec, Bounded):
                 raise ValueError(
-                    f"action_spec is not of type BoundedTensorSpec but {type(action_spec)}."
+                    f"action_spec is not of type Bounded but {type(action_spec)}."
                 )
             low = action_spec.space.low
             high = action_spec.space.high
@@ -386,7 +386,7 @@ class TD3BCLoss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    def actor_loss(self, tensordict):
+    def actor_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
         """Compute the actor loss.
 
         The actor loss should be computed after the :meth:`~.qvalue_loss` and is usually delayed 1-3 critic updates.
@@ -433,7 +433,7 @@ class TD3BCLoss(LossModule):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, metadata
 
-    def qvalue_loss(self, tensordict):
+    def qvalue_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
         """Compute the q-value loss.
 
         The q-value loss should be computed before the :meth:`~.actor_loss`.

@@ -195,7 +195,7 @@ total_frames = 10_000
 # ~~~~~~~~~~~~~~
 #
 # At each data collection (or batch collection) we will run the optimization
-# over a certain number of *epochs*, each time consuming the entire data we just
+# over a certain number of *epochs*, each time-consuming the entire data we just
 # acquired in a nested training loop. Here, the ``sub_batch_size`` is different from the
 # ``frames_per_batch`` here above: recall that we are working with a "batch of data"
 # coming from our collector, which size is defined by ``frames_per_batch``, and that
@@ -203,7 +203,7 @@ total_frames = 10_000
 # The size of these sub-batches is controlled by ``sub_batch_size``.
 #
 sub_batch_size = 64  # cardinality of the sub-samples gathered from the current data in the inner loop
-num_epochs = 10  # optimisation steps per batch of data collected
+num_epochs = 10  # optimization steps per batch of data collected
 clip_epsilon = (
     0.2  # clip value for PPO loss: see the equation in the intro for more context.
 )
@@ -651,7 +651,7 @@ for i, tensordict_data in enumerate(collector):
         # number of steps (1000, which is our ``env`` horizon).
         # The ``rollout`` method of the ``env`` can take a policy as argument:
         # it will then execute this policy at each step.
-        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
+        with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
             # execute a rollout with the trained policy
             eval_rollout = env.rollout(1000, policy_module)
             logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())

@@ -50,9 +50,5 @@ as advised by the documentation.
 We can improve the video quality by appending all our desired settings 
 (as keyword arguments) to `recorder` like so:
 ```python
-# The arguments' types don't appear to matter too much, as long as they are
-# appropriate for Python.
-# For example, this would work as well:
-# logger = CSVLogger(exp_name="my_exp", crf=17, preset="slow")
-logger = CSVLogger(exp_name="my_exp", crf="17", preset="slow")
+recorder = VideoRecorder(logger, tag = "my_video", options = {"crf": "17", "preset": "slow"})
 ```

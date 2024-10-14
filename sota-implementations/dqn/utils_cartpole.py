@@ -5,7 +5,7 @@
 
 import torch.nn
 import torch.optim
-from torchrl.data import CompositeSpec
+from torchrl.data import Composite
 from torchrl.envs import RewardSum, StepCounter, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import MLP, QValueActor
@@ -48,7 +48,7 @@ def make_dqn_modules(proof_environment):
 
     qvalue_module = QValueActor(
         module=mlp,
-        spec=CompositeSpec(action=action_spec),
+        spec=Composite(action=action_spec),
         in_keys=["observation"],
     )
     return qvalue_module

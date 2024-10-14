@@ -113,7 +113,7 @@ frames_per_batch = args.frames_per_batch
 def main():
     import gym
     from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
-    from torchrl.data import BoundedTensorSpec
+    from torchrl.data import Bounded
     from torchrl.envs.libs.gym import GymEnv, set_gym_backend
     from torchrl.envs.utils import RandomPolicy
 
@@ -127,7 +127,7 @@ def main():
 
     collector = RPCDataCollector(
         [EnvCreator(make_env)] * num_jobs,
-        policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
+        policy=RandomPolicy(Bounded(-1, 1, shape=(1,))),
         launcher="submitit_delayed",
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
