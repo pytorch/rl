@@ -110,7 +110,7 @@ jobs:
           add-apt-repository ppa:git-core/candidate -y
           apt-get update -y
           apt-get upgrade -y
-          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
+          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev libpython3.10-dev
       - name: Setup git
         run: git config --global --add safe.directory /__w/rl/rl
       - name: setup Path
