@@ -12,7 +12,7 @@ from tensordict.nn import InteractionType, TensorDictModule
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
-    CompositeSpec,
+    Composite,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -203,7 +203,7 @@ def make_sac_agent(cfg, train_env, eval_env, device):
         out_keys=["logits"],
     )
     actor = ProbabilisticActor(
-        spec=CompositeSpec(action=eval_env.action_spec),
+        spec=Composite(action=eval_env.action_spec),
         module=actor_module,
         in_keys=["logits"],
         out_keys=["action"],

@@ -38,7 +38,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import set_gym_backend
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     DTActor,
     OnlineDTActor,
@@ -374,13 +374,12 @@ def make_odt_model(cfg):
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random",
         cache_dist=False,
         return_log_prob=False,
     )
 
     # init the lazy layers
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = proof_environment.rollout(max_steps=100)
         td["action"] = td["next", "action"]
         actor(td)
@@ -428,13 +427,12 @@ def make_dt_model(cfg):
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random",
         cache_dist=False,
         return_log_prob=False,
     )
 
     # init the lazy layers
-    with torch.no_grad(), set_exploration_mode("random"):
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = proof_environment.rollout(max_steps=100)
         td["action"] = td["next", "action"]
         actor(td)

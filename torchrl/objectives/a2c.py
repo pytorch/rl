@@ -10,7 +10,12 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict import (
+    is_tensor_collection,
+    TensorDict,
+    TensorDictBase,
+    TensorDictParams,
+)
 from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -56,8 +61,9 @@ class A2CLoss(LossModule):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (float): the weight of the entropy loss.
-        critic_coef (float): the weight of the critic loss.
+        entropy_coef (float): the weight of the entropy loss. Defaults to `0.01``.
+        critic_coef (float): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic
+            loss won't be included and the in-keys will miss the critic inputs.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         separate_losses (bool, optional): if ``True``, shared parameters between
@@ -96,14 +102,14 @@ class A2CLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.a2c import A2CLoss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
@@ -147,14 +153,14 @@ class A2CLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.a2c import A2CLoss
         >>> _ = torch.manual_seed(42)
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
@@ -190,6 +196,13 @@ class A2CLoss(LossModule):
         ...     next_reward = torch.randn(*batch, 1),
         ...     next_observation = torch.randn(*batch, n_obs))
         >>> loss_obj.backward()
+
+    .. note::
+      There is an exception regarding compatibility with non-tensordict-based modules.
+      If the actor network is probabilistic and uses a :class:`~tensordict.nn.distributions.CompositeDistribution`,
+      this class must be used with tensordicts and cannot function as a tensordict-independent module.
+      This is because composite action spaces inherently rely on the structured representation of data provided by
+      tensordicts to handle their actions.
     """
 
     @dataclass
@@ -311,7 +324,13 @@ class A2CLoss(LossModule):
         self.register_buffer(
             "entropy_coef", torch.as_tensor(entropy_coef, device=device)
         )
-        self.register_buffer("critic_coef", torch.as_tensor(critic_coef, device=device))
+        if critic_coef is not None:
+            self.register_buffer(
+                "critic_coef", torch.as_tensor(critic_coef, device=device)
+            )
+        else:
+            self.critic_coef = None
+
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
@@ -344,7 +363,7 @@ class A2CLoss(LossModule):
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
         ]
-        if self.critic_coef:
+        if self.critic_coef is not None:
             keys.extend(self.critic_network.in_keys)
         return list(set(keys))
 
@@ -352,7 +371,7 @@ class A2CLoss(LossModule):
     def out_keys(self):
         if self._out_keys is None:
             outs = ["loss_objective"]
-            if self.critic_coef:
+            if self.critic_coef is not None:
                 outs.append("loss_critic")
             if self.entropy_bonus:
                 outs.append("entropy")
@@ -383,7 +402,10 @@ class A2CLoss(LossModule):
             entropy = dist.entropy()
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
-            entropy = -dist.log_prob(x).mean(0)
+            log_prob = dist.log_prob(x)
+            if is_tensor_collection(log_prob):
+                log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+            entropy = -log_prob.mean(0)
         return entropy.unsqueeze(-1)
 
     def _log_probs(
@@ -391,10 +413,6 @@ class A2CLoss(LossModule):
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
         action = tensordict.get(self.tensor_keys.action)
-        if action.requires_grad:
-            raise RuntimeError(
-                f"tensordict stored {self.tensor_keys.action} require grad."
-            )
         tensordict_clone = tensordict.select(
             *self.actor_network.in_keys, strict=False
         ).clone()
@@ -402,11 +420,29 @@ class A2CLoss(LossModule):
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict_clone)
-        log_prob = dist.log_prob(action)
+        if action.requires_grad:
+            raise RuntimeError(
+                f"tensordict stored {self.tensor_keys.action} requires grad."
+            )
+        if isinstance(action, torch.Tensor):
+            log_prob = dist.log_prob(action)
+        else:
+            maybe_log_prob = dist.log_prob(tensordict)
+            if not isinstance(maybe_log_prob, torch.Tensor):
+                # In some cases (Composite distribution with aggregate_probabilities toggled off) the returned type may not
+                # be a tensor
+                log_prob = maybe_log_prob.get(self.tensor_keys.sample_log_prob)
+            else:
+                log_prob = maybe_log_prob
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
 
-    def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+    def loss_critic(self, tensordict: TensorDictBase) -> Tuple[torch.Tensor, float]:
+        """Returns the loss value of the critic, multiplied by ``critic_coef`` if it is not ``None``.
+
+        Returns the loss and the clip-fraction.
+
+        """
         if self.clip_value:
             old_state_value = tensordict.get(
                 self.tensor_keys.value, None
@@ -456,7 +492,9 @@ class A2CLoss(LossModule):
                 loss_value,
                 self.loss_critic_type,
             )
-        return self.critic_coef * loss_value, clip_fraction
+        if self.critic_coef is not None:
+            return self.critic_coef * loss_value, clip_fraction
+        return loss_value, clip_fraction
 
     @property
     @_cache_values
@@ -483,7 +521,7 @@ class A2CLoss(LossModule):
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef:
+        if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
