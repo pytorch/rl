@@ -13,8 +13,8 @@ from dataclasses import asdict, dataclass
 
 from packaging import version as pack_version
 from tensordict._C import unravel_keys
-
 from tensordict.nn import (
+    CompositeDistribution,
     InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictModule as ProbMod,
@@ -25,7 +25,6 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
-
 from torchrl.modules.models import QMixer
 
 _has_functorch = True
@@ -49,19 +48,12 @@ from _utils_internal import (  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
 
 # from torchrl.data.postprocs.utils import expand_as_right
-from tensordict import assert_allclose_td, TensorDict
+from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict.nn import NormalParamExtractor, TensorDictModule
 from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
 from torch import autograd, nn
-from torchrl.data import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
@@ -105,6 +97,7 @@ from torchrl.objectives import (
     DreamerModelLoss,
     DreamerValueLoss,
     DTLoss,
+    GAILLoss,
     IQLLoss,
     KLPENPPOLoss,
     OnlineDTLoss,
@@ -153,9 +146,15 @@ from torchrl.objectives.value.utils import (
     _split_and_pad_sequence,
 )
 
+TORCH_VERSION = torch.__version__
 
 # Capture all warnings
-pytestmark = pytest.mark.filterwarnings("error")
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings(
+        "ignore:The current behavior of MLP when not providing `num_cells` is that the number"
+    ),
+]
 
 
 class _check_td_steady:
@@ -303,9 +302,9 @@ class TestDQN(LossModuleTestBase):
     ):
         # Actor
         if action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
+            action_spec = OneHot(action_dim)
         elif action_spec_type == "categorical":
-            action_spec = DiscreteTensorSpec(action_dim)
+            action_spec = Categorical(action_dim)
         # elif action_spec_type == "nd_bounded":
         #     action_spec = BoundedTensorSpec(
         #         -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -317,7 +316,7 @@ class TestDQN(LossModuleTestBase):
         if is_nn_module:
             return module.to(device)
         actor = QValueActor(
-            spec=CompositeSpec(
+            spec=Composite(
                 {
                     "action": action_spec,
                     (
@@ -348,14 +347,12 @@ class TestDQN(LossModuleTestBase):
         # Actor
         var_nums = None
         if action_spec_type == "mult_one_hot":
-            action_spec = MultiOneHotDiscreteTensorSpec(
-                [action_dim // 2, action_dim // 2]
-            )
+            action_spec = MultiOneHot([action_dim // 2, action_dim // 2])
             var_nums = action_spec.nvec
         elif action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
+            action_spec = OneHot(action_dim)
         elif action_spec_type == "categorical":
-            action_spec = DiscreteTensorSpec(action_dim)
+            action_spec = Categorical(action_dim)
         else:
             raise ValueError(f"Wrong {action_spec_type}")
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
@@ -366,7 +363,7 @@ class TestDQN(LossModuleTestBase):
         # if is_nn_module:
         #     return module
         actor = DistributionalQValueActor(
-            spec=CompositeSpec(
+            spec=Composite(
                 {
                     "action": action_spec,
                     action_value_key: None,
@@ -775,7 +772,7 @@ class TestDQN(LossModuleTestBase):
     ):
         n_obs = 3
         n_action = 4
-        action_spec = OneHotDiscreteTensorSpec(n_action)
+        action_spec = OneHot(n_action)
         module = nn.Linear(n_obs, n_action)  # a simple value model
         actor = QValueActor(
             spec=action_spec,
@@ -936,9 +933,9 @@ class TestQMixer(LossModuleTestBase):
     ):
         # Actor
         if action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
+            action_spec = OneHot(action_dim)
         elif action_spec_type == "categorical":
-            action_spec = DiscreteTensorSpec(action_dim)
+            action_spec = Categorical(action_dim)
         else:
             raise ValueError(f"Wrong {action_spec_type}")
 
@@ -1385,7 +1382,7 @@ class TestDDPG(LossModuleTestBase):
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, action_dim)
@@ -2023,7 +2020,7 @@ class TestTD3(LossModuleTestBase):
         dropout=0.0,
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Sequential(
@@ -2375,7 +2372,7 @@ class TestTD3(LossModuleTestBase):
         loss_fn = TD3Loss(
             actor,
             value,
-            action_spec=BoundedTensorSpec(shape=(n_act,), low=-1, high=1),
+            action_spec=Bounded(shape=(n_act,), low=-1, high=1),
             loss_function="l2",
             separate_losses=separate_losses,
         )
@@ -2729,7 +2726,7 @@ class TestTD3BC(LossModuleTestBase):
         dropout=0.0,
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Sequential(
@@ -3088,7 +3085,7 @@ class TestTD3BC(LossModuleTestBase):
         loss_fn = TD3BCLoss(
             actor,
             value,
-            action_spec=BoundedTensorSpec(shape=(n_act,), low=-1, high=1),
+            action_spec=Bounded(shape=(n_act,), low=-1, high=1),
             loss_function="l2",
             separate_losses=separate_losses,
         )
@@ -3453,21 +3450,40 @@ class TestSAC(LossModuleTestBase):
         device="cpu",
         observation_key="observation",
         action_key="action",
+        composite_action_dist=False,
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
+        if composite_action_dist:
+            action_spec = Composite({action_key: {"action1": action_spec}})
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        if composite_action_dist:
+            distribution_class = functools.partial(
+                CompositeDistribution,
+                distribution_map={
+                    "action1": TanhNormal,
+                },
+                aggregate_probabilities=True,
+            )
+            module_out_keys = [
+                ("params", "action1", "loc"),
+                ("params", "action1", "scale"),
+            ]
+            actor_in_keys = ["params"]
+        else:
+            distribution_class = TanhNormal
+            module_out_keys = actor_in_keys = ["loc", "scale"]
         module = TensorDictModule(
-            net, in_keys=[observation_key], out_keys=["loc", "scale"]
+            net, in_keys=[observation_key], out_keys=module_out_keys
         )
         actor = ProbabilisticActor(
             module=module,
-            in_keys=["loc", "scale"],
-            spec=action_spec,
-            distribution_class=TanhNormal,
+            distribution_class=distribution_class,
+            in_keys=actor_in_keys,
             out_keys=[action_key],
+            spec=action_spec,
         )
         return actor.to(device)
 
@@ -3487,6 +3503,8 @@ class TestSAC(LossModuleTestBase):
                 self.linear = nn.Linear(obs_dim + action_dim, 1)
 
             def forward(self, obs, act):
+                if isinstance(act, TensorDictBase):
+                    act = act.get("action1")
                 return self.linear(torch.cat([obs, act], -1))
 
         module = ValueClass()
@@ -3515,8 +3533,26 @@ class TestSAC(LossModuleTestBase):
         return value.to(device)
 
     def _create_mock_common_layer_setup(
-        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2
+        self,
+        n_obs=3,
+        n_act=4,
+        ncells=4,
+        batch=2,
+        n_hidden=2,
+        composite_action_dist=False,
     ):
+        class QValueClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear1 = nn.Linear(n_hidden + n_act, n_hidden)
+                self.relu = nn.ReLU()
+                self.linear2 = nn.Linear(n_hidden, 1)
+
+            def forward(self, obs, act):
+                if isinstance(act, TensorDictBase):
+                    act = act.get("action1")
+                return self.linear2(self.relu(self.linear1(torch.cat([obs, act], -1))))
+
         common = MLP(
             num_cells=ncells,
             in_features=n_obs,
@@ -3529,17 +3565,13 @@ class TestSAC(LossModuleTestBase):
             depth=1,
             out_features=2 * n_act,
         )
-        qvalue = MLP(
-            in_features=n_hidden + n_act,
-            num_cells=ncells,
-            depth=1,
-            out_features=1,
-        )
+        qvalue = QValueClass()
         batch = [batch]
+        action = torch.randn(*batch, n_act)
         td = TensorDict(
             {
                 "obs": torch.randn(*batch, n_obs),
-                "action": torch.randn(*batch, n_act),
+                "action": {"action1": action} if composite_action_dist else action,
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
                 "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
@@ -3552,14 +3584,30 @@ class TestSAC(LossModuleTestBase):
             batch,
         )
         common = Mod(common, in_keys=["obs"], out_keys=["hidden"])
+        if composite_action_dist:
+            distribution_class = functools.partial(
+                CompositeDistribution,
+                distribution_map={
+                    "action1": TanhNormal,
+                },
+                aggregate_probabilities=True,
+            )
+            module_out_keys = [
+                ("params", "action1", "loc"),
+                ("params", "action1", "scale"),
+            ]
+            actor_in_keys = ["params"]
+        else:
+            distribution_class = TanhNormal
+            module_out_keys = actor_in_keys = ["loc", "scale"]
         actor = ProbSeq(
             common,
             Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
-            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
+            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=module_out_keys),
             ProbMod(
-                in_keys=["loc", "scale"],
+                in_keys=actor_in_keys,
                 out_keys=["action"],
-                distribution_class=TanhNormal,
+                distribution_class=distribution_class,
             ),
         )
         qvalue_head = Mod(
@@ -3585,6 +3633,7 @@ class TestSAC(LossModuleTestBase):
         done_key="done",
         terminated_key="terminated",
         reward_key="reward",
+        composite_action_dist=False,
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
@@ -3606,14 +3655,21 @@ class TestSAC(LossModuleTestBase):
                     terminated_key: terminated,
                     reward_key: reward,
                 },
-                action_key: action,
+                action_key: {"action1": action} if composite_action_dist else action,
             },
             device=device,
         )
         return td
 
     def _create_seq_mock_data_sac(
-        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+        self,
+        batch=8,
+        T=4,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
+        composite_action_dist=False,
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -3629,6 +3685,7 @@ class TestSAC(LossModuleTestBase):
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = torch.ones(batch, T, dtype=torch.bool, device=device)
+        action = action.masked_fill_(~mask.unsqueeze(-1), 0.0)
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -3640,7 +3697,7 @@ class TestSAC(LossModuleTestBase):
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
-                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": {"action1": action} if composite_action_dist else action,
             },
             names=[None, "time"],
             device=device,
@@ -3653,6 +3710,7 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac(
         self,
         delay_value,
@@ -3662,14 +3720,19 @@ class TestSAC(LossModuleTestBase):
         device,
         version,
         td_est,
+        composite_action_dist,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
 
         torch.manual_seed(self.seed)
-        td = self._create_mock_data_sac(device=device)
+        td = self._create_mock_data_sac(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -3819,6 +3882,7 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac_state_dict(
         self,
         delay_value,
@@ -3827,13 +3891,16 @@ class TestSAC(LossModuleTestBase):
         num_qvalue,
         device,
         version,
+        composite_action_dist,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
 
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -3869,20 +3936,24 @@ class TestSAC(LossModuleTestBase):
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [False, True])
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac_separate_losses(
         self,
         device,
         separate_losses,
         version,
+        composite_action_dist,
         n_act=4,
     ):
         torch.manual_seed(self.seed)
-        actor, qvalue, common, td = self._create_mock_common_layer_setup(n_act=n_act)
+        actor, qvalue, common, td = self._create_mock_common_layer_setup(
+            n_act=n_act, composite_action_dist=composite_action_dist
+        )
 
         loss_fn = SACLoss(
             actor_network=actor,
             qvalue_network=qvalue,
-            action_spec=UnboundedContinuousTensorSpec(shape=(n_act,)),
+            action_spec=Unbounded(shape=(n_act,)),
             num_qvalue_nets=1,
             separate_losses=separate_losses,
         )
@@ -3963,6 +4034,7 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac_batcher(
         self,
         n,
@@ -3972,13 +4044,18 @@ class TestSAC(LossModuleTestBase):
         num_qvalue,
         device,
         version,
+        composite_action_dist,
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_sac(device=device)
+        td = self._create_seq_mock_data_sac(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4129,10 +4206,11 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize(
         "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
     )
-    def test_sac_tensordict_keys(self, td_est, version):
-        td = self._create_mock_data_sac()
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_sac_tensordict_keys(self, td_est, version, composite_action_dist):
+        td = self._create_mock_data_sac(composite_action_dist=composite_action_dist)
 
-        actor = self._create_mock_actor()
+        actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
         qvalue = self._create_mock_qvalue()
         if version == 1:
             value = self._create_mock_value()
@@ -4152,7 +4230,7 @@ class TestSAC(LossModuleTestBase):
             "value": "state_value",
             "state_action_value": "state_action_value",
             "action": "action",
-            "log_prob": "_log_prob",
+            "log_prob": "sample_log_prob",
             "reward": "reward",
             "done": "done",
             "terminated": "terminated",
@@ -4286,14 +4364,14 @@ class TestSAC(LossModuleTestBase):
         loss = SACLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         state = loss.state_dict()
 
         loss = SACLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.load_state_dict(state)
 
@@ -4301,7 +4379,7 @@ class TestSAC(LossModuleTestBase):
         loss = SACLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.target_entropy
         state = loss.state_dict()
@@ -4309,20 +4387,25 @@ class TestSAC(LossModuleTestBase):
         loss = SACLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.load_state_dict(state)
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_sac_reduction(self, reduction, version):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_sac_reduction(self, reduction, version, composite_action_dist):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
             if torch.cuda.device_count() == 0
             else torch.device("cuda")
         )
-        td = self._create_mock_data_sac(device=device)
-        actor = self._create_mock_actor(device=device)
+        td = self._create_mock_data_sac(
+            device=device, composite_action_dist=composite_action_dist
+        )
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4367,7 +4450,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         action_key="action",
     ):
         # Actor
-        action_spec = OneHotDiscreteTensorSpec(action_dim)
+        action_spec = OneHot(action_dim)
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
@@ -4953,7 +5036,7 @@ class TestCrossQ(LossModuleTestBase):
         action_key="action",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -5269,7 +5352,7 @@ class TestCrossQ(LossModuleTestBase):
         loss_fn = CrossQLoss(
             actor_network=actor,
             qvalue_network=qvalue,
-            action_spec=UnboundedContinuousTensorSpec(shape=(n_act,)),
+            action_spec=Unbounded(shape=(n_act,)),
             num_qvalue_nets=1,
             separate_losses=separate_losses,
         )
@@ -5574,14 +5657,14 @@ class TestCrossQ(LossModuleTestBase):
         loss = CrossQLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         state = loss.state_dict()
 
         loss = CrossQLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.load_state_dict(state)
 
@@ -5589,7 +5672,7 @@ class TestCrossQ(LossModuleTestBase):
         loss = CrossQLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.target_entropy
         state = loss.state_dict()
@@ -5597,7 +5680,7 @@ class TestCrossQ(LossModuleTestBase):
         loss = CrossQLoss(
             actor_network=policy,
             qvalue_network=value,
-            action_spec=UnboundedContinuousTensorSpec(shape=(2,)),
+            action_spec=Unbounded(shape=(2,)),
         )
         loss.load_state_dict(state)
 
@@ -5648,7 +5731,7 @@ class TestREDQ(LossModuleTestBase):
         action_key="action",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -6593,7 +6676,7 @@ class TestCQL(LossModuleTestBase):
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -7156,9 +7239,9 @@ class TestDiscreteCQL(LossModuleTestBase):
     ):
         # Actor
         if action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
+            action_spec = OneHot(action_dim)
         elif action_spec_type == "categorical":
-            action_spec = DiscreteTensorSpec(action_dim)
+            action_spec = Categorical(action_dim)
         else:
             raise ValueError(f"Wrong action spec type: {action_spec_type}")
 
@@ -7166,7 +7249,7 @@ class TestDiscreteCQL(LossModuleTestBase):
         if is_nn_module:
             return module.to(device)
         actor = QValueActor(
-            spec=CompositeSpec(
+            spec=Composite(
                 {
                     "action": action_spec,
                     (
@@ -7476,7 +7559,7 @@ class TestDiscreteCQL(LossModuleTestBase):
     ):
         n_obs = 3
         n_action = 4
-        action_spec = OneHotDiscreteTensorSpec(n_action)
+        action_spec = OneHot(n_action)
         module = nn.Linear(n_obs, n_action)  # a simple value model
         actor = QValueActor(
             spec=action_spec,
@@ -7547,21 +7630,46 @@ class TestPPO(LossModuleTestBase):
         obs_dim=3,
         action_dim=4,
         device="cpu",
+        action_key="action",
         observation_key="observation",
         sample_log_prob_key="sample_log_prob",
+        composite_action_dist=False,
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
+        if composite_action_dist:
+            action_spec = Composite({action_key: {"action1": action_spec}})
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        if composite_action_dist:
+            distribution_class = functools.partial(
+                CompositeDistribution,
+                distribution_map={
+                    "action1": TanhNormal,
+                },
+                name_map={
+                    "action1": (action_key, "action1"),
+                },
+                log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
+            )
+            module_out_keys = [
+                ("params", "action1", "loc"),
+                ("params", "action1", "scale"),
+            ]
+            actor_in_keys = ["params"]
+        else:
+            distribution_class = TanhNormal
+            module_out_keys = actor_in_keys = ["loc", "scale"]
         module = TensorDictModule(
-            net, in_keys=[observation_key], out_keys=["loc", "scale"]
+            net, in_keys=[observation_key], out_keys=module_out_keys
         )
         actor = ProbabilisticActor(
             module=module,
-            distribution_class=TanhNormal,
-            in_keys=["loc", "scale"],
+            distribution_class=distribution_class,
+            in_keys=actor_in_keys,
+            out_keys=[action_key],
             spec=action_spec,
             return_log_prob=True,
             log_prob_key=sample_log_prob_key,
@@ -7585,22 +7693,52 @@ class TestPPO(LossModuleTestBase):
         )
         return value.to(device)
 
-    def _create_mock_actor_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor_value(
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        composite_action_dist=False,
+        sample_log_prob_key="sample_log_prob",
+    ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
+        if composite_action_dist:
+            action_spec = Composite({"action": {"action1": action_spec}})
         base_layer = nn.Linear(obs_dim, 5)
         net = nn.Sequential(
             base_layer, nn.Linear(5, 2 * action_dim), NormalParamExtractor()
         )
+        if composite_action_dist:
+            distribution_class = functools.partial(
+                CompositeDistribution,
+                distribution_map={
+                    "action1": TanhNormal,
+                },
+                name_map={
+                    "action1": ("action", "action1"),
+                },
+                log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
+            )
+            module_out_keys = [
+                ("params", "action1", "loc"),
+                ("params", "action1", "scale"),
+            ]
+            actor_in_keys = ["params"]
+        else:
+            distribution_class = TanhNormal
+            module_out_keys = actor_in_keys = ["loc", "scale"]
         module = TensorDictModule(
-            net, in_keys=["observation"], out_keys=["loc", "scale"]
+            net, in_keys=["observation"], out_keys=module_out_keys
         )
         actor = ProbabilisticActor(
             module=module,
-            distribution_class=TanhNormal,
-            in_keys=["loc", "scale"],
+            distribution_class=distribution_class,
+            in_keys=actor_in_keys,
             spec=action_spec,
             return_log_prob=True,
         )
@@ -7612,22 +7750,50 @@ class TestPPO(LossModuleTestBase):
         return actor.to(device), value.to(device)
 
     def _create_mock_actor_value_shared(
-        self, batch=2, obs_dim=3, action_dim=4, device="cpu"
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        composite_action_dist=False,
+        sample_log_prob_key="sample_log_prob",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
+        if composite_action_dist:
+            action_spec = Composite({"action": {"action1": action_spec}})
         base_layer = nn.Linear(obs_dim, 5)
         common = TensorDictModule(
             base_layer, in_keys=["observation"], out_keys=["hidden"]
         )
         net = nn.Sequential(nn.Linear(5, 2 * action_dim), NormalParamExtractor())
-        module = TensorDictModule(net, in_keys=["hidden"], out_keys=["loc", "scale"])
+        if composite_action_dist:
+            distribution_class = functools.partial(
+                CompositeDistribution,
+                distribution_map={
+                    "action1": TanhNormal,
+                },
+                name_map={
+                    "action1": ("action", "action1"),
+                },
+                log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
+            )
+            module_out_keys = [
+                ("params", "action1", "loc"),
+                ("params", "action1", "scale"),
+            ]
+            actor_in_keys = ["params"]
+        else:
+            distribution_class = TanhNormal
+            module_out_keys = actor_in_keys = ["loc", "scale"]
+        module = TensorDictModule(net, in_keys=["hidden"], out_keys=module_out_keys)
         actor_head = ProbabilisticActor(
             module=module,
-            distribution_class=TanhNormal,
-            in_keys=["loc", "scale"],
+            distribution_class=distribution_class,
+            in_keys=actor_in_keys,
             spec=action_spec,
             return_log_prob=True,
         )
@@ -7657,6 +7823,7 @@ class TestPPO(LossModuleTestBase):
         done_key="done",
         terminated_key="terminated",
         sample_log_prob_key="sample_log_prob",
+        composite_action_dist=False,
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
@@ -7682,13 +7849,17 @@ class TestPPO(LossModuleTestBase):
                     terminated_key: terminated,
                     reward_key: reward,
                 },
-                action_key: action,
+                action_key: {"action1": action} if composite_action_dist else action,
                 sample_log_prob_key: torch.randn_like(action[..., 1]) / 10,
-                loc_key: loc,
-                scale_key: scale,
             },
             device=device,
         )
+        if composite_action_dist:
+            td[("params", "action1", loc_key)] = loc
+            td[("params", "action1", scale_key)] = scale
+        else:
+            td[loc_key] = loc
+            td[scale_key] = scale
         return td
 
     def _create_seq_mock_data_ppo(
@@ -7701,6 +7872,7 @@ class TestPPO(LossModuleTestBase):
         device="cpu",
         sample_log_prob_key="sample_log_prob",
         action_key="action",
+        composite_action_dist=False,
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -7716,8 +7888,11 @@ class TestPPO(LossModuleTestBase):
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = torch.ones(batch, T, dtype=torch.bool, device=device)
+        action = action.masked_fill_(~mask.unsqueeze(-1), 0.0)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
+        loc = params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0)
+        scale = params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0)
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -7729,16 +7904,21 @@ class TestPPO(LossModuleTestBase):
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
-                action_key: action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                action_key: {"action1": action} if composite_action_dist else action,
                 sample_log_prob_key: (
                     torch.randn_like(action[..., 1]) / 10
                 ).masked_fill_(~mask, 0.0),
-                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
             names=[None, "time"],
         )
+        if composite_action_dist:
+            td[("params", "action1", "loc")] = loc
+            td[("params", "action1", "scale")] = scale
+        else:
+            td["loc"] = loc
+            td["scale"] = scale
+
         return td
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
@@ -7747,6 +7927,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("functional", [True, False])
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_ppo(
         self,
         loss_class,
@@ -7755,11 +7936,16 @@ class TestPPO(LossModuleTestBase):
         advantage,
         td_est,
         functional,
+        composite_action_dist,
     ):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ppo(device=device)
+        td = self._create_seq_mock_data_ppo(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
@@ -7799,7 +7985,10 @@ class TestPPO(LossModuleTestBase):
 
         loss = loss_fn(td)
         if isinstance(loss_fn, KLPENPPOLoss):
-            kl = loss.pop("kl")
+            if composite_action_dist:
+                kl = loss.pop("kl_approx")
+            else:
+                kl = loss.pop("kl")
             assert (kl != 0).any()
 
         loss_critic = loss["loss_critic"]
@@ -7836,10 +8025,15 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True,))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_ppo_state_dict(self, loss_class, device, gradient_mode):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_state_dict(
+        self, loss_class, device, gradient_mode, composite_action_dist
+    ):
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
         sd = loss_fn.state_dict()
@@ -7849,11 +8043,16 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_ppo_shared(self, loss_class, device, advantage):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_shared(self, loss_class, device, advantage, composite_action_dist):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ppo(device=device)
+        td = self._create_seq_mock_data_ppo(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor, value = self._create_mock_actor_value(device=device)
+        actor, value = self._create_mock_actor_value(
+            device=device, composite_action_dist=composite_action_dist
+        )
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9,
@@ -7935,18 +8134,24 @@ class TestPPO(LossModuleTestBase):
     )
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [True, False])
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_ppo_shared_seq(
         self,
         loss_class,
         device,
         advantage,
         separate_losses,
+        composite_action_dist,
     ):
         """Tests PPO with shared module with and without passing twice across the common module."""
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ppo(device=device)
+        td = self._create_seq_mock_data_ppo(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        model, actor, value = self._create_mock_actor_value_shared(device=device)
+        model, actor, value = self._create_mock_actor_value_shared(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value2 = value[-1]  # prune the common module
         if advantage == "gae":
             advantage = GAE(
@@ -8004,8 +8209,20 @@ class TestPPO(LossModuleTestBase):
         grad2 = TensorDict(dict(model.named_parameters()), []).apply(
             lambda x: x.grad.clone()
         )
-        assert_allclose_td(loss, loss2)
-        assert_allclose_td(grad, grad2)
+        if composite_action_dist and loss_class is KLPENPPOLoss:
+            # KL computation for composite dist is based on randomly
+            # sampled data, thus will not be the same.
+            # Similarly, objective loss depends on the KL, so ir will
+            # not be the same either.
+            # Finally, gradients will be different too.
+            loss.pop("kl", None)
+            loss2.pop("kl", None)
+            loss.pop("loss_objective", None)
+            loss2.pop("loss_objective", None)
+            assert_allclose_td(loss, loss2)
+        else:
+            assert_allclose_td(loss, loss2)
+            assert_allclose_td(grad, grad2)
         model.zero_grad()
 
     @pytest.mark.skipif(
@@ -8015,11 +8232,18 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_diff(
+        self, loss_class, device, gradient_mode, advantage, composite_action_dist
+    ):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ppo(device=device)
+        td = self._create_seq_mock_data_ppo(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
@@ -8108,8 +8332,9 @@ class TestPPO(LossModuleTestBase):
             ValueEstimators.TDLambda,
         ],
     )
-    def test_ppo_tensordict_keys(self, loss_class, td_est):
-        actor = self._create_mock_actor()
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_tensordict_keys(self, loss_class, td_est, composite_action_dist):
+        actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
         value = self._create_mock_value()
 
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
@@ -8148,7 +8373,10 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_ppo_tensordict_keys_run(self, loss_class, advantage, td_est):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_tensordict_keys_run(
+        self, loss_class, advantage, td_est, composite_action_dist
+    ):
         """Test PPO loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -8163,9 +8391,12 @@ class TestPPO(LossModuleTestBase):
         td = self._create_seq_mock_data_ppo(
             sample_log_prob_key=tensor_keys["sample_log_prob"],
             action_key=tensor_keys["action"],
+            composite_action_dist=composite_action_dist,
         )
         actor = self._create_mock_actor(
-            sample_log_prob_key=tensor_keys["sample_log_prob"]
+            sample_log_prob_key=tensor_keys["sample_log_prob"],
+            composite_action_dist=composite_action_dist,
+            action_key=tensor_keys["action"],
         )
         value = self._create_mock_value(out_keys=[tensor_keys["value"]])
 
@@ -8256,6 +8487,12 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    @pytest.mark.parametrize(
+        "composite_action_dist",
+        [
+            False,
+        ],
+    )
     def test_ppo_notensordict(
         self,
         loss_class,
@@ -8265,6 +8502,7 @@ class TestPPO(LossModuleTestBase):
         reward_key,
         done_key,
         terminated_key,
+        composite_action_dist,
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_ppo(
@@ -8274,10 +8512,14 @@ class TestPPO(LossModuleTestBase):
             reward_key=reward_key,
             done_key=done_key,
             terminated_key=terminated_key,
+            composite_action_dist=composite_action_dist,
         )
 
         actor = self._create_mock_actor(
-            observation_key=observation_key, sample_log_prob_key=sample_log_prob_key
+            observation_key=observation_key,
+            sample_log_prob_key=sample_log_prob_key,
+            composite_action_dist=composite_action_dist,
+            action_key=action_key,
         )
         value = self._create_mock_value(observation_key=observation_key)
 
@@ -8300,7 +8542,9 @@ class TestPPO(LossModuleTestBase):
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
         if loss_class is KLPENPPOLoss:
-            kwargs.update({"loc": td.get("loc"), "scale": td.get("scale")})
+            loc_key = "params" if composite_action_dist else "loc"
+            scale_key = "params" if composite_action_dist else "scale"
+            kwargs.update({loc_key: td.get(loc_key), scale_key: td.get(scale_key)})
 
         td = TensorDict(kwargs, td.batch_size, names=["time"]).unflatten_keys("_")
 
@@ -8313,6 +8557,7 @@ class TestPPO(LossModuleTestBase):
         loss_val = loss(**kwargs)
         torch.manual_seed(self.seed)
         if beta is not None:
+
             loss.beta = beta.clone()
         loss_val_td = loss(td)
 
@@ -8340,15 +8585,20 @@ class TestPPO(LossModuleTestBase):
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_ppo_reduction(self, reduction, loss_class):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_reduction(self, reduction, loss_class, composite_action_dist):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
             if torch.cuda.device_count() == 0
             else torch.device("cuda")
         )
-        td = self._create_seq_mock_data_ppo(device=device)
-        actor = self._create_mock_actor(device=device)
+        td = self._create_seq_mock_data_ppo(
+            device=device, composite_action_dist=composite_action_dist
+        )
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         advantage = GAE(
             gamma=0.9,
@@ -8376,10 +8626,17 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("clip_value", [True, False, None, 0.5, torch.tensor(0.5)])
-    def test_ppo_value_clipping(self, clip_value, loss_class, device):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_ppo_value_clipping(
+        self, clip_value, loss_class, device, composite_action_dist
+    ):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ppo(device=device)
-        actor = self._create_mock_actor(device=device)
+        td = self._create_seq_mock_data_ppo(
+            device=device, composite_action_dist=composite_action_dist
+        )
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         advantage = GAE(
             gamma=0.9,
@@ -8438,22 +8695,47 @@ class TestA2C(LossModuleTestBase):
         obs_dim=3,
         action_dim=4,
         device="cpu",
+        action_key="action",
         observation_key="observation",
         sample_log_prob_key="sample_log_prob",
+        composite_action_dist=False,
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
+        if composite_action_dist:
+            action_spec = Composite({action_key: {"action1": action_spec}})
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        if composite_action_dist:
+            distribution_class = functools.partial(
+                CompositeDistribution,
+                distribution_map={
+                    "action1": TanhNormal,
+                },
+                name_map={
+                    "action1": (action_key, "action1"),
+                },
+                log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
+            )
+            module_out_keys = [
+                ("params", "action1", "loc"),
+                ("params", "action1", "scale"),
+            ]
+            actor_in_keys = ["params"]
+        else:
+            distribution_class = TanhNormal
+            module_out_keys = actor_in_keys = ["loc", "scale"]
         module = TensorDictModule(
-            net, in_keys=[observation_key], out_keys=["loc", "scale"]
+            net, in_keys=[observation_key], out_keys=module_out_keys
         )
         actor = ProbabilisticActor(
             module=module,
-            in_keys=["loc", "scale"],
+            in_keys=actor_in_keys,
+            out_keys=[action_key],
             spec=action_spec,
-            distribution_class=TanhNormal,
+            distribution_class=distribution_class,
             return_log_prob=True,
             log_prob_key=sample_log_prob_key,
         )
@@ -8477,7 +8759,15 @@ class TestA2C(LossModuleTestBase):
         return value.to(device)
 
     def _create_mock_common_layer_setup(
-        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2, T=10
+        self,
+        n_obs=3,
+        n_act=4,
+        ncells=4,
+        batch=2,
+        n_hidden=2,
+        T=10,
+        composite_action_dist=False,
+        sample_log_prob_key="sample_log_prob",
     ):
         common_net = MLP(
             num_cells=ncells,
@@ -8498,10 +8788,11 @@ class TestA2C(LossModuleTestBase):
             out_features=1,
         )
         batch = [batch, T]
+        action = torch.randn(*batch, n_act)
         td = TensorDict(
             {
                 "obs": torch.randn(*batch, n_obs),
-                "action": torch.randn(*batch, n_act),
+                "action": {"action1": action} if composite_action_dist else action,
                 "sample_log_prob": torch.randn(*batch),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
                 "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
@@ -8516,14 +8807,36 @@ class TestA2C(LossModuleTestBase):
             names=[None, "time"],
         )
         common = Mod(common_net, in_keys=["obs"], out_keys=["hidden"])
+
+        if composite_action_dist:
+            distribution_class = functools.partial(
+                CompositeDistribution,
+                distribution_map={
+                    "action1": TanhNormal,
+                },
+                name_map={
+                    "action1": ("action", "action1"),
+                },
+                log_prob_key=sample_log_prob_key,
+                aggregate_probabilities=True,
+            )
+            module_out_keys = [
+                ("params", "action1", "loc"),
+                ("params", "action1", "scale"),
+            ]
+            actor_in_keys = ["params"]
+        else:
+            distribution_class = TanhNormal
+            module_out_keys = actor_in_keys = ["loc", "scale"]
+
         actor = ProbSeq(
             common,
             Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
-            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
+            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=module_out_keys),
             ProbMod(
-                in_keys=["loc", "scale"],
+                in_keys=actor_in_keys,
                 out_keys=["action"],
-                distribution_class=TanhNormal,
+                distribution_class=distribution_class,
             ),
         )
         critic = Seq(
@@ -8547,6 +8860,7 @@ class TestA2C(LossModuleTestBase):
         done_key="done",
         terminated_key="terminated",
         sample_log_prob_key="sample_log_prob",
+        composite_action_dist=False,
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -8562,8 +8876,11 @@ class TestA2C(LossModuleTestBase):
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
+        action = action.masked_fill_(~mask.unsqueeze(-1), 0.0)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
+        loc = params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0)
+        scale = params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0)
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -8575,17 +8892,21 @@ class TestA2C(LossModuleTestBase):
                     reward_key: reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
-                action_key: action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                action_key: {"action1": action} if composite_action_dist else action,
                 sample_log_prob_key: torch.randn_like(action[..., 1]).masked_fill_(
                     ~mask, 0.0
                 )
                 / 10,
-                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
             names=[None, "time"],
         )
+        if composite_action_dist:
+            td[("params", "action1", "loc")] = loc
+            td[("params", "action1", "scale")] = scale
+        else:
+            td["loc"] = loc
+            td["scale"] = scale
         return td
 
     @pytest.mark.parametrize("gradient_mode", (True, False))
@@ -8593,11 +8914,24 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("functional", (True, False))
-    def test_a2c(self, device, gradient_mode, advantage, td_est, functional):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_a2c(
+        self,
+        device,
+        gradient_mode,
+        advantage,
+        td_est,
+        functional,
+        composite_action_dist,
+    ):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_a2c(device=device)
+        td = self._create_seq_mock_data_a2c(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
@@ -8630,14 +8964,24 @@ class TestA2C(LossModuleTestBase):
             functional=functional,
         )
 
+        def set_requires_grad(tensor, requires_grad):
+            tensor.requires_grad = requires_grad
+            return tensor
+
         # Check error is raised when actions require grads
-        td["action"].requires_grad = True
+        if composite_action_dist:
+            td["action"].apply_(lambda x: set_requires_grad(x, True))
+        else:
+            td["action"].requires_grad = True
         with pytest.raises(
             RuntimeError,
-            match="tensordict stored action require grad.",
+            match="tensordict stored action requires grad.",
         ):
             _ = loss_fn._log_probs(td)
-        td["action"].requires_grad = False
+        if composite_action_dist:
+            td["action"].apply_(lambda x: set_requires_grad(x, False))
+        else:
+            td["action"].requires_grad = False
 
         td = td.exclude(loss_fn.tensor_keys.value_target)
         if advantage is not None:
@@ -8678,9 +9022,12 @@ class TestA2C(LossModuleTestBase):
 
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_a2c_state_dict(self, device, gradient_mode):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_a2c_state_dict(self, device, gradient_mode, composite_action_dist):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
         sd = loss_fn.state_dict()
@@ -8688,23 +9035,36 @@ class TestA2C(LossModuleTestBase):
         loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("separate_losses", [False, True])
-    def test_a2c_separate_losses(self, separate_losses):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_a2c_separate_losses(self, separate_losses, composite_action_dist):
         torch.manual_seed(self.seed)
-        actor, critic, common, td = self._create_mock_common_layer_setup()
+        actor, critic, common, td = self._create_mock_common_layer_setup(
+            composite_action_dist=composite_action_dist
+        )
         loss_fn = A2CLoss(
             actor_network=actor,
             critic_network=critic,
             separate_losses=separate_losses,
         )
 
+        def set_requires_grad(tensor, requires_grad):
+            tensor.requires_grad = requires_grad
+            return tensor
+
         # Check error is raised when actions require grads
-        td["action"].requires_grad = True
+        if composite_action_dist:
+            td["action"].apply_(lambda x: set_requires_grad(x, True))
+        else:
+            td["action"].requires_grad = True
         with pytest.raises(
             RuntimeError,
-            match="tensordict stored action require grad.",
+            match="tensordict stored action requires grad.",
         ):
             _ = loss_fn._log_probs(td)
-        td["action"].requires_grad = False
+        if composite_action_dist:
+            td["action"].apply_(lambda x: set_requires_grad(x, False))
+        else:
+            td["action"].requires_grad = False
 
         td = td.exclude(loss_fn.tensor_keys.value_target)
         loss = loss_fn(td)
@@ -8748,13 +9108,18 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_a2c_diff(self, device, gradient_mode, advantage):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_a2c_diff(self, device, gradient_mode, advantage, composite_action_dist):
         if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
             raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_a2c(device=device)
+        td = self._create_seq_mock_data_a2c(
+            device=device, composite_action_dist=composite_action_dist
+        )
 
-        actor = self._create_mock_actor(device=device)
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
@@ -8824,8 +9189,9 @@ class TestA2C(LossModuleTestBase):
             ValueEstimators.TDLambda,
         ],
     )
-    def test_a2c_tensordict_keys(self, td_est):
-        actor = self._create_mock_actor()
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_a2c_tensordict_keys(self, td_est, composite_action_dist):
+        actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
         value = self._create_mock_value()
 
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
@@ -8870,7 +9236,10 @@ class TestA2C(LossModuleTestBase):
     )
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", None))
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_a2c_tensordict_keys_run(self, device, advantage, td_est):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_a2c_tensordict_keys_run(
+        self, device, advantage, td_est, composite_action_dist
+    ):
         """Test A2C loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -8890,10 +9259,14 @@ class TestA2C(LossModuleTestBase):
             done_key=done_key,
             terminated_key=terminated_key,
             sample_log_prob_key=sample_log_prob_key,
+            composite_action_dist=composite_action_dist,
         )
 
         actor = self._create_mock_actor(
-            device=device, sample_log_prob_key=sample_log_prob_key
+            device=device,
+            sample_log_prob_key=sample_log_prob_key,
+            composite_action_dist=composite_action_dist,
+            action_key=action_key,
         )
         value = self._create_mock_value(device=device, out_keys=[value_key])
         if advantage == "gae":
@@ -8972,12 +9345,26 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    @pytest.mark.parametrize(
+        "composite_action_dist",
+        [
+            False,
+        ],
+    )
     def test_a2c_notensordict(
-        self, action_key, observation_key, reward_key, done_key, terminated_key
+        self,
+        action_key,
+        observation_key,
+        reward_key,
+        done_key,
+        terminated_key,
+        composite_action_dist,
     ):
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(observation_key=observation_key)
+        actor = self._create_mock_actor(
+            observation_key=observation_key, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(observation_key=observation_key)
         td = self._create_seq_mock_data_a2c(
             action_key=action_key,
@@ -8985,6 +9372,7 @@ class TestA2C(LossModuleTestBase):
             reward_key=reward_key,
             done_key=done_key,
             terminated_key=terminated_key,
+            composite_action_dist=composite_action_dist,
         )
 
         loss = A2CLoss(actor, value)
@@ -9029,15 +9417,20 @@ class TestA2C(LossModuleTestBase):
         assert loss_critic == loss_val_td["loss_critic"]
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
-    def test_a2c_reduction(self, reduction):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_a2c_reduction(self, reduction, composite_action_dist):
         torch.manual_seed(self.seed)
         device = (
             torch.device("cpu")
             if torch.cuda.device_count() == 0
             else torch.device("cuda")
         )
-        td = self._create_seq_mock_data_a2c(device=device)
-        actor = self._create_mock_actor(device=device)
+        td = self._create_seq_mock_data_a2c(
+            device=device, composite_action_dist=composite_action_dist
+        )
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         advantage = GAE(
             gamma=0.9,
@@ -9064,10 +9457,15 @@ class TestA2C(LossModuleTestBase):
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("clip_value", [True, None, 0.5, torch.tensor(0.5)])
-    def test_a2c_value_clipping(self, clip_value, device):
+    @pytest.mark.parametrize("composite_action_dist", [True, False])
+    def test_a2c_value_clipping(self, clip_value, device, composite_action_dist):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_a2c(device=device)
-        actor = self._create_mock_actor(device=device)
+        td = self._create_seq_mock_data_a2c(
+            device=device, composite_action_dist=composite_action_dist
+        )
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
         value = self._create_mock_value(device=device)
         advantage = GAE(
             gamma=0.9,
@@ -9151,7 +9549,7 @@ class TestReinforce(LossModuleTestBase):
             distribution_class=TanhNormal,
             return_log_prob=True,
             in_keys=["loc", "scale"],
-            spec=UnboundedContinuousTensorSpec(n_act),
+            spec=Unbounded(n_act),
         )
         if advantage == "gae":
             advantage = GAE(
@@ -9261,7 +9659,7 @@ class TestReinforce(LossModuleTestBase):
             distribution_class=TanhNormal,
             return_log_prob=True,
             in_keys=["loc", "scale"],
-            spec=UnboundedContinuousTensorSpec(n_act),
+            spec=Unbounded(n_act),
         )
 
         loss_fn = ReinforceLoss(
@@ -9455,7 +9853,7 @@ class TestReinforce(LossModuleTestBase):
             distribution_class=TanhNormal,
             return_log_prob=True,
             in_keys=["loc", "scale"],
-            spec=UnboundedContinuousTensorSpec(n_act),
+            spec=Unbounded(n_act),
         )
         loss = ReinforceLoss(actor_network=actor_net, critic_network=value_net)
         loss.set_keys(
@@ -9631,8 +10029,8 @@ class TestDreamer(LossModuleTestBase):
             ContinuousActionConvMockEnv(pixel_shape=[3, *self.img_size])
         )
         default_dict = {
-            "state": UnboundedContinuousTensorSpec(state_dim),
-            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": Unbounded(state_dim),
+            "belief": Unbounded(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -9708,8 +10106,8 @@ class TestDreamer(LossModuleTestBase):
             ContinuousActionConvMockEnv(pixel_shape=[3, *self.img_size])
         )
         default_dict = {
-            "state": UnboundedContinuousTensorSpec(state_dim),
-            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": Unbounded(state_dim),
+            "belief": Unbounded(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -9759,8 +10157,8 @@ class TestDreamer(LossModuleTestBase):
             ContinuousActionConvMockEnv(pixel_shape=[3, *self.img_size])
         )
         default_dict = {
-            "state": UnboundedContinuousTensorSpec(state_dim),
-            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
+            "state": Unbounded(state_dim),
+            "belief": Unbounded(rssm_hidden_dim),
         }
         mock_env.append_transform(
             TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -10049,7 +10447,7 @@ class TestOnlineDT(LossModuleTestBase):
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -10281,7 +10679,7 @@ class TestDT(LossModuleTestBase):
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -10459,6 +10857,227 @@ class TestDT(LossModuleTestBase):
             assert loss["loss"].shape == torch.Size([])
 
 
+class TestGAIL(LossModuleTestBase):
+    seed = 0
+
+    def _create_mock_discriminator(
+        self, batch=2, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # Discriminator
+        body = TensorDictModule(
+            MLP(
+                in_features=obs_dim + action_dim,
+                out_features=32,
+                depth=1,
+                num_cells=32,
+                activation_class=torch.nn.ReLU,
+                activate_last_layer=True,
+            ),
+            in_keys=["observation", "action"],
+            out_keys="hidden",
+        )
+        head = TensorDictModule(
+            MLP(
+                in_features=32,
+                out_features=1,
+                depth=0,
+                num_cells=32,
+                activation_class=torch.nn.Sigmoid,
+                activate_last_layer=True,
+            ),
+            in_keys="hidden",
+            out_keys="d_logits",
+        )
+        discriminator = TensorDictSequential(body, head)
+
+        return discriminator.to(device)
+
+    def _create_mock_data_gail(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "action": action,
+                "collector_action": action,
+                "collector_observation": obs,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_gail(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, T, obs_dim, device=device)
+        action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs,
+                "action": action,
+                "collector_action": action,
+                "collector_observation": obs,
+            },
+            device=device,
+        )
+        return td
+
+    def test_gail_tensordict_keys(self):
+        discriminator = self._create_mock_discriminator()
+        loss_fn = GAILLoss(discriminator)
+
+        default_keys = {
+            "expert_action": "action",
+            "expert_observation": "observation",
+            "collector_action": "collector_action",
+            "collector_observation": "collector_observation",
+            "discriminator_pred": "d_logits",
+        }
+
+        self.tensordict_keys_test(
+            loss_fn,
+            default_keys=default_keys,
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_gail_notensordict(self, device, use_grad_penalty, gp_lambda):
+        torch.manual_seed(self.seed)
+        discriminator = self._create_mock_discriminator(device=device)
+        loss_fn = GAILLoss(
+            discriminator, use_grad_penalty=use_grad_penalty, gp_lambda=gp_lambda
+        )
+
+        tensordict = self._create_mock_data_gail(device=device)
+
+        in_keys = self._flatten_in_keys(loss_fn.in_keys)
+        kwargs = dict(tensordict.flatten_keys("_").select(*in_keys))
+
+        loss_val_td = loss_fn(tensordict)
+        if use_grad_penalty:
+            loss_val, _ = loss_fn(**kwargs)
+        else:
+            loss_val = loss_fn(**kwargs)
+
+        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
+        # test select
+        loss_fn.select_out_keys("loss")
+        if torch.__version__ >= "2.0.0":
+            loss_discriminator = loss_fn(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_discriminator = loss_fn(**kwargs)
+            return
+        assert loss_discriminator == loss_val_td["loss"]
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_gail(self, device, use_grad_penalty, gp_lambda):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_gail(device=device)
+
+        discriminator = self._create_mock_discriminator(device=device)
+
+        loss_fn = GAILLoss(
+            discriminator, use_grad_penalty=use_grad_penalty, gp_lambda=gp_lambda
+        )
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "discriminator" in name
+            if p.grad is None:
+                assert "discriminator" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_gail_state_dict(self, device):
+        torch.manual_seed(self.seed)
+
+        discriminator = self._create_mock_discriminator(device=device)
+
+        loss_fn = GAILLoss(discriminator)
+        sd = loss_fn.state_dict()
+        loss_fn2 = GAILLoss(discriminator)
+        loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_seq_gail(self, device, use_grad_penalty, gp_lambda):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_gail(device=device)
+
+        discriminator = self._create_mock_discriminator(device=device)
+
+        loss_fn = GAILLoss(
+            discriminator, use_grad_penalty=use_grad_penalty, gp_lambda=gp_lambda
+        )
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "discriminator" in name
+            if p.grad is None:
+                assert "discriminator" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
+    @pytest.mark.parametrize("use_grad_penalty", [True, False])
+    @pytest.mark.parametrize("gp_lambda", [0.1, 1.0])
+    def test_gail_reduction(self, reduction, use_grad_penalty, gp_lambda):
+        torch.manual_seed(self.seed)
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda")
+        )
+        td = self._create_mock_data_gail(device=device)
+        discriminator = self._create_mock_discriminator(device=device)
+        loss_fn = GAILLoss(discriminator, reduction=reduction)
+        loss = loss_fn(td)
+        if reduction == "none":
+            assert loss["loss"].shape == (td["observation"].shape[0], 1)
+        else:
+            assert loss["loss"].shape == torch.Size([])
+
+
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
 )
@@ -10474,7 +11093,7 @@ class TestIQL(LossModuleTestBase):
         observation_key="observation",
     ):
         # Actor
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
@@ -11285,7 +11904,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         action_key="action",
     ):
         # Actor
-        action_spec = OneHotDiscreteTensorSpec(action_dim)
+        action_spec = OneHot(action_dim)
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
@@ -14750,7 +15369,7 @@ class TestBase:
         class MyLoss3(MyLoss2):
             @dataclass
             class _AcceptedKeys:
-                some_key = "some_value"
+                some_key: str = "some_value"
 
         loss_module = MyLoss3()
         assert loss_module.tensor_keys.some_key == "some_value"
@@ -15110,6 +15729,68 @@ class TestBuffer:
                 assert p.device == dest
             for p in mod.value_params.values(True, True):
                 assert p.device == dest
+
+
+@pytest.mark.skipif(TORCH_VERSION < "2.5", reason="requires torch>=2.5")
+def test_exploration_compile():
+    m = ProbabilisticTensorDictModule(
+        in_keys=["loc", "scale"],
+        out_keys=["sample"],
+        distribution_class=torch.distributions.Normal,
+    )
+
+    # class set_exploration_type_random(set_exploration_type):
+    #     __init__ = object.__init__
+    #     type = ExplorationType.RANDOM
+    it = exploration_type()
+
+    @torch.compile(fullgraph=True)
+    def func(t):
+        with set_exploration_type(ExplorationType.RANDOM):
+            t0 = m(t.clone())
+            t1 = m(t.clone())
+        return t0, t1
+
+    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
+    t0, t1 = func(t)
+    assert (t0["sample"] != t1["sample"]).any()
+    assert it == exploration_type()
+
+    @torch.compile(fullgraph=True)
+    def func(t):
+        with set_exploration_type(ExplorationType.MEAN):
+            t0 = m(t.clone())
+            t1 = m(t.clone())
+        return t0, t1
+
+    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
+    t0, t1 = func(t)
+    assert (t0["sample"] == t1["sample"]).all()
+    assert it == exploration_type()
+
+    @torch.compile(fullgraph=True)
+    @set_exploration_type(ExplorationType.RANDOM)
+    def func(t):
+        t0 = m(t.clone())
+        t1 = m(t.clone())
+        return t0, t1
+
+    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
+    t0, t1 = func(t)
+    assert (t0["sample"] != t1["sample"]).any()
+    assert it == exploration_type()
+
+    @torch.compile(fullgraph=True)
+    @set_exploration_type(ExplorationType.MEAN)
+    def func(t):
+        t0 = m(t.clone())
+        t1 = m(t.clone())
+        return t0, t1
+
+    t = TensorDict(loc=torch.randn(3), scale=torch.rand(3))
+    t0, t1 = func(t)
+    assert (t0["sample"] == t1["sample"]).all()
+    assert it == exploration_type()
 
 
 def test_loss_exploration():

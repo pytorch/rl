@@ -22,7 +22,7 @@ from tensordict.utils import NestedKey
 
 from torchrl._extension import EXTENSION_WARNING
 
-from torchrl._utils import _replace_last, implement_for, logger
+from torchrl._utils import _replace_last, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import _is_int, unravel_index
 
@@ -46,6 +46,9 @@ class Sampler(ABC):
     # need to keep track of the number of remaining batches
     _remaining_batches = int(torch.iinfo(torch.int64).max)
 
+    # The RNG is set by the replay buffer
+    _rng: torch.Generator | None = None
+
     @abstractmethod
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         ...
@@ -64,7 +67,7 @@ class Sampler(ABC):
         storage: Storage | None = None,
     ) -> dict | None:
         warnings.warn(
-            f"Calling update_priority() on a sampler {type(self).__name__} that is not prioritized. Make sure this is the indented behaviour."
+            f"Calling update_priority() on a sampler {type(self).__name__} that is not prioritized. Make sure this is the indented behavior."
         )
         return
 
@@ -104,6 +107,11 @@ class Sampler(ABC):
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
+
+    def __getstate__(self):
+        state = copy(self.__dict__)
+        state["_rng"] = None
+        return state
 
 
 class RandomSampler(Sampler):
@@ -192,7 +200,9 @@ class SamplerWithoutReplacement(Sampler):
             device = storage.device if hasattr(storage, "device") else None
 
         if self.shuffle:
-            _sample_list = torch.randperm(len_storage, device=device)
+            _sample_list = torch.randperm(
+                len_storage, device=device, generator=self._rng
+            )
         else:
             _sample_list = torch.arange(len_storage, device=device)
         self._sample_list = _sample_list
@@ -385,13 +395,28 @@ class PrioritizedSampler(Sampler):
     def max_size(self):
         return self._max_capacity
 
+    @property
+    def alpha(self):
+        return self._alpha
+
+    @alpha.setter
+    def alpha(self, value):
+        self._alpha = value
+
+    @property
+    def beta(self):
+        return self._beta
+
+    @beta.setter
+    def beta(self, value):
+        self._beta = value
+
     def __getstate__(self):
         if get_spawning_popen() is not None:
             raise RuntimeError(
                 f"Samplers of type {type(self)} cannot be shared between processes."
             )
-        state = copy(self.__dict__)
-        return state
+        return super().__getstate__()
 
     def _init(self):
         if self.dtype in (torch.float, torch.FloatType, torch.float32):
@@ -473,7 +498,11 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError("non-positive p_min")
         # For some undefined reason, only np.random works here.
         # All PT attempts fail, even when subsequently transformed into numpy
-        mass = np.random.uniform(0.0, p_sum, size=batch_size)
+        if self._rng is None:
+            mass = np.random.uniform(0.0, p_sum, size=batch_size)
+        else:
+            mass = torch.rand(batch_size, generator=self._rng) * p_sum
+
         # mass = torch.zeros(batch_size, dtype=torch.double).uniform_(0.0, p_sum)
         # mass = torch.rand(batch_size).mul_(p_sum)
         index = self._sum_tree.scan_lower_bound(mass)
@@ -929,7 +958,7 @@ class SliceSampler(Sampler):
                 f"one process will NOT erase the cache on another process's sampler, "
                 f"which will cause synchronization issues."
             )
-        state = copy(self.__dict__)
+        state = super().__getstate__()
         state["_cache"] = {}
         return state
 
@@ -969,22 +998,20 @@ class SliceSampler(Sampler):
 
             # faster
             end = trajectory[:-1] != trajectory[1:]
-            end = torch.cat([end, trajectory[-1:] != trajectory[:1]], 0)
+            if not at_capacity:
+                end = torch.cat([end, torch.ones_like(end[:1])], 0)
+            else:
+                end = torch.cat([end, trajectory[-1:] != trajectory[:1]], 0)
             length = trajectory.shape[0]
         else:
-            # TODO: check that storage is at capacity here, if not we need to assume that the last element of end is True
-
             # We presume that not done at the end means that the traj spans across end and beginning of storage
             length = end.shape[0]
+            if not at_capacity:
+                end = end.clone()
+                end[length - 1] = True
+        ndim = end.ndim
 
-        if not at_capacity:
-            end = torch.index_fill(
-                end,
-                index=torch.tensor(-1, device=end.device, dtype=torch.long),
-                dim=0,
-                value=1,
-            )
-        else:
+        if at_capacity:
             # we must have at least one end by traj to individuate trajectories
             # so if no end can be found we set it manually
             if cursor is not None:
@@ -1006,7 +1033,6 @@ class SliceSampler(Sampler):
                 mask = ~end.any(0, True)
                 mask = torch.cat([torch.zeros_like(end[:-1]), mask])
                 end = torch.masked_fill(mask, end, 1)
-        ndim = end.ndim
         if ndim == 0:
             raise RuntimeError(
                 "Expected the end-of-trajectory signal to be at least 1-dimensional."
@@ -1063,9 +1089,28 @@ class SliceSampler(Sampler):
         # seq_length is a 1d tensor indicating the desired length of each sequence
 
         if isinstance(seq_length, int):
-            result = torch.cat(
-                [self._start_to_end(_start, length=seq_length) for _start in start]
+            arange = torch.arange(seq_length, device=start.device, dtype=start.dtype)
+            ndims = start.shape[-1] - 1 if (start.ndim - 1) else 0
+            if ndims:
+                arange_reshaped = torch.empty(
+                    arange.shape + torch.Size([ndims + 1]),
+                    device=start.device,
+                    dtype=start.dtype,
+                )
+                arange_reshaped[..., 0] = arange
+                arange_reshaped[..., 1:] = 0
+            else:
+                arange_reshaped = arange.unsqueeze(-1)
+            arange_expanded = arange_reshaped.expand(
+                torch.Size([start.shape[0]]) + arange_reshaped.shape
             )
+            if start.shape != arange_expanded.shape:
+                n_missing_dims = arange_expanded.dim() - start.dim()
+                start_expanded = start[
+                    (slice(None),) + (None,) * n_missing_dims
+                ].expand_as(arange_expanded)
+            result = (start_expanded + arange_expanded).flatten(0, 1)
+
         else:
             # when padding is needed
             result = torch.cat(
@@ -1094,7 +1139,7 @@ class SliceSampler(Sampler):
                             "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                         )
                 vals = self._find_start_stop_traj(
-                    trajectory=trajectory,
+                    trajectory=trajectory.clone(),
                     at_capacity=storage._is_full,
                     cursor=getattr(storage, "_last_cursor", None),
                 )
@@ -1187,7 +1232,9 @@ class SliceSampler(Sampler):
         # start_idx and stop_idx are 2d tensors organized like a non-zero
 
         def get_traj_idx(maxval):
-            return torch.randint(maxval, (num_slices,), device=lengths.device)
+            return torch.randint(
+                maxval, (num_slices,), device=lengths.device, generator=self._rng
+            )
 
         if (lengths < seq_length).any():
             if self.strict_length:
@@ -1290,7 +1337,8 @@ class SliceSampler(Sampler):
             start_point = -span_right
 
         relative_starts = (
-            torch.rand(num_slices, device=lengths.device) * (end_point - start_point)
+            torch.rand(num_slices, device=lengths.device, generator=self._rng)
+            * (end_point - start_point)
         ).floor().to(start_idx.dtype) + start_point
 
         if self.span[0]:
@@ -1800,34 +1848,38 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     def __getstate__(self):
         state = SliceSampler.__getstate__(self)
         state.update(PrioritizedSampler.__getstate__(self))
+        return state
 
     def mark_update(
         self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
     ) -> None:
         return PrioritizedSampler.mark_update(self, index, storage=storage)
 
-    @implement_for("torch", "2.4")
     def _padded_indices(self, shapes, arange) -> torch.Tensor:
         # this complex mumbo jumbo creates a left padded tensor with valid indices on the right, e.g.
         # tensor([[ 0,  1,  2,  3,  4],
         #         [-1, -1,  5,  6,  7],
         #         [-1,  8,  9, 10, 11]])
         # where the -1 items on the left are padded values
-        st, off = torch._nested_compute_contiguous_strides_offsets(shapes.flip(0))
-        nt = torch._nested_view_from_buffer(
-            arange.flip(0).contiguous(), shapes.flip(0), st, off
-        )
-        pad = nt.to_padded_tensor(-1).flip(-1).flip(0)
-        return pad
+        num_groups = shapes.shape[0]
+        max_group_len = shapes.max()
+        pad_lengths = max_group_len - shapes
 
-    @implement_for("torch", None, "2.4")
-    def _padded_indices(self, shapes, arange) -> torch.Tensor:  # noqa: F811
-        arange = arange.flip(0).split(shapes.flip(0).squeeze().unbind())
-        return (
-            torch.nn.utils.rnn.pad_sequence(arange, batch_first=True, padding_value=-1)
-            .flip(-1)
-            .flip(0)
+        # Get all the start and end indices within arange for each group
+        group_ends = shapes.cumsum(0)
+        group_starts = torch.empty_like(group_ends)
+        group_starts[0] = 0
+        group_starts[1:] = group_ends[:-1]
+        pad = torch.empty(
+            (num_groups, max_group_len), dtype=arange.dtype, device=arange.device
         )
+        for pad_row, group_start, group_end, pad_len in zip(
+            pad, group_starts, group_ends, pad_lengths
+        ):
+            pad_row[:pad_len] = -1
+            pad_row[pad_len:] = arange[group_start:group_end]
+
+        return pad
 
     def _preceding_stop_idx(self, storage, lengths, seq_length, start_idx):
         preceding_stop_idx = self._cache.get("preceding_stop_idx")
@@ -2033,6 +2085,7 @@ class SamplerEnsemble(Sampler):
     def __init__(
         self, *samplers, p=None, sample_from_all=False, num_buffer_sampled=None
     ):
+        self._rng_private = None
         self._samplers = samplers
         self.sample_from_all = sample_from_all
         if sample_from_all and p is not None:
@@ -2041,6 +2094,16 @@ class SamplerEnsemble(Sampler):
             )
         self.p = p
         self.num_buffer_sampled = num_buffer_sampled
+
+    @property
+    def _rng(self):
+        return self._rng_private
+
+    @_rng.setter
+    def _rng(self, value):
+        self._rng_private = value
+        for sampler in self._samplers:
+            sampler._rng = value
 
     @property
     def p(self):
@@ -2082,7 +2145,10 @@ class SamplerEnsemble(Sampler):
         else:
             if self.p is None:
                 buffer_ids = torch.randint(
-                    len(self._samplers), (self.num_buffer_sampled,)
+                    len(self._samplers),
+                    (self.num_buffer_sampled,),
+                    generator=self._rng,
+                    device=getattr(storage, "device", None),
                 )
             else:
                 buffer_ids = torch.multinomial(self.p, self.num_buffer_sampled, True)

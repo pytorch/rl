@@ -47,14 +47,14 @@ class DQNLoss(LossModule):
             Defaults to "l2".
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
-            create a DQN with a target network. Default is ``False``.
+            create a DQN with a target network. Default is ``True``.
         double_dqn (bool, optional): whether to use Double DQN, as described in
             https://arxiv.org/abs/1509.06461. Defaults to ``False``.
         action_space (str or TensorSpec, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHot`,
+            :class:`torchrl.data.MultiOneHot`,
+            :class:`torchrl.data.Binary` or :class:`torchrl.data.Categorical`).
             If not provided, an attempt to retrieve it from the value network
             will be made.
         priority_key (NestedKey, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
@@ -68,10 +68,10 @@ class DQNLoss(LossModule):
 
     Examples:
         >>> from torchrl.modules import MLP
-        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.data import OneHot
         >>> n_obs, n_act = 4, 3
         >>> value_net = MLP(in_features=n_obs, out_features=n_act)
-        >>> spec = OneHotDiscreteTensorSpec(n_act)
+        >>> spec = OneHot(n_act)
         >>> actor = QValueActor(value_net, in_keys=["observation"], action_space=spec)
         >>> loss = DQNLoss(actor, action_space=spec)
         >>> batch = [10,]
@@ -99,12 +99,12 @@ class DQNLoss(LossModule):
 
     Examples:
         >>> from torchrl.objectives import DQNLoss
-        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torchrl.data import OneHot
         >>> from torch import nn
         >>> import torch
         >>> n_obs = 3
         >>> n_action = 4
-        >>> action_spec = OneHotDiscreteTensorSpec(n_action)
+        >>> action_spec = OneHot(n_action)
         >>> value_network = nn.Linear(n_obs, n_action) # a simple value model
         >>> dqn_loss = DQNLoss(value_network, action_space=action_spec)
         >>> # define data
@@ -224,7 +224,7 @@ class DQNLoss(LossModule):
         if action_space is None:
             warnings.warn(
                 "action_space was not specified. DQNLoss will default to 'one-hot'."
-                "This behaviour will be deprecated soon and a space will have to be passed."
+                "This behavior will be deprecated soon and a space will have to be passed."
                 "Check the DQNLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"

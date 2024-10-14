@@ -9,11 +9,7 @@ import torch
 from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
 from torch.hub import load_state_dict_from_url
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms.transforms import (
     CatTensors,
@@ -92,8 +88,8 @@ class _VIPNet(Transform):
         return out
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if not isinstance(observation_spec, CompositeSpec):
-            raise ValueError("_VIPNet can only infer CompositeSpec")
+        if not isinstance(observation_spec, Composite):
+            raise ValueError("_VIPNet can only infer Composite")
 
         keys = [key for key in observation_spec.keys(True, True) if key in self.in_keys]
         device = observation_spec[keys[0]].device
@@ -105,7 +101,7 @@ class _VIPNet(Transform):
                 del observation_spec[in_key]
 
         for out_key in self.out_keys:
-            observation_spec[out_key] = UnboundedContinuousTensorSpec(
+            observation_spec[out_key] = Unbounded(
                 shape=torch.Size([*dim, 1024]), device=device
             )
 
@@ -289,7 +285,7 @@ class VIPTransform(Compose):
             unsqueeze = UnsqueezeTransform(
                 in_keys=in_keys,
                 out_keys=in_keys,
-                unsqueeze_dim=-4,
+                dim=-4,
             )
             transforms.append(unsqueeze)
 
@@ -399,7 +395,7 @@ class VIPRewardTransform(VIPTransform):
         if "full_state_spec" in input_spec.keys():
             full_state_spec = input_spec["full_state_spec"]
         else:
-            full_state_spec = CompositeSpec(
+            full_state_spec = Composite(
                 shape=input_spec.shape, device=input_spec.device
             )
         # find the obs spec

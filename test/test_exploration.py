@@ -21,12 +21,7 @@ from torch import nn
 from torchrl._utils import _replace_last
 
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-)
+from torchrl.data import Bounded, Categorical, Composite, OneHot
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
 from torchrl.envs.utils import set_exploration_type
@@ -36,7 +31,7 @@ from torchrl.modules.distributions import (
     NormalParamExtractor,
     TanhNormal,
 )
-from torchrl.modules.models.exploration import LazygSDEModule
+from torchrl.modules.models.exploration import ConsistentDropoutModule, LazygSDEModule
 from torchrl.modules.tensordict_module.actors import (
     Actor,
     ProbabilisticActor,
@@ -59,7 +54,7 @@ class TestEGreedy:
     @set_exploration_type(InteractionType.RANDOM)
     def test_egreedy(self, eps_init, module):
         torch.manual_seed(0)
-        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
+        spec = Bounded(1, 1, torch.Size([4]))
         module = torch.nn.Linear(4, 4, bias=False)
 
         policy = Actor(spec=spec, module=module)
@@ -91,9 +86,9 @@ class TestEGreedy:
         batch_size = (3, 4, 2)
         module = torch.nn.Linear(action_size, action_size, bias=False)
         if spec_class == "discrete":
-            spec = DiscreteTensorSpec(action_size)
+            spec = Categorical(action_size)
         else:
-            spec = OneHotDiscreteTensorSpec(
+            spec = OneHot(
                 action_size,
                 shape=(action_size,),
             )
@@ -166,7 +161,7 @@ class TestEGreedy:
         action_size = 4
         batch_size = (3, 4, 2)
         module = torch.nn.Linear(action_size, action_size, bias=False)
-        spec = OneHotDiscreteTensorSpec(action_size, shape=(action_size,))
+        spec = OneHot(action_size, shape=(action_size,))
         policy = QValueActor(spec=spec, module=module)
         explorative_policy = TensorDictSequential(
             policy,
@@ -187,7 +182,7 @@ class TestEGreedy:
     @pytest.mark.parametrize("module", [True, False])
     def test_wrong_action_shape(self, module):
         torch.manual_seed(0)
-        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
+        spec = Bounded(1, 1, torch.Size([4]))
         module = torch.nn.Linear(4, 5, bias=False)
 
         policy = Actor(spec=spec, module=module)
@@ -240,7 +235,7 @@ class TestOrnsteinUhlenbeckProcess:
             device
         )
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
-        action_spec = BoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
+        action_spec = Bounded(-torch.ones(d_act), torch.ones(d_act), (d_act,))
         policy = ProbabilisticActor(
             spec=action_spec,
             module=module,
@@ -444,7 +439,7 @@ class TestAdditiveGaussian:
             pytest.skip("module raises an error if given spec=None")
 
         torch.manual_seed(seed)
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(d_act, device=device),
             torch.ones(d_act, device=device),
             (d_act,),
@@ -463,9 +458,7 @@ class TestAdditiveGaussian:
                 spec=None,
             )
             policy = ProbabilisticActor(
-                spec=CompositeSpec(action=action_spec)
-                if spec_origin is not None
-                else None,
+                spec=Composite(action=action_spec) if spec_origin is not None else None,
                 module=module,
                 in_keys=["loc", "scale"],
                 distribution_class=TanhNormal,
@@ -541,7 +534,7 @@ class TestAdditiveGaussian:
             device
         )
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
-        action_spec = BoundedTensorSpec(
+        action_spec = Bounded(
             -torch.ones(d_act, device=device),
             torch.ones(d_act, device=device),
             (d_act,),
@@ -644,7 +637,7 @@ class TestAdditiveGaussian:
 @pytest.mark.parametrize("safe", [True, False])
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize(
-    "exploration_type", [InteractionType.RANDOM, InteractionType.MODE]
+    "exploration_type", [InteractionType.RANDOM, InteractionType.DETERMINISTIC]
 )
 def test_gsde(
     state_dim, action_dim, gSDE, device, safe, exploration_type, batch=16, bound=0.1
@@ -670,7 +663,7 @@ def test_gsde(
         module = SafeModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
         distribution_class = TanhNormal
         distribution_kwargs = {"low": -bound, "high": bound}
-    spec = BoundedTensorSpec(
+    spec = Bounded(
         -torch.ones(action_dim) * bound, torch.ones(action_dim) * bound, (action_dim,)
     ).to(device)
 
@@ -708,7 +701,10 @@ def test_gsde(
         with set_exploration_type(exploration_type):
             action1 = module(td).get("action")
         action2 = actor(td.exclude("action")).get("action")
-        if gSDE or exploration_type == InteractionType.MODE:
+        if gSDE or exploration_type in (
+            InteractionType.DETERMINISTIC,
+            InteractionType.MODE,
+        ):
             torch.testing.assert_close(action1, action2)
         else:
             with pytest.raises(AssertionError):
@@ -740,6 +736,156 @@ def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_s
     assert (
         abs(sigma_init - sigma.mean()) < 0.3
     ), f"failed: mean={mean}, std={std}, sigma_init={sigma_init}, actual: {sigma.mean()}"
+
+
+class TestConsistentDropout:
+    @pytest.mark.parametrize("dropout_p", [0.0, 0.1, 0.5])
+    @pytest.mark.parametrize("parallel_spec", [False, True])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_consistent_dropout(self, dropout_p, parallel_spec, device):
+        """
+
+        This preliminary test seeks to ensure two things for both
+        ConsistentDropout and ConsistentDropoutModule:
+        1. Rollout transitions generate a dropout mask as desired.
+            - We can easily verify the existence of a mask
+        2. The dropout mask is correctly applied.
+            - We will check with stochastic policies whether or not
+            the loc and scale are the same.
+        """
+        torch.manual_seed(0)
+
+        # NOTE: Please only put a module with one dropout layer.
+        # That's how this test is constructed anyways.
+        @torch.no_grad
+        def inner_verify_routine(module, env):
+            # Perform transitions.
+            collector = SyncDataCollector(
+                create_env_fn=env,
+                policy=module,
+                frames_per_batch=1,
+                total_frames=10,
+                device=device,
+            )
+            for frames in collector:
+                masks = [
+                    (key, value)
+                    for key, value in frames.items()
+                    if key.startswith("mask_")
+                ]
+                # Assert rollouts do indeed correctly generate the masks.
+                assert len(masks) == 1, (
+                    "Expected exactly ONE mask since we only put "
+                    f"one dropout module, got {len(masks)}."
+                )
+
+                # Verify that the result for this batch is the same.
+                # Kind of Monte Carlo, to be honest.
+                sentinel_mask = masks[0][1].clone()
+                sentinel_outputs = frames.select("loc", "scale").clone()
+
+                desired_dropout_mask = torch.full_like(
+                    sentinel_mask, 1 / (1 - dropout_p)
+                )
+                desired_dropout_mask[sentinel_mask == 0.0] = 0.0
+                # As of 15/08/24, :meth:`~torch.nn.functional.dropout`
+                # is being used. Never hurts to be safe.
+                assert torch.allclose(
+                    sentinel_mask, desired_dropout_mask
+                ), "Dropout was not scaled properly."
+
+                new_frames = module(frames.clone())
+                infer_mask = new_frames[masks[0][0]]
+                infer_outputs = new_frames.select("loc", "scale")
+                assert (infer_mask == sentinel_mask).all(), "Mask does not match"
+
+                assert all(
+                    [
+                        torch.allclose(infer_outputs[key], sentinel_outputs[key])
+                        for key in ("loc", "scale")
+                    ]
+                ), (
+                    "Outputs do not match:\n "
+                    f"{infer_outputs['loc']}\n--- vs ---\n{sentinel_outputs['loc']}"
+                    f"{infer_outputs['scale']}\n--- vs ---\n{sentinel_outputs['scale']}"
+                )
+
+        env = SerialEnv(
+            2,
+            ContinuousActionVecMockEnv,
+        )
+        env = TransformedEnv(env.to(device), InitTracker())
+        env = env.to(device)
+        # the module must work with the action spec of a single env or a serial env
+        if parallel_spec:
+            action_spec = env.action_spec
+        else:
+            action_spec = ContinuousActionVecMockEnv(device=device).action_spec
+        d_act = action_spec.shape[-1]
+
+        # NOTE: Please only put a module with one dropout layer.
+        # That's how this test is constructed anyways.
+        module_td_seq = TensorDictSequential(
+            TensorDictModule(
+                nn.LazyLinear(2 * d_act), in_keys=["observation"], out_keys=["out"]
+            ),
+            ConsistentDropoutModule(p=dropout_p, in_keys="out"),
+            TensorDictModule(
+                NormalParamExtractor(), in_keys=["out"], out_keys=["loc", "scale"]
+            ),
+        )
+
+        policy_td_seq = ProbabilisticActor(
+            module=module_td_seq,
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            default_interaction_type=InteractionType.RANDOM,
+            spec=action_spec,
+        ).to(device)
+
+        # Wake up the policies
+        policy_td_seq(env.reset())
+
+        # Test.
+        inner_verify_routine(policy_td_seq, env)
+
+    def test_consistent_dropout_primer(self):
+        import torch
+
+        from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+        from torchrl.envs import SerialEnv, StepCounter
+        from torchrl.modules import ConsistentDropoutModule, get_primers_from_module
+
+        torch.manual_seed(0)
+
+        m = Seq(
+            Mod(
+                torch.nn.Linear(7, 4),
+                in_keys=["observation"],
+                out_keys=["intermediate"],
+            ),
+            ConsistentDropoutModule(
+                p=0.5,
+                input_shape=(
+                    2,
+                    4,
+                ),
+                in_keys="intermediate",
+            ),
+            Mod(torch.nn.Linear(4, 7), in_keys=["intermediate"], out_keys=["action"]),
+        )
+        primer = get_primers_from_module(m)
+        env0 = ContinuousActionVecMockEnv().append_transform(StepCounter(5))
+        env1 = ContinuousActionVecMockEnv().append_transform(StepCounter(6))
+        env = SerialEnv(2, [lambda env=env0: env, lambda env=env1: env])
+        env = env.append_transform(primer)
+        r = env.rollout(10, m, break_when_any_done=False)
+        mask = [k for k in r.keys() if k.startswith("mask")][0]
+        assert (r[mask][0, :5] != r[mask][0, 5:6]).any()
+        assert (r[mask][0, :4] == r[mask][0, 4:5]).all()
+
+        assert (r[mask][1, :6] != r[mask][1, 6:7]).any()
+        assert (r[mask][1, :5] == r[mask][1, 5:6]).all()
 
 
 if __name__ == "__main__":

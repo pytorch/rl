@@ -159,7 +159,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         use_env_creator=False,
     )()
     if isinstance(create_env_fn, ParallelEnv):
-        raise NotImplementedError("This behaviour is deprecated")
+        raise NotImplementedError("This behavior is deprecated")
     elif isinstance(create_env_fn, EnvCreator):
         recorder.transform[1:].load_state_dict(
             get_norm_state_dict(create_env_fn()), strict=False

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
 import typing
 from typing import Any, Callable, List, Tuple, Union
 
@@ -13,14 +14,14 @@ import torch
 from torch import Tensor
 
 from torchrl.data.tensor_specs import (
-    BinaryDiscreteTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    LazyStackedCompositeSpec,
-    LazyStackedTensorSpec,
-    MultiDiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
+    Binary,
+    Categorical,
+    Composite,
+    MultiCategorical,
+    MultiOneHot,
+    OneHot,
+    Stacked,
+    StackedComposite,
     TensorSpec,
 )
 
@@ -50,10 +51,10 @@ INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 
 
 ACTION_SPACE_MAP = {
-    OneHotDiscreteTensorSpec: "one_hot",
-    MultiOneHotDiscreteTensorSpec: "mult_one_hot",
-    BinaryDiscreteTensorSpec: "binary",
-    DiscreteTensorSpec: "categorical",
+    OneHot: "one_hot",
+    MultiOneHot: "mult_one_hot",
+    Binary: "binary",
+    Categorical: "categorical",
     "one_hot": "one_hot",
     "one-hot": "one_hot",
     "mult_one_hot": "mult_one_hot",
@@ -62,7 +63,7 @@ ACTION_SPACE_MAP = {
     "multi-one-hot": "mult_one_hot",
     "binary": "binary",
     "categorical": "categorical",
-    MultiDiscreteTensorSpec: "multi_categorical",
+    MultiCategorical: "multi_categorical",
     "multi_categorical": "multi_categorical",
     "multi-categorical": "multi_categorical",
     "multi_discrete": "multi_categorical",
@@ -71,14 +72,14 @@ ACTION_SPACE_MAP = {
 
 
 def consolidate_spec(
-    spec: CompositeSpec,
+    spec: Composite,
     recurse_through_entries: bool = True,
     recurse_through_stack: bool = True,
 ):
     """Given a TensorSpec, removes exclusive keys by adding 0 shaped specs.
 
     Args:
-        spec (CompositeSpec): the spec to be consolidated.
+        spec (Composite): the spec to be consolidated.
         recurse_through_entries (bool): if True, call the function recursively on all entries of the spec.
             Default is True.
         recurse_through_stack (bool): if True, if the provided spec is lazy, the function recursively
@@ -87,10 +88,10 @@ def consolidate_spec(
     """
     spec = spec.clone()
 
-    if not isinstance(spec, (CompositeSpec, LazyStackedCompositeSpec)):
+    if not isinstance(spec, (Composite, StackedComposite)):
         return spec
 
-    if isinstance(spec, LazyStackedCompositeSpec):
+    if isinstance(spec, StackedComposite):
         keys = set(spec.keys())  # shared keys
         exclusive_keys_per_spec = [
             set() for _ in range(len(spec._specs))
@@ -128,7 +129,7 @@ def consolidate_spec(
 
     if recurse_through_entries:
         for key, value in spec.items():
-            if isinstance(value, (CompositeSpec, LazyStackedCompositeSpec)):
+            if isinstance(value, (Composite, StackedComposite)):
                 spec.set(
                     key,
                     consolidate_spec(
@@ -145,16 +146,16 @@ def _empty_like_spec(specs: List[TensorSpec], shape):
                 "Found same key in lazy specs corresponding to entries with different classes"
             )
     spec = specs[0]
-    if isinstance(spec, (CompositeSpec, LazyStackedCompositeSpec)):
+    if isinstance(spec, (Composite, StackedComposite)):
         # the exclusive key has values which are CompositeSpecs ->
         # we create an empty composite spec with same batch size
         return spec.empty()
-    elif isinstance(spec, LazyStackedTensorSpec):
+    elif isinstance(spec, Stacked):
         # the exclusive key has values which are LazyStackedTensorSpecs ->
         # we create a LazyStackedTensorSpec with the same shape (aka same -1s) as the first in the list.
         # this will not add any new -1s when they are stacked
         shape = list(shape[: spec.stack_dim]) + list(shape[spec.stack_dim + 1 :])
-        return LazyStackedTensorSpec(
+        return Stacked(
             *[_empty_like_spec(spec._specs, shape) for _ in spec._specs],
             dim=spec.stack_dim,
         )
@@ -191,14 +192,14 @@ def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
         spec (TensorSpec): the spec to check
         recurse (bool): if True, check recursively in nested specs. Default is True.
     """
-    if isinstance(spec, LazyStackedCompositeSpec):
+    if isinstance(spec, StackedComposite):
         keys = set(spec.keys())
         for inner_td in spec._specs:
             if recurse and not check_no_exclusive_keys(inner_td):
                 return False
             if set(inner_td.keys()) != keys:
                 return False
-    elif isinstance(spec, CompositeSpec) and recurse:
+    elif isinstance(spec, Composite) and recurse:
         for value in spec.values():
             if not check_no_exclusive_keys(value):
                 return False
@@ -214,9 +215,9 @@ def contains_lazy_spec(spec: TensorSpec) -> bool:
         spec (TensorSpec): the spec to check
 
     """
-    if isinstance(spec, (LazyStackedTensorSpec, LazyStackedCompositeSpec)):
+    if isinstance(spec, (Stacked, StackedComposite)):
         return True
-    elif isinstance(spec, CompositeSpec):
+    elif isinstance(spec, Composite):
         for inner_spec in spec.values():
             if contains_lazy_spec(inner_spec):
                 return True
@@ -235,6 +236,8 @@ class CloudpickleWrapper(object):
         self.fn = fn
         self.kwargs = kwargs
 
+        functools.update_wrapper(self, getattr(fn, "forward", fn))
+
     def __getstate__(self):
         import cloudpickle
 
@@ -244,6 +247,7 @@ class CloudpickleWrapper(object):
         import pickle
 
         self.fn, self.kwargs = pickle.loads(ob)
+        functools.update_wrapper(self, self.fn)
 
     def __call__(self, *args, **kwargs) -> Any:
         kwargs.update(self.kwargs)
@@ -253,7 +257,7 @@ class CloudpickleWrapper(object):
 def _process_action_space_spec(action_space, spec):
     original_spec = spec
     composite_spec = False
-    if isinstance(spec, CompositeSpec):
+    if isinstance(spec, Composite):
         # this will break whenever our action is more complex than a single tensor
         try:
             if "action" in spec.keys():
@@ -274,8 +278,8 @@ def _process_action_space_spec(action_space, spec):
                 "with a leaf 'action' entry. Otherwise, simply remove the spec and use the action_space only."
             )
     if action_space is not None:
-        if isinstance(action_space, CompositeSpec):
-            raise ValueError("action_space cannot be of type CompositeSpec.")
+        if isinstance(action_space, Composite):
+            raise ValueError("action_space cannot be of type Composite.")
         if (
             spec is not None
             and isinstance(action_space, TensorSpec)
@@ -305,7 +309,7 @@ def _process_action_space_spec(action_space, spec):
 
 def _find_action_space(action_space):
     if isinstance(action_space, TensorSpec):
-        if isinstance(action_space, CompositeSpec):
+        if isinstance(action_space, Composite):
             if "action" in action_space.keys():
                 _key = "action"
             else:
