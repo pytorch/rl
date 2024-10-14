@@ -157,7 +157,7 @@ CrossQ
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    CrossQ
+    CrossQLoss
 
 IQL
 ----
@@ -178,6 +178,15 @@ CQL
 
     CQLLoss
     DiscreteCQLLoss
+
+GAIL
+----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    GAILLoss
 
 DT
 ----

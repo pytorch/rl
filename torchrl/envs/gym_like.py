@@ -12,14 +12,10 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import NonTensorData, TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.common import _EnvWrapper, EnvBase
 
 
@@ -44,10 +40,10 @@ class default_info_dict_reader(BaseInfoDictReader):
     Args:
         keys (list of keys, optional): If provided, the list of keys to get from
             the info dictionary. Defaults to all keys.
-        spec (List[TensorSpec], Dict[str, TensorSpec] or CompositeSpec, optional):
+        spec (List[TensorSpec], Dict[str, TensorSpec] or Composite, optional):
             If a list of specs is provided, each spec will be matched to its
-            correspondent key to form a :class:`torchrl.data.CompositeSpec`.
-            If not provided, a composite spec with :class:`~torchrl.data.UnboundedContinuousTensorSpec`
+            correspondent key to form a :class:`torchrl.data.Composite`.
+            If not provided, a composite spec with :class:`~torchrl.data.Unbounded`
             specs will lazyly be created.
         ignore_private (bool, optional): If ``True``, private infos (starting with
             an underscore) will be ignored. Defaults to ``True``.
@@ -72,10 +68,7 @@ class default_info_dict_reader(BaseInfoDictReader):
     def __init__(
         self,
         keys: List[str] | None = None,
-        spec: Sequence[TensorSpec]
-        | Dict[str, TensorSpec]
-        | CompositeSpec
-        | None = None,
+        spec: Sequence[TensorSpec] | Dict[str, TensorSpec] | Composite | None = None,
         ignore_private: bool = True,
     ):
         self.ignore_private = ignore_private
@@ -87,19 +80,17 @@ class default_info_dict_reader(BaseInfoDictReader):
         if spec is None and keys is None:
             _info_spec = None
         elif spec is None:
-            _info_spec = CompositeSpec(
-                {key: UnboundedContinuousTensorSpec(()) for key in keys}, shape=[]
-            )
-        elif not isinstance(spec, CompositeSpec):
+            _info_spec = Composite({key: Unbounded(()) for key in keys}, shape=[])
+        elif not isinstance(spec, Composite):
             if self.keys is not None and len(spec) != len(self.keys):
                 raise ValueError(
                     "If specifying specs for info keys with a sequence, the "
                     "length of the sequence must match the number of keys"
                 )
             if isinstance(spec, dict):
-                _info_spec = CompositeSpec(spec, shape=[])
+                _info_spec = Composite(spec, shape=[])
             else:
-                _info_spec = CompositeSpec(
+                _info_spec = Composite(
                     {key: spec for key, spec in zip(keys, spec)}, shape=[]
                 )
         else:
@@ -121,7 +112,7 @@ class default_info_dict_reader(BaseInfoDictReader):
                 keys = [key for key in keys if not key.startswith("_")]
             self.keys = keys
         # create an info_spec only if there is none
-        info_spec = None if self.info_spec is not None else CompositeSpec()
+        info_spec = None if self.info_spec is not None else Composite()
         for key in keys:
             if key in info_dict:
                 val = info_dict[key]
@@ -130,7 +121,7 @@ class default_info_dict_reader(BaseInfoDictReader):
                 tensordict.set(key, val)
                 if info_spec is not None:
                     val = tensordict.get(key)
-                    info_spec[key] = UnboundedContinuousTensorSpec(
+                    info_spec[key] = Unbounded(
                         val.shape, device=val.device, dtype=val.dtype
                     )
             elif self.info_spec is not None:
@@ -158,7 +149,7 @@ class default_info_dict_reader(BaseInfoDictReader):
 class GymLikeEnv(_EnvWrapper):
     """A gym-like env is an environment.
 
-    Its behaviour is similar to gym environments in what common methods (specifically reset and step) are expected to do.
+    Its behavior is similar to gym environments in what common methods (specifically reset and step) are expected to do.
 
     A :obj:`GymLikeEnv` has a :obj:`.step()` method with the following signature:
 
@@ -181,6 +172,7 @@ class GymLikeEnv(_EnvWrapper):
     def __new__(cls, *args, **kwargs):
         self = super().__new__(cls, *args, _batch_locked=True, **kwargs)
         self._info_dict_reader = []
+
         return self
 
     def read_action(self, action):
@@ -291,14 +283,18 @@ class GymLikeEnv(_EnvWrapper):
             observations = observations_dict
         else:
             for key, val in observations.items():
-                observations[key] = self.observation_spec[key].encode(
-                    val, ignore_device=True
-                )
+                if isinstance(self.observation_spec[key], NonTensor):
+                    observations[key] = NonTensorData(val)
+                else:
+                    observations[key] = self.observation_spec[key].encode(
+                        val, ignore_device=True
+                    )
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
-        action_np = self.read_action(action)
+        if self._convert_actions_to_numpy:
+            action = self.read_action(action)
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
@@ -309,7 +305,7 @@ class GymLikeEnv(_EnvWrapper):
                 truncated,
                 done,
                 info_dict,
-            ) = self._output_transform(self._env.step(action_np))
+            ) = self._output_transform(self._env.step(action))
 
             if _reward is not None:
                 reward = reward + _reward
@@ -515,7 +511,7 @@ class GymLikeEnv(_EnvWrapper):
         the info is filled at reset time.
 
         .. note:: This method requires running a few iterations in the environment to
-          manually check that the behaviour matches expectations.
+          manually check that the behavior matches expectations.
 
         Args:
             ignore_private (bool, optional): If ``True``, private infos (starting with

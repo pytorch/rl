@@ -230,7 +230,7 @@ def _fast_vec_gae(
     ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
 
     """
-    # _gen_num_per_traj and _split_and_pad_sequence need
+    # _get_num_per_traj and _split_and_pad_sequence need
     # time dimension at last position
     done = done.transpose(-2, -1)
     terminated = terminated.transpose(-2, -1)

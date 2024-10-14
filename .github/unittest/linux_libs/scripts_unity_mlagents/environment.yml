@@ -1,0 +1,21 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python==3.10.12
+  - pip
+  - pip:
+    - mlagents_envs==1.0.0
+    - hypothesis
+    - future
+    - cloudpickle
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-error-for-skips
+    - expecttest
+    - pyyaml
+    - scipy
+    - hydra-core

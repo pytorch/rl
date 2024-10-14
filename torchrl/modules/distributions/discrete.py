@@ -389,6 +389,17 @@ class MaskedOneHotCategorical(MaskedCategorical):
     ) -> torch.Tensor:
         ...
 
+    @property
+    def deterministic_sample(self):
+        return self.mode
+
+    @property
+    def mode(self) -> torch.Tensor:
+        if hasattr(self, "logits"):
+            return (self.logits == self.logits.max(-1, True)[0]).to(torch.long)
+        else:
+            return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
+
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         return super().log_prob(value.argmax(dim=-1))
 

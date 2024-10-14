@@ -174,8 +174,8 @@ def test_implement_for_reset():
         ("0.9.0", "0.1.0", "0.21.0", True),
         ("0.19.99", "0.19.9", "0.21.0", True),
         ("0.19.99", None, "0.19.0", False),
-        ("5.61.77", "0.21.0", None, True),
-        ("5.61.77", None, "0.21.0", False),
+        ("0.99.0", "0.21.0", None, True),
+        ("0.99.0", None, "0.21.0", False),
     ],
 )
 def test_implement_for_check_versions(
@@ -189,9 +189,9 @@ def test_implement_for_check_versions(
 @pytest.mark.parametrize(
     "gymnasium_version, expected_from_version_gymnasium, expected_to_version_gymnasium",
     [
-        ("0.27.0", None, None),
-        ("0.27.2", None, None),
-        ("5.1.77", None, None),
+        ("0.27.0", None, "1.0.0"),
+        ("0.27.2", None, "1.0.0"),
+        # ("1.0.1", "1.0.0", None),
     ],
 )
 @pytest.mark.parametrize(
@@ -199,7 +199,7 @@ def test_implement_for_check_versions(
     [
         ("0.21.0", "0.21.0", None),
         ("0.22.0", "0.21.0", None),
-        ("5.61.77", "0.21.0", None),
+        ("0.99.0", "0.21.0", None),
         ("0.9.0", None, "0.21.0"),
         ("0.20.0", None, "0.21.0"),
         ("0.19.99", None, "0.21.0"),
@@ -228,6 +228,8 @@ def test_set_gym_environments(
     import gymnasium
 
     # look for the right function that should be called according to gym versions (and same for gymnasium)
+    expected_fn_gymnasium = None
+    expected_fn_gym = None
     for impfor in implement_for._setters:
         if impfor.fn.__name__ == "_set_gym_environments":
             if (impfor.module_name, impfor.from_version, impfor.to_version) == (
@@ -242,20 +244,22 @@ def test_set_gym_environments(
                 expected_to_version_gymnasium,
             ):
                 expected_fn_gymnasium = impfor.fn
+            if expected_fn_gym is not None and expected_fn_gymnasium is not None:
+                break
 
     with set_gym_backend(gymnasium):
         assert (
-            _utils_internal._set_gym_environments == expected_fn_gymnasium
+            _utils_internal._set_gym_environments is expected_fn_gymnasium
         ), expected_fn_gym
 
     with set_gym_backend(gym):
         assert (
-            _utils_internal._set_gym_environments == expected_fn_gym
+            _utils_internal._set_gym_environments is expected_fn_gym
         ), expected_fn_gymnasium
 
     with set_gym_backend(gymnasium):
         assert (
-            _utils_internal._set_gym_environments == expected_fn_gymnasium
+            _utils_internal._set_gym_environments is expected_fn_gymnasium
         ), expected_fn_gym
 
 

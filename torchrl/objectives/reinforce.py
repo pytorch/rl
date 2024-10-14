@@ -100,7 +100,7 @@ class ReinforceLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
+        >>> from torchrl.data.tensor_specs import Unbounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
@@ -115,7 +115,7 @@ class ReinforceLoss(LossModule):
         ...     distribution_class=TanhNormal,
         ...     return_log_prob=True,
         ...     in_keys=["loc", "scale"],
-        ...     spec=UnboundedContinuousTensorSpec(n_act),)
+        ...     spec=Unbounded(n_act),)
         >>> loss = ReinforceLoss(actor_net, value_net)
         >>> batch = 2
         >>> data = TensorDict({
@@ -146,7 +146,7 @@ class ReinforceLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
+        >>> from torchrl.data.tensor_specs import Unbounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
@@ -160,7 +160,7 @@ class ReinforceLoss(LossModule):
         ...     distribution_class=TanhNormal,
         ...     return_log_prob=True,
         ...     in_keys=["loc", "scale"],
-        ...     spec=UnboundedContinuousTensorSpec(n_act),)
+        ...     spec=Unbounded(n_act),)
         >>> loss = ReinforceLoss(actor_net, value_net)
         >>> batch = 2
         >>> loss_actor, loss_value = loss(
