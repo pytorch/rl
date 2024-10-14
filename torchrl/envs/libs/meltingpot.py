@@ -12,7 +12,7 @@ import torch
 
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import CompositeSpec, DiscreteTensorSpec, TensorSpec
+from torchrl.data import Categorical, Composite, TensorSpec
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform
 from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
@@ -246,9 +246,9 @@ class MeltingpotWrapper(_EnvWrapper):
         }
         self._make_group_map()
 
-        action_spec = CompositeSpec()
-        observation_spec = CompositeSpec()
-        reward_spec = CompositeSpec()
+        action_spec = Composite()
+        observation_spec = Composite()
+        reward_spec = Composite()
 
         for group in self.group_map.keys():
             (
@@ -266,11 +266,9 @@ class MeltingpotWrapper(_EnvWrapper):
             reward_spec[group] = group_reward_spec
 
         observation_spec.update(torchrl_state_spec)
-        self.done_spec = CompositeSpec(
+        self.done_spec = Composite(
             {
-                "done": DiscreteTensorSpec(
-                    n=2, shape=torch.Size((1,)), dtype=torch.bool
-                ),
+                "done": Categorical(n=2, shape=torch.Size((1,)), dtype=torch.bool),
             },
         )
         self.action_spec = action_spec
@@ -292,7 +290,7 @@ class MeltingpotWrapper(_EnvWrapper):
         for agent_name in self.group_map[group]:
             agent_index = self.agent_names_to_indices_map[agent_name]
             action_specs.append(
-                CompositeSpec(
+                Composite(
                     {
                         "action": torchrl_agent_act_specs[
                             agent_index
@@ -301,7 +299,7 @@ class MeltingpotWrapper(_EnvWrapper):
                 )
             )
             observation_specs.append(
-                CompositeSpec(
+                Composite(
                     {
                         "observation": torchrl_agent_obs_specs[
                             agent_index
@@ -310,7 +308,7 @@ class MeltingpotWrapper(_EnvWrapper):
                 )
             )
             reward_specs.append(
-                CompositeSpec({"reward": torchrl_rew_spec[agent_index]})  # shape = (1,)
+                Composite({"reward": torchrl_rew_spec[agent_index]})  # shape = (1,)
             )
 
         # Create multi-agent specs

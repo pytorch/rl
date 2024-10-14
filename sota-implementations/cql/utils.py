@@ -11,7 +11,7 @@ from tensordict.nn.distributions import NormalParamExtractor
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
-    CompositeSpec,
+    Composite,
     LazyMemmapStorage,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -252,7 +252,7 @@ def make_discretecql_model(cfg, train_env, eval_env, device="cpu"):
     actor_net = MLP(**actor_net_kwargs)
     qvalue_module = QValueActor(
         module=actor_net,
-        spec=CompositeSpec(action=action_spec),
+        spec=Composite(action=action_spec),
         in_keys=["observation"],
     )
     qvalue_module = qvalue_module.to(device)

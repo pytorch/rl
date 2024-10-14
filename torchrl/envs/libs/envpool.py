@@ -13,12 +13,7 @@ import torch
 
 from tensordict import TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    DiscreteTensorSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Categorical, Composite, TensorSpec, Unbounded
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.utils import _classproperty
 
@@ -35,8 +30,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     Args:
         env (envpool.python.envpool.EnvPoolMixin): the envpool to wrap.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:
@@ -161,7 +156,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return action_spec
 
     def _get_output_spec(self) -> TensorSpec:
-        return CompositeSpec(
+        return Composite(
             full_observation_spec=self._get_observation_spec(),
             full_reward_spec=self._get_reward_spec(),
             full_done_spec=self._get_done_spec(),
@@ -180,9 +175,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             categorical_action_encoding=True,
         )
         observation_spec = self._add_shape_to_spec(observation_spec)
-        if isinstance(observation_spec, CompositeSpec):
+        if isinstance(observation_spec, Composite):
             return observation_spec
-        return CompositeSpec(
+        return Composite(
             observation=observation_spec,
             shape=(self.num_workers,),
             device=self.device,
@@ -192,19 +187,19 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return spec.expand((self.num_workers, *spec.shape))
 
     def _get_reward_spec(self) -> TensorSpec:
-        return UnboundedContinuousTensorSpec(
+        return Unbounded(
             device=self.device,
             shape=self.batch_size,
         )
 
     def _get_done_spec(self) -> TensorSpec:
-        spec = DiscreteTensorSpec(
+        spec = Categorical(
             2,
             device=self.device,
             shape=self.batch_size,
             dtype=torch.bool,
         )
-        return CompositeSpec(
+        return Composite(
             done=spec,
             truncated=spec.clone(),
             terminated=spec.clone(),
@@ -335,8 +330,8 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         create_env_kwargs (Dict[str, Any], optional): kwargs to be passed to envpool
             environment constructor.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
         disable_env_checker (bool, optional): for gym > 0.24 only. If ``True`` (default
             for these versions), the environment checker won't be run.

@@ -89,7 +89,7 @@ frames_per_batch = 100
 optim_steps = 10
 collector = SyncDataCollector(
     env,
-    policy,
+    policy_explore,
     frames_per_batch=frames_per_batch,
     total_frames=-1,
     init_random_frames=init_rand_steps,
