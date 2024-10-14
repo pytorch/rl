@@ -124,8 +124,6 @@ jobs:
           echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
       - name: Run
         run: |
-          echo $(find /usr -name Python.h)
-
           python3.10 -m venv --system-site-packages ./py310
           source ./py310/bin/activate
           export PYTHON_INCLUDE_DIR=/usr/include/python3.10
