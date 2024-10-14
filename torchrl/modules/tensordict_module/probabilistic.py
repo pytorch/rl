@@ -15,7 +15,7 @@ from tensordict.nn import (
     TensorDictModule,
 )
 from tensordict.utils import NestedKey
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.modules.distributions import Delta
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 from torchrl.modules.tensordict_module.sequence import SafeSequential
@@ -104,7 +104,6 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         out_keys: Optional[Union[NestedKey, List[NestedKey]]] = None,
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
-        default_interaction_mode: str = None,
         default_interaction_type: str = InteractionType.DETERMINISTIC,
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
@@ -117,7 +116,6 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             in_keys=in_keys,
             out_keys=out_keys,
             default_interaction_type=default_interaction_type,
-            default_interaction_mode=default_interaction_mode,
             distribution_class=distribution_class,
             distribution_kwargs=distribution_kwargs,
             return_log_prob=return_log_prob,
@@ -129,18 +127,18 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             spec = spec.clone()
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
-        elif spec is not None and not isinstance(spec, CompositeSpec):
+        elif spec is not None and not isinstance(spec, Composite):
             if len(self.out_keys) > 1:
                 raise RuntimeError(
                     f"got more than one out_key for the SafeModule: {self.out_keys},\nbut only one spec. "
-                    "Consider using a CompositeSpec object or no spec at all."
+                    "Consider using a Composite object or no spec at all."
                 )
-            spec = CompositeSpec({self.out_keys[0]: spec})
-        elif spec is not None and isinstance(spec, CompositeSpec):
+            spec = Composite({self.out_keys[0]: spec})
+        elif spec is not None and isinstance(spec, Composite):
             if "_" in spec.keys():
                 warnings.warn('got a spec with key "_": it will be ignored')
         elif spec is None:
-            spec = CompositeSpec()
+            spec = Composite()
         spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
         out_keys = set(unravel_key_list(self.out_keys))
         if spec_keys != out_keys:
@@ -159,7 +157,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         self.safe = safe
         if safe:
             if spec is None or (
-                isinstance(spec, CompositeSpec)
+                isinstance(spec, Composite)
                 and all(_spec is None for _spec in spec.values())
             ):
                 raise RuntimeError(
@@ -169,14 +167,14 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             self.register_forward_hook(_forward_hook_safe_action)
 
     @property
-    def spec(self) -> CompositeSpec:
+    def spec(self) -> Composite:
         return self._spec
 
     @spec.setter
-    def spec(self, spec: CompositeSpec) -> None:
-        if not isinstance(spec, CompositeSpec):
+    def spec(self, spec: Composite) -> None:
+        if not isinstance(spec, Composite):
             raise RuntimeError(
-                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a CompositeSpec instance."
+                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a Composite instance."
             )
         self._spec = spec
 

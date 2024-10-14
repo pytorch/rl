@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDictBase
-from torchrl.data import CompositeSpec
+from torchrl.data import Composite
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
@@ -59,7 +59,7 @@ class IsaacGymWrapper(GymWrapper):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         super()._make_specs(env, batch_size=self.batch_size)
-        self.full_done_spec = CompositeSpec(
+        self.full_done_spec = Composite(
             {
                 key: spec.squeeze(-1)
                 for key, spec in self.full_done_spec.items(True, True)

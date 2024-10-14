@@ -25,12 +25,7 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    DiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Bounded, Categorical, Composite, Unbounded
 from torchrl.envs.utils import _classproperty
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
@@ -398,24 +393,22 @@ def _proc_spec(spec):
     if spec is None:
         return
     if spec["type"] == "Dict":
-        return CompositeSpec(
+        return Composite(
             {key: _proc_spec(subspec) for key, subspec in spec["subspaces"].items()}
         )
     elif spec["type"] == "Box":
         if all(item == -float("inf") for item in spec["low"]) and all(
             item == float("inf") for item in spec["high"]
         ):
-            return UnboundedContinuousTensorSpec(
-                spec["shape"], dtype=_DTYPE_DIR[spec["dtype"]]
-            )
-        return BoundedTensorSpec(
+            return Unbounded(spec["shape"], dtype=_DTYPE_DIR[spec["dtype"]])
+        return Bounded(
             shape=spec["shape"],
             low=torch.as_tensor(spec["low"]),
             high=torch.as_tensor(spec["high"]),
             dtype=_DTYPE_DIR[spec["dtype"]],
         )
     elif spec["type"] == "Discrete":
-        return DiscreteTensorSpec(
+        return Categorical(
             spec["n"], shape=spec["shape"], dtype=_DTYPE_DIR[spec["dtype"]]
         )
     else:

@@ -8,12 +8,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    DiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-    UnboundedDiscreteTensorSpec,
-)
+from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import Compose, DoubleToFloat, RenameTransform
 from torchrl.envs.utils import _classproperty
@@ -24,17 +19,13 @@ _has_sklearn = importlib.util.find_spec("sklearn", None) is not None
 def _make_composite_from_td(td):
     # custom funtion to convert a tensordict in a similar spec structure
     # of unbounded values.
-    composite = CompositeSpec(
+    composite = Composite(
         {
             key: _make_composite_from_td(tensor)
             if isinstance(tensor, TensorDictBase)
-            else UnboundedContinuousTensorSpec(
-                dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
-            )
+            else Unbounded(dtype=tensor.dtype, device=tensor.device, shape=tensor.shape)
             if tensor.dtype in (torch.float16, torch.float32, torch.float64)
-            else UnboundedDiscreteTensorSpec(
-                dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
-            )
+            else Unbounded(dtype=tensor.dtype, device=tensor.device, shape=tensor.shape)
             for key, tensor in td.items()
         },
         shape=td.shape,
@@ -115,10 +106,10 @@ class OpenMLEnv(EnvBase):
             .reshape(self.batch_size)
             .exclude("index")
         )
-        self.action_spec = DiscreteTensorSpec(
+        self.action_spec = Categorical(
             self._data.max_outcome_val + 1, shape=self.batch_size, device=self.device
         )
-        self.reward_spec = UnboundedContinuousTensorSpec(shape=(*self.batch_size, 1))
+        self.reward_spec = Unbounded(shape=(*self.batch_size, 1))
 
     def _reset(self, tensordict):
         data = self._data.sample()

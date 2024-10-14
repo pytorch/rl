@@ -109,7 +109,7 @@ class EnvCreator:
                 del state_dict[key]
 
     @property
-    def meta_data(self):
+    def meta_data(self) -> EnvMetaData:
         if self._meta_data is None:
             raise RuntimeError(
                 "meta_data is None in EnvCreator. " "Make sure init_() has been called."

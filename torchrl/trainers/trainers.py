@@ -1126,7 +1126,7 @@ class Recorder(TrainerHookBase):
     """Recorder hook for :class:`~torchrl.trainers.Trainer`.
 
     Args:
-        record_interval (int): total number of optimisation steps
+        record_interval (int): total number of optimization steps
             between two calls to the recorder for testing.
         record_frames (int): number of frames to be recorded during
             testing.
@@ -1145,7 +1145,7 @@ class Recorder(TrainerHookBase):
 
             Given that this instance is supposed to both explore and render
             the performance of the policy, it should be possible to turn off
-            the explorative behaviour by calling the
+            the explorative behavior by calling the
             `set_exploration_type(ExplorationType.DETERMINISTIC)` context manager.
         environment (EnvBase): An environment instance to be used
             for testing.

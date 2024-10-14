@@ -6,11 +6,7 @@ import numpy as np
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import make_composite_from_td
 
@@ -21,125 +17,193 @@ class PendulumEnv(EnvBase):
     See the Pendulum tutorial for more details: :ref:`tutorial <pendulum_tuto>`.
 
     Specs:
-        CompositeSpec(
-            output_spec: CompositeSpec(
-                full_observation_spec: CompositeSpec(
-                    th: BoundedTensorSpec(
+        >>> env = PendulumEnv()
+        >>> env.specs
+        Composite(
+            output_spec: Composite(
+                full_observation_spec: Composite(
+                    th: BoundedContinuous(
                         shape=torch.Size([]),
                         space=ContinuousBox(
-                            low=Tensor(shape=torch.Size([]), dtype=torch.float32, contiguous=True),
-                            high=Tensor(shape=torch.Size([]), dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
-                    thdot: BoundedTensorSpec(
+                    thdot: BoundedContinuous(
                         shape=torch.Size([]),
                         space=ContinuousBox(
-                            low=Tensor(shape=torch.Size([]), dtype=torch.float32, contiguous=True),
-                            high=Tensor(shape=torch.Size([]), dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
-                    params: CompositeSpec(
-                        max_speed: UnboundedContinuousTensorSpec(
+                    params: Composite(
+                        max_speed: UnboundedDiscrete(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True)),
+                            device=cpu,
                             dtype=torch.int64,
                             domain=discrete),
-                        max_torque: UnboundedContinuousTensorSpec(
+                        max_torque: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
-                        dt: UnboundedContinuousTensorSpec(
+                        dt: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
-                        g: UnboundedContinuousTensorSpec(
+                        g: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
-                        m: UnboundedContinuousTensorSpec(
+                        m: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
-                        l: UnboundedContinuousTensorSpec(
+                        l: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
+                        device=None,
                         shape=torch.Size([])),
+                    device=None,
                     shape=torch.Size([])),
-                full_reward_spec: CompositeSpec(
-                    reward: UnboundedContinuousTensorSpec(
+                full_reward_spec: Composite(
+                    reward: UnboundedContinuous(
                         shape=torch.Size([1]),
                         space=ContinuousBox(
-                            low=Tensor(shape=torch.Size([1]), dtype=torch.float32, contiguous=True),
-                            high=Tensor(shape=torch.Size([1]), dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
+                    device=None,
                     shape=torch.Size([])),
-                full_done_spec: CompositeSpec(
-                    done: DiscreteTensorSpec(
+                full_done_spec: Composite(
+                    done: Categorical(
                         shape=torch.Size([1]),
-                        space=DiscreteBox(n=2),
+                        space=CategoricalBox(n=2),
+                        device=cpu,
                         dtype=torch.bool,
                         domain=discrete),
-                    terminated: DiscreteTensorSpec(
+                    terminated: Categorical(
                         shape=torch.Size([1]),
-                        space=DiscreteBox(n=2),
+                        space=CategoricalBox(n=2),
+                        device=cpu,
                         dtype=torch.bool,
                         domain=discrete),
+                    device=None,
                     shape=torch.Size([])),
+                device=None,
                 shape=torch.Size([])),
-            input_spec: CompositeSpec(
-                full_state_spec: CompositeSpec(
-                    th: BoundedTensorSpec(
+            input_spec: Composite(
+                full_state_spec: Composite(
+                    th: BoundedContinuous(
                         shape=torch.Size([]),
                         space=ContinuousBox(
-                            low=Tensor(shape=torch.Size([]), dtype=torch.float32, contiguous=True),
-                            high=Tensor(shape=torch.Size([]), dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
-                    thdot: BoundedTensorSpec(
+                    thdot: BoundedContinuous(
                         shape=torch.Size([]),
                         space=ContinuousBox(
-                            low=Tensor(shape=torch.Size([]), dtype=torch.float32, contiguous=True),
-                            high=Tensor(shape=torch.Size([]), dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
-                    params: CompositeSpec(
-                        max_speed: UnboundedContinuousTensorSpec(
+                    params: Composite(
+                        max_speed: UnboundedDiscrete(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True)),
+                            device=cpu,
                             dtype=torch.int64,
                             domain=discrete),
-                        max_torque: UnboundedContinuousTensorSpec(
+                        max_torque: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
-                        dt: UnboundedContinuousTensorSpec(
+                        dt: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
-                        g: UnboundedContinuousTensorSpec(
+                        g: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
-                        m: UnboundedContinuousTensorSpec(
+                        m: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
-                        l: UnboundedContinuousTensorSpec(
+                        l: UnboundedContinuous(
                             shape=torch.Size([]),
+                            space=ContinuousBox(
+                                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            device=cpu,
                             dtype=torch.float32,
                             domain=continuous),
+                        device=None,
                         shape=torch.Size([])),
+                    device=None,
                     shape=torch.Size([])),
-                full_action_spec: CompositeSpec(
-                    action: BoundedTensorSpec(
+                full_action_spec: Composite(
+                    action: BoundedContinuous(
                         shape=torch.Size([1]),
                         space=ContinuousBox(
-                            low=Tensor(shape=torch.Size([1]), dtype=torch.float32, contiguous=True),
-                            high=Tensor(shape=torch.Size([1]), dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
+                    device=None,
                     shape=torch.Size([])),
+                device=None,
                 shape=torch.Size([])),
+            device=None,
             shape=torch.Size([]))
 
     """
@@ -152,6 +216,7 @@ class PendulumEnv(EnvBase):
         "render_fps": 30,
     }
     batch_locked = False
+    rng = None
 
     def __init__(self, td_params=None, seed=None, device=None):
         if td_params is None:
@@ -160,7 +225,7 @@ class PendulumEnv(EnvBase):
         super().__init__(device=device)
         self._make_spec(td_params)
         if seed is None:
-            seed = torch.empty((), dtype=torch.int64).random_().item()
+            seed = torch.empty((), dtype=torch.int64).random_(generator=self.rng).item()
         self.set_seed(seed)
 
     @classmethod
@@ -240,14 +305,14 @@ class PendulumEnv(EnvBase):
 
     def _make_spec(self, td_params):
         # Under the hood, this will populate self.output_spec["observation"]
-        self.observation_spec = CompositeSpec(
-            th=BoundedTensorSpec(
+        self.observation_spec = Composite(
+            th=Bounded(
                 low=-torch.pi,
                 high=torch.pi,
                 shape=(),
                 dtype=torch.float32,
             ),
-            thdot=BoundedTensorSpec(
+            thdot=Bounded(
                 low=-td_params["params", "max_speed"],
                 high=td_params["params", "max_speed"],
                 shape=(),
@@ -265,22 +330,22 @@ class PendulumEnv(EnvBase):
         self.state_spec = self.observation_spec.clone()
         # action-spec will be automatically wrapped in input_spec when
         # `self.action_spec = spec` will be called supported
-        self.action_spec = BoundedTensorSpec(
+        self.action_spec = Bounded(
             low=-td_params["params", "max_torque"],
             high=td_params["params", "max_torque"],
             shape=(1,),
             dtype=torch.float32,
         )
-        self.reward_spec = UnboundedContinuousTensorSpec(shape=(*td_params.shape, 1))
+        self.reward_spec = Unbounded(shape=(*td_params.shape, 1))
 
     def make_composite_from_td(td):
         # custom function to convert a ``tensordict`` in a similar spec structure
         # of unbounded values.
-        composite = CompositeSpec(
+        composite = Composite(
             {
                 key: make_composite_from_td(tensor)
                 if isinstance(tensor, TensorDictBase)
-                else UnboundedContinuousTensorSpec(
+                else Unbounded(
                     dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
                 )
                 for key, tensor in td.items()
@@ -290,7 +355,8 @@ class PendulumEnv(EnvBase):
         return composite
 
     def _set_seed(self, seed: int):
-        rng = torch.manual_seed(seed)
+        rng = torch.Generator()
+        rng.manual_seed(seed)
         self.rng = rng
 
     @staticmethod
