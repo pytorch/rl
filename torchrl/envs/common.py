@@ -853,7 +853,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         full_action_spec = self.input_spec.get("full_action_spec", None)
         if full_action_spec is None:
-            full_action_spec = CompositeSpec(shape=self.batch_size, device=self.device)
+            full_action_spec = Composite(shape=self.batch_size, device=self.device)
             self.input_spec.unlock_()
             self.input_spec["full_action_spec"] = full_action_spec
             self.input_spec.lock_()
