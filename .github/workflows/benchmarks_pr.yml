@@ -124,7 +124,7 @@ jobs:
           echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
       - name: Run
         run: |
-          python3.10 -m venv ./py310
+          python3.10 -m venv --system-site-packages ./py310
           source ./py310/bin/activate
 
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 -U
