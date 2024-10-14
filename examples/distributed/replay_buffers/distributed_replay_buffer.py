@@ -150,8 +150,8 @@ class DummyTrainerNode:
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
     """Experience replay buffer node that is capable of accepting remote connections. Being a `RemoteTensorDictReplayBuffer`
-    means all of it's public methods are remotely invokable using `torch.rpc`.
-    Using a LazyMemmapStorage is highly advised in distributed settings with shared storage due to the lower serialisation
+    means all of its public methods are remotely invokable using `torch.rpc`.
+    Using a LazyMemmapStorage is highly advised in distributed settings with shared storage due to the lower serialization
     cost of MemoryMappedTensors as well as the ability to specify file storage locations which can improve ability to recover from node failures.
 
     Args:

@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from tensordict import TensorDict
-from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import Unbounded
 from torchrl.envs.libs.gym import (
     _AsyncMeta,
     _gym_to_torchrl_spec_transform,
@@ -80,8 +80,8 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     Args:
         env_name (str): the environment name to build. Must be one of :attr:`.available_envs`
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:
@@ -305,7 +305,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         )
         self.observation_spec = observation_spec
 
-        self.reward_spec = UnboundedContinuousTensorSpec(
+        self.reward_spec = Unbounded(
             shape=(1,),
             device=self.device,
         )  # default

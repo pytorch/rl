@@ -133,7 +133,7 @@ print("length after adding elements:", len(buffer))
 #   basic properties (such as shape and dtype) as the first batch of data that
 #   was used to instantiate the buffer.
 #   Passing data that does not match this requirement will either raise an
-#   exception or lead to some undefined behaviours.
+#   exception or lead to some undefined behaviors.
 # - The :class:`~torchrl.data.LazyMemmapStorage` works as the
 #   :class:`~torchrl.data.LazyTensorStorage` in that it is lazy (i.e., it
 #   expects the first batch of data to be instantiated), and it requires data

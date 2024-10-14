@@ -18,16 +18,15 @@ from torchrl.envs.utils import _classproperty
 _has_jumanji = importlib.util.find_spec("jumanji") is not None
 
 from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
+    Bounded,
+    Categorical,
+    Composite,
     DEVICE_TYPING,
-    DiscreteTensorSpec,
-    MultiDiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
+    MultiCategorical,
+    MultiOneHot,
+    OneHot,
     TensorSpec,
-    UnboundedContinuousTensorSpec,
-    UnboundedDiscreteTensorSpec,
+    Unbounded,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.gym_like import GymLikeEnv
@@ -59,19 +58,13 @@ def _jumanji_to_torchrl_spec_transform(
     import jumanji
 
     if isinstance(spec, jumanji.specs.DiscreteArray):
-        action_space_cls = (
-            DiscreteTensorSpec
-            if categorical_action_encoding
-            else OneHotDiscreteTensorSpec
-        )
+        action_space_cls = Categorical if categorical_action_encoding else OneHot
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return action_space_cls(spec.num_values, dtype=dtype, device=device)
     if isinstance(spec, jumanji.specs.MultiDiscreteArray):
         action_space_cls = (
-            MultiDiscreteTensorSpec
-            if categorical_action_encoding
-            else MultiOneHotDiscreteTensorSpec
+            MultiCategorical if categorical_action_encoding else MultiOneHot
         )
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
@@ -82,7 +75,7 @@ def _jumanji_to_torchrl_spec_transform(
         shape = spec.shape
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return BoundedTensorSpec(
+        return Bounded(
             shape=shape,
             low=np.asarray(spec.minimum),
             high=np.asarray(spec.maximum),
@@ -94,11 +87,9 @@ def _jumanji_to_torchrl_spec_transform(
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
-            return UnboundedContinuousTensorSpec(
-                shape=shape, dtype=dtype, device=device
-            )
+            return Unbounded(shape=shape, dtype=dtype, device=device)
         else:
-            return UnboundedDiscreteTensorSpec(shape=shape, dtype=dtype, device=device)
+            return Unbounded(shape=shape, dtype=dtype, device=device)
     elif isinstance(spec, jumanji.specs.Spec) and hasattr(spec, "__dict__"):
         new_spec = {}
         for key, value in spec.__dict__.items():
@@ -110,7 +101,7 @@ def _jumanji_to_torchrl_spec_transform(
                 new_spec[key] = _jumanji_to_torchrl_spec_transform(
                     value, dtype, device, categorical_action_encoding
                 )
-        return CompositeSpec(**new_spec)
+        return Composite(**new_spec)
     else:
         raise TypeError(f"Unsupported spec type {type(spec)}")
 
@@ -140,8 +131,8 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
     Args:
         env (jumanji.env.Environment): the env to wrap.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:
@@ -433,9 +424,9 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         spec = env.observation_spec
         new_spec = _jumanji_to_torchrl_spec_transform(spec, device=self.device)
         if isinstance(spec, jumanji.specs.Array):
-            return CompositeSpec(observation=new_spec).expand(self.batch_size)
+            return Composite(observation=new_spec).expand(self.batch_size)
         elif isinstance(spec, jumanji.specs.Spec):
-            return CompositeSpec(**{k: v for k, v in new_spec.items()}).expand(
+            return Composite(**{k: v for k, v in new_spec.items()}).expand(
                 self.batch_size
             )
         else:
@@ -681,8 +672,8 @@ class JumanjiEnv(JumanjiWrapper):
     Args:
         env_name (str): the name of the environment to wrap. Must be part of :attr:`~.available_envs`.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:

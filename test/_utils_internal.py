@@ -56,7 +56,7 @@ def HALFCHEETAH_VERSIONED():
 
 def PONG_VERSIONED():
     # load gym
-    # Gymnasium says that the ale_py behaviour changes from 1.0
+    # Gymnasium says that the ale_py behavior changes from 1.0
     # but with python 3.12 it is already the case with 0.29.1
     try:
         import ale_py  # noqa
@@ -70,7 +70,7 @@ def PONG_VERSIONED():
 
 def BREAKOUT_VERSIONED():
     # load gym
-    # Gymnasium says that the ale_py behaviour changes from 1.0
+    # Gymnasium says that the ale_py behavior changes from 1.0
     # but with python 3.12 it is already the case with 0.29.1
     try:
         import ale_py  # noqa
@@ -121,7 +121,7 @@ def _set_gym_environments():  # noqa: F811
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
-@implement_for("gymnasium")
+@implement_for("gymnasium", None, "1.0.0")
 def _set_gym_environments():  # noqa: F811
     global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
 
@@ -130,6 +130,11 @@ def _set_gym_environments():  # noqa: F811
     _PENDULUM_VERSIONED = "Pendulum-v1"
     _PONG_VERSIONED = "ALE/Pong-v5"
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
+
+
+@implement_for("gymnasium", "1.0.0", None)
+def _set_gym_environments():  # noqa: F811
+    raise ImportError
 
 
 if _has_gym:
@@ -155,6 +160,8 @@ def get_default_devices():
         return [torch.device("cpu")]
     elif num_cuda == 1:
         return [torch.device("cuda:0")]
+    elif torch.mps.is_available():
+        return [torch.device("mps:0")]
     else:
         # then run on all devices
         return get_available_devices()

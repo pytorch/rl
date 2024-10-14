@@ -13,12 +13,7 @@ import packaging
 import torch
 from tensordict import TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    DiscreteTensorSpec,
-    OneHotDiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Categorical, Composite, OneHot, Unbounded
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
 from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
@@ -141,7 +136,7 @@ class PettingZooWrapper(_EnvWrapper):
     For example, you can provide ``MarlGroupMapType.ONE_GROUP_PER_AGENT``, telling that each agent should
     have its own tensordict (similar to the pettingzoo parallel API).
 
-    Grouping is useful for leveraging vectorisation among agents whose data goes through the same
+    Grouping is useful for leveraging vectorization among agents whose data goes through the same
     neural network.
 
     Args:
@@ -308,24 +303,24 @@ class PettingZooWrapper(_EnvWrapper):
         check_marl_grouping(self.group_map, self.possible_agents)
         self.has_action_mask = {group: False for group in self.group_map.keys()}
 
-        action_spec = CompositeSpec()
-        observation_spec = CompositeSpec()
-        reward_spec = CompositeSpec()
-        done_spec = CompositeSpec(
+        action_spec = Composite()
+        observation_spec = Composite()
+        reward_spec = Composite()
+        done_spec = Composite(
             {
-                "done": DiscreteTensorSpec(
+                "done": Categorical(
                     n=2,
                     shape=torch.Size((1,)),
                     dtype=torch.bool,
                     device=self.device,
                 ),
-                "terminated": DiscreteTensorSpec(
+                "terminated": Categorical(
                     n=2,
                     shape=torch.Size((1,)),
                     dtype=torch.bool,
                     device=self.device,
                 ),
-                "truncated": DiscreteTensorSpec(
+                "truncated": Categorical(
                     n=2,
                     shape=torch.Size((1,)),
                     dtype=torch.bool,
@@ -356,7 +351,7 @@ class PettingZooWrapper(_EnvWrapper):
         observation_specs = []
         for agent in agent_names:
             action_specs.append(
-                CompositeSpec(
+                Composite(
                     {
                         "action": _gym_to_torchrl_spec_transform(
                             self.action_space(agent),
@@ -368,7 +363,7 @@ class PettingZooWrapper(_EnvWrapper):
                 )
             )
             observation_specs.append(
-                CompositeSpec(
+                Composite(
                     {
                         "observation": _gym_to_torchrl_spec_transform(
                             self.observation_space(agent),
@@ -386,34 +381,31 @@ class PettingZooWrapper(_EnvWrapper):
         # We uniform this by removing it from both places and optionally set it in a standard location.
         group_observation_inner_spec = group_observation_spec["observation"]
         if (
-            isinstance(group_observation_inner_spec, CompositeSpec)
+            isinstance(group_observation_inner_spec, Composite)
             and "action_mask" in group_observation_inner_spec.keys()
         ):
             self.has_action_mask[group_name] = True
             del group_observation_inner_spec["action_mask"]
-            group_observation_spec["action_mask"] = DiscreteTensorSpec(
+            group_observation_spec["action_mask"] = Categorical(
                 n=2,
                 shape=group_action_spec["action"].shape
                 if not self.categorical_actions
-                else (
-                    *group_action_spec["action"].shape,
-                    group_action_spec["action"].space.n,
-                ),
+                else group_action_spec["action"].to_one_hot_spec().shape,
                 dtype=torch.bool,
                 device=self.device,
             )
 
         if self.use_mask:
-            group_observation_spec["mask"] = DiscreteTensorSpec(
+            group_observation_spec["mask"] = Categorical(
                 n=2,
                 shape=torch.Size((n_agents,)),
                 dtype=torch.bool,
                 device=self.device,
             )
 
-        group_reward_spec = CompositeSpec(
+        group_reward_spec = Composite(
             {
-                "reward": UnboundedContinuousTensorSpec(
+                "reward": Unbounded(
                     shape=torch.Size((n_agents, 1)),
                     device=self.device,
                     dtype=torch.float32,
@@ -421,21 +413,21 @@ class PettingZooWrapper(_EnvWrapper):
             },
             shape=torch.Size((n_agents,)),
         )
-        group_done_spec = CompositeSpec(
+        group_done_spec = Composite(
             {
-                "done": DiscreteTensorSpec(
+                "done": Categorical(
                     n=2,
                     shape=torch.Size((n_agents, 1)),
                     dtype=torch.bool,
                     device=self.device,
                 ),
-                "terminated": DiscreteTensorSpec(
+                "terminated": Categorical(
                     n=2,
                     shape=torch.Size((n_agents, 1)),
                     dtype=torch.bool,
                     device=self.device,
                 ),
-                "truncated": DiscreteTensorSpec(
+                "truncated": Categorical(
                     n=2,
                     shape=torch.Size((n_agents, 1)),
                     dtype=torch.bool,
@@ -473,11 +465,11 @@ class PettingZooWrapper(_EnvWrapper):
             info_specs = []
             for agent in agents:
                 info_specs.append(
-                    CompositeSpec(
+                    Composite(
                         {
-                            "info": CompositeSpec(
+                            "info": Composite(
                                 {
-                                    key: UnboundedContinuousTensorSpec(
+                                    key: Unbounded(
                                         shape=torch.as_tensor(value).shape,
                                         device=self.device,
                                     )
@@ -495,11 +487,11 @@ class PettingZooWrapper(_EnvWrapper):
                     group_action_spec = self.input_spec[
                         "full_action_spec", group, "action"
                     ]
-                    self.observation_spec[group]["action_mask"] = DiscreteTensorSpec(
+                    self.observation_spec[group]["action_mask"] = Categorical(
                         n=2,
                         shape=group_action_spec.shape
                         if not self.categorical_actions
-                        else (*group_action_spec.shape, group_action_spec.space.n),
+                        else group_action_spec.to_one_hot_spec().shape,
                         dtype=torch.bool,
                         device=self.device,
                     )
@@ -518,7 +510,7 @@ class PettingZooWrapper(_EnvWrapper):
                 )
             except AttributeError:
                 state_example = torch.as_tensor(self.state(), device=self.device)
-                state_spec = UnboundedContinuousTensorSpec(
+                state_spec = Unbounded(
                     shape=state_example.shape,
                     dtype=state_example.dtype,
                     device=self.device,
@@ -809,9 +801,7 @@ class PettingZooWrapper(_EnvWrapper):
                         del agent_info["action_mask"]
 
                 group_action_spec = self.input_spec["full_action_spec", group, "action"]
-                if isinstance(
-                    group_action_spec, (DiscreteTensorSpec, OneHotDiscreteTensorSpec)
-                ):
+                if isinstance(group_action_spec, (Categorical, OneHot)):
                     # We update the mask for available actions
                     group_action_spec.update_mask(group_mask.clone())
 
@@ -904,7 +894,7 @@ class PettingZooEnv(PettingZooWrapper):
     For example, you can provide ``MarlGroupMapType.ONE_GROUP_PER_AGENT``, telling that each agent should
     have its own tensordict (similar to the pettingzoo parallel API).
 
-    Grouping is useful for leveraging vectorisation among agents whose data goes through the same
+    Grouping is useful for leveraging vectorization among agents whose data goes through the same
     neural network.
 
     Args:
