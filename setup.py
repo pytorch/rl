@@ -152,11 +152,15 @@ def get_extensions():
     }
     sources = list(extension_sources)
 
+    include_dirs = [this_dir]
+    python_include_dir = os.getenv("PYTHON_INCLUDE_DIR")
+    if python_include_dir is not None:
+        include_dirs.append(python_include_dir)
     ext_modules = [
         extension(
             "torchrl._torchrl",
             sources,
-            include_dirs=[this_dir],
+            include_dirs=include_dirs,
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
         )
