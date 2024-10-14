@@ -54,8 +54,8 @@ class HabitatEnv(GymEnv):
     Args:
         env_name (str): The environment to execute.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:

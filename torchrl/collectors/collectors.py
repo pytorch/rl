@@ -10,13 +10,13 @@ import abc
 import contextlib
 
 import functools
-
 import os
 import queue
 import sys
 import time
+import typing
 import warnings
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
@@ -33,7 +33,8 @@ from tensordict import (
     TensorDictBase,
     TensorDictParams,
 )
-from tensordict.nn import TensorDictModule
+from tensordict.base import NO_DEFAULT
+from tensordict.nn import CudaGraphModule, TensorDictModule
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
@@ -50,20 +51,22 @@ from torchrl._utils import (
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
+from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
+from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
-    _convert_exploration_type,
     _make_compatible_policy,
-    _NonParametricPolicyWrapper,
     ExplorationType,
+    RandomPolicy,
     set_exploration_type,
 )
 
 _TIMEOUT = 1.0
+INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 # MAX_IDLE_COUNT is the maximum number of times a Dataloader worker can timeout with his queue.
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
@@ -131,59 +134,97 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     """Base class for data collectors."""
 
     _iterator = None
+    total_frames: int
+    frames_per_batch: int
+    trust_policy: bool
+    compiled_policy: bool
+    cudagraphed_policy: bool
 
     def _get_policy_and_device(
         self,
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ] = None,
+        policy: Callable[[Any], Any] | None = None,
         observation_spec: TensorSpec = None,
+        policy_device: Any = NO_DEFAULT,
+        env_maker: Any | None = None,
+        env_maker_kwargs: dict | None = None,
     ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
         Args:
-            create_env_fn (Callable or list of callables): an env creator
-                function (or a list of creators)
-            create_env_kwargs (dictionary): kwargs for the env creator
             policy (TensorDictModule, optional): a policy to be used
             observation_spec (TensorSpec, optional): spec of the observations
+            policy_device (torch.device, optional): the device where the policy should be placed.
+                Defaults to self.policy_device
+            env_maker (a callable or a batched env, optional): the env_maker function for this device/policy pair.
+            env_maker_kwargs (a dict, optional): the env_maker function kwargs.
 
         """
-        policy = _make_compatible_policy(
-            policy, observation_spec, env=getattr(self, "env", None)
-        )
-        param_and_buf = TensorDict.from_module(policy, as_module=True)
+        if policy_device is NO_DEFAULT:
+            policy_device = self.policy_device
 
-        def get_weights_fn(param_and_buf=param_and_buf):
-            return param_and_buf.data
+        if not self.trust_policy:
+            env = getattr(self, "env", None)
+            policy = _make_compatible_policy(
+                policy,
+                observation_spec,
+                env=env,
+                env_maker=env_maker,
+                env_maker_kwargs=env_maker_kwargs,
+            )
+        if not policy_device:
+            return policy, None
 
-        if self.policy_device:
-            # create a stateless policy and populate it with params
-            def _map_to_device_params(param, device):
-                is_param = isinstance(param, nn.Parameter)
+        if isinstance(policy, nn.Module):
+            param_and_buf = TensorDict.from_module(policy, as_module=True)
+        else:
+            # Because we want to reach the warning
+            param_and_buf = TensorDict()
 
-                pd = param.detach().to(device, non_blocking=True)
+        i = -1
+        for p in param_and_buf.values(True, True):
+            i += 1
+            if p.device != policy_device:
+                # Then we need casting
+                break
+        else:
+            if i == -1 and not self.trust_policy:
+                # We trust that the policy policy device is adequate
+                warnings.warn(
+                    "A policy device was provided but no parameter/buffer could be found in "
+                    "the policy. Casting to policy_device is therefore impossible. "
+                    "The collector will trust that the devices match. To suppress this "
+                    "warning, set `trust_policy=True` when building the collector."
+                )
+            return policy, None
 
-                if is_param:
-                    pd = nn.Parameter(pd, requires_grad=False)
-                return pd
+        def map_weight(
+            weight,
+            policy_device=policy_device,
+        ):
 
-            # Create a stateless policy, then populate this copy with params on device
-            with param_and_buf.apply(
-                functools.partial(_map_to_device_params, device="meta"),
-                filter_empty=False,
-            ).to_module(policy):
-                policy = deepcopy(policy)
+            is_param = isinstance(weight, nn.Parameter)
+            is_buffer = isinstance(weight, nn.Buffer)
+            weight = weight.data
+            if weight.device != policy_device:
+                weight = weight.to(policy_device)
+            elif weight.device.type in ("cpu", "mps"):
+                weight = weight.share_memory_()
+            if is_param:
+                weight = nn.Parameter(weight, requires_grad=False)
+            elif is_buffer:
+                weight = nn.Buffer(weight)
+            return weight
 
-            param_and_buf.apply(
-                functools.partial(_map_to_device_params, device=self.policy_device),
-                filter_empty=False,
-            ).to_module(policy)
+        # Create a stateless policy, then populate this copy with params on device
+        get_original_weights = functools.partial(TensorDict.from_module, policy)
+        with param_and_buf.to("meta").to_module(policy):
+            policy = deepcopy(policy)
 
-        return policy, get_weights_fn
+        param_and_buf.apply(
+            functools.partial(map_weight),
+            filter_empty=False,
+        ).to_module(policy)
+        return policy, get_original_weights
 
     def update_policy_weights_(
         self, policy_weights: Optional[TensorDictBase] = None
@@ -234,12 +275,27 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
+    def _read_compile_kwargs(self, compile_policy, cudagraph_policy):
+        self.compiled_policy = compile_policy not in (False, None)
+        self.cudagraphed_policy = cudagraph_policy not in (False, None)
+        self.compiled_policy_kwargs = (
+            {} if not isinstance(compile_policy, typing.Mapping) else compile_policy
+        )
+        self.cudagraphed_policy_kwargs = (
+            {} if not isinstance(cudagraph_policy, typing.Mapping) else cudagraph_policy
+        )
+
     def __repr__(self) -> str:
         string = f"{self.__class__.__name__}()"
         return string
 
     def __class_getitem__(self, index):
         raise NotImplementedError
+
+    def __len__(self) -> int:
+        if self.total_frames > 0:
+            return -(self.total_frames // -self.frames_per_batch)
+        raise RuntimeError("Non-terminating collectors do not have a length")
 
 
 @accept_remote_rref_udf_invocation
@@ -357,6 +413,17 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+            but populate the buffer instead. Defaults to ``None``.
+        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
+            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
+            and ``False`` otherwise.
+        compile_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be compiled
+            using :func:`~torch.compile` default behaviour. If a dictionary of kwargs is passed, it
+            will be used to compile the policy.
+        cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped
+            in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
+            If a dictionary of kwargs is passed, it will be used to wrap the policy.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -440,19 +507,20 @@ class SyncDataCollector(DataCollectorBase):
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         split_trajs: bool | None = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
-        exploration_mode: str | None = None,
         return_same_td: bool = False,
         reset_when_done: bool = True,
         interruptor=None,
         set_truncated: bool = False,
         use_buffers: bool | None = None,
+        replay_buffer: ReplayBuffer | None = None,
+        trust_policy: bool = None,
+        compile_policy: bool | Dict[str, Any] | None = None,
+        cudagraph_policy: bool | Dict[str, Any] | None = None,
+        **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
 
         self.closed = True
-        exploration_type = _convert_exploration_type(
-            exploration_mode=exploration_mode, exploration_type=exploration_type
-        )
         if create_env_kwargs is None:
             create_env_kwargs = {}
         if not isinstance(create_env_fn, EnvBase):
@@ -468,9 +536,20 @@ class SyncDataCollector(DataCollectorBase):
                 env.update_kwargs(create_env_kwargs)
 
         if policy is None:
-            from torchrl.collectors import RandomPolicy
 
             policy = RandomPolicy(env.full_action_spec)
+        if trust_policy is None:
+            trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
+        self.trust_policy = trust_policy
+        self._read_compile_kwargs(compile_policy, cudagraph_policy)
+
+        ##########################
+        # Trajectory pool
+        self._traj_pool_val = kwargs.pop("traj_pool", None)
+        if kwargs:
+            raise TypeError(
+                f"Keys {list(kwargs.keys())} are unknown to {type(self).__name__}."
+            )
 
         ##########################
         # Setting devices:
@@ -493,7 +572,8 @@ class SyncDataCollector(DataCollectorBase):
             # Cuda handles sync
             if torch.cuda.is_available():
                 self._sync_storage = torch.cuda.synchronize
-            elif torch.backends.mps.is_available():
+            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
+                # Will break for older PT versions which don't have torch.mps
                 self._sync_storage = torch.mps.synchronize
             elif self.storing_device.type == "cpu":
                 self._sync_storage = _do_nothing
@@ -507,7 +587,7 @@ class SyncDataCollector(DataCollectorBase):
             # Cuda handles sync
             if torch.cuda.is_available():
                 self._sync_env = torch.cuda.synchronize
-            elif torch.backends.mps.is_available():
+            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_env = torch.mps.synchronize
             elif self.env_device.type == "cpu":
                 self._sync_env = _do_nothing
@@ -520,7 +600,7 @@ class SyncDataCollector(DataCollectorBase):
             # Cuda handles sync
             if torch.cuda.is_available():
                 self._sync_policy = torch.cuda.synchronize
-            elif torch.backends.mps.is_available():
+            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_policy = torch.mps.synchronize
             elif self.policy_device.type == "cpu":
                 self._sync_policy = _do_nothing
@@ -538,10 +618,19 @@ class SyncDataCollector(DataCollectorBase):
 
         self.env: EnvBase = env
         del env
+        self.replay_buffer = replay_buffer
+        if self.replay_buffer is not None:
+            if postproc is not None:
+                raise TypeError("postproc must be None when a replay buffer is passed.")
+            if use_buffers:
+                raise TypeError("replay_buffer is exclusive with use_buffers.")
         if use_buffers is None:
-            use_buffers = not self.env._has_dynamic_specs
+            use_buffers = not self.env._has_dynamic_specs and self.replay_buffer is None
         self._use_buffers = use_buffers
+        self.replay_buffer = replay_buffer
+
         self.closed = False
+
         if not reset_when_done:
             raise ValueError("reset_when_done is deprectated.")
         self.reset_when_done = reset_when_done
@@ -551,11 +640,15 @@ class SyncDataCollector(DataCollectorBase):
             policy=policy,
             observation_spec=self.env.observation_spec,
         )
-
         if isinstance(self.policy, nn.Module):
             self.policy_weights = TensorDict.from_module(self.policy, as_module=True)
         else:
-            self.policy_weights = TensorDict({}, [])
+            self.policy_weights = TensorDict()
+
+        if self.compiled_policy:
+            self.policy = torch.compile(self.policy, **self.compiled_policy_kwargs)
+        if self.cudagraphed_policy:
+            self.policy = CudaGraphModule(self.policy, **self.cudagraphed_policy_kwargs)
 
         if self.env_device:
             self.env: EnvBase = self.env.to(self.env_device)
@@ -655,6 +748,13 @@ class SyncDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
+    @property
+    def _traj_pool(self):
+        pool = getattr(self, "_traj_pool_val", None)
+        if pool is None:
+            pool = self._traj_pool_val = _TrajectoryPool()
+        return pool
+
     def _make_shuttle(self):
         # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
         with torch.no_grad():
@@ -665,9 +765,9 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self._shuttle_has_no_device = False
 
-        traj_ids = torch.arange(self.n_env, device=self.storing_device).view(
-            self.env.batch_size
-        )
+        traj_ids = self._traj_pool.get_traj_and_increment(
+            self.n_env, device=self.storing_device
+        ).view(self.env.batch_size)
         self._shuttle.set(
             ("collector", "traj_ids"),
             traj_ids,
@@ -753,11 +853,13 @@ class SyncDataCollector(DataCollectorBase):
                 # changed them here).
                 # This will cause a failure to update entries when policy and env device mismatch and
                 # casting is necessary.
-                def filter_policy(value_output, value_input, value_input_clone):
-                    if (
-                        (value_input is None)
-                        or (value_output is not value_input)
-                        or ~torch.isclose(value_output, value_input_clone).any()
+                def filter_policy(name, value_output, value_input, value_input_clone):
+                    if (value_input is None) or (
+                        (value_output is not value_input)
+                        and (
+                            value_output.device != value_input_clone.device
+                            or ~torch.isclose(value_output, value_input_clone).any()
+                        )
                     ):
                         return value_output
 
@@ -767,6 +869,7 @@ class SyncDataCollector(DataCollectorBase):
                     policy_input_clone,
                     default=None,
                     filter_empty=True,
+                    named=True,
                 )
                 self._policy_output_keys = list(
                     self._policy_output_keys.union(
@@ -871,7 +974,15 @@ class SyncDataCollector(DataCollectorBase):
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
-        return self.env.set_seed(seed, static_seed=static_seed)
+        out = self.env.set_seed(seed, static_seed=static_seed)
+        return out
+
+    def _increment_frames(self, numel):
+        self._frames += numel
+        completed = self._frames >= self.total_frames
+        if completed:
+            self.env.close()
+        return completed
 
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
@@ -917,14 +1028,15 @@ class SyncDataCollector(DataCollectorBase):
             for stream in streams:
                 stack.enter_context(torch.cuda.stream(stream))
 
-            total_frames = self.total_frames
-
             while self._frames < self.total_frames:
                 self._iter += 1
                 tensordict_out = self.rollout()
-                self._frames += tensordict_out.numel()
-                if self._frames >= total_frames:
-                    self.env.close()
+                if tensordict_out is None:
+                    # if a replay buffer is passed, there is no tensordict_out
+                    #  frames are updated within the rollout function
+                    yield
+                    continue
+                self._increment_frames(tensordict_out.numel())
 
                 if self.split_trajs:
                     tensordict_out = split_trajectories(
@@ -976,14 +1088,20 @@ class SyncDataCollector(DataCollectorBase):
             env_output.get("next"), done_keys=self.env.done_keys
         )
         if traj_sop.any():
+            device = self.storing_device
+
             traj_ids = self._shuttle.get(("collector", "traj_ids"))
-            traj_sop = traj_sop.to(self.storing_device)
-            traj_ids = traj_ids.clone().to(self.storing_device)
-            traj_ids[traj_sop] = traj_ids.max() + torch.arange(
-                1,
-                traj_sop.sum() + 1,
-                device=self.storing_device,
+            if device is not None:
+                traj_ids = traj_ids.to(device)
+                traj_sop = traj_sop.to(device)
+            elif traj_sop.device != traj_ids.device:
+                traj_sop = traj_sop.to(traj_ids.device)
+
+            pool = self._traj_pool
+            new_traj = pool.get_traj_and_increment(
+                traj_sop.sum(), device=traj_sop.device
             )
+            traj_ids = traj_ids.masked_scatter(traj_sop, new_traj)
             self._shuttle.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
@@ -1053,13 +1171,18 @@ class SyncDataCollector(DataCollectorBase):
                         next_data.clear_device_()
                     self._shuttle.set("next", next_data)
 
-                if self.storing_device is not None:
-                    tensordicts.append(
-                        self._shuttle.to(self.storing_device, non_blocking=True)
-                    )
-                    self._sync_storage()
+                if self.replay_buffer is not None:
+                    self.replay_buffer.add(self._shuttle)
+                    if self._increment_frames(self._shuttle.numel()):
+                        return
                 else:
-                    tensordicts.append(self._shuttle)
+                    if self.storing_device is not None:
+                        tensordicts.append(
+                            self._shuttle.to(self.storing_device, non_blocking=True)
+                        )
+                        self._sync_storage()
+                    else:
+                        tensordicts.append(self._shuttle)
 
                 # carry over collector data without messing up devices
                 collector_data = self._shuttle.get("collector").copy()
@@ -1067,13 +1190,14 @@ class SyncDataCollector(DataCollectorBase):
                 if self._shuttle_has_no_device:
                     self._shuttle.clear_device_()
                 self._shuttle.set("collector", collector_data)
-
                 self._update_traj_ids(env_output)
 
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
+                    if self.replay_buffer is not None:
+                        return
                     result = self._final_rollout
                     if self._use_buffers:
                         try:
@@ -1109,6 +1233,8 @@ class SyncDataCollector(DataCollectorBase):
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
+                elif self.replay_buffer is not None:
+                    return
                 else:
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
@@ -1359,7 +1485,7 @@ class _MultiDataCollector(DataCollectorBase):
             workers may charge the cpu load too much and harm performance.
         cat_results (str, int or None): (:class:`~torchrl.collectors.MultiSyncDataCollector` exclusively).
             If ``"stack"``, the data collected from the workers will be stacked along the
-            first dimension. This is the preferred behaviour as it is the most compatible
+            first dimension. This is the preferred behavior as it is the most compatible
             with the rest of the library.
             If ``0``, results will be concatenated along the first dimension
             of the outputs, which can be the batched dimension if the environments are
@@ -1367,7 +1493,7 @@ class _MultiDataCollector(DataCollectorBase):
             A ``cat_results`` value of ``-1`` will always concatenate results along the
             time dimension. This should be preferred over the default. Intermediate values
             are also accepted.
-            Defaults to ``0``.
+            Defaults to ``"stack"``.
 
             .. note:: From v0.5, this argument will default to ``"stack"`` for a better
                 interoperability with the rest of the library.
@@ -1380,6 +1506,17 @@ class _MultiDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+            but populate the buffer instead. Defaults to ``None``.
+        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
+            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
+            and ``False`` otherwise.
+        compile_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be compiled
+            using :func:`~torch.compile` default behaviour. If a dictionary of kwargs is passed, it
+            will be used to compile the policy.
+        cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped
+            in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
+            If a dictionary of kwargs is passed, it will be used to wrap the policy.
 
     """
 
@@ -1406,7 +1543,6 @@ class _MultiDataCollector(DataCollectorBase):
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
-        exploration_mode=None,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
         preemptive_threshold: float = None,
@@ -1415,10 +1551,12 @@ class _MultiDataCollector(DataCollectorBase):
         cat_results: str | int | None = None,
         set_truncated: bool = False,
         use_buffers: bool | None = None,
+        replay_buffer: ReplayBuffer | None = None,
+        replay_buffer_chunk: bool = True,
+        trust_policy: bool = None,
+        compile_policy: bool | Dict[str, Any] | None = None,
+        cudagraph_policy: bool | Dict[str, Any] | None = None,
     ):
-        exploration_type = _convert_exploration_type(
-            exploration_mode=exploration_mode, exploration_type=exploration_type
-        )
         self.closed = True
         self.num_workers = len(create_env_fn)
 
@@ -1426,6 +1564,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self.create_env_fn = create_env_fn
+        self._read_compile_kwargs(compile_policy, cudagraph_policy)
         self.create_env_kwargs = (
             create_env_kwargs
             if create_env_kwargs is not None
@@ -1458,79 +1597,42 @@ class _MultiDataCollector(DataCollectorBase):
         del storing_device, env_device, policy_device, device
 
         self._use_buffers = use_buffers
+        self.replay_buffer = replay_buffer
+        self._check_replay_buffer_init()
+        self.replay_buffer_chunk = replay_buffer_chunk
+        if (
+            replay_buffer is not None
+            and hasattr(replay_buffer, "shared")
+            and not replay_buffer.shared
+        ):
+            replay_buffer.share()
 
-        _policy_weights_dict = {}
-        _get_weights_fn_dict = {}
+        self._policy_weights_dict = {}
+        self._get_weights_fn_dict = {}
 
-        if policy is not None:
-            policy = _NonParametricPolicyWrapper(policy)
-            policy_weights = TensorDict.from_module(policy, as_module=True)
+        if trust_policy is None:
+            trust_policy = isinstance(policy, CudaGraphModule)
+        self.trust_policy = trust_policy
 
-            # store a stateless policy
-            with policy_weights.apply(_make_meta_params).to_module(policy):
-                # TODO:
-                self.policy = deepcopy(policy)
-
-        else:
-            policy_weights = TensorDict()
-            self.policy = None
-
-        for policy_device in policy_devices:
-            # if we have already mapped onto that device, get that value
-            if policy_device in _policy_weights_dict:
-                continue
-            # If policy device is None, the only thing we need to do is
-            # make sure that the weights are shared.
-            if policy_device is None:
-
-                def map_weight(
-                    weight,
-                ):
-                    is_param = isinstance(weight, nn.Parameter)
-                    weight = weight.data
-                    if weight.device.type in ("cpu", "mps"):
-                        weight = weight.share_memory_()
-                    if is_param:
-                        weight = nn.Parameter(weight, requires_grad=False)
-                    return weight
-
-            # in other cases, we need to cast the policy if and only if not all the weights
-            # are on the appropriate device
-            else:
-                # check the weights devices
-                has_different_device = [False]
-
-                def map_weight(
-                    weight,
-                    policy_device=policy_device,
-                    has_different_device=has_different_device,
-                ):
-                    is_param = isinstance(weight, nn.Parameter)
-                    weight = weight.data
-                    if weight.device != policy_device:
-                        has_different_device[0] = True
-                        weight = weight.to(policy_device)
-                    elif weight.device.type in ("cpu", "mps"):
-                        weight = weight.share_memory_()
-                    if is_param:
-                        weight = nn.Parameter(weight, requires_grad=False)
-                    return weight
-
-            local_policy_weights = TensorDictParams(
-                policy_weights.apply(map_weight, filter_empty=False)
+        for policy_device, env_maker, env_maker_kwargs in zip(
+            self.policy_device, self.create_env_fn, self.create_env_kwargs
+        ):
+            (policy_copy, get_weights_fn,) = self._get_policy_and_device(
+                policy=policy,
+                policy_device=policy_device,
+                env_maker=env_maker,
+                env_maker_kwargs=env_maker_kwargs,
             )
-
-            def _get_weight_fn(weights=policy_weights):
-                # This function will give the local_policy_weight the original weights.
-                # see self.update_policy_weights_ to see how this is used
-                return weights
-
-            # We lock the weights to be able to cache a bunch of ops and to avoid modifying it
-            _policy_weights_dict[policy_device] = local_policy_weights.lock_()
-            _get_weights_fn_dict[policy_device] = _get_weight_fn
-
-        self._policy_weights_dict = _policy_weights_dict
-        self._get_weights_fn_dict = _get_weights_fn_dict
+            if type(policy_copy) is not type(policy):
+                policy = policy_copy
+            weights = (
+                TensorDict.from_module(policy_copy)
+                if isinstance(policy_copy, nn.Module)
+                else TensorDict()
+            )
+            self._policy_weights_dict[policy_device] = weights
+            self._get_weights_fn_dict[policy_device] = get_weights_fn
+        self.policy = policy
 
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
@@ -1597,6 +1699,26 @@ class _MultiDataCollector(DataCollectorBase):
                 "cat_results can only be used with ``MultiSyncDataCollector``."
             )
         self.cat_results = cat_results
+
+    def _check_replay_buffer_init(self):
+        if self.replay_buffer is None:
+            return
+        is_init = getattr(self.replay_buffer._storage, "initialized", True)
+        if not is_init:
+            if isinstance(self.create_env_fn[0], EnvCreator):
+                fake_td = self.create_env_fn[0].meta_data.tensordict
+            elif isinstance(self.create_env_fn[0], EnvBase):
+                fake_td = self.create_env_fn[0].fake_tensordict()
+            else:
+                fake_td = self.create_env_fn[0](
+                    **self.create_env_kwargs[0]
+                ).fake_tensordict()
+            fake_td["collector", "traj_ids"] = torch.zeros(
+                fake_td.shape, dtype=torch.long
+            )
+
+            self.replay_buffer.add(fake_td)
+            self.replay_buffer.empty()
 
     @classmethod
     def _total_workers_from_env(cls, env_creators):
@@ -1665,10 +1787,10 @@ class _MultiDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def update_policy_weights_(self, policy_weights=None) -> None:
+        if isinstance(policy_weights, TensorDictParams):
+            policy_weights = policy_weights.data
         for _device in self._policy_weights_dict:
             if policy_weights is not None:
-                if isinstance(policy_weights, TensorDictParams):
-                    policy_weights = policy_weights.data
                 self._policy_weights_dict[_device].data.update_(policy_weights)
             elif self._get_weights_fn_dict[_device] is not None:
                 original_weights = self._get_weights_fn_dict[_device]()
@@ -1694,6 +1816,8 @@ class _MultiDataCollector(DataCollectorBase):
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
+        self._traj_pool = _TrajectoryPool(lock=True)
+
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
         ):
@@ -1708,9 +1832,12 @@ class _MultiDataCollector(DataCollectorBase):
             storing_device = self.storing_device[i]
             env_device = self.env_device[i]
             policy = self.policy
-            with self._policy_weights_dict[policy_device].to_module(
-                policy
-            ) if policy is not None else contextlib.nullcontext():
+            policy_weights = self._policy_weights_dict[policy_device]
+            if policy is not None and policy_weights is not None:
+                cm = policy_weights.to_module(policy)
+            else:
+                cm = contextlib.nullcontext()
+            with cm:
                 kwargs = {
                     "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,
@@ -1730,6 +1857,16 @@ class _MultiDataCollector(DataCollectorBase):
                     "interruptor": self.interruptor,
                     "set_truncated": self.set_truncated,
                     "use_buffers": self._use_buffers,
+                    "replay_buffer": self.replay_buffer,
+                    "replay_buffer_chunk": self.replay_buffer_chunk,
+                    "traj_pool": self._traj_pool,
+                    "trust_policy": self.trust_policy,
+                    "compile_policy": self.compiled_policy_kwargs
+                    if self.compiled_policy
+                    else False,
+                    "cudagraph_policy": self.cudagraphed_policy_kwargs
+                    if self.cudagraphed_policy
+                    else False,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -1754,6 +1891,7 @@ also that the state dict is synchronised across processes if needed."""
                 self.procs.append(proc)
                 self.pipes.append(pipe_parent)
         for pipe_parent in self.pipes:
+            pipe_parent.poll(timeout=INSTANTIATE_TIMEOUT)
             msg = pipe_parent.recv()
             if msg != "instantiated":
                 raise RuntimeError(msg)
@@ -2069,29 +2207,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
         cat_results = self.cat_results
         if cat_results is None:
             cat_results = "stack"
-            warnings.warn(
-                f"`cat_results` was not specified in the constructor of {type(self).__name__}. "
-                f"For MultiSyncDataCollector, `cat_results` indicates how the data should "
-                f"be packed: the preferred option and current default is `cat_results='stack'` "
-                f"which provides the best interoperability across torchrl components. "
-                f"Other accepted values are `cat_results=0` (previous behaviour) and "
-                f"`cat_results=-1` (cat along time dimension). Among these two, the latter "
-                f"should be preferred for consistency across environment configurations. "
-                f"Currently, the default value is `'stack'`."
-                f"From v0.6 onward, this warning will be removed. "
-                f"To suppress this warning, set `cat_results` to the desired value.",
-                category=DeprecationWarning,
-            )
 
         self.buffers = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
         self.out_buffer = None
-        last_traj_ids = [-10 for _ in range(self.num_workers)]
-        last_traj_ids_subs = [None for _ in range(self.num_workers)]
-        traj_max = -1
-        traj_ids_list = [None for _ in range(self.num_workers)]
         preempt = self.interruptor is not None and self.preemptive_threshold < 1.0
 
         while not all(dones) and self._frames < self.total_frames:
@@ -2125,7 +2246,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
             for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 use_buffers = self._use_buffers
-                if j == 0 or not use_buffers:
+                if self.replay_buffer is not None:
+                    idx = new_data
+                    workers_frames[idx] = (
+                        workers_frames[idx] + self.frames_per_batch_worker
+                    )
+                    continue
+                elif j == 0 or not use_buffers:
                     try:
                         data, idx = new_data
                         self.buffers[idx] = data
@@ -2167,51 +2294,25 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
 
+            if self.replay_buffer is not None:
+                yield
+                self._frames += self.frames_per_batch_worker * self.num_workers
+                continue
+
             # we have to correct the traj_ids to make sure that they don't overlap
             # We can count the number of frames collected for free in this loop
             n_collected = 0
             for idx in range(self.num_workers):
                 buffer = buffers[idx]
                 traj_ids = buffer.get(("collector", "traj_ids"))
-                is_last = traj_ids == last_traj_ids[idx]
-                # If we `cat` interrupted data, we have already filtered out
-                # non-valid steps. If we stack, we haven't.
-                if preempt and cat_results == "stack":
-                    valid = buffer.get(("collector", "traj_ids")) != -1
-                    if valid.ndim > 2:
-                        valid = valid.flatten(0, -2)
-                    if valid.ndim == 2:
-                        valid = valid.any(0)
-                    last_traj_ids[idx] = traj_ids[..., valid][..., -1:].clone()
-                else:
-                    last_traj_ids[idx] = traj_ids[..., -1:].clone()
-                if not is_last.all():
-                    traj_to_correct = traj_ids[~is_last]
-                    traj_to_correct = (
-                        traj_to_correct + (traj_max + 1) - traj_to_correct.min()
-                    )
-                    traj_ids = traj_ids.masked_scatter(~is_last, traj_to_correct)
-                # is_last can only be true if we're after the first iteration
-                if is_last.any():
-                    traj_ids = torch.where(
-                        is_last, last_traj_ids_subs[idx].expand_as(traj_ids), traj_ids
-                    )
-
                 if preempt:
                     if cat_results == "stack":
                         mask_frames = buffer.get(("collector", "traj_ids")) != -1
-                        traj_ids = torch.where(mask_frames, traj_ids, -1)
                         n_collected += mask_frames.sum().cpu()
-                        last_traj_ids_subs[idx] = traj_ids[..., valid][..., -1:].clone()
                     else:
-                        last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
                         n_collected += traj_ids.numel()
                 else:
-                    last_traj_ids_subs[idx] = traj_ids[..., -1:].clone()
                     n_collected += traj_ids.numel()
-                traj_ids_list[idx] = traj_ids
-
-                traj_max = max(traj_max, traj_ids.max())
 
             if same_device is None:
                 prev_device = None
@@ -2232,9 +2333,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     self.out_buffer = stack(
                         [item.cpu() for item in buffers.values()], 0
                     )
-                self.out_buffer.set(
-                    ("collector", "traj_ids"), torch.stack(traj_ids_list), inplace=True
-                )
             else:
                 if self._use_buffers is None:
                     torchrl_logger.warning(
@@ -2251,9 +2349,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         self.out_buffer = torch.cat(
                             [item.cpu() for item in buffers.values()], cat_results
                         )
-                    self.out_buffer.set_(
-                        ("collector", "traj_ids"), torch.cat(traj_ids_list, cat_results)
-                    )
                 except RuntimeError as err:
                     if (
                         preempt
@@ -2397,7 +2492,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.out_tensordicts = {}
+        self.out_tensordicts = defaultdict(lambda: None)
         self.running = False
 
         if self.postprocs is not None:
@@ -2442,7 +2537,9 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
         use_buffers = self._use_buffers
-        if j == 0 or not use_buffers:
+        if self.replay_buffer is not None:
+            idx = new_data
+        elif j == 0 or not use_buffers:
             try:
                 data, idx = new_data
                 self.out_tensordicts[idx] = data
@@ -2457,7 +2554,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         else:
             idx = new_data
         out = self.out_tensordicts[idx]
-        if j == 0 or use_buffers:
+        if not self.replay_buffer and (j == 0 or use_buffers):
             # we clone the data to make sure that we'll be working with a fixed copy
             out = out.clone()
         return idx, j, out
@@ -2479,12 +2576,19 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
         workers_frames = [0 for _ in range(self.num_workers)]
         while self._frames < self.total_frames:
-            _check_for_faulty_process(self.procs)
             self._iter += 1
-            idx, j, out = self._get_from_queue()
-            worker_frames = out.numel()
-            if self.split_trajs:
-                out = split_trajectories(out, prefix="collector")
+            while True:
+                try:
+                    idx, j, out = self._get_from_queue(timeout=10.0)
+                    break
+                except TimeoutError:
+                    _check_for_faulty_process(self.procs)
+            if self.replay_buffer is None:
+                worker_frames = out.numel()
+                if self.split_trajs:
+                    out = split_trajectories(out, prefix="collector")
+            else:
+                worker_frames = self.frames_per_batch_worker
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
             if self.postprocs:
@@ -2500,7 +2604,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             else:
                 msg = "continue"
             self.pipes[idx].send((idx, msg))
-            if self._exclude_private_keys:
+            if out is not None and self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
             yield out
@@ -2687,7 +2791,6 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: Optional[bool] = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
-        exploration_mode=None,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
         preemptive_threshold: float = None,
@@ -2712,7 +2815,6 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             env_device=env_device,
             storing_device=storing_device,
             exploration_type=exploration_type,
-            exploration_mode=exploration_mode,
             reset_when_done=reset_when_done,
             update_at_each_batch=update_at_each_batch,
             preemptive_threshold=preemptive_threshold,
@@ -2762,6 +2864,12 @@ def _main_async_collector(
     interruptor=None,
     set_truncated: bool = False,
     use_buffers: bool | None = None,
+    replay_buffer: ReplayBuffer | None = None,
+    replay_buffer_chunk: bool = True,
+    traj_pool: _TrajectoryPool = None,
+    trust_policy: bool = False,
+    compile_policy: bool = False,
+    cudagraph_policy: bool = False,
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
@@ -2782,10 +2890,15 @@ def _main_async_collector(
         env_device=env_device,
         exploration_type=exploration_type,
         reset_when_done=reset_when_done,
-        return_same_td=True,
+        return_same_td=replay_buffer is None,
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
+        replay_buffer=replay_buffer if replay_buffer_chunk else None,
+        traj_pool=traj_pool,
+        trust_policy=trust_policy,
+        compile_policy=compile_policy,
+        cudagraph_policy=cudagraph_policy,
     )
     use_buffers = inner_collector._use_buffers
     if verbose:
@@ -2848,6 +2961,25 @@ def _main_async_collector(
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
                 # sending the trajectory in the queue until timeout when it's never going to be received.
                 continue
+
+            if replay_buffer is not None:
+                if not replay_buffer_chunk:
+                    next_data.names = None
+                    replay_buffer.extend(next_data)
+
+                try:
+                    queue_out.put((idx, j), timeout=_TIMEOUT)
+                    if verbose:
+                        torchrl_logger.info(f"worker {idx} successfully sent data")
+                    j += 1
+                    has_timed_out = False
+                    continue
+                except queue.Full:
+                    if verbose:
+                        torchrl_logger.info(f"worker {idx} has timed out")
+                    has_timed_out = True
+                    continue
+
             if j == 0 or not use_buffers:
                 collected_tensordict = next_data
                 if (
@@ -2862,10 +2994,16 @@ def _main_async_collector(
                     # if policy is on cuda and env on cuda, we are fine with this
                     # If policy is on cuda and env on cpu (or opposite) we put tensors that
                     # are on cpu in shared mem.
+                    MPS_ERROR = (
+                        "tensors on mps device cannot be put in shared memory. Make sure "
+                        "the shared device (aka storing_device) is set to CPU."
+                    )
                     if collected_tensordict.device is not None:
-                        # placehoder in case we need different behaviours
-                        if collected_tensordict.device.type in ("cpu", "mps"):
+                        # placehoder in case we need different behaviors
+                        if collected_tensordict.device.type in ("cpu",):
                             collected_tensordict.share_memory_()
+                        elif collected_tensordict.device.type in ("mps",):
+                            raise RuntimeError(MPS_ERROR)
                         elif collected_tensordict.device.type == "cuda":
                             collected_tensordict.share_memory_()
                         else:
@@ -2874,11 +3012,13 @@ def _main_async_collector(
                             )
                     else:
                         # make sure each cpu tensor is shared - assuming non-cpu devices are shared
-                        collected_tensordict.apply(
-                            lambda x: x.share_memory_()
-                            if x.device.type in ("cpu", "mps")
-                            else x
-                        )
+                        def cast_tensor(x, MPS_ERROR=MPS_ERROR):
+                            if x.device.type in ("cpu",):
+                                x.share_memory_()
+                            if x.device.type in ("mps",):
+                                RuntimeError(MPS_ERROR)
+
+                        collected_tensordict.apply(cast_tensor, filter_empty=True)
                 data = (collected_tensordict, idx)
             else:
                 if next_data is not collected_tensordict:
@@ -2956,3 +3096,20 @@ def _make_meta_params(param):
     if is_param:
         pd = nn.Parameter(pd, requires_grad=False)
     return pd
+
+
+class _TrajectoryPool:
+    def __init__(self, ctx=None, lock: bool = False):
+        self.ctx = ctx
+        self._traj_id = torch.zeros((), device="cpu", dtype=torch.int).share_memory_()
+        if ctx is None:
+            self.lock = contextlib.nullcontext() if not lock else mp.RLock()
+        else:
+            self.lock = contextlib.nullcontext() if not lock else ctx.RLock()
+
+    def get_traj_and_increment(self, n=1, device=None):
+        with self.lock:
+            v = self._traj_id.item()
+            out = torch.arange(v, v + n).to(device)
+            self._traj_id.copy_(1 + out[-1].item())
+        return out

@@ -44,6 +44,7 @@ jobs:
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_ataridqn/setup_env.sh
         bash .github/unittest/linux_libs/scripts_ataridqn/install.sh
@@ -81,6 +82,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         nvidia-smi
 
@@ -114,6 +116,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_d4rl/setup_env.sh
         bash .github/unittest/linux_libs/scripts_d4rl/install.sh
@@ -148,6 +151,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_d4rl/setup_env.sh
         bash .github/unittest/linux_libs/scripts_d4rl/install.sh
@@ -181,6 +185,7 @@ jobs:
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_gen-dgrl/setup_env.sh
         bash .github/unittest/linux_libs/scripts_gen-dgrl/install.sh
@@ -216,6 +221,7 @@ jobs:
         export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin"
         export TAR_OPTIONS="--no-same-owner"
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         ./.github/unittest/linux_libs/scripts_gym/setup_env.sh
         ./.github/unittest/linux_libs/scripts_gym/batch_scripts.sh
@@ -251,6 +257,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         nvidia-smi
 
@@ -285,6 +292,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         nvidia-smi
 
@@ -292,6 +300,82 @@ jobs:
         bash .github/unittest/linux_libs/scripts_meltingpot/install.sh
         bash .github/unittest/linux_libs/scripts_meltingpot/run_test.sh
         bash .github/unittest/linux_libs/scripts_meltingpot/post_process.sh
+
+  unittests-open_spiel:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_open_spiel/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_open_spiel/install.sh
+        bash .github/unittest/linux_libs/scripts_open_spiel/run_test.sh
+        bash .github/unittest/linux_libs/scripts_open_spiel/post_process.sh
+
+  unittests-unity_mlagents:
+    strategy:
+      matrix:
+        python_version: ["3.10.12"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.10.12"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_unity_mlagents/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_unity_mlagents/install.sh
+        bash .github/unittest/linux_libs/scripts_unity_mlagents/run_test.sh
+        bash .github/unittest/linux_libs/scripts_unity_mlagents/post_process.sh
 
   unittests-minari:
     strategy:
@@ -321,6 +405,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_minari/setup_env.sh
         bash .github/unittest/linux_libs/scripts_minari/install.sh
@@ -355,6 +440,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_openx/setup_env.sh
         bash .github/unittest/linux_libs/scripts_openx/install.sh
@@ -387,6 +473,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         nvidia-smi
 
@@ -423,6 +510,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_robohive/setup_env.sh
         bash .github/unittest/linux_libs/scripts_robohive/install_and_run_test.sh
@@ -456,6 +544,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_roboset/setup_env.sh
         bash .github/unittest/linux_libs/scripts_roboset/install.sh
@@ -491,6 +580,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_sklearn/setup_env.sh
         bash .github/unittest/linux_libs/scripts_sklearn/install.sh
@@ -527,6 +617,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         nvidia-smi
 
@@ -563,6 +654,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_vd4rl/setup_env.sh
         bash .github/unittest/linux_libs/scripts_vd4rl/install.sh
@@ -599,6 +691,7 @@ jobs:
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
         export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         nvidia-smi
 

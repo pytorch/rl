@@ -77,7 +77,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
               shuffle=False will also impact the sampling. We advice users to
               create a copy of the dataset where the ``shuffle`` attribute of the
               sampler is set to ``False`` if they wish to enjoy the two different
-              behaviours (shuffled and not) within the same code base.
+              behaviors (shuffled and not) within the same code base.
 
         num_slices (int, optional): the number of slices in a batch. This
             corresponds to the number of trajectories present in a batch.
@@ -134,7 +134,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
                 the dataset. This isn't possible at a reasonable cost with
                 `streaming=True`: in this case, trajectories will be sampled
                 one at a time and delivered as such (with cropping to comply with
-                the batch-size etc). The behaviour of the two modalities is
+                the batch-size etc). The behavior of the two modalities is
                 much more similar when `num_slices` and `slice_len` are specified,
                 as in these cases, views of sub-episodes will be returned in both
                 cases.

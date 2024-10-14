@@ -99,7 +99,7 @@ Key learnings:
 #    wrapper for the VMAS simulator.
 #
 # 3. Next, we will design the policy and the critic networks, discussing the impact of the various choices on
-#    parameter sharing and critic centralisation.
+#    parameter sharing and critic centralization.
 #
 # 4. Next, we will create the sampling collector and the replay buffer.
 #
@@ -184,7 +184,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # -----------
 #
 # Multi-agent environments simulate multiple agents interacting with the world.
-# TorchRL API allows integrating various types of multi-agent environment flavours.
+# TorchRL API allows integrating various types of multi-agent environment flavors.
 # Some examples include environments with shared or individual agent rewards, done flags, and observations.
 # For more information on how the multi-agent environments API works in TorchRL, you can check out the dedicated
 # :ref:`doc section <MARL-environment-API>`.
@@ -195,7 +195,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # This means that all its state and physics
 # are PyTorch tensors with a first dimension representing the number of parallel environments in a batch.
 # This allows leveraging the Single Instruction Multiple Data (SIMD) paradigm of GPUs and significantly
-# speed up parallel computation by leveraging parallelisation in GPU warps. It also means
+# speed up parallel computation by leveraging parallelization in GPU warps. It also means
 # that, when using it in TorchRL, both simulation and training can be run on-device, without ever passing
 # data to the CPU.
 #
@@ -207,7 +207,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # avoid colliding into each other.
 # Agents act in a 2D continuous world with drag and elastic collisions.
 # Their actions are 2D continuous forces which determine their acceleration.
-# The reward is composed of three terms: a collision penalisation, a reward based on the distance to the goal, and a
+# The reward is composed of three terms: a collision penalization, a reward based on the distance to the goal, and a
 # final shared reward given when all agents reach their goal.
 # The distance-based term is computed as the difference in the relative distance
 # between an agent and its goal over two consecutive timesteps.
@@ -391,7 +391,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # **First**: define a neural network ``n_obs_per_agent`` -> ``2 * n_actions_per_agents``
 #
 # For this we use the ``MultiAgentMLP``, a TorchRL module made exactly for
-# multiple agents, with much customisation available.
+# multiple agents, with much customization available.
 #
 
 share_parameters_policy = True

@@ -20,11 +20,11 @@ from tensordict.nn import (
 from torchrl.collectors import SyncDataCollector
 
 from torchrl.data import (
-    CompositeSpec,
+    Composite,
     LazyMemmapStorage,
     SliceSampler,
     TensorDictReplayBuffer,
-    UnboundedContinuousTensorSpec,
+    Unbounded,
 )
 
 from torchrl.envs import (
@@ -92,8 +92,8 @@ def _make_env(cfg, device, from_pixels=False):
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
     default_dict = {
-        "state": UnboundedContinuousTensorSpec(shape=(cfg.networks.state_dim,)),
-        "belief": UnboundedContinuousTensorSpec(shape=(cfg.networks.rssm_hidden_dim,)),
+        "state": Unbounded(shape=(cfg.networks.state_dim,)),
+        "belief": Unbounded(shape=(cfg.networks.rssm_hidden_dim,)),
     }
     env = env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
@@ -469,13 +469,13 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             actor_module,
             in_keys=["state", "belief"],
             out_keys=["loc", "scale"],
-            spec=CompositeSpec(
+            spec=Composite(
                 **{
-                    "loc": UnboundedContinuousTensorSpec(
+                    "loc": Unbounded(
                         proof_environment.action_spec.shape,
                         device=proof_environment.action_spec.device,
                     ),
-                    "scale": UnboundedContinuousTensorSpec(
+                    "scale": Unbounded(
                         proof_environment.action_spec.shape,
                         device=proof_environment.action_spec.device,
                     ),
@@ -488,7 +488,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             default_interaction_type=InteractionType.RANDOM,
             distribution_class=TanhNormal,
             distribution_kwargs={"tanh_loc": True},
-            spec=CompositeSpec(**{action_key: proof_environment.action_spec}),
+            spec=Composite(**{action_key: proof_environment.action_spec}),
         ),
     )
     return actor_simulator
@@ -526,12 +526,12 @@ def _dreamer_make_actor_real(
                 actor_module,
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
-                spec=CompositeSpec(
+                spec=Composite(
                     **{
-                        "loc": UnboundedContinuousTensorSpec(
+                        "loc": Unbounded(
                             proof_environment.action_spec.shape,
                         ),
-                        "scale": UnboundedContinuousTensorSpec(
+                        "scale": Unbounded(
                             proof_environment.action_spec.shape,
                         ),
                     }
@@ -543,9 +543,7 @@ def _dreamer_make_actor_real(
                 default_interaction_type=InteractionType.DETERMINISTIC,
                 distribution_class=TanhNormal,
                 distribution_kwargs={"tanh_loc": True},
-                spec=CompositeSpec(
-                    **{action_key: proof_environment.action_spec.to("cpu")}
-                ),
+                spec=Composite(**{action_key: proof_environment.action_spec.to("cpu")}),
             ),
         ),
         SafeModule(

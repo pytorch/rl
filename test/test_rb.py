@@ -26,6 +26,7 @@ from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
     is_tensorclass,
+    LazyStackedTensorDict,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -57,6 +58,11 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+)
+from torchrl.data.replay_buffers.scheduler import (
+    LinearScheduler,
+    SchedulerList,
+    StepScheduler,
 )
 
 from torchrl.data.replay_buffers.storages import (
@@ -99,6 +105,7 @@ from torchrl.envs.transforms.transforms import (
     VecNorm,
 )
 
+
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
@@ -108,6 +115,11 @@ _os_is_windows = sys.platform == "win32"
 torch_2_3 = version.parse(
     ".".join([str(s) for s in version.parse(str(torch.__version__)).release])
 ) >= version.parse("2.3.0")
+
+ReplayBufferRNG = functools.partial(ReplayBuffer, generator=torch.Generator())
+TensorDictReplayBufferRNG = functools.partial(
+    TensorDictReplayBuffer, generator=torch.Generator()
+)
 
 
 @pytest.mark.parametrize(
@@ -125,17 +137,27 @@ torch_2_3 = version.parse(
     "rb_type,storage,datatype",
     [
         [ReplayBuffer, ListStorage, None],
+        [ReplayBufferRNG, ListStorage, None],
         [TensorDictReplayBuffer, ListStorage, "tensordict"],
+        [TensorDictReplayBufferRNG, ListStorage, "tensordict"],
         [RemoteTensorDictReplayBuffer, ListStorage, "tensordict"],
         [ReplayBuffer, LazyTensorStorage, "tensor"],
         [ReplayBuffer, LazyTensorStorage, "tensordict"],
         [ReplayBuffer, LazyTensorStorage, "pytree"],
+        [ReplayBufferRNG, LazyTensorStorage, "tensor"],
+        [ReplayBufferRNG, LazyTensorStorage, "tensordict"],
+        [ReplayBufferRNG, LazyTensorStorage, "pytree"],
         [TensorDictReplayBuffer, LazyTensorStorage, "tensordict"],
+        [TensorDictReplayBufferRNG, LazyTensorStorage, "tensordict"],
         [RemoteTensorDictReplayBuffer, LazyTensorStorage, "tensordict"],
         [ReplayBuffer, LazyMemmapStorage, "tensor"],
         [ReplayBuffer, LazyMemmapStorage, "tensordict"],
         [ReplayBuffer, LazyMemmapStorage, "pytree"],
+        [ReplayBufferRNG, LazyMemmapStorage, "tensor"],
+        [ReplayBufferRNG, LazyMemmapStorage, "tensordict"],
+        [ReplayBufferRNG, LazyMemmapStorage, "pytree"],
         [TensorDictReplayBuffer, LazyMemmapStorage, "tensordict"],
+        [TensorDictReplayBufferRNG, LazyMemmapStorage, "tensordict"],
         [RemoteTensorDictReplayBuffer, LazyMemmapStorage, "tensordict"],
     ],
 )
@@ -531,6 +553,20 @@ class TestStorages:
         ):
             storage_type(data, max_size=4)
 
+    def test_existsok_lazymemmap(self, tmpdir):
+        storage0 = LazyMemmapStorage(10, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storage0)
+        rb.extend(TensorDict(a=torch.randn(3), batch_size=[3]))
+
+        storage1 = LazyMemmapStorage(10, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storage1)
+        with pytest.raises(RuntimeError, match="existsok"):
+            rb.extend(TensorDict(a=torch.randn(3), batch_size=[3]))
+
+        storage2 = LazyMemmapStorage(10, scratch_dir=tmpdir, existsok=True)
+        rb = ReplayBuffer(storage=storage2)
+        rb.extend(TensorDict(a=torch.randn(3), batch_size=[3]))
+
     @pytest.mark.parametrize(
         "data_type", ["tensor", "tensordict", "tensorclass", "pytree"]
     )
@@ -685,6 +721,20 @@ class TestStorages:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample()
         assert (s.exclude("index") == 1).all()
+
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    def test_extend_lazystack(self, storage_type):
+
+        rb = ReplayBuffer(
+            storage=storage_type(6),
+            batch_size=2,
+        )
+        td1 = TensorDict(a=torch.rand(5, 4, 8), batch_size=5)
+        td2 = TensorDict(a=torch.rand(5, 3, 8), batch_size=5)
+        ltd = LazyStackedTensorDict(td1, td2, stack_dim=1)
+        rb.extend(ltd)
+        rb.sample(3)
+        assert len(rb) == 5
 
     @pytest.mark.parametrize("device_data", get_default_devices())
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
@@ -1155,17 +1205,115 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
     # sampled_td_filtered.batch_size = [3, 4]
 
 
+class TestRNG:
+    def test_rb_rng(self):
+        state = torch.random.get_rng_state()
+        rb = ReplayBufferRNG(sampler=RandomSampler(), storage=LazyTensorStorage(100))
+        rb.extend(torch.arange(100))
+        rb._rng.set_state(state)
+        a = rb.sample(32)
+        rb._rng.set_state(state)
+        b = rb.sample(32)
+        assert (a == b).all()
+        c = rb.sample(32)
+        assert (a != c).any()
+
+    def test_prb_rng(self):
+        state = torch.random.get_rng_state()
+        rb = ReplayBuffer(
+            sampler=PrioritizedSampler(100, 1.0, 1.0),
+            storage=LazyTensorStorage(100),
+            generator=torch.Generator(),
+        )
+        rb.extend(torch.arange(100))
+        rb.update_priority(index=torch.arange(100), priority=torch.arange(1, 101))
+
+        rb._rng.set_state(state)
+        a = rb.sample(32)
+
+        rb._rng.set_state(state)
+        b = rb.sample(32)
+        assert (a == b).all()
+
+        c = rb.sample(32)
+        assert (a != c).any()
+
+    def test_slice_rng(self):
+        state = torch.random.get_rng_state()
+        rb = ReplayBuffer(
+            sampler=SliceSampler(num_slices=4),
+            storage=LazyTensorStorage(100),
+            generator=torch.Generator(),
+        )
+        done = torch.zeros(100, 1, dtype=torch.bool)
+        done[49] = 1
+        done[-1] = 1
+        data = TensorDict(
+            {
+                "data": torch.arange(100),
+                ("next", "done"): done,
+            },
+            batch_size=[100],
+        )
+        rb.extend(data)
+
+        rb._rng.set_state(state)
+        a = rb.sample(32)
+
+        rb._rng.set_state(state)
+        b = rb.sample(32)
+        assert (a == b).all()
+
+        c = rb.sample(32)
+        assert (a != c).any()
+
+    def test_rng_state_dict(self):
+        state = torch.random.get_rng_state()
+        rb = ReplayBufferRNG(sampler=RandomSampler(), storage=LazyTensorStorage(100))
+        rb.extend(torch.arange(100))
+        rb._rng.set_state(state)
+        sd = rb.state_dict()
+        assert sd.get("_rng") is not None
+        a = rb.sample(32)
+
+        rb.load_state_dict(sd)
+        b = rb.sample(32)
+        assert (a == b).all()
+        c = rb.sample(32)
+        assert (a != c).any()
+
+    def test_rng_dumps(self, tmpdir):
+        state = torch.random.get_rng_state()
+        rb = ReplayBufferRNG(sampler=RandomSampler(), storage=LazyTensorStorage(100))
+        rb.extend(torch.arange(100))
+        rb._rng.set_state(state)
+        rb.dumps(tmpdir)
+        a = rb.sample(32)
+
+        rb.loads(tmpdir)
+        b = rb.sample(32)
+        assert (a == b).all()
+        c = rb.sample(32)
+        assert (a != c).any()
+
+
 @pytest.mark.parametrize(
     "rbtype,storage",
     [
         (ReplayBuffer, None),
         (ReplayBuffer, ListStorage),
+        (ReplayBufferRNG, None),
+        (ReplayBufferRNG, ListStorage),
         (PrioritizedReplayBuffer, None),
         (PrioritizedReplayBuffer, ListStorage),
         (TensorDictReplayBuffer, None),
         (TensorDictReplayBuffer, ListStorage),
         (TensorDictReplayBuffer, LazyTensorStorage),
         (TensorDictReplayBuffer, LazyMemmapStorage),
+        (TensorDictReplayBufferRNG, None),
+        (TensorDictReplayBufferRNG, ListStorage),
+        (TensorDictReplayBufferRNG, LazyTensorStorage),
+        (TensorDictReplayBufferRNG, LazyMemmapStorage),
         (TensorDictPrioritizedReplayBuffer, None),
         (TensorDictPrioritizedReplayBuffer, ListStorage),
         (TensorDictPrioritizedReplayBuffer, LazyTensorStorage),
@@ -1175,33 +1323,34 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
 @pytest.mark.parametrize("size", [3, 5, 100])
 @pytest.mark.parametrize("prefetch", [0])
 class TestBuffers:
-    _default_params_rb = {}
-    _default_params_td_rb = {}
-    _default_params_prb = {"alpha": 0.8, "beta": 0.9}
-    _default_params_td_prb = {"alpha": 0.8, "beta": 0.9}
+
+    default_constr = {
+        ReplayBuffer: ReplayBuffer,
+        PrioritizedReplayBuffer: functools.partial(
+            PrioritizedReplayBuffer, alpha=0.8, beta=0.9
+        ),
+        TensorDictReplayBuffer: TensorDictReplayBuffer,
+        TensorDictPrioritizedReplayBuffer: functools.partial(
+            TensorDictPrioritizedReplayBuffer, alpha=0.8, beta=0.9
+        ),
+        TensorDictReplayBufferRNG: TensorDictReplayBufferRNG,
+        ReplayBufferRNG: ReplayBufferRNG,
+    }
 
     def _get_rb(self, rbtype, size, storage, prefetch):
         if storage is not None:
             storage = storage(size)
-        if rbtype is ReplayBuffer:
-            params = self._default_params_rb
-        elif rbtype is PrioritizedReplayBuffer:
-            params = self._default_params_prb
-        elif rbtype is TensorDictReplayBuffer:
-            params = self._default_params_td_rb
-        elif rbtype is TensorDictPrioritizedReplayBuffer:
-            params = self._default_params_td_prb
-        else:
-            raise NotImplementedError(rbtype)
-        rb = rbtype(storage=storage, prefetch=prefetch, batch_size=3, **params)
+        rb = self.default_constr[rbtype](
+            storage=storage, prefetch=prefetch, batch_size=3
+        )
         return rb
 
     def _get_datum(self, rbtype):
-        if rbtype is ReplayBuffer:
+        if rbtype in (ReplayBuffer, ReplayBufferRNG):
             data = torch.randint(100, (1,))
         elif rbtype is PrioritizedReplayBuffer:
             data = torch.randint(100, (1,))
-        elif rbtype is TensorDictReplayBuffer:
+        elif rbtype in (TensorDictReplayBuffer, TensorDictReplayBufferRNG):
             data = TensorDict({"a": torch.randint(100, (1,))}, [])
         elif rbtype is TensorDictPrioritizedReplayBuffer:
             data = TensorDict({"a": torch.randint(100, (1,))}, [])
@@ -1210,11 +1359,11 @@ class TestBuffers:
         return data
 
     def _get_data(self, rbtype, size):
-        if rbtype is ReplayBuffer:
+        if rbtype in (ReplayBuffer, ReplayBufferRNG):
             data = [torch.randint(100, (1,)) for _ in range(size)]
         elif rbtype is PrioritizedReplayBuffer:
             data = [torch.randint(100, (1,)) for _ in range(size)]
-        elif rbtype is TensorDictReplayBuffer:
+        elif rbtype in (TensorDictReplayBuffer, TensorDictReplayBufferRNG):
             data = TensorDict(
                 {
                     "a": torch.randint(100, (size,)),
@@ -1627,10 +1776,8 @@ class TestTransforms:
                 not _has_tv, reason="needs torchvision dependency"
             ),
         ),
-        pytest.param(
-            partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
-        ),
-        pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
+        pytest.param(partial(UnsqueezeTransform, dim=-1), id="UnsqueezeTransform"),
+        pytest.param(partial(SqueezeTransform, dim=-1), id="SqueezeTransform"),
         GrayScale,
         pytest.param(partial(ObservationNorm, loc=1, scale=2), id="ObservationNorm"),
         pytest.param(partial(CatFrames, dim=-3, N=4), id="CatFrames"),
@@ -1950,13 +2097,16 @@ class TestMultiProc:
         init=True,
         writer_type=TensorDictRoundRobinWriter,
         sampler_type=RandomSampler,
+        device=None,
     ):
         rb = TensorDictReplayBuffer(
             storage=storage_type(21), writer=writer_type(), sampler=sampler_type()
         )
         if init:
             td = TensorDict(
-                {"a": torch.zeros(10), "next": {"reward": torch.ones(10)}}, [10]
+                {"a": torch.zeros(10), "next": {"reward": torch.ones(10)}},
+                [10],
+                device=device,
             )
             rb.extend(td)
         q0 = mp.Queue(1)
@@ -1983,13 +2133,6 @@ class TestMultiProc:
         # list storage cannot be shared
         with pytest.raises(RuntimeError, match="Cannot share a storage of type"):
             self.exec_multiproc_rb(storage_type=ListStorage)
-
-    def test_error_nonshared(self):
-        # non shared tensor storage cannot be shared
-        with pytest.raises(
-            RuntimeError, match="The storage must be place in shared memory"
-        ):
-            self.exec_multiproc_rb(storage_type=LazyTensorStorage)
 
     def test_error_maxwriter(self):
         # TensorDictMaxValueWriter cannot be shared
@@ -2900,6 +3043,77 @@ def test_prioritized_slice_sampler_episodes(device):
     assert {1, 3} == set(
         torch.cat(episodes).cpu().tolist()
     ), "after priority update, only episode 1 and 3 are expected to be sampled"
+
+
+@pytest.mark.parametrize("alpha", [0.6, torch.tensor(1.0)])
+@pytest.mark.parametrize("beta", [0.7, torch.tensor(0.1)])
+@pytest.mark.parametrize("gamma", [0.1])
+@pytest.mark.parametrize("total_steps", [200])
+@pytest.mark.parametrize("n_annealing_steps", [100])
+@pytest.mark.parametrize("anneal_every_n", [10, 159])
+@pytest.mark.parametrize("alpha_min", [0, 0.2])
+@pytest.mark.parametrize("beta_max", [1, 1.4])
+def test_prioritized_parameter_scheduler(
+    alpha,
+    beta,
+    gamma,
+    total_steps,
+    n_annealing_steps,
+    anneal_every_n,
+    alpha_min,
+    beta_max,
+):
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=alpha, beta=beta, storage=ListStorage(max_size=1000)
+    )
+    data = TensorDict({"data": torch.randn(1000, 5)}, batch_size=1000)
+    rb.extend(data)
+    alpha_scheduler = LinearScheduler(
+        rb, param_name="alpha", final_value=alpha_min, num_steps=n_annealing_steps
+    )
+    beta_scheduler = StepScheduler(
+        rb,
+        param_name="beta",
+        gamma=gamma,
+        n_steps=anneal_every_n,
+        max_value=beta_max,
+        mode="additive",
+    )
+
+    scheduler = SchedulerList(schedulers=(alpha_scheduler, beta_scheduler))
+
+    alpha = alpha if torch.is_tensor(alpha) else torch.tensor(alpha)
+    alpha_min = torch.tensor(alpha_min)
+    expected_alpha_vals = torch.linspace(alpha, alpha_min, n_annealing_steps + 1)
+    expected_alpha_vals = torch.nn.functional.pad(
+        expected_alpha_vals, (0, total_steps - n_annealing_steps), value=alpha_min
+    )
+
+    expected_beta_vals = [beta]
+    annealing_steps = total_steps // anneal_every_n
+    gammas = torch.arange(0, annealing_steps + 1, dtype=torch.float32) * gamma
+    expected_beta_vals = (
+        (beta + gammas).repeat_interleave(anneal_every_n).clip(None, beta_max)
+    )
+    for i in range(total_steps):
+        curr_alpha = rb.sampler.alpha
+        torch.testing.assert_close(
+            curr_alpha
+            if torch.is_tensor(curr_alpha)
+            else torch.tensor(curr_alpha).float(),
+            expected_alpha_vals[i],
+            msg=f"expected {expected_alpha_vals[i]}, got {curr_alpha}",
+        )
+        curr_beta = rb.sampler.beta
+        torch.testing.assert_close(
+            curr_beta
+            if torch.is_tensor(curr_beta)
+            else torch.tensor(curr_beta).float(),
+            expected_beta_vals[i],
+            msg=f"expected {expected_beta_vals[i]}, got {curr_beta}",
+        )
+        rb.sample(20)
+        scheduler.step()
 
 
 class TestEnsemble:
