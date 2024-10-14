@@ -126,6 +126,7 @@ jobs:
         run: |
           python3.10 -m venv --system-site-packages ./py310
           source ./py310/bin/activate
+          export PYTHON_INCLUDE_DIR=/usr/include/python3.10
 
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 -U
           python3.10 -m pip install cmake ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]"
