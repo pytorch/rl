@@ -8694,7 +8694,7 @@ class TestTransforms:
 
         # Final check to ensure clean sampling from the action_spec
         action = env.rand_action()
-        assert "action_2"
+        assert "action_2" in action
 
     @pytest.mark.parametrize("device", get_default_devices())
     def test_finitetensordictcheck(self, device):
