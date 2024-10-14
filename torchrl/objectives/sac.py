@@ -18,7 +18,7 @@ from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
@@ -44,6 +44,19 @@ def _delezify(func):
         return func(self, *args, **kwargs)
 
     return new_func
+
+
+def compute_log_prob(action_dist, action_or_tensordict, tensor_key):
+    """Compute the log probability of an action given a distribution."""
+    if isinstance(action_or_tensordict, torch.Tensor):
+        log_p = action_dist.log_prob(action_or_tensordict)
+    else:
+        maybe_log_prob = action_dist.log_prob(action_or_tensordict)
+        if not isinstance(maybe_log_prob, torch.Tensor):
+            log_p = maybe_log_prob.get(tensor_key)
+        else:
+            log_p = maybe_log_prob
+    return log_p
 
 
 class SACLoss(LossModule):
@@ -117,14 +130,14 @@ class SACLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.sac import SACLoss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
@@ -180,14 +193,14 @@ class SACLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.sac import SACLoss
         >>> _ = torch.manual_seed(42)
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
@@ -251,7 +264,7 @@ class SACLoss(LossModule):
             state_action_value (NestedKey): The input tensordict key where the
                 state action value is expected.  Defaults to ``"state_action_value"``.
             log_prob (NestedKey): The input tensordict key where the log probability is expected.
-                Defaults to ``"_log_prob"``.
+                Defaults to ``"sample_log_prob"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
@@ -267,7 +280,7 @@ class SACLoss(LossModule):
         action: NestedKey = "action"
         value: NestedKey = "state_value"
         state_action_value: NestedKey = "state_action_value"
-        log_prob: NestedKey = "_log_prob"
+        log_prob: NestedKey = "sample_log_prob"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
@@ -440,8 +453,8 @@ class SACLoss(LossModule):
                     "the target entropy explicitely or provide the spec of the "
                     "action tensor in the actor network."
                 )
-            if not isinstance(action_spec, CompositeSpec):
-                action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+            if not isinstance(action_spec, Composite):
+                action_spec = Composite({self.tensor_keys.action: action_spec})
             if (
                 isinstance(self.tensor_keys.action, tuple)
                 and len(self.tensor_keys.action) > 1
@@ -450,9 +463,7 @@ class SACLoss(LossModule):
             else:
                 action_container_shape = action_spec.shape
             target_entropy = -float(
-                action_spec[self.tensor_keys.action]
-                .shape[len(action_container_shape) :]
-                .numel()
+                action_spec.shape[len(action_container_shape) :].numel()
             )
         delattr(self, "_target_entropy")
         self.register_buffer(
@@ -622,7 +633,7 @@ class SACLoss(LossModule):
         ), self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict)
             a_reparm = dist.rsample()
-        log_prob = dist.log_prob(a_reparm)
+        log_prob = compute_log_prob(dist, a_reparm, self.tensor_keys.log_prob)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
@@ -713,7 +724,9 @@ class SACLoss(LossModule):
                 next_dist = self.actor_network.get_dist(next_tensordict)
                 next_action = next_dist.rsample()
                 next_tensordict.set(self.tensor_keys.action, next_action)
-                next_sample_log_prob = next_dist.log_prob(next_action)
+                next_sample_log_prob = compute_log_prob(
+                    next_dist, next_action, self.tensor_keys.log_prob
+                )
 
             # get q-values
             next_tensordict_expand = self._vmap_qnetworkN0(
@@ -780,7 +793,8 @@ class SACLoss(LossModule):
             td_copy.get(self.tensor_keys.state_action_value).squeeze(-1).min(0)[0]
         )
 
-        log_p = action_dist.log_prob(action)
+        log_p = compute_log_prob(action_dist, action, self.tensor_keys.log_prob)
+
         if log_p.shape != min_qval.shape:
             raise RuntimeError(
                 f"Losses shape mismatch: {min_qval.shape} and {log_p.shape}"
@@ -818,9 +832,9 @@ class DiscreteSACLoss(LossModule):
         qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         action_space (str or TensorSpec): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHot`,
+            :class:`torchrl.data.MultiOneHot`,
+            :class:`torchrl.data.Binary` or :class:`torchrl.data.Categorical`).
         num_actions (int, optional): number of actions in the action space.
             To be provided if target_entropy is set to "auto".
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 2.
@@ -852,7 +866,7 @@ class DiscreteSACLoss(LossModule):
     Examples:
     >>> import torch
     >>> from torch import nn
-    >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+    >>> from torchrl.data.tensor_specs import OneHot
     >>> from torchrl.modules.distributions import NormalParamExtractor, OneHotCategorical
     >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
     >>> from torchrl.modules.tensordict_module.common import SafeModule
@@ -860,7 +874,7 @@ class DiscreteSACLoss(LossModule):
     >>> from tensordict import TensorDict
     >>> from tensordict.nn import TensorDictModule
     >>> n_act, n_obs = 4, 3
-    >>> spec = OneHotDiscreteTensorSpec(n_act)
+    >>> spec = OneHot(n_act)
     >>> module = TensorDictModule(nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["logits"])
     >>> actor = ProbabilisticActor(
     ...     module=module,
@@ -909,13 +923,13 @@ class DiscreteSACLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+        >>> from torchrl.data.tensor_specs import OneHot
         >>> from torchrl.modules.distributions import NormalParamExtractor, OneHotCategorical
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.sac import DiscreteSACLoss
         >>> n_act, n_obs = 4, 3
-        >>> spec = OneHotDiscreteTensorSpec(n_act)
+        >>> spec = OneHot(n_act)
         >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["logits"])
         >>> actor = ProbabilisticActor(
@@ -1088,7 +1102,7 @@ class DiscreteSACLoss(LossModule):
         if action_space is None:
             warnings.warn(
                 "action_space was not specified. DiscreteSACLoss will default to 'one-hot'."
-                "This behaviour will be deprecated soon and a space will have to be passed. "
+                "This behavior will be deprecated soon and a space will have to be passed. "
                 "Check the DiscreteSACLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"

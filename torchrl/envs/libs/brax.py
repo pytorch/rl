@@ -11,11 +11,7 @@ import torch
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.jax_utils import (
     _extract_spec,
@@ -55,8 +51,8 @@ class BraxWrapper(_EnvWrapper):
     Args:
         env (brax.envs.base.PipelineEnv): the environment to wrap.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:
@@ -255,7 +251,7 @@ class BraxWrapper(_EnvWrapper):
         return state_spec
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
-        self.action_spec = BoundedTensorSpec(
+        self.action_spec = Bounded(
             low=-1,
             high=1,
             shape=(
@@ -264,15 +260,15 @@ class BraxWrapper(_EnvWrapper):
             ),
             device=self.device,
         )
-        self.reward_spec = UnboundedContinuousTensorSpec(
+        self.reward_spec = Unbounded(
             shape=[
                 *self.batch_size,
                 1,
             ],
             device=self.device,
         )
-        self.observation_spec = CompositeSpec(
-            observation=UnboundedContinuousTensorSpec(
+        self.observation_spec = Composite(
+            observation=Unbounded(
                 shape=(
                     *self.batch_size,
                     env.observation_size,
@@ -439,8 +435,8 @@ class BraxEnv(BraxWrapper):
         env_name (str): the environment name of the env to wrap. Must be part of
             :attr:`~.available_envs`.
         categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.DiscreteTensorSpec`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHotTensorSpec`).
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
 
     Keyword Args:

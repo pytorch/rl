@@ -48,7 +48,7 @@ class CustomEnv(gym.Env):
 
 if __name__ == "__main__":
     import torch
-    from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
+    from torchrl.data.tensor_specs import Unbounded
     from torchrl.envs import check_env_specs, GymEnv, GymWrapper
 
     args = parser.parse_args()
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     keys = ["field1"]
     specs = [
-        UnboundedContinuousTensorSpec(shape=(num_envs, 3), dtype=torch.float64),
+        Unbounded(shape=(num_envs, 3), dtype=torch.float64),
     ]
 
     # Create an info reader: this object will read the info and write its content to the tensordict

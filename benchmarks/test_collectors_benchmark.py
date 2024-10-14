@@ -3,16 +3,20 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import time
 
 import pytest
 import torch.cuda
+import tqdm
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
 )
-from torchrl.envs import EnvCreator, GymEnv, StepCounter, TransformedEnv
+from torchrl.data import LazyTensorStorage, ReplayBuffer
+from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs import EnvCreator, GymEnv, ParallelEnv, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.utils import RandomPolicy
 
@@ -178,6 +182,57 @@ def test_sync_pixels(benchmark):
 def test_async_pixels(benchmark):
     (c,), _ = async_collector_setup_pixels()
     benchmark(execute_collector, c)
+
+
+class TestRBGCollector:
+    @pytest.mark.parametrize(
+        "n_col,n_wokrers_per_col",
+        [
+            [2, 2],
+            [4, 2],
+            [8, 2],
+            [16, 2],
+            [2, 1],
+            [4, 1],
+            [8, 1],
+            [16, 1],
+        ],
+    )
+    def test_multiasync_rb(self, n_col, n_wokrers_per_col):
+        make_env = EnvCreator(lambda: GymEnv("ALE/Pong-v5"))
+        if n_wokrers_per_col > 1:
+            make_env = ParallelEnv(n_wokrers_per_col, make_env)
+            env = make_env
+            policy = RandomPolicy(env.action_spec)
+        else:
+            env = make_env()
+            policy = RandomPolicy(env.action_spec)
+
+        storage = LazyTensorStorage(10_000)
+        rb = ReplayBuffer(storage=storage)
+        rb.extend(env.rollout(2, policy).reshape(-1))
+        rb.append_transform(CloudpickleWrapper(lambda x: x.reshape(-1)), invert=True)
+
+        fpb = n_wokrers_per_col * 100
+        total_frames = n_wokrers_per_col * 100_000
+        c = MultiaSyncDataCollector(
+            [make_env] * n_col,
+            policy,
+            frames_per_batch=fpb,
+            total_frames=total_frames,
+            replay_buffer=rb,
+        )
+        frames = 0
+        pbar = tqdm.tqdm(total=total_frames - (n_col * fpb))
+        for i, _ in enumerate(c):
+            if i == n_col:
+                t0 = time.time()
+            if i >= n_col:
+                frames += fpb
+            if i > n_col:
+                fps = frames / (time.time() - t0)
+                pbar.update(fpb)
+                pbar.set_description(f"fps: {fps: 4.4f}")
 
 
 if __name__ == "__main__":
