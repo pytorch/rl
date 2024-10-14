@@ -116,6 +116,13 @@ jobs:
       - name: setup Path
         run: |
           echo /usr/local/bin >> $GITHUB_PATH
+      - name: Setup benchmarks
+        run: |
+          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
       - name: Run
         run: |
           python3.10 -m venv ./py310
@@ -124,8 +131,10 @@ jobs:
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 -U
           python3.10 -m pip install cmake ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
-          python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
+          python3.10 setup.py develop
+          # python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
 
+          # test import
           python3 -c """import torch
           assert torch.cuda.device_count()
           """
