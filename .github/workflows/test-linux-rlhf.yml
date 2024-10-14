@@ -44,6 +44,7 @@ jobs:
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
+        export TD_GET_DEFAULTS_TO_NONE=1
 
         bash .github/unittest/linux_libs/scripts_rlhf/setup_env.sh
         bash .github/unittest/linux_libs/scripts_rlhf/install.sh

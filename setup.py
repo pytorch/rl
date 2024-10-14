@@ -152,11 +152,15 @@ def get_extensions():
     }
     sources = list(extension_sources)
 
+    include_dirs = [this_dir]
+    python_include_dir = os.getenv("PYTHON_INCLUDE_DIR")
+    if python_include_dir is not None:
+        include_dirs.append(python_include_dir)
     ext_modules = [
         extension(
             "torchrl._torchrl",
             sources,
-            include_dirs=[this_dir],
+            include_dirs=include_dirs,
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
         )
@@ -191,7 +195,7 @@ def _main(argv):
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
 
     this_directory = Path(__file__).parent
-    long_description = (this_directory / "README.md").read_text()
+    long_description = (this_directory / "README.md").read_text(encoding="utf8")
     sys.argv = [sys.argv[0]] + unknown
 
     extra_requires = {
@@ -203,7 +207,7 @@ def _main(argv):
             "pygame",
         ],
         "dm_control": ["dm_control"],
-        "gym_continuous": ["gymnasium", "mujoco"],
+        "gym_continuous": ["gymnasium<1.0", "mujoco"],
         "rendering": ["moviepy"],
         "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
         "utils": [
@@ -229,6 +233,7 @@ def _main(argv):
             "pillow",
         ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"],
+        "open_spiel": ["open_spiel>=1.5"],
     }
     extra_requires["all"] = set()
     for key in list(extra_requires.keys()):

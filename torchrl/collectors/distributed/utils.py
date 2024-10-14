@@ -53,10 +53,10 @@ class submitit_delayed_launcher:
         ... def main():
         ...     from torchrl.envs.utils import RandomPolicy
                 from torchrl.envs.libs.gym import GymEnv
-        ...     from torchrl.data import BoundedTensorSpec
+        ...     from torchrl.data import BoundedContinuous
         ...     collector = DistributedDataCollector(
         ...         [EnvCreator(lambda: GymEnv("Pendulum-v1"))] * num_jobs,
-        ...         policy=RandomPolicy(BoundedTensorSpec(-1, 1, shape=(1,))),
+        ...         policy=RandomPolicy(BoundedContinuous(-1, 1, shape=(1,))),
         ...         launcher="submitit_delayed",
         ...     )
         ...     for data in collector:

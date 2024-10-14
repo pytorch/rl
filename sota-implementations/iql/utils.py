@@ -11,7 +11,7 @@ from tensordict.nn.distributions import NormalParamExtractor
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
-    CompositeSpec,
+    Composite,
     LazyMemmapStorage,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -306,7 +306,7 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
         out_keys=["logits"],
     )
     actor = ProbabilisticActor(
-        spec=CompositeSpec(action=eval_env.action_spec),
+        spec=Composite(action=eval_env.action_spec),
         module=actor_module,
         in_keys=["logits"],
         out_keys=["action"],

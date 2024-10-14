@@ -7,7 +7,7 @@ import torch.nn
 import torch.optim
 
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
-from torchrl.data import CompositeSpec
+from torchrl.data import Composite
 from torchrl.envs import (
     ClipTransform,
     DoubleToFloat,
@@ -87,7 +87,7 @@ def make_ppo_models_state(proof_environment):
             out_keys=["loc", "scale"],
         ),
         in_keys=["loc", "scale"],
-        spec=CompositeSpec(action=proof_environment.action_spec),
+        spec=Composite(action=proof_environment.action_spec),
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,

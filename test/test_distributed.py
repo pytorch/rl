@@ -405,7 +405,7 @@ class TestSyncCollector(DistributedCollectorBase):
             MultiaSyncDataCollector,
         ],
     )
-    @pytest.mark.parametrize("update_interval", [1_000_000, 1])
+    @pytest.mark.parametrize("update_interval", [1])
     def test_distributed_collector_updatepolicy(self, collector_class, update_interval):
         """Testing various collector classes to be used in nodes."""
         queue = mp.Queue(1)

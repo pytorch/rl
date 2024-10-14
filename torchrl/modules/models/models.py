@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
+import warnings
 
 from copy import deepcopy
 from numbers import Number
@@ -179,8 +180,15 @@ class MLP(nn.Sequential):
         if out_features is None:
             raise ValueError("out_features must be specified for MLP.")
 
-        default_num_cells = 32
         if num_cells is None:
+            warnings.warn(
+                "The current behavior of MLP when not providing `num_cells` is that the number of cells is "
+                "set to [default_num_cells] * depth, where `depth=3` by default and `default_num_cells=0`. "
+                "From v0.7, this behavior will switch and `depth=0` will be used. "
+                "To silence tis message, indicate what number of cells you desire.",
+                category=DeprecationWarning,
+            )
+            default_num_cells = 32
             if depth is None:
                 num_cells = [default_num_cells] * 3
                 depth = 3

@@ -20,7 +20,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
-from torchrl.collectors.utils import split_trajectories
+from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
 
@@ -99,7 +99,7 @@ class RayCollector(DataCollectorBase):
 
     The class dictionary input parameter "ray_init_config" can be used to provide the kwargs to
     call Ray initialization method ray.init(). If "ray_init_config" is not provided, the default
-    behaviour is to autodetect an existing Ray cluster or start a new Ray instance locally if no
+    behavior is to autodetect an existing Ray cluster or start a new Ray instance locally if no
     existing cluster is found. Refer to Ray documentation for advanced initialization kwargs.
 
     Similarly, dictionary input parameter "remote_configs" can be used to specify the kwargs for
@@ -401,9 +401,11 @@ class RayCollector(DataCollectorBase):
 
         self._local_policy = policy
         if isinstance(self._local_policy, nn.Module):
-            policy_weights = TensorDict(dict(policy.named_parameters()), [])
+            policy_weights = TensorDict.from_module(self._local_policy)
+            policy_weights = policy_weights.data.lock_()
         else:
-            policy_weights = TensorDict({}, [])
+            warnings.warn(_NON_NN_POLICY_WEIGHTS)
+            policy_weights = TensorDict(lock=True)
         self.policy_weights = policy_weights
         self.collector_class = collector_class
         self.collected_frames = 0

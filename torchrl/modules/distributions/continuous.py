@@ -5,13 +5,21 @@
 from __future__ import annotations
 
 import warnings
+import weakref
 from numbers import Number
 from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 from torch import distributions as D, nn
+
+try:
+    from torch.compiler import assume_constant_result
+except ImportError:
+    from torch._dynamo import assume_constant_result
+
 from torch.distributions import constraints
+from torch.distributions.transforms import _InverseTransform
 
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
@@ -20,13 +28,18 @@ from torchrl.modules.distributions.truncated_normal import (
 from torchrl.modules.distributions.utils import (
     _cast_device,
     FasterTransformedDistribution,
-    safeatanh,
-    safetanh,
+    safeatanh_noeps,
+    safetanh_noeps,
 )
 from torchrl.modules.utils import mappings
 
 # speeds up distribution construction
 D.Distribution.set_default_validate_args(False)
+
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 
 class IndependentNormal(D.Independent):
@@ -39,7 +52,7 @@ class IndependentNormal(D.Independent):
         .. math::
             loc = tanh(loc / upscale) * upscale.
 
-    This behaviour can be disabled by switching off the tanh_loc parameter (see below).
+    This behavior can be disabled by switching off the tanh_loc parameter (see below).
 
 
     Args:
@@ -92,19 +105,21 @@ class SafeTanhTransform(D.TanhTransform):
     """TanhTransform subclass that ensured that the transformation is numerically invertible."""
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dtype.is_floating_point:
-            eps = torch.finfo(x.dtype).resolution
-        else:
-            raise NotImplementedError(f"No tanh transform for {x.dtype} inputs.")
-        return safetanh(x, eps)
+        return safetanh_noeps(x)
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
-        if y.dtype.is_floating_point:
-            eps = torch.finfo(y.dtype).resolution
-        else:
-            raise NotImplementedError(f"No inverse tanh for {y.dtype} inputs.")
-        x = safeatanh(y, eps)
-        return x
+        return safeatanh_noeps(y)
+
+    @property
+    def inv(self):
+        inv = None
+        if self._inv is not None:
+            inv = self._inv()
+        if inv is None:
+            inv = _InverseTransform(self)
+            if not is_dynamo_compiling():
+                self._inv = weakref.ref(inv)
+        return inv
 
 
 class NormalParamWrapper(nn.Module):
@@ -173,7 +188,7 @@ class TruncatedNormal(D.Independent):
         .. math::
             loc = tanh(loc / upscale) * upscale.
 
-    This behaviour can be disabled by switching off the tanh_loc parameter (see below).
+    This behavior can be disabled by switching off the tanh_loc parameter (see below).
 
 
     Args:
@@ -202,13 +217,6 @@ class TruncatedNormal(D.Independent):
         "scale": constraints.greater_than(1e-6),
     }
 
-    def _warn_minmax(self):
-        warnings.warn(
-            f"the min / high keyword arguments are deprecated in favor of low / high in {type(self).__name__} "
-            f"and will be removed entirely in v0.6. ",
-            DeprecationWarning,
-        )
-
     def __init__(
         self,
         loc: torch.Tensor,
@@ -217,14 +225,7 @@ class TruncatedNormal(D.Independent):
         low: Union[torch.Tensor, float] = -1.0,
         high: Union[torch.Tensor, float] = 1.0,
         tanh_loc: bool = False,
-        **kwargs,
     ):
-        if "max" in kwargs:
-            self._warn_minmax()
-            high = kwargs.pop("max")
-        if "min" in kwargs:
-            self._warn_minmax()
-            low = kwargs.pop("min")
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
@@ -316,6 +317,33 @@ class TruncatedNormal(D.Independent):
         return lp
 
 
+class _PatchedComposeTransform(D.ComposeTransform):
+    @property
+    def inv(self):
+        inv = None
+        if self._inv is not None:
+            inv = self._inv()
+        if inv is None:
+            inv = _PatchedComposeTransform([p.inv for p in reversed(self.parts)])
+            if not is_dynamo_compiling():
+                self._inv = weakref.ref(inv)
+                inv._inv = weakref.ref(self)
+        return inv
+
+
+class _PatchedAffineTransform(D.AffineTransform):
+    @property
+    def inv(self):
+        inv = None
+        if self._inv is not None:
+            inv = self._inv()
+        if inv is None:
+            inv = _InverseTransform(self)
+            if not is_dynamo_compiling():
+                self._inv = weakref.ref(inv)
+        return inv
+
+
 class TanhNormal(FasterTransformedDistribution):
     """Implements a TanhNormal distribution with location scaling.
 
@@ -337,13 +365,15 @@ class TanhNormal(FasterTransformedDistribution):
             .. math::
                 loc = tanh(loc / upscale) * upscale.
 
-        min (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
-        max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
+        low (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
+        high (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1. Setting ``event_dims`` to ``0`` will result in a log-probability that has the same shape
             as the input, ``1`` will reduce (sum over) the last dimension, ``2`` the last two etc.
         tanh_loc (bool, optional): if ``True``, the above formula is used for the location scaling, otherwise the raw
             value is kept. Default is ``False``;
+        safe_tanh (bool, optional): if ``True``, the Tanh transform is done "safely", to avoid numerical overflows.
+            This will currently break with :func:`torch.compile`.
     """
 
     arg_constraints = {
@@ -352,13 +382,6 @@ class TanhNormal(FasterTransformedDistribution):
     }
 
     num_params = 2
-
-    def _warn_minmax(self):
-        warnings.warn(
-            f"the min / high keyword arguments are deprecated in favor of low / high in {type(self).__name__} "
-            f"and will be removed entirely in v0.6. ",
-            DeprecationWarning,
-        )
 
     def __init__(
         self,
@@ -369,15 +392,9 @@ class TanhNormal(FasterTransformedDistribution):
         high: Union[torch.Tensor, Number] = 1.0,
         event_dims: int | None = None,
         tanh_loc: bool = False,
+        safe_tanh: bool = True,
         **kwargs,
     ):
-        if "max" in kwargs:
-            self._warn_minmax()
-            high = kwargs.pop("max")
-        if "min" in kwargs:
-            self._warn_minmax()
-            low = kwargs.pop("min")
-
         if not isinstance(loc, torch.Tensor):
             loc = torch.as_tensor(loc, dtype=torch.get_default_dtype())
         if not isinstance(scale, torch.Tensor):
@@ -419,13 +436,20 @@ class TanhNormal(FasterTransformedDistribution):
         self.low = low
         self.high = high
 
-        t = SafeTanhTransform()
+        if safe_tanh:
+            if is_dynamo_compiling():
+                _err_compile_safetanh()
+            t = SafeTanhTransform()
+        else:
+            t = D.TanhTransform()
         # t = D.TanhTransform()
-        if self.non_trivial_max or self.non_trivial_min:
-            t = D.ComposeTransform(
+        if is_dynamo_compiling() or (self.non_trivial_max or self.non_trivial_min):
+            t = _PatchedComposeTransform(
                 [
                     t,
-                    D.AffineTransform(loc=(high + low) / 2, scale=(high - low) / 2),
+                    _PatchedAffineTransform(
+                        loc=(high + low) / 2, scale=(high - low) / 2
+                    ),
                 ]
             )
         self._t = t
@@ -446,7 +470,7 @@ class TanhNormal(FasterTransformedDistribution):
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
             # loc must be rescaled if tanh_loc
-            if self.non_trivial_max or self.non_trivial_min:
+            if is_dynamo_compiling() or (self.non_trivial_max or self.non_trivial_min):
                 loc = loc + (self.high - self.low) / 2 + self.low
         self.loc = loc
         self.scale = scale
@@ -467,6 +491,10 @@ class TanhNormal(FasterTransformedDistribution):
                 super().__init__(base, self._t)
 
     @property
+    def support(self):
+        return D.constraints.real()
+
+    @property
     def root_dist(self):
         bd = self
         while hasattr(bd, "base_dist"):
@@ -475,15 +503,10 @@ class TanhNormal(FasterTransformedDistribution):
 
     @property
     def mode(self):
-        warnings.warn(
-            "This computation of the mode is based on an inaccurate estimation of the mode "
-            "given the base_dist mode. "
-            "To use a more stable implementation of the mode, use dist.get_mode() method instead. "
-            "To silence this warning, consider using the DETERMINISTIC exploration_type."
-            "This implementation will be removed in v0.6.",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            f"The distribution {type(self).__name__} has not analytical mode. "
+            f"Use ExplorationMode.DETERMINISTIC to get a deterministic sample from it."
         )
-        return self.deterministic_sample
 
     @property
     def deterministic_sample(self):
@@ -647,13 +670,6 @@ class TanhDelta(FasterTransformedDistribution):
         "loc": constraints.real,
     }
 
-    def _warn_minmax(self):
-        warnings.warn(
-            f"the min / high keyword arguments are deprecated in favor of low / high in {type(self).__name__} "
-            f"and will be removed entirely in v0.6. ",
-            category=DeprecationWarning,
-        )
-
     def __init__(
         self,
         param: torch.Tensor,
@@ -662,15 +678,7 @@ class TanhDelta(FasterTransformedDistribution):
         event_dims: int = 1,
         atol: float = 1e-6,
         rtol: float = 1e-6,
-        **kwargs,
     ):
-        if "max" in kwargs:
-            self._warn_minmax()
-            high = kwargs.pop("max")
-        if "min" in kwargs:
-            self._warn_minmax()
-            low = kwargs.pop("min")
-
         minmax_msg = "high value has been found to be equal or less than low value"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
             if not (high > low).all():
@@ -696,10 +704,10 @@ class TanhDelta(FasterTransformedDistribution):
         loc = self.update(param)
 
         if self.non_trivial:
-            t = D.ComposeTransform(
+            t = _PatchedComposeTransform(
                 [
                     t,
-                    D.AffineTransform(
+                    _PatchedAffineTransform(
                         loc=(self.high + self.low) / 2, scale=(self.high - self.low) / 2
                     ),
                 ]
@@ -712,7 +720,6 @@ class TanhDelta(FasterTransformedDistribution):
             rtol=rtol,
             batch_shape=batch_shape,
             event_shape=event_shape,
-            **kwargs,
         )
 
         super().__init__(base, t)
@@ -761,3 +768,16 @@ def _uniform_sample_delta(dist: Delta, size=None) -> torch.Tensor:
 
 
 uniform_sample_delta = _uniform_sample_delta
+
+
+def _err_compile_safetanh():
+    raise RuntimeError(
+        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass"
+        "safe_tanh=False. "
+        "If you are using a ProbabilisticTensorDictModule, this can be done via "
+        "`distribution_kwargs={'safe_tanh': False}`. "
+        "See https://github.com/pytorch/pytorch/issues/133529 for more details."
+    )
+
+
+_warn_compile_safetanh = assume_constant_result(_err_compile_safetanh)

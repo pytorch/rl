@@ -281,25 +281,27 @@ class TestWandbLogger:
         # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
         # the first 64 frames are black and the next 64 are white
         video = torch.cat(
-            (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
+            (torch.zeros(128, 1, 32, 32), torch.full((128, 1, 32, 32), 255))
         )
         video = video[None, :]
         wandb_logger.log_video(
             name="foo",
             video=video,
-            fps=6,
+            fps=4,
+            format="mp4",
         )
         wandb_logger.log_video(
-            name="foo_12fps",
+            name="foo_16fps",
             video=video,
-            fps=24,
+            fps=16,
+            format="mp4",
         )
         sleep(0.01)  # wait until events are registered
 
         # check that fps can be passed and that it has impact on the length of the video
-        video_6fps_size = wandb_logger.experiment.summary["foo"]["size"]
-        video_24fps_size = wandb_logger.experiment.summary["foo_12fps"]["size"]
-        assert video_6fps_size > video_24fps_size, video_6fps_size
+        video_4fps_size = wandb_logger.experiment.summary["foo"]["size"]
+        video_16fps_size = wandb_logger.experiment.summary["foo_16fps"]["size"]
+        assert video_4fps_size > video_16fps_size, (video_4fps_size, video_16fps_size)
 
         # check that we catch the error in case the format of the tensor is wrong
         video_wrong_format = torch.zeros(64, 2, 32, 32)
