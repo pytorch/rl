@@ -802,7 +802,7 @@ def _path2str(path, default_name=None):
         if result == default_name:
             raise RuntimeError(
                 "A tensor had the same identifier as the default name used when the buffer contains "
-                f"a single tensor (name={default_name}). This behaviour is not allowed. Please rename your "
+                f"a single tensor (name={default_name}). This behavior is not allowed. Please rename your "
                 f"tensor in the map/dict or set a new default name with the environment variable SINGLE_TENSOR_BUFFER_NAME."
             )
         return result

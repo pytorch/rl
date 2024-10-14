@@ -170,7 +170,7 @@ This demo was presented at ICML 2022 on the industry demo day.
 # * a collection of algorithms: we do not intend to provide SOTA implementations of RL algorithms,
 #   but we provide these algorithms only as examples of how to use the library.
 #
-# * a research framework: modularity in TorchRL comes in two flavours. First, we try
+# * a research framework: modularity in TorchRL comes in two flavors. First, we try
 #   to build re-usable components, such that they can be easily swapped with each other.
 #   Second, we make our best such that components can be used independently of the rest
 #   of the library.
@@ -365,7 +365,7 @@ except ModuleNotFoundError:
 # Envs
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-from torchrl.envs.libs.gym import GymEnv, GymWrapper
+from torchrl.envs.libs.gym import GymEnv, GymWrapper, set_gym_backend
 
 gym_env = gym.make("Pendulum-v1")
 env = GymWrapper(gym_env)
@@ -434,9 +434,16 @@ print("last transform parent: ", env.transform[2].parent)
 
 from torchrl.envs import ParallelEnv
 
+
+def make_env():
+    # You can control whether to use gym or gymnasium for your env
+    with set_gym_backend("gym"):
+        return GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False)
+
+
 base_env = ParallelEnv(
     4,
-    lambda: GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False),
+    make_env,
     mp_start_method="fork",  # This will break on Windows machines! Remove and decorate with if __name__ == "__main__"
 )
 env = TransformedEnv(
@@ -572,10 +579,10 @@ print(tensordict_exp)
 # ------------------------------
 
 torch.manual_seed(0)
-from torchrl.data import BoundedTensorSpec
+from torchrl.data import Bounded
 from torchrl.modules import SafeModule
 
-spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
+spec = Bounded(-torch.ones(3), torch.ones(3))
 base_module = nn.Linear(5, 3)
 module = SafeModule(
     module=base_module, spec=spec, in_keys=["obs"], out_keys=["action"], safe=True
@@ -652,13 +659,9 @@ with set_exploration_type(ExplorationType.RANDOM):
     td_module(td)
     print("random:", td["action"])
 
-with set_exploration_type(ExplorationType.MODE):
+with set_exploration_type(ExplorationType.DETERMINISTIC):
     td_module(td)
     print("mode:", td["action"])
-
-with set_exploration_type(ExplorationType.MODE):
-    td_module(td)
-    print("mean:", td["action"])
 
 ###############################################################################
 # Using Environments and Modules

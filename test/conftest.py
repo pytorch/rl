@@ -113,6 +113,18 @@ def pytest_addoption(parser):
         help="Use 'fork' start method for mp dedicated tests only if there is no cuda device available.",
     )
 
+    parser.addoption(
+        "--unity_editor",
+        action="store_true",
+        default=False,
+        help="Run tests that require manually pressing play in the Unity editor.",
+    )
+
+
+def pytest_runtest_setup(item):
+    if "unity_editor" in item.keywords and not item.config.getoption("--unity_editor"):
+        pytest.skip("need --unity_editor option to run this test")
+
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")

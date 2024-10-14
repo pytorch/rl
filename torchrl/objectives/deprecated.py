@@ -17,7 +17,7 @@ from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
 
-from torchrl.data.tensor_specs import CompositeSpec
+from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import default_value_kwargs, distance_loss, ValueEstimators
 from torchrl.objectives.common import LossModule
@@ -251,8 +251,8 @@ class REDQLoss_deprecated(LossModule):
                         "the target entropy explicitely or provide the spec of the "
                         "action tensor in the actor network."
                     )
-                if not isinstance(action_spec, CompositeSpec):
-                    action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                if not isinstance(action_spec, Composite):
+                    action_spec = Composite({self.tensor_keys.action: action_spec})
                 target_entropy = -float(
                     np.prod(action_spec[self.tensor_keys.action].shape)
                 )
@@ -465,7 +465,7 @@ class REDQLoss_deprecated(LossModule):
 
 
 class DoubleREDQLoss_deprecated(REDQLoss_deprecated):
-    """[Deprecated] Class for delayed target-REDQ (which should be the default behaviour)."""
+    """[Deprecated] Class for delayed target-REDQ (which should be the default behavior)."""
 
     delay_qvalue: bool = True
 

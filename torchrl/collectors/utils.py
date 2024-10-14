@@ -11,6 +11,12 @@ import torch
 from tensordict import NestedKey, pad, set_lazy_legacy, TensorDictBase
 
 
+_NON_NN_POLICY_WEIGHTS = (
+    "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
+    "update_policy_weights_ will be a no-op."
+)
+
+
 def _stack_output(fun) -> Callable:
     def stacked_output_fun(*args, **kwargs):
         out = fun(*args, **kwargs)

@@ -1021,7 +1021,6 @@ def make_collector_offpolicy(
         "init_random_frames": cfg.collector.init_random_frames,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
-        "exploration_type": ExplorationType.from_str(cfg.collector.exploration_mode),
     }
 
     collector = collector_helper(**collector_helper_kwargs)
