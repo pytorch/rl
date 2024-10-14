@@ -73,14 +73,14 @@ class IQLLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import IQLLoss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
@@ -136,14 +136,14 @@ class IQLLoss(LossModule):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.data import Bounded
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import IQLLoss
         >>> _ = torch.manual_seed(42)
         >>> n_act, n_obs = 4, 3
-        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))
         >>> net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
         >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> actor = ProbabilisticActor(
@@ -383,7 +383,8 @@ class IQLLoss(LossModule):
         loss_actor, metadata = self.actor_loss(tensordict_reshape)
         loss_qvalue, metadata_qvalue = self.qvalue_loss(tensordict_reshape)
         loss_value, metadata_value = self.value_loss(tensordict_reshape)
-        metadata.update(**metadata_qvalue, **metadata_value)
+        metadata.update(metadata_qvalue)
+        metadata.update(metadata_value)
 
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
@@ -410,7 +411,7 @@ class IQLLoss(LossModule):
             [],
         )
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # KL loss
         with self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict)
@@ -446,7 +447,7 @@ class IQLLoss(LossModule):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, {}
 
-    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
@@ -460,7 +461,7 @@ class IQLLoss(LossModule):
         value_loss = _reduce(value_loss, reduction=self.reduction)
         return value_loss, {}
 
-    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         obs_keys = self.actor_network.in_keys
         tensordict = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
@@ -541,9 +542,9 @@ class DiscreteIQLLoss(IQLLoss):
     Keyword Args:
         action_space (str or TensorSpec): Action space. Must be one of
                 ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-                or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-                :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-                :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+                or an instance of the corresponding specs (:class:`torchrl.data.OneHot`,
+                :class:`torchrl.data.MultiOneHot`,
+                :class:`torchrl.data.Binary` or :class:`torchrl.data.Categorical`).
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
@@ -569,14 +570,14 @@ class DiscreteIQLLoss(IQLLoss):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+        >>> from torchrl.data.tensor_specs import OneHot
         >>> from torchrl.modules.distributions.discrete import OneHotCategorical
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import DiscreteIQLLoss
         >>> from tensordict import TensorDict
         >>> n_act, n_obs = 4, 3
-        >>> spec = OneHotDiscreteTensorSpec(n_act)
+        >>> spec = OneHot(n_act)
         >>> module = SafeModule(nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["logits"])
         >>> actor = ProbabilisticActor(
         ...     module=module,
@@ -627,14 +628,14 @@ class DiscreteIQLLoss(IQLLoss):
         >>> import torch
         >>> import torch
         >>> from torch import nn
-        >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+        >>> from torchrl.data.tensor_specs import OneHot
         >>> from torchrl.modules.distributions.discrete import OneHotCategorical
         >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor
         >>> from torchrl.modules.tensordict_module.common import SafeModule
         >>> from torchrl.objectives.iql import DiscreteIQLLoss
         >>> _ = torch.manual_seed(42)
         >>> n_act, n_obs = 4, 3
-        >>> spec = OneHotDiscreteTensorSpec(n_act)
+        >>> spec = OneHot(n_act)
         >>> module = SafeModule(nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["logits"])
         >>> actor = ProbabilisticActor(
         ...     module=module,
@@ -774,14 +775,14 @@ class DiscreteIQLLoss(IQLLoss):
         if action_space is None:
             warnings.warn(
                 "action_space was not specified. DiscreteIQLLoss will default to 'one-hot'."
-                "This behaviour will be deprecated soon and a space will have to be passed."
+                "This behavior will be deprecated soon and a space will have to be passed."
                 "Check the DiscreteIQLLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
         self.reduction = reduction
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # KL loss
         with self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict)
@@ -828,7 +829,7 @@ class DiscreteIQLLoss(IQLLoss):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, {}
 
-    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # Min Q value
         with torch.no_grad():
             # Min Q value
@@ -856,7 +857,7 @@ class DiscreteIQLLoss(IQLLoss):
         value_loss = _reduce(value_loss, reduction=self.reduction)
         return value_loss, {}
 
-    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         obs_keys = self.actor_network.in_keys
         next_td = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False

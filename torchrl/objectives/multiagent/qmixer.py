@@ -63,9 +63,9 @@ class QMixerLoss(LossModule):
             create a double DQN. Default is ``False``.
         action_space (str or TensorSpec, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHot`,
+            :class:`torchrl.data.MultiOneHot`,
+            :class:`torchrl.data.Binary` or :class:`torchrl.data.Categorical`).
             If not provided, an attempt to retrieve it from the value network
             will be made.
         priority_key (NestedKey, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
@@ -254,7 +254,7 @@ class QMixerLoss(LossModule):
         if action_space is None:
             warnings.warn(
                 "action_space was not specified. QMixerLoss will default to 'one-hot'."
-                "This behaviour will be deprecated soon and a space will have to be passed."
+                "This behavior will be deprecated soon and a space will have to be passed."
                 "Check the QMixerLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"

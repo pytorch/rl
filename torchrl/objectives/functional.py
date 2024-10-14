@@ -20,7 +20,7 @@ def cross_entropy_loss(
             (integer representation) or log_policy.shape (one-hot).
         inplace: fills log_policy in-place with 0.0 at non-selected actions before summing along the last dimensions.
             This is usually faster but it will change the value of log-policy in place, which may lead to unwanted
-            behaviours.
+            behaviors.
 
     """
     if action.shape == log_policy.shape:

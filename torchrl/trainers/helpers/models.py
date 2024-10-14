@@ -9,11 +9,7 @@ import torch
 from tensordict import set_lazy_legacy
 from tensordict.nn import InteractionType
 from torch import nn
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    DiscreteTensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -153,9 +149,9 @@ def make_dqn_actor(
     actor_class = QValueActor
     actor_kwargs = {}
 
-    if isinstance(action_spec, DiscreteTensorSpec):
+    if isinstance(action_spec, Categorical):
         # if action spec is modeled as categorical variable, we still need to have features equal
-        # to the number of possible choices and also set categorical behavioural for actors.
+        # to the number of possible choices and also set categorical behavioral for actors.
         actor_kwargs.update({"action_space": "categorical"})
         out_features = env_specs["input_spec", "full_action_spec", "action"].space.n
     else:
@@ -182,7 +178,7 @@ def make_dqn_actor(
 
     model = actor_class(
         module=net,
-        spec=CompositeSpec(action=action_spec),
+        spec=Composite(action=action_spec),
         in_keys=[in_key],
         safe=True,
         **actor_kwargs,
@@ -385,13 +381,13 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             actor_module,
             in_keys=["state", "belief"],
             out_keys=["loc", "scale"],
-            spec=CompositeSpec(
+            spec=Composite(
                 **{
-                    "loc": UnboundedContinuousTensorSpec(
+                    "loc": Unbounded(
                         proof_environment.action_spec.shape,
                         device=proof_environment.action_spec.device,
                     ),
-                    "scale": UnboundedContinuousTensorSpec(
+                    "scale": Unbounded(
                         proof_environment.action_spec.shape,
                         device=proof_environment.action_spec.device,
                     ),
@@ -404,7 +400,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             default_interaction_type=InteractionType.RANDOM,
             distribution_class=TanhNormal,
             distribution_kwargs={"tanh_loc": True},
-            spec=CompositeSpec(**{action_key: proof_environment.action_spec}),
+            spec=Composite(**{action_key: proof_environment.action_spec}),
         ),
     )
     return actor_simulator
@@ -436,12 +432,12 @@ def _dreamer_make_actor_real(
                 actor_module,
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
-                spec=CompositeSpec(
+                spec=Composite(
                     **{
-                        "loc": UnboundedContinuousTensorSpec(
+                        "loc": Unbounded(
                             proof_environment.action_spec.shape,
                         ),
-                        "scale": UnboundedContinuousTensorSpec(
+                        "scale": Unbounded(
                             proof_environment.action_spec.shape,
                         ),
                     }
@@ -453,9 +449,7 @@ def _dreamer_make_actor_real(
                 default_interaction_type=InteractionType.DETERMINISTIC,
                 distribution_class=TanhNormal,
                 distribution_kwargs={"tanh_loc": True},
-                spec=CompositeSpec(
-                    **{action_key: proof_environment.action_spec.to("cpu")}
-                ),
+                spec=Composite(**{action_key: proof_environment.action_spec.to("cpu")}),
             ),
         ),
         SafeModule(
@@ -536,8 +530,8 @@ def _dreamer_make_mbenv(
     model_based_env.set_specs_from_env(proof_environment)
     model_based_env = TransformedEnv(model_based_env)
     default_dict = {
-        "state": UnboundedContinuousTensorSpec(state_dim),
-        "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
+        "state": Unbounded(state_dim),
+        "belief": Unbounded(rssm_hidden_dim),
         # "action": proof_environment.action_spec,
     }
     model_based_env.append_transform(

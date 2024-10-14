@@ -16,13 +16,12 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import (
     dispatch,
-    is_functional,
     set_skip_existing,
     TensorDictModule,
     TensorDictModuleBase,
 )
 from tensordict.utils import NestedKey
-from torch import nn, Tensor
+from torch import Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
@@ -412,18 +411,13 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @property
     def is_functional(self):
-        if isinstance(self.value_network, nn.Module):
-            return is_functional(self.value_network)
-        elif self.value_network is None:
-            return None
-        else:
-            raise RuntimeError("Cannot determine if value network is functional.")
+        # legacy
+        return False
 
     @property
     def is_stateless(self):
-        if not self.is_functional:
-            return False
-        return self.value_network._is_stateless
+        # legacy
+        return False
 
     def _next_value(self, tensordict, target_params, kwargs):
         step_td = step_mdp(tensordict, keep_other=False)
@@ -1183,17 +1177,17 @@ class GAE(ValueEstimatorBase):
         device (torch.device, optional): device of the module.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
-            markes with the ``"time"`` name if any, and to the last dimension
+            marked with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
 
-    GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
+    GAE will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
     to train the value network. Finally, if :obj:`gradient_mode` is ``True``,
     an additional and differentiable :obj:`"value_error"` entry will be returned,
-    which simple represents the difference between the return and the value network
+    which simply represents the difference between the return and the value network
     output (i.e. an additional distance loss should be applied to that signed value).
 
     .. note::
@@ -1268,7 +1262,7 @@ class GAE(ValueEstimatorBase):
                 target params to be passed to the functional value network module.
             time_dim (int, optional): the dimension corresponding to the time
                 in the input tensordict. If not provided, defaults to the dimension
-                markes with the ``"time"`` name if any, and to the last dimension
+                marked with the ``"time"`` name if any, and to the last dimension
                 otherwise.
                 Negative dimensions are considered with respect to the input
                 tensordict.
@@ -1316,7 +1310,7 @@ class GAE(ValueEstimatorBase):
         """
         if tensordict.batch_dims < 1:
             raise RuntimeError(
-                "Expected input tensordict to have at least one dimensions, got "
+                "Expected input tensordict to have at least one dimension, got "
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))

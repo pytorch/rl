@@ -6,7 +6,6 @@
 from typing import Union
 
 import torch
-from packaging import version
 from torch import autograd, distributions as d
 from torch.distributions import Independent, Transform, TransformedDistribution
 
@@ -92,72 +91,133 @@ class FasterTransformedDistribution(TransformedDistribution):
         )
 
 
-if version.parse(torch.__version__) >= version.parse("2.0.0"):
+def _safetanh(x, eps):  # noqa: D103
+    lim = 1.0 - eps
+    y = x.tanh()
+    return y.clamp(-lim, lim)
 
-    class _SafeTanh(autograd.Function):
-        generate_vmap_rule = True
 
-        @staticmethod
-        def forward(input, eps):
-            output = input.tanh()
-            lim = 1.0 - eps
-            output = output.clamp(-lim, lim)
-            # ctx.save_for_backward(output)
-            return output
+def _safeatanh(y, eps):  # noqa: D103
+    lim = 1.0 - eps
+    return y.clamp(-lim, lim).atanh()
 
-        @staticmethod
-        def setup_context(ctx, inputs, output):
-            # input, eps = inputs
-            # ctx.mark_non_differentiable(ind, ind_inv)
-            # # Tensors must be saved via ctx.save_for_backward. Please do not
-            # # assign them directly onto the ctx object.
-            ctx.save_for_backward(output)
 
-        @staticmethod
-        def backward(ctx, *grad):
-            grad = grad[0]
-            (output,) = ctx.saved_tensors
-            return (grad * (1 - output.pow(2)), None)
+class _SafeTanh(autograd.Function):
+    generate_vmap_rule = True
 
-    class _SafeaTanh(autograd.Function):
-        generate_vmap_rule = True
-
-        @staticmethod
-        def setup_context(ctx, inputs, output):
-            tanh_val, eps = inputs
-            # ctx.mark_non_differentiable(ind, ind_inv)
-            # # Tensors must be saved via ctx.save_for_backward. Please do not
-            # # assign them directly onto the ctx object.
-            ctx.save_for_backward(tanh_val)
-            ctx.eps = eps
-
-        @staticmethod
-        def forward(tanh_val, eps):
-            lim = 1.0 - eps
-            output = tanh_val.clamp(-lim, lim)
-            # ctx.save_for_backward(output)
-            output = output.atanh()
-            return output
-
-        @staticmethod
-        def backward(ctx, *grad):
-            grad = grad[0]
-            (tanh_val,) = ctx.saved_tensors
-            eps = ctx.eps
-            lim = 1.0 - eps
-            output = tanh_val.clamp(-lim, lim)
-            return (grad / (1 - output.pow(2)), None)
-
-    safetanh = _SafeTanh.apply
-    safeatanh = _SafeaTanh.apply
-
-else:
-
-    def safetanh(x, eps):  # noqa: D103
+    @staticmethod
+    def forward(input, eps):
+        output = input.tanh()
         lim = 1.0 - eps
-        y = x.tanh()
-        return y.clamp(-lim, lim)
+        output = output.clamp(-lim, lim)
+        # ctx.save_for_backward(output)
+        return output
 
-    def safeatanh(y, eps):  # noqa: D103
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        # input, eps = inputs
+        # ctx.mark_non_differentiable(ind, ind_inv)
+        # # Tensors must be saved via ctx.save_for_backward. Please do not
+        # # assign them directly onto the ctx object.
+        ctx.save_for_backward(output)
+
+    @staticmethod
+    def backward(ctx, *grad):
+        grad = grad[0]
+        (output,) = ctx.saved_tensors
+        return (grad * (1 - output.pow(2)), None)
+
+
+class _SafeTanhNoEps(autograd.Function):
+    generate_vmap_rule = True
+
+    @staticmethod
+    def forward(input):
+        output = input.tanh()
+        eps = torch.finfo(input.dtype).resolution
         lim = 1.0 - eps
-        return y.clamp(-lim, lim).atanh()
+        output = output.clamp(-lim, lim)
+        return output
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        ctx.save_for_backward(output)
+
+    @staticmethod
+    def backward(ctx, *grad):
+        grad = grad[0]
+        (output,) = ctx.saved_tensors
+        return (grad * (1 - output.pow(2)),)
+
+
+class _SafeaTanh(autograd.Function):
+    generate_vmap_rule = True
+
+    @staticmethod
+    def forward(tanh_val, eps):
+        if eps is None:
+            eps = torch.finfo(tanh_val.dtype).resolution
+        lim = 1.0 - eps
+        output = tanh_val.clamp(-lim, lim)
+        # ctx.save_for_backward(output)
+        output = output.atanh()
+        return output
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        tanh_val, eps = inputs
+
+        # ctx.mark_non_differentiable(ind, ind_inv)
+        # # Tensors must be saved via ctx.save_for_backward. Please do not
+        # # assign them directly onto the ctx object.
+        ctx.save_for_backward(tanh_val)
+        ctx.eps = eps
+
+    @staticmethod
+    def backward(ctx, *grad):
+        grad = grad[0]
+        (tanh_val,) = ctx.saved_tensors
+        eps = ctx.eps
+        lim = 1.0 - eps
+        output = tanh_val.clamp(-lim, lim)
+        return (grad / (1 - output.pow(2)), None)
+
+
+class _SafeaTanhNoEps(autograd.Function):
+    generate_vmap_rule = True
+
+    @staticmethod
+    def forward(tanh_val):
+        eps = torch.finfo(tanh_val.dtype).resolution
+        lim = 1.0 - eps
+        output = tanh_val.clamp(-lim, lim)
+        # ctx.save_for_backward(output)
+        output = output.atanh()
+        return output
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        tanh_val = inputs[0]
+        eps = torch.finfo(tanh_val.dtype).resolution
+
+        # ctx.mark_non_differentiable(ind, ind_inv)
+        # # Tensors must be saved via ctx.save_for_backward. Please do not
+        # # assign them directly onto the ctx object.
+        ctx.save_for_backward(tanh_val)
+        ctx.eps = eps
+
+    @staticmethod
+    def backward(ctx, *grad):
+        grad = grad[0]
+        (tanh_val,) = ctx.saved_tensors
+        eps = ctx.eps
+        lim = 1.0 - eps
+        output = tanh_val.clamp(-lim, lim)
+        return (grad / (1 - output.pow(2)),)
+
+
+safetanh = _SafeTanh.apply
+safeatanh = _SafeaTanh.apply
+
+safetanh_noeps = _SafeTanhNoEps.apply
+safeatanh_noeps = _SafeaTanhNoEps.apply
