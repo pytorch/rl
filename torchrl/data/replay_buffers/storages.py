@@ -26,6 +26,7 @@ from tensordict import (
 )
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
@@ -258,7 +259,7 @@ class ListStorage(Storage):
                     np.ndarray,
                 ),
             ):
-                for _cursor, _data in zip(cursor, data, strict=True):
+                for _cursor, _data in _zip_strict(cursor, data):
                     self.set(_cursor, _data, set_cursor=set_cursor)
             else:
                 raise TypeError(
