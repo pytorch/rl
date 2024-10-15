@@ -495,23 +495,14 @@ class CrossQLoss(LossModule):
         To see what keys are expected in the input tensordict and what keys are expected as output, check the
         class's `"in_keys"` and `"out_keys"` attributes.
         """
-        shape = None
-        if tensordict.ndimension() > 1:
-            shape = tensordict.shape
-            tensordict_reshape = tensordict.reshape(-1)
-        else:
-            tensordict_reshape = tensordict
-
-        loss_qvalue, value_metadata = self.qvalue_loss(tensordict_reshape)
-        loss_actor, metadata_actor = self.actor_loss(tensordict_reshape)
+        loss_qvalue, value_metadata = self.qvalue_loss(tensordict)
+        loss_actor, metadata_actor = self.actor_loss(tensordict)
         loss_alpha = self.alpha_loss(log_prob=metadata_actor["log_prob"])
-        tensordict_reshape.set(self.tensor_keys.priority, value_metadata["td_error"])
+        tensordict.set(self.tensor_keys.priority, value_metadata["td_error"])
         if loss_actor.shape != loss_qvalue.shape:
             raise RuntimeError(
                 f"Losses shape mismatch: {loss_actor.shape} and {loss_qvalue.shape}"
             )
-        if shape:
-            tensordict.update(tensordict_reshape.view(shape))
         entropy = -metadata_actor["log_prob"]
         out = {
             "loss_actor": loss_actor,
