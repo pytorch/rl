@@ -672,7 +672,7 @@ class CQLLoss(LossModule):
                 # take max over actions
                 state_action_value = state_action_value.reshape(
                     torch.Size(
-                        [*self.num_qvalue_nets, *tensordict.shape, self.num_random, -1]
+                        [self.num_qvalue_nets, *tensordict.shape, self.num_random, -1]
                     )
                 ).max(-2)[0]
                 # take min over qvalue nets
