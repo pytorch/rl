@@ -10332,7 +10332,7 @@ class TestDreamer(LossModuleTestBase):
             return
         if td_est is not None:
             loss_module.make_value_estimator(td_est)
-        loss_td, fake_data = loss_module(tensordict)
+        loss_td, fake_data = loss_module(tensordict.reshape(-1))
         assert not fake_data.requires_grad
         assert fake_data.shape == torch.Size([tensordict.numel(), imagination_horizon])
         if discount_loss:

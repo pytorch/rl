@@ -217,7 +217,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 with torch.autocast(
                     device_type=device.type, dtype=torch.bfloat16
                 ) if use_autocast else contextlib.nullcontext():
-                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                    actor_loss_td, sampled_tensordict = actor_loss(
+                        sampled_tensordict.reshape(-1)
+                    )
 
                 actor_opt.zero_grad()
                 if use_autocast:
