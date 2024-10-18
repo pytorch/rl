@@ -46,7 +46,7 @@ formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
+VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DEBUG))))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
 if RL_WARNINGS:
@@ -269,7 +269,7 @@ class implement_for:
         ...     # More recent gym versions will return x + 2
         ...     return x + 2
         ...
-        >>> @implement_for("gymnasium")
+        >>> @implement_for("gymnasium", None, "1.0.0")
         >>> def fun(self, x):
         ...     # If gymnasium is to be used instead of gym, x+3 will be returned
         ...     return x + 3
@@ -823,4 +823,6 @@ def _make_ordinal_device(device: torch.device):
         return device
     if device.type == "cuda" and device.index is None:
         return torch.device("cuda", index=torch.cuda.current_device())
+    if device.type == "mps" and device.index is None:
+        return torch.device("mps", index=0)
     return device

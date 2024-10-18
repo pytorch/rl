@@ -58,13 +58,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
             device = "cpu"
     device = torch.device(device)
 
+    # Create replay buffer
+    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
+
     # Create env
     train_env, eval_env = make_environment(
         cfg, train_num_envs=1, eval_num_envs=cfg.logger.eval_envs, logger=logger
     )
-
-    # Create replay buffer
-    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
 
     # Create agent
     model = make_cql_model(cfg, train_env, eval_env, device)
@@ -106,9 +106,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cql_loss = loss_vals["loss_cql"]
 
         q_loss = q_loss + cql_loss
-
-        alpha_loss = loss_vals["loss_alpha"]
-        alpha_prime_loss = loss_vals["loss_alpha_prime"]
 
         # update model
         alpha_loss = loss_vals["loss_alpha"]

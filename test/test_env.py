@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import contextlib
 import functools
 import gc
 import os.path
@@ -490,6 +491,26 @@ class TestModelBasedEnvBase:
 
 
 class TestParallel:
+    def test_create_env_fn(self, maybe_fork_ParallelEnv):
+        def make_env():
+            return GymEnv(PENDULUM_VERSIONED())
+
+        with pytest.raises(
+            RuntimeError, match="len\\(create_env_fn\\) and num_workers mismatch"
+        ):
+            maybe_fork_ParallelEnv(4, [make_env, make_env])
+
+    def test_create_env_kwargs(self, maybe_fork_ParallelEnv):
+        def make_env():
+            return GymEnv(PENDULUM_VERSIONED())
+
+        with pytest.raises(
+            RuntimeError, match="len\\(create_env_kwargs\\) and num_workers mismatch"
+        ):
+            maybe_fork_ParallelEnv(
+                4, make_env, create_env_kwargs=[{"seed": 0}, {"seed": 1}]
+            )
+
     @pytest.mark.skipif(
         not torch.cuda.device_count(), reason="No cuda device detected."
     )
@@ -1119,6 +1140,25 @@ class TestParallel:
 
         env1.close()
         env2.close()
+
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_parallel_env_update_kwargs(self, parallel, maybe_fork_ParallelEnv):
+        def make_env(seed=None):
+            env = DiscreteActionConvMockEnv()
+            if seed is not None:
+                env.set_seed(seed)
+            return env
+
+        _class = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = _class(
+            num_workers=2,
+            create_env_fn=make_env,
+            create_env_kwargs=[{"seed": 0}, {"seed": 1}],
+        )
+        with pytest.raises(
+            RuntimeError, match="len\\(kwargs\\) and num_workers mismatch"
+        ):
+            env.update_kwargs([{"seed": 42}])
 
     @pytest.mark.parametrize("batch_size", [(32, 5), (4,), (1,), ()])
     @pytest.mark.parametrize("n_workers", [2, 1])
@@ -3338,6 +3378,98 @@ class TestCustomEnvs:
             assert r.shape == torch.Size((10,))
             r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
             assert r.shape == torch.Size((5, 10))
+
+
+@pytest.mark.parametrize("device", [None, *get_default_devices()])
+@pytest.mark.parametrize("env_device", [None, *get_default_devices()])
+class TestPartialSteps:
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_parallel_partial_steps(
+        self, use_buffers, device, env_device, maybe_fork_ParallelEnv
+    ):
+        with torch.device(device) if device is not None else contextlib.nullcontext():
+            penv = maybe_fork_ParallelEnv(
+                4,
+                lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
+                use_buffers=use_buffers,
+                device=device,
+            )
+            td = penv.reset()
+            psteps = torch.zeros(4, dtype=torch.bool)
+            psteps[[1, 3]] = True
+            td.set("_step", psteps)
+
+            td.set("action", penv.action_spec.one())
+            td = penv.step(td)
+            assert (td[0].get("next") == 0).all()
+            assert (td[1].get("next") != 0).any()
+            assert (td[2].get("next") == 0).all()
+            assert (td[3].get("next") != 0).any()
+
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_parallel_partial_step_and_maybe_reset(
+        self, use_buffers, device, env_device, maybe_fork_ParallelEnv
+    ):
+        with torch.device(device) if device is not None else contextlib.nullcontext():
+            penv = maybe_fork_ParallelEnv(
+                4,
+                lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
+                use_buffers=use_buffers,
+                device=device,
+            )
+            td = penv.reset()
+            psteps = torch.zeros(4, dtype=torch.bool)
+            psteps[[1, 3]] = True
+            td.set("_step", psteps)
+
+            td.set("action", penv.action_spec.one())
+            td, tdreset = penv.step_and_maybe_reset(td)
+            assert (td[0].get("next") == 0).all()
+            assert (td[1].get("next") != 0).any()
+            assert (td[2].get("next") == 0).all()
+            assert (td[3].get("next") != 0).any()
+
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_serial_partial_steps(self, use_buffers, device, env_device):
+        with torch.device(device) if device is not None else contextlib.nullcontext():
+            penv = SerialEnv(
+                4,
+                lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
+                use_buffers=use_buffers,
+                device=device,
+            )
+            td = penv.reset()
+            psteps = torch.zeros(4, dtype=torch.bool)
+            psteps[[1, 3]] = True
+            td.set("_step", psteps)
+
+            td.set("action", penv.action_spec.one())
+            td = penv.step(td)
+            assert (td[0].get("next") == 0).all()
+            assert (td[1].get("next") != 0).any()
+            assert (td[2].get("next") == 0).all()
+            assert (td[3].get("next") != 0).any()
+
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_serial_partial_step_and_maybe_reset(self, use_buffers, device, env_device):
+        with torch.device(device) if device is not None else contextlib.nullcontext():
+            penv = SerialEnv(
+                4,
+                lambda: CountingEnv(max_steps=10, start_val=2, device=env_device),
+                use_buffers=use_buffers,
+                device=device,
+            )
+            td = penv.reset()
+            psteps = torch.zeros(4, dtype=torch.bool)
+            psteps[[1, 3]] = True
+            td.set("_step", psteps)
+
+            td.set("action", penv.action_spec.one())
+            td = penv.step(td)
+            assert (td[0].get("next") == 0).all()
+            assert (td[1].get("next") != 0).any()
+            assert (td[2].get("next") == 0).all()
+            assert (td[3].get("next") != 0).any()
 
 
 if __name__ == "__main__":

@@ -409,9 +409,9 @@ class PixelRenderTransform(Transform):
         >>> env.transform[-1].dump()
 
     The transform can be disabled using the :meth:`~torchrl.record.PixelRenderTransform.switch` method, which will
-    turn the rendering on if it's off or off if it's on (an argument can also be passed to control this behaviour).
+    turn the rendering on if it's off or off if it's on (an argument can also be passed to control this behavior).
     Since transforms are :class:`~torch.nn.Module` instances, :meth:`~torch.nn.Module.apply` can be used to control
-    this behaviour:
+    this behavior:
 
         >>> def switch(module):
         ...     if isinstance(module, PixelRenderTransform):

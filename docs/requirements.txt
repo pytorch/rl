@@ -14,11 +14,9 @@ docutils
 sphinx_design
 
 torchvision
-dm_control<1.0.21
-mujoco<3.2.1
-atari-py
-ale-py
-gym[classic_control,accept-rom-license]
+dm_control
+mujoco
+gym[classic_control,accept-rom-license,ale-py,atari]
 pygame
 tqdm
 ipython

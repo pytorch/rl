@@ -186,6 +186,27 @@ class _EnvPostInit(abc.ABCMeta):
             return AutoResetEnv(
                 instance, AutoResetTransform(replace=auto_reset_replace)
             )
+
+        done_keys = set(instance.full_done_spec.keys(True, True))
+        obs_keys = set(instance.full_observation_spec.keys(True, True))
+        reward_keys = set(instance.full_reward_spec.keys(True, True))
+        # state_keys can match obs_keys so we don't test that
+        action_keys = set(instance.full_action_spec.keys(True, True))
+        state_keys = set(instance.full_state_spec.keys(True, True))
+        total_set = set()
+        for keyset in (done_keys, obs_keys, reward_keys):
+            if total_set.intersection(keyset):
+                raise RuntimeError(
+                    f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
+                )
+            total_set = total_set.union(keyset)
+        total_set = set()
+        for keyset in (state_keys, action_keys):
+            if total_set.intersection(keyset):
+                raise RuntimeError(
+                    f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
+                )
+            total_set = total_set.union(keyset)
         return instance
 
 
@@ -830,7 +851,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
-        return self.input_spec["full_action_spec"]
+        full_action_spec = self.input_spec.get("full_action_spec", None)
+        if full_action_spec is None:
+            full_action_spec = Composite(shape=self.batch_size, device=self.device)
+            self.input_spec.unlock_()
+            self.input_spec["full_action_spec"] = full_action_spec
+            self.input_spec.lock_()
+        return full_action_spec
 
     @full_action_spec.setter
     def full_action_spec(self, spec: Composite) -> None:
@@ -1313,7 +1340,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
-        observation_spec = self.output_spec["full_observation_spec"]
+        observation_spec = self.output_spec.get("full_observation_spec", default=None)
         if observation_spec is None:
             observation_spec = Composite(shape=self.batch_size, device=self.device)
             self.output_spec.unlock_()
@@ -2136,9 +2163,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self._assert_tensordict_shape(tensordict)
 
         tensordict_reset = self._reset(tensordict, **kwargs)
-        #        We assume that this is done properly
-        #        if reset.device != self.device:
-        #            reset = reset.to(self.device, non_blocking=True)
+        # We assume that this is done properly
+        # if reset.device != self.device:
+        #     reset = reset.to(self.device, non_blocking=True)
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
@@ -2317,13 +2344,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         max_steps: int,
         policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         callback: Optional[Callable[[TensorDictBase, ...], Any]] = None,
+        *,
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
-        break_when_any_done: bool = True,
+        break_when_any_done: bool | None = None,
+        break_when_all_done: bool | None = None,
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
         set_truncated: bool = False,
         out=None,
+        trust_policy: bool = False,
     ):
         """Executes a rollout in the environment.
 
@@ -2342,6 +2372,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 TensorDict. Defaults to ``None``. The output of ``callback`` will not be collected, it is the user
                 responsibility to save any result within the callback call if data needs to be carried over beyond
                 the call to ``rollout``.
+
+        Keyword Args:
             auto_reset (bool, optional): if ``True``, resets automatically the environment
                 if it is in a done state when the rollout is initiated.
                 Default is ``True``.
@@ -2349,6 +2381,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 policy device before the policy is used. Default is ``False``.
             break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is
                 called on the sub-envs that are done. Default is True.
+            break_when_all_done (bool): TODO
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if ``auto_reset`` is False, an initial
                 tensordict must be provided. Rollout will check if this tensordict has done flags and reset the
@@ -2362,6 +2395,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 ``done_spec``, an exception is raised.
                 Truncated keys can be set through ``env.add_truncated_keys``.
                 Defaults to ``False``.
+            trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
+                assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
+                and ``False`` otherwise.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -2545,9 +2581,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ...     )
 
         """
+        if break_when_any_done is None:  # True by default
+            if break_when_all_done:  # all overrides
+                break_when_any_done = False
+            else:
+                break_when_any_done = True
+        if break_when_all_done is None:
+            # There is no case where break_when_all_done is True by default
+            break_when_all_done = False
+        if break_when_all_done and break_when_any_done:
+            raise TypeError(
+                "Cannot have both break_when_all_done and break_when_any_done True at the same time."
+            )
+
         if policy is not None:
             policy = _make_compatible_policy(
-                policy, self.observation_spec, env=self, fast_wrap=True
+                policy,
+                self.observation_spec,
+                env=self,
+                fast_wrap=True,
+                trust_policy=trust_policy,
             )
             if auto_cast_to_device:
                 try:
@@ -2578,8 +2631,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             "env_device": env_device,
             "callback": callback,
         }
-        if break_when_any_done:
-            tensordicts = self._rollout_stop_early(**kwargs)
+        if break_when_any_done or break_when_all_done:
+            tensordicts = self._rollout_stop_early(
+                break_when_all_done=break_when_all_done,
+                break_when_any_done=break_when_any_done,
+                **kwargs,
+            )
         else:
             tensordicts = self._rollout_nonstop(**kwargs)
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
@@ -2639,6 +2696,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def _rollout_stop_early(
         self,
         *,
+        break_when_any_done,
+        break_when_all_done,
         tensordict,
         auto_cast_to_device,
         max_steps,
@@ -2651,6 +2710,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if auto_cast_to_device:
             sync_func = _get_sync_func(policy_device, env_device)
         tensordicts = []
+        partial_steps = True
         for i in range(max_steps):
             if auto_cast_to_device:
                 if policy_device is not None:
@@ -2668,6 +2728,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
             td_append = tensordict.copy()
+            if break_when_all_done:
+                if partial_steps is not True:
+                    # At least one partial step has been done
+                    del td_append["_partial_steps"]
+                    td_append = torch.where(
+                        partial_steps.view(td_append.shape), td_append, tensordicts[-1]
+                    )
+
             tensordicts.append(td_append)
 
             if i == max_steps - 1:
@@ -2675,16 +2743,31 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 break
             tensordict = self._step_mdp(tensordict)
 
-            # done and truncated are in done_keys
-            # We read if any key is done.
-            any_done = _terminated_or_truncated(
-                tensordict,
-                full_done_spec=self.output_spec["full_done_spec"],
-                key=None,
-            )
-
-            if any_done:
-                break
+            if break_when_any_done:
+                # done and truncated are in done_keys
+                # We read if any key is done.
+                any_done = _terminated_or_truncated(
+                    tensordict,
+                    full_done_spec=self.output_spec["full_done_spec"],
+                    key=None,
+                )
+                if any_done:
+                    break
+            else:
+                _terminated_or_truncated(
+                    tensordict,
+                    full_done_spec=self.output_spec["full_done_spec"],
+                    key="_partial_steps",
+                    write_full_false=False,
+                )
+                partial_step_curr = tensordict.get("_partial_steps", None)
+                if partial_step_curr is not None:
+                    partial_step_curr = ~partial_step_curr
+                    partial_steps = partial_steps & partial_step_curr
+                if partial_steps is not True:
+                    if not partial_steps.any():
+                        break
+                    tensordict.set("_partial_steps", partial_steps)
 
             if callback is not None:
                 callback(self, tensordict)
@@ -3039,6 +3122,7 @@ class _EnvWrapper(EnvBase):
 
         self._constructor_kwargs = kwargs
         self._check_kwargs(kwargs)
+        self._convert_actions_to_numpy = kwargs.pop("convert_actions_to_numpy", True)
         self._env = self._build_env(**kwargs)  # writes the self._env attribute
         self._make_specs(self._env)  # writes the self._env attribute
         self.is_closed = False

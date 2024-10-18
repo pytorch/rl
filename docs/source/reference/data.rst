@@ -171,7 +171,7 @@ using the following components:
 Storage choice is very influential on replay buffer sampling latency, especially
 in distributed reinforcement learning settings with larger data volumes.
 :class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage` is highly
-advised in distributed settings with shared storage due to the lower serialisation
+advised in distributed settings with shared storage due to the lower serialization
 cost of MemoryMappedTensors as well as the ability to specify file storage locations
 for improved node failure recovery.
 The following mean sampling latency improvements over using :class:`~torchrl.data.replay_buffers.ListStorage`
@@ -974,6 +974,26 @@ The following classes are deprecated and just point to the classes above:
     OneHotDiscreteTensorSpec
     UnboundedContinuousTensorSpec
     UnboundedDiscreteTensorSpec
+
+Trees and Forests
+-----------------
+
+TorchRL offers a set of classes and functions that can be used to represent trees and forests efficiently.
+
+.. currentmodule:: torchrl.data
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    BinaryToDecimal
+    HashToInt
+    QueryModule
+    RandomProjectionHash
+    SipHash
+    TensorDictMap
+    TensorMap
+
 
 Reinforcement Learning From Human Feedback (RLHF)
 -------------------------------------------------

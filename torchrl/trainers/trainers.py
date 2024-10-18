@@ -633,14 +633,14 @@ class ReplayBufferTrainer(TrainerHookBase):
             the replay buffer batch-size will be used (preferred option for
             unchanged batch-sizes).
         memmap (bool, optional): if ``True``, a memmap tensordict is created.
-            Default is False.
+            Default is ``False``.
         device (device, optional): device where the samples must be placed.
-            Default is cpu.
+            Default is ``cpu``.
         flatten_tensordicts (bool, optional): if ``True``, the tensordicts will be
             flattened (or equivalently masked with the valid mask obtained from
             the collector) before being passed to the replay buffer. Otherwise,
             no transform will be achieved other than padding (see :obj:`max_dims` arg below).
-            Defaults to True
+            Defaults to ``False``.
         max_dims (sequence of int, optional): if :obj:`flatten_tensordicts` is set to False,
             this will be a list of the length of the batch_size of the provided
             tensordicts that represent the maximum size of each. If provided,
@@ -1126,7 +1126,7 @@ class Recorder(TrainerHookBase):
     """Recorder hook for :class:`~torchrl.trainers.Trainer`.
 
     Args:
-        record_interval (int): total number of optimisation steps
+        record_interval (int): total number of optimization steps
             between two calls to the recorder for testing.
         record_frames (int): number of frames to be recorded during
             testing.
@@ -1145,7 +1145,7 @@ class Recorder(TrainerHookBase):
 
             Given that this instance is supposed to both explore and render
             the performance of the policy, it should be possible to turn off
-            the explorative behaviour by calling the
+            the explorative behavior by calling the
             `set_exploration_type(ExplorationType.DETERMINISTIC)` context manager.
         environment (EnvBase): An environment instance to be used
             for testing.

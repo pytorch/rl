@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from typing import Optional, Tuple
 
 import torch
@@ -387,7 +389,7 @@ class LSTMModule(ModuleBase):
     .. note:: This module relies on specific ``recurrent_state`` keys being present in the input
         TensorDicts. To generate a :class:`~torchrl.envs.transforms.TensorDictPrimer` transform that will automatically
         add hidden states to the environment TensorDicts, use the method :func:`~torchrl.modules.rnn.LSTMModule.make_tensordict_primer`.
-        If this class is a submodule in a larger module, the method :func:`~torchrl.models.utils.get_primers_from_module` can be called
+        If this class is a submodule in a larger module, the method :func:`~torchrl.modules.utils.get_primers_from_module` can be called
         on the parent module to automatically generate the primer transforms required for all submodules, including this one.
 
 
@@ -529,10 +531,13 @@ class LSTMModule(ModuleBase):
         inputs and outputs (recurrent states) during rollout execution. That way, the data can be shared across
         processes and dealt with properly.
 
-        Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviours, for instance
+        Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviors, for instance
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
         are not registered within the environment specs.
+
+        See :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given
+        module.
 
         Examples:
             >>> from torchrl.collectors import SyncDataCollector
@@ -605,7 +610,7 @@ class LSTMModule(ModuleBase):
     def set_recurrent_mode(self, mode: bool = True):
         """Returns a new copy of the module that shares the same lstm model but with a different ``recurrent_mode`` attribute (if it differs).
 
-        A copy is created such that the module can be used with divergent behaviour
+        A copy is created such that the module can be used with divergent behavior
         in various parts of the code (inference vs training):
 
         Examples:
@@ -619,7 +624,7 @@ class LSTMModule(ModuleBase):
             >>> lstm = nn.LSTM(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
             >>> lstm_module = LSTMModule(lstm=lstm, in_keys=["observation", "hidden0", "hidden1"], out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")])
             >>> mlp = MLP(num_cells=[64], out_features=1)
-            >>> # building two policies with different behaviours:
+            >>> # building two policies with different behaviors:
             >>> policy_inference = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy_training = Seq(lstm_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> traj_td = env.rollout(3) # some random temporal data
@@ -687,7 +692,7 @@ class LSTMModule(ModuleBase):
         # packed sequences do not help to get the accurate last hidden values
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
-        if is_init.any() and hidden0 is not None:
+        if hidden0 is not None:
             is_init_expand = expand_as_right(is_init, hidden0)
             hidden0 = torch.where(is_init_expand, 0, hidden0)
             hidden1 = torch.where(is_init_expand, 0, hidden1)
@@ -1108,7 +1113,7 @@ class GRUModule(ModuleBase):
     .. note:: This module relies on specific ``recurrent_state`` keys being present in the input
         TensorDicts. To generate a :class:`~torchrl.envs.transforms.TensorDictPrimer` transform that will automatically
         add hidden states to the environment TensorDicts, use the method :func:`~torchrl.modules.rnn.GRUModule.make_tensordict_primer`.
-        If this class is a submodule in a larger module, the method :func:`~torchrl.models.utils.get_primers_from_module` can be called
+        If this class is a submodule in a larger module, the method :func:`~torchrl.modules.utils.get_primers_from_module` can be called
         on the parent module to automatically generate the primer transforms required for all submodules, including this one.
 
     Examples:
@@ -1275,10 +1280,13 @@ class GRUModule(ModuleBase):
         inputs and outputs (recurrent states) during rollout execution. That way, the data can be shared across
         processes and dealt with properly.
 
-        Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviours, for instance
+        Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviors, for instance
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
         are not registered within the environment specs.
+
+        See :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given
+        module.
 
         Examples:
             >>> from torchrl.collectors import SyncDataCollector
@@ -1348,7 +1356,7 @@ class GRUModule(ModuleBase):
     def set_recurrent_mode(self, mode: bool = True):
         """Returns a new copy of the module that shares the same gru model but with a different ``recurrent_mode`` attribute (if it differs).
 
-        A copy is created such that the module can be used with divergent behaviour
+        A copy is created such that the module can be used with divergent behavior
         in various parts of the code (inference vs training):
 
         Examples:
@@ -1361,7 +1369,7 @@ class GRUModule(ModuleBase):
             >>> gru = nn.GRU(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
             >>> gru_module = GRUModule(gru=gru, in_keys=["observation", "hidden"], out_keys=["intermediate", ("next", "hidden")])
             >>> mlp = MLP(num_cells=[64], out_features=1)
-            >>> # building two policies with different behaviours:
+            >>> # building two policies with different behaviors:
             >>> policy_inference = Seq(gru_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy_training = Seq(gru_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> traj_td = env.rollout(3) # some random temporal data

@@ -318,7 +318,7 @@ have on an environment returning zeros after reset:
 
 We also offer the :class:`~.SerialEnv` class that enjoys the exact same API but is executed
 serially. This is mostly useful for testing purposes, when one wants to assess the
-behaviour of a :class:`~.ParallelEnv` without launching the subprocesses.
+behavior of a :class:`~.ParallelEnv` without launching the subprocesses.
 
 In addition to :class:`~.ParallelEnv`, which offers process-based parallelism, we also provide a way to create
 multithreaded environments with :obj:`~.MultiThreadedEnv`. This class uses `EnvPool <https://github.com/sail-sg/envpool>`_
@@ -499,7 +499,7 @@ current episode.
 To handle these cases, torchrl provides a :class:`~torchrl.envs.AutoResetTransform` that will copy the observations
 that result from the call to `step` to the next `reset` and skip the calls to `reset` during rollouts (in both
 :meth:`~torchrl.envs.EnvBase.rollout` and :class:`~torchrl.collectors.SyncDataCollector` iterations).
-This transform class also provides a fine-grained control over the behaviour to be adopted for the invalid observations,
+This transform class also provides a fine-grained control over the behavior to be adopted for the invalid observations,
 which can be masked with `"nan"` or any other values, or not masked at all.
 
 To tell torchrl that an environment is auto-resetting, it is sufficient to provide an ``auto_reset`` argument
@@ -722,6 +722,9 @@ Since each transform uses a ``"in_keys"``/``"out_keys"`` set of keyword argument
 also easy to root the transform graph to each component of the observation data (e.g.
 pixels or states etc).
 
+Forward and inverse transforms
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Transforms also have an ``inv`` method that is called before
 the action is applied in reverse order over the composed transform chain:
 this allows to apply transforms to data in the environment before the action is taken
@@ -732,6 +735,20 @@ in the environment. The keys to be included in this inverse transform are passed
    :caption: Inverse transform
 
         >>> env.append_transform(DoubleToFloat(in_keys_inv=["action"]))  # will map the action from float32 to float64 before calling the base_env.step
+
+The way ``in_keys`` relates to ``in_keys_inv`` can be understood by considering the base environment as the "inner" part
+of the transform. In constrast, the user inputs and outputs to and from the transform are to be considered as the
+outside world. The following figure shows what this means in practice for the :class:`~torchrl.envs.RenameTransform`
+class: the input ``TensorDict`` of the ``step`` function must have the ``out_keys_inv`` listed in its entries as they
+are part of the outside world. The transform changes these names to make them match the names of the inner, base
+environment using the ``in_keys_inv``. The inverse process is executed with the output tensordict, where the ``in_keys``
+are mapped to the corresponding ``out_keys``.
+
+.. figure:: /_static/img/rename_transform.png
+
+   Rename transform logic
+
+
 
 Cloning transforms
 ~~~~~~~~~~~~~~~~~~
@@ -755,10 +772,10 @@ registered buffers:
     >>> TransformedEnv(base_env, third_transform.clone())  # works
 
 On a single process or if the buffers are placed in shared memory, this will
-result in all the clone transforms to keep the same behaviour even if the
+result in all the clone transforms to keep the same behavior even if the
 buffers are changed in place (which is what will happen with the :class:`CatFrames`
 transform, for instance). In distributed settings, this may not hold and one
-should be careful about the expected behaviour of the cloned transforms in this
+should be careful about the expected behavior of the cloned transforms in this
 context.
 Finally, notice that indexing multiple transforms from a :class:`Compose` transform
 may also result in loss of parenthood for these transforms: the reason is that
@@ -979,11 +996,9 @@ Helpers
 
     RandomPolicy
     check_env_specs
-    exploration_mode #deprecated
     exploration_type
     get_available_libraries
     make_composite_from_td
-    set_exploration_mode #deprecated
     set_exploration_type
     step_mdp
     terminated_or_truncated
@@ -1061,7 +1076,7 @@ the current gym backend or any of its modules:
 Another tool that comes in handy with gym and other external dependencies is
 the :class:`torchrl._utils.implement_for` class. Decorating a function
 with ``@implement_for`` will tell torchrl that, depending on the version
-indicated, a specific behaviour is to be expected. This allows us to easily
+indicated, a specific behavior is to be expected. This allows us to easily
 support multiple versions of gym without requiring any effort from the user side.
 For example, considering that our virtual environment has the v0.26.2 installed,
 the following function will return ``1`` when queried:
@@ -1098,11 +1113,15 @@ the following function will return ``1`` when queried:
     MultiThreadedEnv
     MultiThreadedEnvWrapper
     OpenMLEnv
+    OpenSpielWrapper
+    OpenSpielEnv
     PettingZooEnv
     PettingZooWrapper
     RoboHiveEnv
     SMACv2Env
     SMACv2Wrapper
+    UnityMLAgentsEnv
+    UnityMLAgentsWrapper
     VmasEnv
     VmasWrapper
     gym_backend

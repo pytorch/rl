@@ -99,68 +99,69 @@ lines of code*!
   
   from torchrl.collectors import SyncDataCollector
   from torchrl.data.replay_buffers import TensorDictReplayBuffer, \
-      LazyTensorStorage, SamplerWithoutReplacement
+    LazyTensorStorage, SamplerWithoutReplacement
   from torchrl.envs.libs.gym import GymEnv
   from torchrl.modules import ProbabilisticActor, ValueOperator, TanhNormal
   from torchrl.objectives import ClipPPOLoss
   from torchrl.objectives.value import GAE
   
-  env = GymEnv("Pendulum-v1")
+  env = GymEnv("Pendulum-v1") 
   model = TensorDictModule(
-      nn.Sequential(
-          nn.Linear(3, 128), nn.Tanh(),
-          nn.Linear(128, 128), nn.Tanh(),
-          nn.Linear(128, 128), nn.Tanh(),
-          nn.Linear(128, 2),
-          NormalParamExtractor()
-      ),
-      in_keys=["observation"],
-      out_keys=["loc", "scale"]
+    nn.Sequential(
+        nn.Linear(3, 128), nn.Tanh(),
+        nn.Linear(128, 128), nn.Tanh(),
+        nn.Linear(128, 128), nn.Tanh(),
+        nn.Linear(128, 2),
+        NormalParamExtractor()
+    ),
+    in_keys=["observation"],
+    out_keys=["loc", "scale"]
   )
   critic = ValueOperator(
-      nn.Sequential(
-          nn.Linear(3, 128), nn.Tanh(),
-          nn.Linear(128, 128), nn.Tanh(),
-          nn.Linear(128, 128), nn.Tanh(),
-          nn.Linear(128, 1),
-      ),
-      in_keys=["observation"],
+    nn.Sequential(
+        nn.Linear(3, 128), nn.Tanh(),
+        nn.Linear(128, 128), nn.Tanh(),
+        nn.Linear(128, 128), nn.Tanh(),
+        nn.Linear(128, 1),
+    ),
+    in_keys=["observation"],
   )
   actor = ProbabilisticActor(
-      model,
-      in_keys=["loc", "scale"],
-      distribution_class=TanhNormal,
-      distribution_kwargs={"min": -1.0, "max": 1.0},
-      return_log_prob=True
-      )
+    model,
+    in_keys=["loc", "scale"],
+    distribution_class=TanhNormal,
+    distribution_kwargs={"low": -1.0, "high": 1.0},
+    return_log_prob=True
+    )
   buffer = TensorDictReplayBuffer(
-      LazyTensorStorage(1000),
-      SamplerWithoutReplacement()
-      )
+    storage=LazyTensorStorage(1000),
+    sampler=SamplerWithoutReplacement(),
+    batch_size=50,
+    )
   collector = SyncDataCollector(
-      env,
-      actor,
-      frames_per_batch=1000,
-      total_frames=1_000_000
-      )
-  loss_fn = ClipPPOLoss(actor, critic, gamma=0.99)
+    env,
+    actor,
+    frames_per_batch=1000,
+    total_frames=1_000_000,
+  )
+  loss_fn = ClipPPOLoss(actor, critic)
+  adv_fn = GAE(value_network=critic, average_gae=True, gamma=0.99, lmbda=0.95)
   optim = torch.optim.Adam(loss_fn.parameters(), lr=2e-4)
-  adv_fn = GAE(value_network=critic, gamma=0.99, lmbda=0.95, average_gae=True)
+  
   for data in collector:  # collect data
-      for epoch in range(10):
-          adv_fn(data)  # compute advantage
-          buffer.extend(data.view(-1))
-          for i in range(20):  # consume data
-              sample = buffer.sample(50)  # mini-batch
-              loss_vals = loss_fn(sample)
-              loss_val = sum(
-                  value for key, value in loss_vals.items() if
-                  key.startswith("loss")
-                  )
-              loss_val.backward()
-              optim.step()
-              optim.zero_grad()
-      print(f"avg reward: {data['next', 'reward'].mean().item(): 4.4f}")
+    for epoch in range(10):
+        adv_fn(data)  # compute advantage
+        buffer.extend(data)
+        for sample in buffer:  # consume data
+            loss_vals = loss_fn(sample)
+            loss_val = sum(
+                value for key, value in loss_vals.items() if
+                key.startswith("loss")
+                )
+            loss_val.backward()
+            optim.step()
+            optim.zero_grad()
+    print(f"avg reward: {data['next', 'reward'].mean().item(): 4.4f}")
   ```
   </details>
 
@@ -521,22 +522,287 @@ If you would like to contribute to new features, check our [call for contributio
 
 ## Examples, tutorials and demos
 
-A series of [examples](https://github.com/pytorch/rl/blob/main/examples/) are provided with an illustrative purpose:
-- [DQN](https://github.com/pytorch/rl/blob/main/sota-implementations/dqn)
-- [DDPG](https://github.com/pytorch/rl/blob/main/sota-implementations/ddpg/ddpg.py)
-- [IQL](https://github.com/pytorch/rl/blob/main/sota-implementations/iql/iql_offline.py)
-- [CQL](https://github.com/pytorch/rl/blob/main/sota-implementations/cql/cql_offline.py)
-- [TD3](https://github.com/pytorch/rl/blob/main/sota-implementations/td3/td3.py)
-- [TD3+BC](https://github.com/pytorch/rl/blob/main/sota-implementations/td3+bc/td3+bc.py)
-- [A2C](https://github.com/pytorch/rl/blob/main/examples/a2c_old/a2c.py)
-- [PPO](https://github.com/pytorch/rl/blob/main/sota-implementations/ppo/ppo.py)
-- [SAC](https://github.com/pytorch/rl/blob/main/sota-implementations/sac/sac.py)
-- [REDQ](https://github.com/pytorch/rl/blob/main/sota-implementations/redq/redq.py)
-- [Dreamer](https://github.com/pytorch/rl/blob/main/sota-implementations/dreamer/dreamer.py)
-- [Decision Transformers](https://github.com/pytorch/rl/blob/main/sota-implementations/decision_transformer)
-- [RLHF](https://github.com/pytorch/rl/blob/main/examples/rlhf)
+A series of [State-of-the-Art implementations](https://github.com/pytorch/rl/blob/main/sota-implementations/) are provided with an illustrative purpose:
+
+<table>
+  <tr>
+   <td><strong>Algorithm</strong>
+   </td>
+   <td><strong>Compile Support**</strong>
+   </td>
+   <td><strong>Tensordict-free API</strong>
+   </td>
+   <td><strong>Modular Losses</strong>
+   </td>
+   <td><strong>Continuous and Discrete</strong>
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/dqn">DQN</a>
+   </td>
+   <td> 1.9x
+   </td>
+   <td> +
+   </td>
+   <td> NA
+   </td>
+   <td> + (through <a href="https://pytorch.org/rl/stable/reference/generated/torchrl.envs.transforms.ActionDiscretizer.html?highlight=actiondiscretizer">ActionDiscretizer</a> transform)
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/ddpg/ddpg.py">DDPG</a>
+   </td>
+   <td> 1.87x
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+   <td> - (continuous only)
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/iql/">IQL</a>
+   </td>
+   <td> 3.22x
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/cql/cql_offline.py">CQL</a>
+   </td>
+   <td> 2.68x
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/td3/td3.py">TD3</a>
+   </td>
+   <td> 2.27x
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+   <td> - (continuous only)
+   </td>
+  </tr>
+  <tr>
+   <td>
+    <a href="https://github.com/pytorch/rl/blob/main/sota-implementations/td3_bc/td3_bc.py">TD3+BC</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+   <td> - (continuous only)
+   </td>
+  </tr>
+  <tr>
+   <td>
+    <a href="https://github.com/pytorch/rl/blob/main/examples/a2c/">A2C</a>
+   </td>
+   <td> 2.67x
+   </td>
+   <td> +
+   </td>
+   <td> -
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td>
+    <a href="https://github.com/pytorch/rl/blob/main/sota-implementations/ppo/">PPO</a>
+   </td>
+   <td> 2.42x
+   </td>
+   <td> +
+   </td>
+   <td> -
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/sac/sac.py">SAC</a>
+   </td>
+   <td> 2.62x
+   </td>
+   <td> +
+   </td>
+   <td> -
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/redq/redq.py">REDQ</a>
+   </td>
+   <td> 2.28x
+   </td>
+   <td> +
+   </td>
+   <td> -
+   </td>
+   <td> - (continuous only)
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/dreamer/dreamer.py">Dreamer v1</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> + (<a href="https://pytorch.org/rl/stable/reference/objectives.html#dreamer">different classes</a>)
+   </td>
+   <td> - (continuous only)
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/decision_transformer">Decision Transformers</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> NA
+   </td>
+   <td> - (continuous only)
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/crossq">CrossQ</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+   <td> - (continuous only)
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/gail">Gail</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> NA
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/impala">Impala</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> -
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/multiagent/iql.py">IQL (MARL)</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/multiagent/maddpg_iddpg.py">DDPG (MARL)</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> +
+   </td>
+   <td> - (continuous only)
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/multiagent/mappo_ippo.py">PPO (MARL)</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> -
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/multiagent/qmix_vdn.py">QMIX-VDN (MARL)</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> NA
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/sota-implementations/multiagent/sac.py">SAC (MARL)</a>
+   </td>
+   <td> untested
+   </td>
+   <td> +
+   </td>
+   <td> -
+   </td>
+   <td> +
+   </td>
+  </tr>
+  <tr>
+   <td><a href="https://github.com/pytorch/rl/blob/main/examples/rlhf">RLHF</a>
+   </td>
+   <td> NA
+   </td>
+   <td> +
+   </td>
+   <td> NA
+   </td>
+   <td> NA
+   </td>
+  </tr>
+</table>
+
+** The number indicates expected speed-up compared to eager mode when executed on CPU. Numbers may vary depending on
+  architecture and device.
 
 and many more to come!
+
+[Code examples](examples/) displaying toy code snippets and training scripts are also available 
+- [RLHF](examples/rlhf)
+- [Memory-mapped replay buffers](examples/torchrl_features)
+
 
 Check the [examples](https://github.com/pytorch/rl/blob/main/sota-implementations/) directory for more details 
 about handling the various configuration settings.
@@ -592,7 +858,7 @@ Importantly, the nightly builds require the nightly builds of PyTorch too.
 
 To install extra dependencies, call
 ```bash
-pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl,checkpointing]"
+pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl,open_spiel,checkpointing]"
 ```
 or a subset of these.
 

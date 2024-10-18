@@ -26,6 +26,11 @@ except ImportError as err:
         raise err_ft from err
 from torchrl.envs.utils import step_mdp
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
+
 _GAMMA_LMBDA_DEPREC_ERROR = (
     "Passing gamma / lambda parameters through the loss constructor "
     "is a deprecated feature. To customize your value function, "
@@ -198,23 +203,37 @@ class TargetNetUpdater:
 
     @property
     def _targets(self):
-        return TensorDict(
-            {name: getattr(self.loss_module, name) for name in self._target_names},
-            [],
-        )
+        targets = self.__dict__.get("_targets_val", None)
+        if targets is None:
+            targets = self.__dict__["_targets_val"] = TensorDict(
+                {name: getattr(self.loss_module, name) for name in self._target_names},
+                [],
+            )
+        return targets
+
+    @_targets.setter
+    def _targets(self, targets):
+        self.__dict__["_targets_val"] = targets
 
     @property
     def _sources(self):
-        return TensorDict(
-            {name: getattr(self.loss_module, name) for name in self._source_names},
-            [],
-        )
+        sources = self.__dict__.get("_sources_val", None)
+        if sources is None:
+            sources = self.__dict__["_sources_val"] = TensorDict(
+                {name: getattr(self.loss_module, name) for name in self._source_names},
+                [],
+            )
+        return sources
+
+    @_sources.setter
+    def _sources(self, sources):
+        self.__dict__["_sources_val"] = sources
 
     def init_(self) -> None:
         if self.initialized:
             warnings.warn("Updated already initialized.")
         found_distinct = False
-        self._distinct = {}
+        self._distinct_and_params = {}
         for key, source in self._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
@@ -223,8 +242,12 @@ class TargetNetUpdater:
             # for p_source, p_target in zip(source, target):
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
-            self._distinct[key] = target.data_ptr() != source.data.data_ptr()
-            found_distinct = found_distinct or self._distinct[key]
+            self._distinct_and_params[key] = (
+                target.is_leaf
+                and source.requires_grad
+                and target.data_ptr() != source.data.data_ptr()
+            )
+            found_distinct = found_distinct or self._distinct_and_params[key]
             target.data.copy_(source.data)
         if not found_distinct:
             raise RuntimeError(
@@ -235,6 +258,23 @@ class TargetNetUpdater:
                 f"If no target parameter is needed, do not use a target updater such as {type(self)}."
             )
 
+        # filter the target_ out
+        def filter_target(key):
+            if isinstance(key, tuple):
+                return (filter_target(key[0]), *key[1:])
+            return key[7:]
+
+        self._sources = self._sources.select(
+            *[
+                filter_target(key)
+                for (key, val) in self._distinct_and_params.items()
+                if val
+            ]
+        ).lock_()
+        self._targets = self._targets.select(
+            *(key for (key, val) in self._distinct_and_params.items() if val)
+        ).lock_()
+
         self.initialized = True
 
     def step(self) -> None:
@@ -243,19 +283,11 @@ class TargetNetUpdater:
                 f"{self.__class__.__name__} must be "
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
-        for key, source in self._sources.items(True, True):
-            if not isinstance(key, tuple):
-                key = (key,)
-            key = ("target_" + key[0], *key[1:])
-            if not self._distinct[key]:
-                continue
-            target = self._targets[key]
+        for key, param in self._sources.items():
+            target = self._targets.get("target_{}".format(key))
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
-            if target.is_leaf:
-                self._step(source, target)
-            else:
-                target.copy_(source)
+            self._step(param, target)
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
         raise NotImplementedError
@@ -301,7 +333,7 @@ class SoftUpdate(TargetNetUpdater):
     ):
         if eps is None and tau is None:
             raise RuntimeError(
-                "Neither eps nor tau was provided. This behaviour is deprecated.",
+                "Neither eps nor tau was provided. This behavior is deprecated.",
             )
             eps = 0.999
         if (eps is None) ^ (tau is None):
@@ -321,8 +353,10 @@ class SoftUpdate(TargetNetUpdater):
         super(SoftUpdate, self).__init__(loss_module)
         self.eps = eps
 
-    def _step(self, p_source: Tensor, p_target: Tensor) -> None:
-        p_target.data.copy_(p_target.data * self.eps + p_source.data * (1 - self.eps))
+    def _step(
+        self, p_source: Tensor | TensorDictBase, p_target: Tensor | TensorDictBase
+    ) -> None:
+        p_target.data.lerp_(p_source.data, 1 - self.eps)
 
 
 class HardUpdate(TargetNetUpdater):
@@ -374,11 +408,18 @@ class hold_out_net(_context_manager):
 
     def __enter__(self) -> None:
         if self.mode:
-            self.network.requires_grad_(False)
+            if is_dynamo_compiling():
+                self._params = TensorDict.from_module(self.network)
+                self._params.data.to_module(self.network)
+            else:
+                self.network.requires_grad_(False)
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         if self.mode:
-            self.network.requires_grad_()
+            if is_dynamo_compiling():
+                self._params.to_module(self.network)
+            else:
+                self.network.requires_grad_()
 
 
 class hold_out_params(_context_manager):
@@ -454,11 +495,17 @@ def next_state_value(
     return target_value
 
 
-def _cache_values(fun):
+def _cache_values(func):
     """Caches the tensordict returned by a property."""
-    name = fun.__name__
+    name = func.__name__
 
-    def new_fun(self, netname=None):
+    @functools.wraps(func)
+    def new_func(self, netname=None):
+        if is_dynamo_compiling():
+            if netname is not None:
+                return func(self, netname)
+            else:
+                return func(self)
         __dict__ = self.__dict__
         _cache = __dict__.setdefault("_cache", {})
         attr_name = name
@@ -468,16 +515,16 @@ def _cache_values(fun):
             out = _cache[attr_name]
             return out
         if netname is not None:
-            out = fun(self, netname)
+            out = func(self, netname)
         else:
-            out = fun(self)
+            out = func(self)
         # TODO: decide what to do with locked tds in functional calls
         # if is_tensor_collection(out):
         #     out.lock_()
         _cache[attr_name] = out
         return out
 
-    return new_fun
+    return new_func
 
 
 def _vmap_func(module, *args, func=None, **kwargs):
