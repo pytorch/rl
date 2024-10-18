@@ -1391,10 +1391,18 @@ def _stack_anything(data):  # noqa: F811
         )
     if is_tensor_collection(data[0]):
         return LazyStackedTensorDict.maybe_dense_stack(data)
-    return tree_map(
-        lambda *x: torch.stack(x),
-        *data,
-    )
+    flat_trees = []
+    spec = None
+    for d in data:
+        flat_tree, spec = tree_flatten(d)
+        flat_trees.append(flat_tree)
+
+    leaves = []
+    for leaf in zip(*flat_trees):
+        leaf = torch.stack(leaf)
+        leaves.append(leaf)
+
+    return tree_unflatten(leaves, spec)
 
 
 def _collate_id(x):
