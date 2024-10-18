@@ -14,7 +14,7 @@ import pytest
 
 import torch
 
-from _utils_internal import get_default_devices
+from _utils_internal import capture_log_records, get_default_devices
 from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
 
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
@@ -378,6 +378,31 @@ def test_rng_decorator(device):
         s1b = torch.randn(3)
         torch.testing.assert_close(s0a, s1a)
         torch.testing.assert_close(s0b, s1b)
+
+
+# Check that 'capture_log_records' captures records emitted when torch
+# recompiles a function.
+def test_capture_log_records_recompile():
+    torch.compiler.reset()
+
+    # This function recompiles each time it is called with a different string
+    # input.
+    @torch.compile
+    def str_to_tensor(s):
+        return bytes(s, "utf8")
+
+    str_to_tensor("a")
+
+    try:
+        torch._logging.set_logs(recompiles=True)
+        records = []
+        capture_log_records(records, "torch._dynamo", "recompiles")
+        str_to_tensor("b")
+
+    finally:
+        torch._logging.set_logs()
+
+    assert len(records) == 1
 
 
 if __name__ == "__main__":
