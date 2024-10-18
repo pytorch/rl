@@ -17,7 +17,12 @@ import numpy as np
 import pytest
 import torch
 
-from _utils_internal import CARTPOLE_VERSIONED, get_default_devices, make_tc
+from _utils_internal import (
+    capture_log_records,
+    CARTPOLE_VERSIONED,
+    get_default_devices,
+    make_tc,
+)
 
 from mocking_classes import CountingEnv
 from packaging import version
@@ -398,6 +403,63 @@ class TestComposableBuffers:
             match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data2)
+
+    def test_extend_recompile(self, rb_type, sampler, writer, storage, size, datatype):
+        if rb_type is not ReplayBuffer:
+            pytest.skip(
+                "Only replay buffer of type 'ReplayBuffer' is currently supported."
+            )
+        if sampler in (PrioritizedSampler,):
+            pytest.skip(f"Sampler of type '{sampler.__name__}' is not yet supported.")
+        if storage is not LazyTensorStorage:
+            pytest.skip(
+                "Only storage of type 'LazyTensorStorage' is currently supported."
+            )
+        if writer is not RoundRobinWriter:
+            pytest.skip(
+                "Only writer of type 'RoundRobinWriter' is currently supported."
+            )
+
+        torch.compiler.reset()
+
+        storage_size = 10 * size
+        rb = self._get_rb(
+            rb_type=rb_type,
+            sampler=sampler,
+            writer=writer,
+            storage=storage,
+            size=storage_size,
+        )
+        data_size = size
+        data = self._get_data(datatype, size=data_size)
+
+        @torch.compile
+        def extend(data):
+            rb.extend(data)
+
+        # Number of times to extend the replay buffer
+        num_extend = 30
+
+        # NOTE: The first two calls to 'extend' currently cause recompilations,
+        # so avoid capturing those for now.
+        num_extend_before_capture = 2
+
+        for _ in range(num_extend_before_capture):
+            extend(data)
+
+        try:
+            torch._logging.set_logs(recompiles=True)
+            records = []
+            capture_log_records(records, "torch._dynamo", "recompiles")
+
+            for _ in range(num_extend - num_extend_before_capture):
+                extend(data)
+
+            assert len(records) == 0
+            assert len(rb) == storage_size
+
+        finally:
+            torch._logging.set_logs()
 
     def test_sample(self, rb_type, sampler, writer, storage, size, datatype):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
