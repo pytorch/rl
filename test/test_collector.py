@@ -43,6 +43,7 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
+from packaging import version
 from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
@@ -106,6 +107,7 @@ IS_WINDOWS = sys.platform == "win32"
 IS_OSX = sys.platform == "darwin"
 PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 class WrappablePolicy(nn.Module):
@@ -2654,6 +2656,9 @@ class TestDynamicEnvs:
             assert data.names[-1] == "time"
 
 
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+)
 class TestCompile:
     @pytest.mark.parametrize(
         "collector_cls",

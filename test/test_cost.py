@@ -46,6 +46,7 @@ from _utils_internal import (  # noqa
     get_default_devices,
 )
 from mocking_classes import ContinuousActionConvMockEnv
+from packaging import version
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
@@ -146,7 +147,7 @@ from torchrl.objectives.value.utils import (
     _split_and_pad_sequence,
 )
 
-TORCH_VERSION = torch.__version__
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 # Capture all warnings
 pytestmark = [
@@ -10332,7 +10333,7 @@ class TestDreamer(LossModuleTestBase):
             return
         if td_est is not None:
             loss_module.make_value_estimator(td_est)
-        loss_td, fake_data = loss_module(tensordict)
+        loss_td, fake_data = loss_module(tensordict.reshape(-1))
         assert not fake_data.requires_grad
         assert fake_data.shape == torch.Size([tensordict.numel(), imagination_horizon])
         if discount_loss:
@@ -15731,7 +15732,9 @@ class TestBuffer:
                 assert p.device == dest
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.5", reason="requires torch>=2.5")
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
+)
 def test_exploration_compile():
     m = ProbabilisticTensorDictModule(
         in_keys=["loc", "scale"],
