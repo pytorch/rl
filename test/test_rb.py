@@ -405,6 +405,11 @@ class TestComposableBuffers:
             rb.extend(data2)
 
     def test_extend_recompile(self, rb_type, sampler, writer, storage, size, datatype):
+        if _os_is_windows:
+            # Compiling on Windows requires "cl" compiler to be installed.
+            # <https://github.com/pytorch/pytorch/blob/8231180147a096a703d8891756068c89365292e0/torch/_inductor/cpp_builder.py#L143>
+            # Our Windows CI jobs do not have "cl", so skip this test.
+            pytest.skip("This test does not support Windows.")
         if rb_type is not ReplayBuffer:
             pytest.skip(
                 "Only replay buffer of type 'ReplayBuffer' is currently supported."
@@ -2261,6 +2266,34 @@ class TestSamplers:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample(batch_size=1)
         assert (s.exclude("index") == 0).all()
+
+    def test_sampler_without_rep_dumps_loads(self, tmpdir):
+        d0 = tmpdir + "/save0"
+        d1 = tmpdir + "/save1"
+        d2 = tmpdir + "/dump"
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyMemmapStorage(max_size=100, scratch_dir=d0, device="cpu"),
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            batch_size=8,
+        )
+        replay_buffer2 = TensorDictReplayBuffer(
+            storage=LazyMemmapStorage(max_size=100, scratch_dir=d1, device="cpu"),
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            batch_size=8,
+        )
+        td = TensorDict(
+            {"a": torch.arange(0, 27), ("b", "c"): torch.arange(1, 28)}, batch_size=[27]
+        )
+        replay_buffer.extend(td)
+        for _ in replay_buffer:
+            break
+        replay_buffer.dumps(d2)
+        replay_buffer2.loads(d2)
+        assert (
+            replay_buffer.sampler._sample_list == replay_buffer2.sampler._sample_list
+        ).all()
+        s = replay_buffer2.sample(3)
+        assert (s["a"] == s["b", "c"] - 1).all()
 
     @pytest.mark.parametrize("drop_last", [False, True])
     def test_sampler_without_replacement_cap_prefetch(self, drop_last):
