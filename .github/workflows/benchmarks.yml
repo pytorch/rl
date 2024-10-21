@@ -135,6 +135,8 @@ jobs:
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+        env:
+          GIT_WORK_TREE: /__w/rl/rl
         with:
           name: GPU Benchmark Results
           tool: 'pytest'
@@ -146,4 +148,3 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
-        working-directory: /__w/rl/rl
