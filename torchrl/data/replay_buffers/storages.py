@@ -1367,14 +1367,42 @@ def _collate_list_tensordict(x):
     return out
 
 
+@implement_for("torch", "2.4")
 def _stack_anything(data):
     if is_tensor_collection(data[0]):
         return LazyStackedTensorDict.maybe_dense_stack(data)
-    return torch.utils._pytree.tree_map(
+    return tree_map(
         lambda *x: torch.stack(x),
         *data,
         is_leaf=lambda x: isinstance(x, torch.Tensor) or is_tensor_collection(x),
     )
+
+
+@implement_for("torch", None, "2.4")
+def _stack_anything(data):  # noqa: F811
+    from tensordict import _pytree
+
+    if not _pytree.PYTREE_REGISTERED_TDS:
+        raise RuntimeError(
+            "TensorDict is not registered within PyTree. "
+            "If you see this error, it means tensordicts instances cannot be natively stacked using tree_map. "
+            "To solve this issue, (a) upgrade pytorch to a version > 2.4, or (b) make sure TensorDict is registered in PyTree. "
+            "If this error persists, open an issue on https://github.com/pytorch/rl/issues"
+        )
+    if is_tensor_collection(data[0]):
+        return LazyStackedTensorDict.maybe_dense_stack(data)
+    flat_trees = []
+    spec = None
+    for d in data:
+        flat_tree, spec = tree_flatten(d)
+        flat_trees.append(flat_tree)
+
+    leaves = []
+    for leaf in zip(*flat_trees):
+        leaf = torch.stack(leaf)
+        leaves.append(leaf)
+
+    return tree_unflatten(leaves, spec)
 
 
 def _collate_id(x):
