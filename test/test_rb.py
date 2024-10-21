@@ -2200,6 +2200,34 @@ class TestSamplers:
         s = new_replay_buffer.sample(batch_size=1)
         assert (s.exclude("index") == 0).all()
 
+    def test_sampler_without_rep_dumps_loads(self, tmpdir):
+        d0 = tmpdir + "/save0"
+        d1 = tmpdir + "/save1"
+        d2 = tmpdir + "/dump"
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyMemmapStorage(max_size=100, scratch_dir=d0, device="cpu"),
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            batch_size=8,
+        )
+        replay_buffer2 = TensorDictReplayBuffer(
+            storage=LazyMemmapStorage(max_size=100, scratch_dir=d1, device="cpu"),
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            batch_size=8,
+        )
+        td = TensorDict(
+            {"a": torch.arange(0, 27), ("b", "c"): torch.arange(1, 28)}, batch_size=[27]
+        )
+        replay_buffer.extend(td)
+        for _ in replay_buffer:
+            break
+        replay_buffer.dumps(d2)
+        replay_buffer2.loads(d2)
+        assert (
+            replay_buffer.sampler._sample_list == replay_buffer2.sampler._sample_list
+        ).all()
+        s = replay_buffer2.sample(3)
+        assert (s["a"] == s["b", "c"] - 1).all()
+
     @pytest.mark.parametrize("drop_last", [False, True])
     def test_sampler_without_replacement_cap_prefetch(self, drop_last):
         torch.manual_seed(0)
