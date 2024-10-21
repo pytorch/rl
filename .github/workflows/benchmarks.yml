@@ -77,17 +77,6 @@ jobs:
       image: nvidia/cuda:12.3.0-base-ubuntu22.04
       options: --gpus all
     steps:
-      - name: Set GITHUB_BRANCH environment variable
-        run: |
-          if [ "${{ github.event_name }}" == "push" ]; then
-            export GITHUB_BRANCH=${{ github.event.branch }}
-          elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            export GITHUB_BRANCH=${{ github.event.pull_request.head.ref }}
-          else
-            echo "Unsupported event type"
-            exit 1
-          fi
-          echo "GITHUB_BRANCH=$GITHUB_BRANCH" >> $GITHUB_ENV
       - name: Who triggered this?
         run: |
           echo "Action triggered by ${{ github.event.pull_request.html_url }}"
@@ -133,7 +122,6 @@ jobs:
           python3.10 -m pip install cmake ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
           python3.10 setup.py develop
-          # python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
 
           # test import
           python3 -c """import torch
@@ -158,3 +146,4 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
+        working-directory: /__w/rl/rl
