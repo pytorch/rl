@@ -43,6 +43,7 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
+from packaging import version
 from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
@@ -106,6 +107,7 @@ IS_WINDOWS = sys.platform == "win32"
 IS_OSX = sys.platform == "darwin"
 PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 class WrappablePolicy(nn.Module):
@@ -2654,6 +2656,9 @@ class TestDynamicEnvs:
             assert data.names[-1] == "time"
 
 
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+)
 class TestCompile:
     @pytest.mark.parametrize(
         "collector_cls",
@@ -2996,8 +3001,9 @@ def __deepcopy_error__(*args, **kwargs):
     raise RuntimeError("deepcopy not allowed")
 
 
-@pytest.mark.filterwarnings("error")
-@pytest.mark.filterwarnings("ignore:Tensordict is registered in PyTree")
+@pytest.mark.filterwarnings(
+    "error::UserWarning", "ignore:Tensordict is registered in PyTree:UserWarning"
+)
 @pytest.mark.parametrize(
     "collector_type",
     [
@@ -3015,6 +3021,8 @@ def test_no_deepcopy_policy(collector_type):
     #
     # If the policy is not a nn.Module or has no parameter, policy_device should warn (we don't know what to do but we
     # can trust that the user knows what to do).
+
+    # warnings.warn("Tensordict is registered in PyTree", category=UserWarning)
 
     shared_device = torch.device("cpu")
     if torch.cuda.is_available():

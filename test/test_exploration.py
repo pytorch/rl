@@ -757,7 +757,7 @@ class TestConsistentDropout:
 
         # NOTE: Please only put a module with one dropout layer.
         # That's how this test is constructed anyways.
-        @torch.no_grad
+        @torch.no_grad()
         def inner_verify_routine(module, env):
             # Perform transitions.
             collector = SyncDataCollector(
