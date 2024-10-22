@@ -157,6 +157,9 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:The current behavior of MLP when not providing `num_cells` is that the number"
     ),
+    pytest.mark.filterwarnings(
+        "ignore:dep_util is Deprecated. Use functions from setuptools instead"
+    ),
 ]
 
 
