@@ -149,7 +149,7 @@ class Storage:
         if self.ndim == 1:
             return torch.randint(
                 0,
-                len(self),
+                self._len,
                 (batch_size,),
                 generator=self._rng,
                 device=getattr(self, "device", None),

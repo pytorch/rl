@@ -404,7 +404,9 @@ class TestComposableBuffers:
         ) if cond else contextlib.nullcontext():
             rb.extend(data2)
 
-    def test_extend_recompile(self, rb_type, sampler, writer, storage, size, datatype):
+    def test_extend_sample_recompile(
+        self, rb_type, sampler, writer, storage, size, datatype
+    ):
         if _os_is_windows:
             # Compiling on Windows requires "cl" compiler to be installed.
             # <https://github.com/pytorch/pytorch/blob/8231180147a096a703d8891756068c89365292e0/torch/_inductor/cpp_builder.py#L143>
@@ -414,8 +416,8 @@ class TestComposableBuffers:
             pytest.skip(
                 "Only replay buffer of type 'ReplayBuffer' is currently supported."
             )
-        if sampler in (PrioritizedSampler,):
-            pytest.skip(f"Sampler of type '{sampler.__name__}' is not yet supported.")
+        if sampler is not RandomSampler:
+            pytest.skip("Only sampler of type 'RandomSampler' is currently supported.")
         if storage is not LazyTensorStorage:
             pytest.skip(
                 "Only storage of type 'LazyTensorStorage' is currently supported."
@@ -424,6 +426,8 @@ class TestComposableBuffers:
             pytest.skip(
                 "Only writer of type 'RoundRobinWriter' is currently supported."
             )
+        if datatype == "tensordict":
+            pytest.skip("'tensordict' datatype is not currently supported.")
 
         torch.compiler.reset()
 
@@ -439,18 +443,19 @@ class TestComposableBuffers:
         data = self._get_data(datatype, size=data_size)
 
         @torch.compile
-        def extend(data):
+        def extend_and_sample(data):
             rb.extend(data)
+            return rb.sample()
 
         # Number of times to extend the replay buffer
         num_extend = 30
 
-        # NOTE: The first two calls to 'extend' currently cause recompilations,
-        # so avoid capturing those for now.
+        # NOTE: The first two calls to 'extend' and 'sample' currently cause
+        # recompilations, so avoid capturing those for now.
         num_extend_before_capture = 2
 
         for _ in range(num_extend_before_capture):
-            extend(data)
+            extend_and_sample(data)
 
         try:
             torch._logging.set_logs(recompiles=True)
@@ -458,10 +463,10 @@ class TestComposableBuffers:
             capture_log_records(records, "torch._dynamo", "recompiles")
 
             for _ in range(num_extend - num_extend_before_capture):
-                extend(data)
+                extend_and_sample(data)
 
-            assert len(records) == 0
             assert len(rb) == storage_size
+            assert len(records) == 0
 
         finally:
             torch._logging.set_logs()
