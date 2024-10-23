@@ -144,16 +144,19 @@ class Storage:
     def _empty(self):
         ...
 
+    # NOTE: This property is used to enable compiled Storages. A `len(self)`
+    # call can cause recompiles, but for some reason, wrapping the call in a
+    # `property` decorated function avoids the recompiles.
+    @property
+    def len(self):
+        return len(self)
+
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
-        if isinstance(self, TensorStorage):
-            storage_len = self._len
-        else:
-            storage_len = len(self)
         if self.ndim == 1:
             return torch.randint(
                 0,
-                storage_len,
+                self.len,
                 (batch_size,),
                 generator=self._rng,
                 device=getattr(self, "device", None),
