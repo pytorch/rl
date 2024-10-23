@@ -429,7 +429,7 @@ class TestComposableBuffers:
         if datatype == "tensordict":
             pytest.skip("'tensordict' datatype is not currently supported.")
 
-        torch._dynamo.reset_code_caches()
+        torch._dynamo.reset()
 
         storage_size = 10 * size
         rb = self._get_rb(
