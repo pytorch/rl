@@ -116,6 +116,7 @@ _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 torch_2_3 = version.parse(
     ".".join([str(s) for s in version.parse(str(torch.__version__)).release])
@@ -404,14 +405,16 @@ class TestComposableBuffers:
         ) if cond else contextlib.nullcontext():
             rb.extend(data2)
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
+    # Compiling on Windows requires "cl" compiler to be installed.
+    # <https://github.com/pytorch/pytorch/blob/8231180147a096a703d8891756068c89365292e0/torch/_inductor/cpp_builder.py#L143>
+    # Our Windows CI jobs do not have "cl", so skip this test.
+    @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
     def test_extend_sample_recompile(
         self, rb_type, sampler, writer, storage, size, datatype
     ):
-        if _os_is_windows:
-            # Compiling on Windows requires "cl" compiler to be installed.
-            # <https://github.com/pytorch/pytorch/blob/8231180147a096a703d8891756068c89365292e0/torch/_inductor/cpp_builder.py#L143>
-            # Our Windows CI jobs do not have "cl", so skip this test.
-            pytest.skip("This test does not support Windows.")
         if rb_type is not ReplayBuffer:
             pytest.skip(
                 "Only replay buffer of type 'ReplayBuffer' is currently supported."
@@ -429,7 +432,7 @@ class TestComposableBuffers:
         if datatype == "tensordict":
             pytest.skip("'tensordict' datatype is not currently supported.")
 
-        torch._dynamo.reset()
+        torch._dynamo.reset_code_caches()
 
         storage_size = 10 * size
         rb = self._get_rb(
