@@ -17,7 +17,12 @@ import numpy as np
 import pytest
 import torch
 
-from _utils_internal import CARTPOLE_VERSIONED, get_default_devices, make_tc
+from _utils_internal import (
+    capture_log_records,
+    CARTPOLE_VERSIONED,
+    get_default_devices,
+    make_tc,
+)
 
 from mocking_classes import CountingEnv
 from packaging import version
@@ -111,6 +116,7 @@ _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 torch_2_3 = version.parse(
     ".".join([str(s) for s in version.parse(str(torch.__version__)).release])
@@ -398,6 +404,75 @@ class TestComposableBuffers:
             match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data2)
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
+    # Compiling on Windows requires "cl" compiler to be installed.
+    # <https://github.com/pytorch/pytorch/blob/8231180147a096a703d8891756068c89365292e0/torch/_inductor/cpp_builder.py#L143>
+    # Our Windows CI jobs do not have "cl", so skip this test.
+    @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
+    def test_extend_sample_recompile(
+        self, rb_type, sampler, writer, storage, size, datatype
+    ):
+        if rb_type is not ReplayBuffer:
+            pytest.skip(
+                "Only replay buffer of type 'ReplayBuffer' is currently supported."
+            )
+        if sampler is not RandomSampler:
+            pytest.skip("Only sampler of type 'RandomSampler' is currently supported.")
+        if storage is not LazyTensorStorage:
+            pytest.skip(
+                "Only storage of type 'LazyTensorStorage' is currently supported."
+            )
+        if writer is not RoundRobinWriter:
+            pytest.skip(
+                "Only writer of type 'RoundRobinWriter' is currently supported."
+            )
+        if datatype == "tensordict":
+            pytest.skip("'tensordict' datatype is not currently supported.")
+
+        torch._dynamo.reset_code_caches()
+
+        storage_size = 10 * size
+        rb = self._get_rb(
+            rb_type=rb_type,
+            sampler=sampler,
+            writer=writer,
+            storage=storage,
+            size=storage_size,
+        )
+        data_size = size
+        data = self._get_data(datatype, size=data_size)
+
+        @torch.compile
+        def extend_and_sample(data):
+            rb.extend(data)
+            return rb.sample()
+
+        # Number of times to extend the replay buffer
+        num_extend = 30
+
+        # NOTE: The first two calls to 'extend' and 'sample' currently cause
+        # recompilations, so avoid capturing those for now.
+        num_extend_before_capture = 2
+
+        for _ in range(num_extend_before_capture):
+            extend_and_sample(data)
+
+        try:
+            torch._logging.set_logs(recompiles=True)
+            records = []
+            capture_log_records(records, "torch._dynamo", "recompiles")
+
+            for _ in range(num_extend - num_extend_before_capture):
+                extend_and_sample(data)
+
+            assert len(rb) == storage_size
+            assert len(records) == 0
+
+        finally:
+            torch._logging.set_logs()
 
     def test_sample(self, rb_type, sampler, writer, storage, size, datatype):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
