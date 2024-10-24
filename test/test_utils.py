@@ -15,9 +15,12 @@ import pytest
 import torch
 
 from _utils_internal import capture_log_records, get_default_devices
+from packaging import version
 from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
 
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 @pytest.mark.parametrize("value", ["True", "1", "true"])
@@ -382,6 +385,9 @@ def test_rng_decorator(device):
 
 # Check that 'capture_log_records' captures records emitted when torch
 # recompiles a function.
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+)
 def test_capture_log_records_recompile():
     torch.compiler.reset()
 
