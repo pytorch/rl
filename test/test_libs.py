@@ -30,18 +30,32 @@ import numpy as np
 import pytest
 import torch
 
-from _utils_internal import (
-    _make_multithreaded_env,
-    CARTPOLE_VERSIONED,
-    get_available_devices,
-    get_default_devices,
-    HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    rand_reset,
-    retry,
-    rollout_consistency_assertion,
-)
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
+else:
+    from _utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
 from packaging import version
 from tensordict import (
     assert_allclose_td,
