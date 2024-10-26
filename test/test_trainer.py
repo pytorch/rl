@@ -22,7 +22,10 @@ try:
 except ImportError:
     _has_tb = False
 
-from _utils_internal import PONG_VERSIONED
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import PONG_VERSIONED
+else:
+    from _utils_internal import PONG_VERSIONED
 from tensordict import TensorDict
 from torchrl.data import (
     LazyMemmapStorage,

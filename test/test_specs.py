@@ -4,13 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import contextlib
+import os
 import warnings
 
 import numpy as np
 import pytest
 import torch
 import torchrl.data.tensor_specs
-from _utils_internal import get_available_devices, get_default_devices, set_global_var
 from scipy.stats import chisquare
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.utils import _unravel_key_to_tuple
@@ -44,6 +44,19 @@ from torchrl.data.tensor_specs import (
     UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        get_available_devices,
+        get_default_devices,
+        set_global_var,
+    )
+else:
+    from _utils_internal import (
+        get_available_devices,
+        get_default_devices,
+        set_global_var,
+    )
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
