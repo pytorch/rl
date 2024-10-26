@@ -7,6 +7,7 @@ import contextlib
 import functools
 import itertools
 import operator
+import os
 
 import sys
 import warnings
@@ -16,11 +17,7 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pytest
 import torch
-from _utils_internal import (  # noqa
-    dtype_fixture,
-    get_available_devices,
-    get_default_devices,
-)
+
 from mocking_classes import ContinuousActionConvMockEnv
 
 from packaging import version, version as pack_version
@@ -137,6 +134,19 @@ from torchrl.objectives.value.utils import (
     _make_gammas_tensor,
     _split_and_pad_sequence,
 )
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (  # noqa
+        dtype_fixture,
+        get_available_devices,
+        get_default_devices,
+    )
+else:
+    from _utils_internal import (  # noqa
+        dtype_fixture,
+        get_available_devices,
+        get_default_devices,
+    )
 
 _has_functorch = True
 try:

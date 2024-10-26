@@ -3,11 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import os
 
 import pytest
 import torch
 
-from _utils_internal import get_default_devices
 from mocking_classes import NestedCountingEnv
 from tensordict import TensorDict
 from tensordict.nn import CompositeDistribution, TensorDictModule
@@ -30,6 +30,11 @@ from torchrl.modules.tensordict_module.actors import (
     QValueModule,
     ValueOperator,
 )
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import get_default_devices
+else:
+    from _utils_internal import get_default_devices
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,7 @@ import contextlib
 import importlib.util
 
 import itertools
+import os
 import pickle
 import re
 import sys
@@ -20,16 +21,28 @@ import pytest
 import tensordict.tensordict
 import torch
 
-from _utils_internal import (  # noqa
-    BREAKOUT_VERSIONED,
-    dtype_fixture,
-    get_default_devices,
-    HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    rand_reset,
-    retry,
-)
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (  # noqa
+        BREAKOUT_VERSIONED,
+        dtype_fixture,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+    )
+else:
+    from _utils_internal import (  # noqa
+        BREAKOUT_VERSIONED,
+        dtype_fixture,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+    )
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -704,7 +717,11 @@ class TestCatFrames(TransformBase):
     def test_catframes_batching(
         self, batched_class, break_when_any_done, maybe_fork_ParallelEnv
     ):
-        from _utils_internal import CARTPOLE_VERSIONED
+
+        if os.getenv("PYTORCH_TEST_FBCODE"):
+            from pytorch.rl.test._utils_internal import CARTPOLE_VERSIONED
+        else:
+            from _utils_internal import CARTPOLE_VERSIONED
 
         if batched_class is ParallelEnv:
             batched_class = maybe_fork_ParallelEnv
@@ -1590,7 +1607,10 @@ class TestStepCounter(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_stepcount_batching(self, batched_class, break_when_any_done):
-        from _utils_internal import CARTPOLE_VERSIONED
+        if os.getenv("PYTORCH_TEST_FBCODE"):
+            from pytorch.rl.test._utils_internal import CARTPOLE_VERSIONED
+        else:
+            from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
@@ -5221,7 +5241,10 @@ class TestRewardSum(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_rewardsum_batching(self, batched_class, break_when_any_done):
-        from _utils_internal import CARTPOLE_VERSIONED
+        if os.getenv("PYTORCH_TEST_FBCODE"):
+            from pytorch.rl.test._utils_internal import CARTPOLE_VERSIONED
+        else:
+            from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())), RewardSum()
@@ -6325,7 +6348,10 @@ class TestTargetReturn(TransformBase):
     @pytest.mark.parametrize("batched_class", [SerialEnv, ParallelEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_targetreturn_batching(self, batched_class, break_when_any_done):
-        from _utils_internal import CARTPOLE_VERSIONED
+        if os.getenv("PYTORCH_TEST_FBCODE"):
+            from pytorch.rl.test._utils_internal import CARTPOLE_VERSIONED
+        else:
+            from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
@@ -6824,7 +6850,10 @@ class TestTensorDictPrimer(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_tensordictprimer_batching(self, batched_class, break_when_any_done):
-        from _utils_internal import CARTPOLE_VERSIONED
+        if os.getenv("PYTORCH_TEST_FBCODE"):
+            from pytorch.rl.test._utils_internal import CARTPOLE_VERSIONED
+        else:
+            from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
@@ -7036,7 +7065,10 @@ class TestTimeMaxPool(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_timemax_batching(self, batched_class, break_when_any_done):
-        from _utils_internal import CARTPOLE_VERSIONED
+        if os.getenv("PYTORCH_TEST_FBCODE"):
+            from pytorch.rl.test._utils_internal import CARTPOLE_VERSIONED
+        else:
+            from _utils_internal import CARTPOLE_VERSIONED
 
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
