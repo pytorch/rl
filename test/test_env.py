@@ -18,17 +18,30 @@ import pytest
 import torch
 import yaml
 
-from _utils_internal import (
-    _make_envs,
-    CARTPOLE_VERSIONED,
-    check_rollout_consistency_multikey_env,
-    decorate_thread_sub_func,
-    get_default_devices,
-    HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    rand_reset,
-)
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        _make_envs,
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+    )
+else:
+    from _utils_internal import (
+        _make_envs,
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+    )
 from mocking_classes import (
     ActionObsMergeLinear,
     AutoResetHeteroCountingEnv,

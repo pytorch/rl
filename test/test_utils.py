@@ -14,7 +14,10 @@ import pytest
 
 import torch
 
-from _utils_internal import capture_log_records, get_default_devices
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import capture_log_records, get_default_devices
+else:
+    from _utils_internal import capture_log_records, get_default_devices
 from packaging import version
 from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
 
