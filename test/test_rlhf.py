@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import os
 import zipfile
 from copy import deepcopy
 from pathlib import Path
@@ -13,7 +14,6 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from _utils_internal import get_default_devices
 from tensordict import (
     is_tensor_collection,
     MemoryMappedTensor,
@@ -32,6 +32,11 @@ from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
 from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
 from torchrl.data.rlhf.utils import RolloutFromModel
 from torchrl.modules.models.rlhf import GPT2RewardModel
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import get_default_devices
+else:
+    from _utils_internal import get_default_devices
 
 HERE = Path(__file__).parent
 
