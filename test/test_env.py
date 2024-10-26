@@ -3405,16 +3405,16 @@ class TestCustomEnvs:
         )
         assert r.shape == (5, 100)
 
-    def test_pendulum_env(self):
-        env = PendulumEnv(device=None)
-        assert env.device is None
-        env = PendulumEnv(device="cpu")
-        assert env.device == torch.device("cpu")
+    @pytest.mark.parametrize("device", [None, *get_default_devices()])
+    def test_pendulum_env(self, device):
+        env = PendulumEnv(device=device)
+        assert env.device == device
         check_env_specs(env)
+
         for _ in range(10):
             r = env.rollout(10)
             assert r.shape == torch.Size((10,))
-            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
             assert r.shape == torch.Size((5, 10))
 
 
