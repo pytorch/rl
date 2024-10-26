@@ -7,35 +7,11 @@ import contextlib
 import functools
 import itertools
 import operator
+
+import sys
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
-
-from packaging import version as pack_version
-from tensordict._C import unravel_keys
-from tensordict.nn import (
-    CompositeDistribution,
-    InteractionType,
-    ProbabilisticTensorDictModule,
-    ProbabilisticTensorDictModule as ProbMod,
-    ProbabilisticTensorDictSequential,
-    ProbabilisticTensorDictSequential as ProbSeq,
-    TensorDictModule as Mod,
-    TensorDictSequential,
-    TensorDictSequential as Seq,
-)
-from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
-from torchrl.modules.models import QMixer
-
-_has_functorch = True
-try:
-    import functorch as ft  # noqa
-
-    make_functional_with_buffers = ft.make_functional_with_buffers
-    FUNCTORCH_ERR = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERR = str(err)
 
 import numpy as np
 import pytest
@@ -47,9 +23,23 @@ from _utils_internal import (  # noqa
 )
 from mocking_classes import ContinuousActionConvMockEnv
 
-# from torchrl.data.postprocs.utils import expand_as_right
+from packaging import version, version as pack_version
+
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
-from tensordict.nn import NormalParamExtractor, TensorDictModule
+from tensordict._C import unravel_keys
+from tensordict.nn import (
+    CompositeDistribution,
+    InteractionType,
+    NormalParamExtractor,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictModule as ProbMod,
+    ProbabilisticTensorDictSequential,
+    ProbabilisticTensorDictSequential as ProbSeq,
+    TensorDictModule,
+    TensorDictModule as Mod,
+    TensorDictSequential,
+    TensorDictSequential as Seq,
+)
 from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
 from torch import autograd, nn
@@ -57,6 +47,7 @@ from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, U
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
+from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
 from torchrl.modules import (
     DistributionalQValueActor,
     OneHotCategorical,
@@ -65,6 +56,7 @@ from torchrl.modules import (
     WorldModelWrapper,
 )
 from torchrl.modules.distributions.continuous import TanhDelta, TanhNormal
+from torchrl.modules.models import QMixer
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -146,13 +138,27 @@ from torchrl.objectives.value.utils import (
     _split_and_pad_sequence,
 )
 
-TORCH_VERSION = torch.__version__
+_has_functorch = True
+try:
+    import functorch as ft  # noqa
+
+    make_functional_with_buffers = ft.make_functional_with_buffers
+    FUNCTORCH_ERR = ""
+except ImportError as err:
+    _has_functorch = False
+    FUNCTORCH_ERR = str(err)
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
+IS_WINDOWS = sys.platform == "win32"
 
 # Capture all warnings
 pytestmark = [
     pytest.mark.filterwarnings("error"),
     pytest.mark.filterwarnings(
         "ignore:The current behavior of MLP when not providing `num_cells` is that the number"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:dep_util is Deprecated. Use functions from setuptools instead"
     ),
 ]
 
@@ -10332,7 +10338,7 @@ class TestDreamer(LossModuleTestBase):
             return
         if td_est is not None:
             loss_module.make_value_estimator(td_est)
-        loss_td, fake_data = loss_module(tensordict)
+        loss_td, fake_data = loss_module(tensordict.reshape(-1))
         assert not fake_data.requires_grad
         assert fake_data.shape == torch.Size([tensordict.numel(), imagination_horizon])
         if discount_loss:
@@ -15731,8 +15737,16 @@ class TestBuffer:
                 assert p.device == dest
 
 
-@pytest.mark.skipif(TORCH_VERSION < "2.5", reason="requires torch>=2.5")
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
+)
+@pytest.mark.skipif(IS_WINDOWS, reason="windows tests do not support compile")
 def test_exploration_compile():
+    try:
+        torch._dynamo.reset_code_caches()
+    except Exception:
+        # older versions of PT don't have that function
+        pass
     m = ProbabilisticTensorDictModule(
         in_keys=["loc", "scale"],
         out_keys=["sample"],
