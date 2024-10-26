@@ -4,10 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import os
 
 import pytest
 import torch
-from _utils_internal import get_default_devices
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingEnvCountModule,
@@ -46,6 +46,11 @@ from torchrl.modules.tensordict_module.exploration import (
     OrnsteinUhlenbeckProcessModule,
     OrnsteinUhlenbeckProcessWrapper,
 )
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import get_default_devices
+else:
+    from _utils_internal import get_default_devices
 
 
 class TestEGreedy:

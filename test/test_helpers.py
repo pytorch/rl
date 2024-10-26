@@ -5,14 +5,13 @@
 
 import argparse
 import dataclasses
+import os
 import pathlib
 import sys
 from time import sleep
 
 import pytest
 import torch
-
-from _utils_internal import generate_seeds, get_default_devices
 from torchrl._utils import timeit
 
 try:
@@ -49,6 +48,11 @@ from torchrl.trainers.helpers.models import (
     DreamerConfig,
     make_dqn_actor,
 )
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import generate_seeds, get_default_devices
+else:
+    from _utils_internal import generate_seeds, get_default_devices
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 if TORCH_VERSION < version.parse("1.12.0"):

@@ -5,12 +5,12 @@
 
 import argparse
 import importlib.util
+import os
 
 import pytest
 import torch
 import torch.nn.functional as F
 
-from _utils_internal import get_default_devices
 from tensordict import TensorDictBase
 from torch import autograd, nn
 from torch.utils._pytree import tree_map
@@ -28,6 +28,11 @@ from torchrl.modules.distributions import (
     TanhDelta,
 )
 from torchrl.modules.distributions.continuous import SafeTanhTransform
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import get_default_devices
+else:
+    from _utils_internal import get_default_devices
 
 _has_scipy = importlib.util.find_spec("scipy", None) is not None
 
