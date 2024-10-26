@@ -182,16 +182,11 @@ class SamplerWithoutReplacement(Sampler):
         path = Path(path)
         path.mkdir(exist_ok=True)
 
-        with open(path / "sampler_metadata.json", "w") as file:
-            json.dump(
-                self.state_dict(),
-                file,
-            )
+        TensorDict(self.state_dict()).memmap(path)
 
     def loads(self, path):
-        with open(path / "sampler_metadata.json", "r") as file:
-            metadata = json.load(file)
-        self.load_state_dict(metadata)
+        sd = TensorDict.load_memmap(path).to_dict()
+        self.load_state_dict(sd)
 
     def _get_sample_list(self, storage: Storage, len_storage: int, batch_size: int):
         if storage is None:

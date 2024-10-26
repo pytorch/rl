@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from _utils_internal import get_default_devices
 from tensordict import TensorDictBase
 from torch import autograd, nn
+from torch.utils._pytree import tree_map
 from torchrl.modules import (
     NormalParamWrapper,
     OneHotCategorical,
@@ -182,7 +183,7 @@ class TestTruncatedNormal:
     @pytest.mark.parametrize("device", get_default_devices())
     def test_truncnormal(self, min, max, vecs, upscale, shape, device):
         torch.manual_seed(0)
-        *vecs, min, max, vecs, upscale = torch.utils._pytree.tree_map(
+        *vecs, min, max, vecs, upscale = tree_map(
             lambda t: torch.as_tensor(t, device=device),
             (*vecs, min, max, vecs, upscale),
         )
