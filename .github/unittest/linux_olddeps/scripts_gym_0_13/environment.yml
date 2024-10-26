@@ -27,3 +27,4 @@ dependencies:
     - pyopengl==3.1.4
     - ray
     - av
+    - h5py

@@ -144,12 +144,29 @@ class Storage:
     def _empty(self):
         ...
 
+    # NOTE: This property is used to enable compiled Storages. Calling
+    # `len(self)` on a TensorStorage should normally cause a graph break since
+    # it uses a `mp.Value`, and it does cause a break when the `len(self)` call
+    # happens within a method of TensorStorage itself. However, when the
+    # `len(self)` call happens in the Storage base class, for an unknown reason
+    # the compiler doesn't seem to recognize that there should be a graph break,
+    # and the lack of a break causes a recompile each time `len(self)` is called
+    # in this context. Also for an unknown reason, we can force the graph break
+    # to happen if we wrap the `len(self)` call with a `property`-decorated
+    # function. For another unknown reason, if we change
+    # `TensorStorage._len_value` from `mp.Value` to int, it seems like there
+    # should no longer be any need to recompile, but recompiles happen anyway.
+    # Ideally, this should all be investigated and understood in the future.
+    @property
+    def len(self):
+        return len(self)
+
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
             return torch.randint(
                 0,
-                len(self),
+                self.len,
                 (batch_size,),
                 generator=self._rng,
                 device=getattr(self, "device", None),
@@ -1367,14 +1384,42 @@ def _collate_list_tensordict(x):
     return out
 
 
+@implement_for("torch", "2.4")
 def _stack_anything(data):
     if is_tensor_collection(data[0]):
         return LazyStackedTensorDict.maybe_dense_stack(data)
-    return torch.utils._pytree.tree_map(
+    return tree_map(
         lambda *x: torch.stack(x),
         *data,
         is_leaf=lambda x: isinstance(x, torch.Tensor) or is_tensor_collection(x),
     )
+
+
+@implement_for("torch", None, "2.4")
+def _stack_anything(data):  # noqa: F811
+    from tensordict import _pytree
+
+    if not _pytree.PYTREE_REGISTERED_TDS:
+        raise RuntimeError(
+            "TensorDict is not registered within PyTree. "
+            "If you see this error, it means tensordicts instances cannot be natively stacked using tree_map. "
+            "To solve this issue, (a) upgrade pytorch to a version > 2.4, or (b) make sure TensorDict is registered in PyTree. "
+            "If this error persists, open an issue on https://github.com/pytorch/rl/issues"
+        )
+    if is_tensor_collection(data[0]):
+        return LazyStackedTensorDict.maybe_dense_stack(data)
+    flat_trees = []
+    spec = None
+    for d in data:
+        flat_tree, spec = tree_flatten(d)
+        flat_trees.append(flat_tree)
+
+    leaves = []
+    for leaf in zip(*flat_trees):
+        leaf = torch.stack(leaf)
+        leaves.append(leaf)
+
+    return tree_unflatten(leaves, spec)
 
 
 def _collate_id(x):

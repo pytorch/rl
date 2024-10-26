@@ -31,6 +31,7 @@ from tensordict import (
 from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
+from torch.utils._pytree import tree_map
 
 from torchrl._utils import _make_ordinal_device, accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
@@ -319,9 +320,7 @@ class ReplayBuffer:
     def _transpose(self, data):
         if is_tensor_collection(data):
             return data.transpose(self.dim_extend, 0)
-        return torch.utils._pytree.tree_map(
-            lambda x: x.transpose(self.dim_extend, 0), data
-        )
+        return tree_map(lambda x: x.transpose(self.dim_extend, 0), data)
 
     def _get_collate_fn(self, collate_fn):
         self._collate_fn = (
