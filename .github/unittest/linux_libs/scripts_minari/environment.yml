@@ -18,3 +18,4 @@ dependencies:
     - scipy
     - hydra-core
     - minari[gcs,hdf5]
+    - gymnasium<1.0.0
