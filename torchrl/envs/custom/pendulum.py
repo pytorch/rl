@@ -220,7 +220,7 @@ class PendulumEnv(EnvBase):
 
     def __init__(self, td_params=None, seed=None, device=None):
         if td_params is None:
-            td_params = self.gen_params()
+            td_params = self.gen_params(device=self.device)
 
         super().__init__(device=device)
         self._make_spec(td_params)
@@ -273,7 +273,7 @@ class PendulumEnv(EnvBase):
             # if no ``tensordict`` is passed, we generate a single set of hyperparameters
             # Otherwise, we assume that the input ``tensordict`` contains all the relevant
             # parameters to get started.
-            tensordict = self.gen_params(batch_size=batch_size)
+            tensordict = self.gen_params(batch_size=batch_size, device=self.device)
 
         high_th = torch.tensor(self.DEFAULT_X, device=self.device)
         high_thdot = torch.tensor(self.DEFAULT_Y, device=self.device)
@@ -355,12 +355,12 @@ class PendulumEnv(EnvBase):
         return composite
 
     def _set_seed(self, seed: int):
-        rng = torch.Generator()
+        rng = torch.Generator(device=self.device)
         rng.manual_seed(seed)
         self.rng = rng
 
     @staticmethod
-    def gen_params(g=10.0, batch_size=None) -> TensorDictBase:
+    def gen_params(g=10.0, batch_size=None, device=None) -> TensorDictBase:
         """Returns a ``tensordict`` containing the physical parameters such as gravitational force and torque or speed limits."""
         if batch_size is None:
             batch_size = []
@@ -379,6 +379,7 @@ class PendulumEnv(EnvBase):
                 )
             },
             [],
+            device=device,
         )
         if batch_size:
             td = td.expand(batch_size).contiguous()
