@@ -7,25 +7,13 @@ from __future__ import annotations
 import argparse
 import functools
 import gc
+import os
 
 import sys
 
 import numpy as np
 import pytest
 import torch
-
-from _utils_internal import (
-    CARTPOLE_VERSIONED,
-    check_rollout_consistency_multikey_env,
-    decorate_thread_sub_func,
-    generate_seeds,
-    get_available_devices,
-    get_default_devices,
-    LSTMNet,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    retry,
-)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -101,6 +89,33 @@ from torchrl.envs.utils import (
     RandomPolicy,
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        generate_seeds,
+        get_available_devices,
+        get_default_devices,
+        LSTMNet,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        retry,
+    )
+else:
+    from _utils_internal import (
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        generate_seeds,
+        get_available_devices,
+        get_default_devices,
+        LSTMNet,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        retry,
+    )
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"

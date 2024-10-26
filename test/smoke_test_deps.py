@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import os
 import tempfile
 
 import pytest
@@ -46,7 +47,10 @@ def test_gym():
     from torchrl.envs.libs.gym import _has_gym, GymEnv  # noqa
 
     assert _has_gym
-    from _utils_internal import PONG_VERSIONED
+    if os.getenv("PYTORCH_TEST_FBCODE"):
+        from pytorch.rl.test._utils_internal import PONG_VERSIONED
+    else:
+        from _utils_internal import PONG_VERSIONED
 
     env = GymEnv(PONG_VERSIONED())
     env.reset()
