@@ -50,7 +50,7 @@ from torchrl.trainers.helpers.models import (
     make_dqn_actor,
 )
 
-TORCH_VERSION = version.parse(torch.__version__)
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 if TORCH_VERSION < version.parse("1.12.0"):
     UNSQUEEZE_SINGLETON = True
 else:
