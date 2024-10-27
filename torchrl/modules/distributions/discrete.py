@@ -54,7 +54,7 @@ class ReparamGradientStrategy(Enum):
 class OneHotCategorical(D.Categorical):
     """One-hot categorical distribution.
 
-    This class behaves excacly as torch.distributions.Categorical except that it reads and produces one-hot encodings
+    This class behaves exactly as torch.distributions.Categorical except that it reads and produces one-hot encodings
     of the discrete tensors.
 
     Args:
@@ -64,7 +64,7 @@ class OneHotCategorical(D.Categorical):
             reparameterized samples.
             ``ReparamGradientStrategy.PassThrough`` will compute the sample gradients
              by using the softmax valued log-probability as a proxy to the
-             samples gradients.
+             sample gradients.
             ``ReparamGradientStrategy.RelaxedOneHot`` will use
             :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.
 
@@ -153,7 +153,7 @@ class MaskedCategorical(D.Categorical):
     Args:
         logits (torch.Tensor): event log probabilities (unnormalized)
         probs (torch.Tensor): event probabilities. If provided, the probabilities
-            corresponding to to masked items will be zeroed and the probability
+            corresponding to masked items will be zeroed and the probability
             re-normalized along its last dimension.
 
     Keyword Args:
@@ -304,7 +304,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
     Args:
         logits (torch.Tensor): event log probabilities (unnormalized)
         probs (torch.Tensor): event probabilities. If provided, the probabilities
-            corresponding to to masked items will be zeroed and the probability
+            corresponding to masked items will be zeroed and the probability
             re-normalized along its last dimension.
 
     Keyword Args:
