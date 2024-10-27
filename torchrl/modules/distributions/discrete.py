@@ -11,10 +11,7 @@ import torch
 import torch.distributions as D
 import torch.nn.functional as F
 
-__all__ = [
-    "OneHotCategorical",
-    "MaskedCategorical",
-]
+__all__ = ["OneHotCategorical", "MaskedCategorical", "Ordinal", "OneHotOrdinal"]
 
 
 def _treat_categorical_params(
