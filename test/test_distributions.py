@@ -712,7 +712,7 @@ class TestOrdinal:
         assert actions.min() >= 0
         assert actions.max() < num_categories
 
-    def test_bounded_gradients(self, distribution: type) -> None:
+    def test_bounded_gradients(self) -> None:
         logits = torch.tensor(
             [[1.0, 0.0, torch.finfo().max], [1.0, 0.0, torch.finfo().min]],
             requires_grad=True,
@@ -750,7 +750,7 @@ class TestOrdinal:
 
 class TestOneHotOrdinal:
     @pytest.mark.parametrize("dtype", [torch.float, torch.double])
-    @pytest.mark.parametrize("device", ("cpu", "meta"))
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("logit_shape", [(10,), (10, 10), (5, 10, 20)])
     def test_correct_sampling_shape(
         self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
@@ -780,7 +780,7 @@ class TestOneHotOrdinal:
         assert torch.all(actions.sum(-1))
         assert actions.shape[-1] == num_categories
 
-    def test_bounded_gradients(self, distribution: type) -> None:
+    def test_bounded_gradients(self) -> None:
         logits = torch.tensor(
             [[1.0, 0.0, torch.finfo().max], [1.0, 0.0, torch.finfo().min]],
             requires_grad=True,
