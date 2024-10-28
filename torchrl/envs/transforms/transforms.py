@@ -4827,16 +4827,18 @@ class TensorDictPrimer(Transform):
     ) -> TensorDictBase:
         """Sets the default values in the input tensordict.
 
-        If the parent is batch-locked, we assume that the specs have the appropriate leading
+        If the parent is batch-locked, we make sure the specs have the appropriate leading
         shape. We allow for execution when the parent is missing, in which case the
         spec shape is assumed to match the tensordict's.
-
         """
         _reset = _get_reset(self.reset_key, tensordict)
-        if self.primers.shape[: len(tensordict.shape)] != self.parent.batch_size:
+        if (
+            self.parent
+            and self.primers.shape[: len(tensordict.shape)] != self.parent.batch_size
+        ):
             try:
                 # We try to set the primer shape to the parent shape
-                self.primers.shape = tensordict.shape
+                self.primers.shape = self.parent.batch_size
             except ValueError:
                 # If we fail, we expand them to parent batch size
                 self.primers = self._expand_shape(self.primers)
