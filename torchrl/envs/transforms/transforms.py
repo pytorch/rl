@@ -4833,6 +4833,8 @@ class TensorDictPrimer(Transform):
 
         """
         _reset = _get_reset(self.reset_key, tensordict)
+        if self.primers.shape[: len(tensordict.shape)] != tensordict.shape:
+            self.primers = self.primers.expand(self._batch_size)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
                 if self.random:
