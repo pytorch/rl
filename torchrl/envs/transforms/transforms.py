@@ -4760,7 +4760,7 @@ class TensorDictPrimer(Transform):
                 # We try to set the primer shape to the observation spec shape
                 self.primers.shape = observation_spec.shape
             except ValueError:
-                # If we fail, we expnad them to that shape
+                # If we fail, we expand them to that shape
                 self.primers = self._expand_shape(self.primers)
         device = observation_spec.device
         observation_spec.update(self.primers.clone().to(device))
@@ -4833,8 +4833,13 @@ class TensorDictPrimer(Transform):
 
         """
         _reset = _get_reset(self.reset_key, tensordict)
-        if self.primers.shape[: len(tensordict.shape)] != tensordict.shape:
-            self.primers = self.primers.expand(self._batch_size)
+        if self.primers.shape[: len(tensordict.shape)] != self.parent.batch_size:
+            try:
+                # We try to set the primer shape to the parent shape
+                self.primers.shape = tensordict.shape
+            except ValueError:
+                # If we fail, we expand them to parent batch size
+                self.primers = self._expand_shape(self.primers)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
                 if self.random:
