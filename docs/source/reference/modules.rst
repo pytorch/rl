@@ -553,6 +553,8 @@ Some distributions are typically used in RL scripts.
     OneHotCategorical
     MaskedCategorical
     MaskedOneHotCategorical
+    Ordinal
+    OneHotOrdinal
 
 Utils
 -----

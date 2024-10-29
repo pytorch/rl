@@ -14,6 +14,8 @@ from .distributions import (
     NormalParamExtractor,
     NormalParamWrapper,
     OneHotCategorical,
+    OneHotOrdinal,
+    Ordinal,
     ReparamGradientStrategy,
     TanhDelta,
     TanhNormal,
