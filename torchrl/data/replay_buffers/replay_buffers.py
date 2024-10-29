@@ -712,7 +712,7 @@ class ReplayBuffer:
                 "for a proper usage of the batch-size arguments."
             )
         if not self._prefetch:
-            ret = self._sample(batch_size)
+            result = self._sample(batch_size)
         else:
             with self._futures_lock:
                 while (
@@ -722,11 +722,15 @@ class ReplayBuffer:
                 ) or not len(self._prefetch_queue):
                     fut = self._prefetch_executor.submit(self._sample, batch_size)
                     self._prefetch_queue.append(fut)
-                ret = self._prefetch_queue.popleft().result()
+                result = self._prefetch_queue.popleft().result()
 
         if return_info:
-            return ret
-        return ret[0]
+            out, info = result
+            if getattr(self.storage, "device", None) is not None:
+                device = self.storage.device
+                info = tree_map(lambda x: x.to(device) if hasattr(x, "to") else x, info)
+            return out, info
+        return result[0]
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self._sampler.mark_update(index, storage=self._storage)
