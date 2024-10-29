@@ -18,8 +18,6 @@ import numpy as np
 import pytest
 import torch
 
-from mocking_classes import ContinuousActionConvMockEnv
-
 from packaging import version, version as pack_version
 
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
@@ -141,12 +139,14 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         get_available_devices,
         get_default_devices,
     )
+    from pytorch.rl.test.mocking_classes import ContinuousActionConvMockEnv
 else:
     from _utils_internal import (  # noqa
         dtype_fixture,
         get_available_devices,
         get_default_devices,
     )
+    from mocking_classes import ContinuousActionConvMockEnv
 
 _has_functorch = True
 try:
