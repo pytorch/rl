@@ -32,6 +32,20 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         rand_reset,
         retry,
     )
+    from pytorch.rl.test.mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        IncrementingEnv,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
 else:
     from _utils_internal import (  # noqa
         BREAKOUT_VERSIONED,
@@ -43,20 +57,20 @@ else:
         rand_reset,
         retry,
     )
-from mocking_classes import (
-    ContinuousActionVecMockEnv,
-    CountingBatchedEnv,
-    CountingEnv,
-    CountingEnvCountPolicy,
-    DiscreteActionConvMockEnv,
-    DiscreteActionConvMockEnvNumpy,
-    IncrementingEnv,
-    MockBatchedLockedEnv,
-    MockBatchedUnLockedEnv,
-    MultiKeyCountingEnv,
-    MultiKeyCountingEnvPolicy,
-    NestedCountingEnv,
-)
+    from mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        IncrementingEnv,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
 from tensordict import TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import TensorDictSequential
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
