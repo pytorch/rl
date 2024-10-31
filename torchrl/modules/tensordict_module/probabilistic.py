@@ -128,7 +128,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, Composite):
-            if len(self.out_keys) > 1:
+            if len(self.out_keys) - return_log_prob > 1:
                 raise RuntimeError(
                     f"got more than one out_key for the SafeModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a Composite object or no spec at all."
