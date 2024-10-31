@@ -102,8 +102,12 @@ and outputs the parameters of a distribution, while the distribution constructor
 reads these parameters and gets a random sample from the distribution and/or
 provides a :class:`torch.distributions.Distribution` object.
 
-    >>> from tensordict.nn import NormalParamExtractor, TensorDictSequential
+    >>> from tensordict.nn import NormalParamExtractor, TensorDictSequential, TensorDictModule
+    >>> from torchrl.modules import SafeProbabilisticModule
+    >>> from torchrl.envs import GymEnv
     >>> from torch.distributions import Normal
+    >>> from torch import nn
+    >>>
     >>> env = GymEnv("Pendulum-v1")
     >>> action_spec = env.action_spec
     >>> model = nn.Sequential(nn.LazyLinear(action_spec.shape[-1] * 2), NormalParamExtractor())
@@ -124,6 +128,7 @@ provides a :class:`torch.distributions.Distribution` object.
 To facilitate the construction of probabilistic policies, we provide a dedicated
 :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`:
 
+    >>> from torchrl.modules import ProbabilisticActor
     >>> policy = ProbabilisticActor(
     ...     model,
     ...     in_keys=["loc", "scale"],
