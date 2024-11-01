@@ -4594,9 +4594,9 @@ class TensorDictPrimer(Transform):
 
     When used in a `TransformedEnv`, the spec shapes must match the environment's shape if
     the parent environment is batch-locked (`env.batch_locked=True`). If the spec shapes and
-    parent shapes do not match, the spec shapes are modified in place to match the leading
-    dimensions of the parent's batch size.  This adjustment is made for cases where the primer
-    shape is known during instantiation, but the batch size is not known until reset.
+    parent shapes do not match, the spec shapes are modified in-place to match the leading
+    dimensions of the parent's batch size. This adjustment is made for cases where the parent
+    batch size dimension is not known during instantiation.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
