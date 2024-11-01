@@ -6941,8 +6941,7 @@ class TestTensorDictPrimer(TransformBase):
         ).all
 
     def test_spec_shape_inplace_correction(self):
-        hidden_size = input_size = 2
-        num_layers = 1
+        hidden_size = input_size = num_layers = 2
         model = GRUModule(
             input_size, hidden_size, num_layers, in_key="observation", out_key="action"
         )

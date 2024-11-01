@@ -4870,14 +4870,9 @@ class TensorDictPrimer(Transform):
         if (
             self.parent
             and self.parent.batch_locked
-            and self.primers.shape[: len(tensordict.shape)] != self.parent.batch_size
+            and self.primers.shape[: len(self.parent.shape)] != self.parent.batch_size
         ):
-            try:
-                # We try to set the primer shape to the parent shape
-                self.primers.shape = self.parent.batch_size
-            except ValueError:
-                # If we fail, we expand them to parent batch size
-                self.primers = self._expand_shape(self.primers)
+            self.primers = self._expand_shape(self.primers)
         if _reset.any():
             for key, spec in self.primers.items(True, True):
                 if self.random:
