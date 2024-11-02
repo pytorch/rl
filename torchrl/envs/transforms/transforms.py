@@ -18,6 +18,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Mapping,
     Optional,
     OrderedDict,
     Sequence,
@@ -8678,3 +8679,100 @@ class ActionDiscretizer(Transform):
         if self.sampling == self.SamplingStrategy.RANDOM:
             action = action + self.jitters * torch.rand_like(self.jitters)
         return tensordict.set(self.in_keys_inv[0], action)
+
+
+class TrajCounter(Transform):
+    def __init__(self, out_key: NestedKey = "traj_count"):
+        super().__init__(in_keys=[], out_keys=[out_key])
+        self._traj_count = mp.Value("i", 0)
+        self._lock = mp.RLock()
+        self._initialized = False
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        if not self._initialized:
+            self._initialized = True
+        rk = self.parent.reset_keys
+        if len(rk) > 1:
+            raise RuntimeError(
+                f"Multiple reset keys is not supported yet with transforms of type {type(self).__name__}."
+            )
+        rk = rk[0]
+        reset = None
+        if tensordict is not None:
+            reset = tensordict.get(rk, default=None)
+        if reset is None:
+            reset = torch.ones(
+                self.container.observation_spec[self.out_keys[0]].shape,
+                device=tensordict_reset.device,
+                dtype=torch.bool,
+            )
+        with self._lock:
+            tc = int(self._traj_count.value)
+            episodes = torch.arange(
+                tc, tc + reset.sum(), device=self.parent.device
+            ).view(reset.shape)
+            self._traj_count.value += reset.sum()
+            tensordict_reset.set(self.out_keys[0], episodes)
+            return tensordict_reset
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        if not self._initialized:
+            raise RuntimeError("_step was called before _reset was called.")
+        next_tensordict.set(self.out_keys[0], tensordict.get(self.out_keys[0]))
+        return next_tensordict
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError(
+            f"{type(self).__name__} can only be called within an environment step or reset."
+        )
+
+    def state_dict(self, *args, destination=None, prefix="", keep_vars=False):
+        return {
+            "traj_count": int(self._traj_count.value),
+            "initialized": self.initialized,
+        }
+
+    def load_state_dict(
+        self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False
+    ):
+        self._traj_count.value *= 0
+        self._traj_count.value += state_dict["traj_count"]
+        self._initialized = state_dict["initialized"]
+
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
+        if not isinstance(observation_spec, Composite):
+            raise ValueError(
+                f"observation_spec was expected to be of type Composite. Got {type(observation_spec)} instead."
+            )
+        full_done_spec = self.parent.output_spec["full_done_spec"]
+        traj_count_key = self.out_keys[0]
+        # find a matching done key (there might be more than one)
+        for done_key in self.parent.done_keys:
+            # check root
+            if type(done_key) != type(traj_count_key):
+                continue
+            if isinstance(done_key, tuple):
+                if done_key[:-1] == step_count_key[:-1]:
+                    shape = full_done_spec[done_key].shape
+                    break
+            if isinstance(done_key, str):
+                shape = full_done_spec[done_key].shape
+                break
+
+        else:
+            raise KeyError(
+                f"Could not find root of traj_count key {traj_count_key} in done keys {self.done_keys}."
+            )
+        observation_spec[traj_count_key] = Bounded(
+            shape=shape,
+            dtype=torch.int64,
+            device=observation_spec.device,
+            low=0,
+            high=torch.iinfo(torch.int64).max,
+        )
+        print("observation_spec", observation_spec)
+        return super().transform_observation_spec(observation_spec)

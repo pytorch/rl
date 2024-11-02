@@ -135,6 +135,7 @@ from torchrl.envs import (
     TensorDictPrimer,
     TimeMaxPool,
     ToTensorImage,
+    TrajCounter,
     TransformedEnv,
     UnsqueezeTransform,
     VC1Transform,
@@ -1924,6 +1925,60 @@ class TestStepCounter(TransformBase):
         )
         assert len(env.transform.step_count_keys) == 1
         assert env.transform.step_count_keys[0] == ("data", "step_count")
+
+
+class TestTrajCounter(TransformBase):
+    def test_single_trans_env_check(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(CountingEnv(max_steps=4), TrajCounter())
+        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        check_env_specs(env)
+        r = env.rollout(100, lambda td: td.set("action", 1), break_when_any_done=False)
+        assert r["traj_count"].max() == 20
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        ...
+
+    def test_serial_trans_env_check(self):
+        ...
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        ...
+
+    def test_trans_serial_env_check(self):
+        ...
+
+    def test_transform_env(self):
+        ...
+
+    def test_nested(self):
+        ...
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        ...
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
+    def test_transform_compose(self, device, batch):
+        ...
+
+    def test_transform_inverse(self):
+        ...
+
+    def test_transform_model(self):
+        ...
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
+    def test_transform_no_env(self, device, batch):
+        ...
+
+    def test_step_counter_observation_spec(self):
+        ...
+
+    def test_stepcounter_ignore(self):
+        ...
 
 
 class TestCatTensors(TransformBase):
