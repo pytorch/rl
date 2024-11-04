@@ -21,6 +21,8 @@ import pytest
 import tensordict.tensordict
 import torch
 
+from torchrl.collectors import MultiSyncDataCollector
+
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (  # noqa
         BREAKOUT_VERSIONED,
@@ -135,6 +137,7 @@ from torchrl.envs import (
     TensorDictPrimer,
     TimeMaxPool,
     ToTensorImage,
+    TrajCounter,
     TransformedEnv,
     UnsqueezeTransform,
     VC1Transform,
@@ -1924,6 +1927,213 @@ class TestStepCounter(TransformBase):
         )
         assert len(env.transform.step_count_keys) == 1
         assert env.transform.step_count_keys[0] == ("data", "step_count")
+
+
+class TestTrajCounter(TransformBase):
+    def test_single_trans_env_check(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(CountingEnv(max_steps=4), TrajCounter())
+        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("predefined", [True, False])
+    def test_parallel_trans_env_check(self, predefined):
+        if predefined:
+            t = TrajCounter()
+        else:
+            t = None
+
+        def make_env(max_steps=4, t=t):
+            if t is None:
+                t = TrajCounter()
+            env = TransformedEnv(CountingEnv(max_steps=max_steps), t.clone())
+            env.transform.transform_observation_spec(env.base_env.observation_spec)
+            return env
+
+        if predefined:
+            penv = ParallelEnv(
+                2,
+                [EnvCreator(make_env, max_steps=4), EnvCreator(make_env, max_steps=5)],
+                mp_start_method="spawn",
+            )
+        else:
+            make_env_c0 = EnvCreator(make_env)
+            make_env_c1 = make_env_c0.make_variant(max_steps=5)
+            penv = ParallelEnv(
+                2,
+                [make_env_c0, make_env_c1],
+                mp_start_method="spawn",
+            )
+
+        r = penv.rollout(100, break_when_any_done=False)
+        s0 = set(r[0]["traj_count"].squeeze().tolist())
+        s1 = set(r[1]["traj_count"].squeeze().tolist())
+        assert len(s1.intersection(s0)) == 0
+
+    @pytest.mark.parametrize("predefined", [True, False])
+    def test_serial_trans_env_check(self, predefined):
+        if predefined:
+            t = TrajCounter()
+        else:
+            t = None
+
+        def make_env(max_steps=4, t=t):
+            if t is None:
+                t = TrajCounter()
+            else:
+                t = t.clone()
+            env = TransformedEnv(CountingEnv(max_steps=max_steps), t)
+            env.transform.transform_observation_spec(env.base_env.observation_spec)
+            return env
+
+        if predefined:
+            penv = SerialEnv(
+                2,
+                [EnvCreator(make_env, max_steps=4), EnvCreator(make_env, max_steps=5)],
+            )
+        else:
+            make_env_c0 = EnvCreator(make_env)
+            make_env_c1 = make_env_c0.make_variant(max_steps=5)
+            penv = SerialEnv(
+                2,
+                [make_env_c0, make_env_c1],
+            )
+
+        r = penv.rollout(100, break_when_any_done=False)
+        s0 = set(r[0]["traj_count"].squeeze().tolist())
+        s1 = set(r[1]["traj_count"].squeeze().tolist())
+        assert len(s1.intersection(s0)) == 0
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(
+                2, [lambda: CountingEnv(max_steps=4), lambda: CountingEnv(max_steps=5)]
+            ),
+            TrajCounter(),
+        )
+        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        r = env.rollout(
+            100,
+            lambda td: td.set("action", torch.ones(env.shape + (1,))),
+            break_when_any_done=False,
+        )
+        check_env_specs(env)
+        assert r["traj_count"].max() == 36
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(
+                2, [lambda: CountingEnv(max_steps=4), lambda: CountingEnv(max_steps=5)]
+            ),
+            TrajCounter(),
+        )
+        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        r = env.rollout(
+            100,
+            lambda td: td.set("action", torch.ones(env.shape + (1,))),
+            break_when_any_done=False,
+        )
+        check_env_specs(env)
+        assert r["traj_count"].max() == 36
+
+    def test_transform_env(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(CountingEnv(max_steps=4), TrajCounter())
+        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        r = env.rollout(100, lambda td: td.set("action", 1), break_when_any_done=False)
+        assert r["traj_count"].max() == 19
+
+    def test_nested(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            CountingEnv(max_steps=4),
+            Compose(
+                RenameTransform("done", ("nested", "done"), create_copy=True),
+                TrajCounter(out_key=(("nested"), (("traj_count",),))),
+            ),
+        )
+        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        r = env.rollout(100, lambda td: td.set("action", 1), break_when_any_done=False)
+        assert r["nested", "traj_count"].max() == 19
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        t = TrajCounter()
+        rb = rbclass(storage=LazyTensorStorage(20))
+        rb.append_transform(t)
+        td = (
+            TensorDict(
+                {("next", "observation"): torch.randn(3), "action": torch.randn(2)}, []
+            )
+            .expand(10)
+            .contiguous()
+        )
+        rb.extend(td)
+        with pytest.raises(
+            RuntimeError,
+            match="TrajCounter can only be called within an environment step or reset",
+        ):
+            td = rb.sample(10)
+
+    def test_collector_match(self):
+        # The counter in the collector should match the one from the transform
+        t = TrajCounter()
+
+        def make_env(max_steps=4):
+            env = TransformedEnv(CountingEnv(max_steps=max_steps), t.clone())
+            env.transform.transform_observation_spec(env.base_env.observation_spec)
+            return env
+
+        collector = MultiSyncDataCollector(
+            [EnvCreator(make_env, max_steps=5), EnvCreator(make_env, max_steps=4)],
+            total_frames=99,
+            frames_per_batch=8,
+        )
+        for d in collector:
+            # The env has one more traj because the collector calls reset during init
+            assert d["collector", "traj_ids"].max() == d["next", "traj_count"].max() - 1
+            assert d["traj_count"].max() > 0
+
+    def test_transform_compose(self):
+        t = TrajCounter()
+        t = nn.Sequential(t)
+        td = (
+            TensorDict(
+                {("next", "observation"): torch.randn(3), "action": torch.randn(2)}, []
+            )
+            .expand(10)
+            .contiguous()
+        )
+
+        with pytest.raises(
+            RuntimeError,
+            match="TrajCounter can only be called within an environment step or reset",
+        ):
+            td = t(td)
+
+    def test_transform_inverse(self):
+        pytest.skip("No inverse transform for TrajCounter")
+
+    def test_transform_model(self):
+        t = TrajCounter()
+        td = (
+            TensorDict(
+                {("next", "observation"): torch.randn(3), "action": torch.randn(2)}, []
+            )
+            .expand(10)
+            .contiguous()
+        )
+
+        with pytest.raises(
+            RuntimeError,
+            match="TrajCounter can only be called within an environment step or reset",
+        ):
+            td = t(td)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
+    def test_transform_no_env(self, device, batch):
+        pytest.skip("TrajCounter cannot be called without env")
 
 
 class TestCatTensors(TransformBase):
