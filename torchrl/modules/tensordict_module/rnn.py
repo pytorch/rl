@@ -234,7 +234,7 @@ class LSTM(LSTMBase):
 
         return hy, cy
 
-    def _lstm(self, x, hx):
+    def _lstm(self, x, hx, done: torch.Tensor | None = None):
 
         h_t, c_t = hx
         h_t, c_t = h_t.unbind(0), c_t.unbind(0)
@@ -256,7 +256,7 @@ class LSTM(LSTMBase):
                 bias_ihs.append(None)
                 bias_hhs.append(None)
 
-        for x_t in x.unbind(int(self.batch_first)):
+        for t, x_t in enumerate(x.unbind(int(self.batch_first))):
             h_t_out = []
             c_t_out = []
 
@@ -282,13 +282,20 @@ class LSTM(LSTMBase):
                     x_t = _h_t
             h_t = h_t_out
             c_t = c_t_out
+            if done is not None:
+                done_t = done[..., t, :]
+                h_t = [torch.where(~done_t.expand_as(_h_t), _h_t, 0) for _h_t in h_t]
+                c_t = [torch.where(~done_t.expand_as(_c_t), _c_t, 0) for _c_t in c_t]
+
             outputs.append(x_t)
 
         outputs = torch.stack(outputs, dim=int(self.batch_first))
 
         return outputs, (torch.stack(h_t_out, 0), torch.stack(c_t_out, 0))
 
-    def forward(self, input, hx=None):  # noqa: F811
+    def forward(
+        self, input, hx: Tuple[Tensor, Tensor] | None = None, done: Tensor | None = None
+    ):  # noqa: F811
         real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
         if input.dim() != 3:
             raise ValueError(
@@ -311,7 +318,7 @@ class LSTM(LSTMBase):
                 device=input.device,
             )
             hx = (h_zeros, c_zeros)
-        return self._lstm(input, hx)
+        return self._lstm(input, hx, done)
 
 
 class LSTMModule(ModuleBase):
