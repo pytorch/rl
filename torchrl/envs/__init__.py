@@ -92,6 +92,7 @@ from .transforms import (
     TensorDictPrimer,
     TimeMaxPool,
     ToTensorImage,
+    TrajCounter,
     Transform,
     TransformedEnv,
     UnsqueezeTransform,

@@ -188,8 +188,8 @@ class TensorDictMap(
             storage_constructor (type, optional): a type of tensor storage.
                 Defaults to :class:`~tensordict.nn.storage.LazyDynamicStorage`.
                 Other options include :class:`~tensordict.nn.storage.FixedStorage`.
-            hash_module (Callable, optional): a hash function to use in the :class:`~tensordict.nn.storage.QueryModule`.
-                Defaults to :class:`SipHash` for low-dimensional inputs, and :class:`~tensordict.nn.storage.RandomProjectionHash`
+            hash_module (Callable, optional): a hash function to use in the :class:`~torchrl.data.map.QueryModule`.
+                Defaults to :class:`SipHash` for low-dimensional inputs, and :class:`~torchrl.data.map.RandomProjectionHash`
                 for larger inputs.
             collate_fn (callable, optional): a function to use to collate samples from the
                 storage. Defaults to a custom value for each known storage type (stack for
@@ -257,8 +257,8 @@ class TensorDictMap(
         for mem in self.storage.values():
             mem.clear()
 
-    def _to_index(self, item: TensorDictBase, extend: bool) -> torch.Tensor:
-        item = self.query_module(item, extend=extend)
+    def _to_index(self, item: TensorDictBase, extend: bool, clone: bool | None=None) -> torch.Tensor:
+        item = self.query_module(item, extend=extend, clone=clone)
         return item[self.index_key]
 
     def _maybe_add_batch(
@@ -280,9 +280,10 @@ class TensorDictMap(
         return item
 
     def __getitem__(self, item: TensorDictBase) -> TensorDictBase:
+        item = item.copy()
         item, _ = self._maybe_add_batch(item, None)
 
-        index = self._to_index(item, extend=False)
+        index = self._to_index(item, extend=False, clone=False)
 
         res = self.storage[index]
         res = self.collate_fn(res)
@@ -316,7 +317,7 @@ class TensorDictMap(
 
     def contains(self, item: TensorDictBase) -> torch.Tensor:
         item, _ = self._maybe_add_batch(item, None)
-        index = self._to_index(item, extend=False)
+        index = self._to_index(item, extend=False, clone=True)
 
         res = self.storage.contains(index)
         res = self._maybe_remove_batch(res)
