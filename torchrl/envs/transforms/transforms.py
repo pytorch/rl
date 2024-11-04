@@ -8724,42 +8724,43 @@ class TrajCounter(Transform):
     .. note::
         Sharing a trajectory counter among workers can be done in multiple ways, but it will usually involve wrapping the environment in a :class:`~torchrl.envs.EnvCreator`. Not doing so may result in an error during serialization of the transform. The counter will be shared among the workers, meaning that at any point in time, it is guaranteed that there will not be two environments that will share the same trajectory count (and each (step-count, traj-count) pair will be unique).
         Here are examples of valid ways of sharing a ``TrajCounter`` object between processes:
-        >>> # Option 1: Create the trajectory counter outside the environment.
-        >>> #  This requires the counter to be cloned within the transformed env, as a single transform object cannot have two parents.
-        >>> t = TrajCounter()
-        >>> def make_env(max_steps=4, t=t):
-        ...     # See CountingEnv in torchrl.test.mocking_classes
-        ...     env = TransformedEnv(CountingEnv(max_steps=max_steps), t.clone())
-        ...     env.transform.transform_observation_spec(env.base_env.observation_spec)
-        ...     return env
-        >>> penv = ParallelEnv(
-        ...     2,
-        ...     [EnvCreator(make_env, max_steps=4), EnvCreator(make_env, max_steps=5)],
-        ...     mp_start_method="spawn",
-        ... )
-        >>> # Option 2: Create the transform within the constructor.
-        >>> #  In this scenario, we still need to tell each sub-env what kwarg has to be used.
-        >>> #  Both EnvCreator and ParallelEnv offer that possibility.
-        >>> def make_env(max_steps=4):
-        ...     t = TrajCounter()
-        ...     env = TransformedEnv(CountingEnv(max_steps=max_steps), t)
-        ...     env.transform.transform_observation_spec(env.base_env.observation_spec)
-        ...     return env
-        >>> make_env_c0 = EnvCreator(make_env)
-        >>> # Create a variant of the env with different kwargs
-        >>> make_env_c1 = make_env_c0.make_variant(max_steps=5)
-        >>> penv = ParallelEnv(
-        ...     2,
-        ...     [make_env_c0, make_env_c1],
-        ...     mp_start_method="spawn",
-        ... )
-        >>> # Alternatively, pass the kwargs to the ParallelEnv
-        >>> penv = ParallelEnv(
-        ...     2,
-        ...     [make_env_c0, make_env_c0],
-        ...     create_env_kwargs=[{"max_steps": 5}, {"max_steps": 4}],
-        ...     mp_start_method="spawn",
-        ... )
+
+            >>> # Option 1: Create the trajectory counter outside the environment.
+            >>> #  This requires the counter to be cloned within the transformed env, as a single transform object cannot have two parents.
+            >>> t = TrajCounter()
+            >>> def make_env(max_steps=4, t=t):
+            ...     # See CountingEnv in torchrl.test.mocking_classes
+            ...     env = TransformedEnv(CountingEnv(max_steps=max_steps), t.clone())
+            ...     env.transform.transform_observation_spec(env.base_env.observation_spec)
+            ...     return env
+            >>> penv = ParallelEnv(
+            ...     2,
+            ...     [EnvCreator(make_env, max_steps=4), EnvCreator(make_env, max_steps=5)],
+            ...     mp_start_method="spawn",
+            ... )
+            >>> # Option 2: Create the transform within the constructor.
+            >>> #  In this scenario, we still need to tell each sub-env what kwarg has to be used.
+            >>> #  Both EnvCreator and ParallelEnv offer that possibility.
+            >>> def make_env(max_steps=4):
+            ...     t = TrajCounter()
+            ...     env = TransformedEnv(CountingEnv(max_steps=max_steps), t)
+            ...     env.transform.transform_observation_spec(env.base_env.observation_spec)
+            ...     return env
+            >>> make_env_c0 = EnvCreator(make_env)
+            >>> # Create a variant of the env with different kwargs
+            >>> make_env_c1 = make_env_c0.make_variant(max_steps=5)
+            >>> penv = ParallelEnv(
+            ...     2,
+            ...     [make_env_c0, make_env_c1],
+            ...     mp_start_method="spawn",
+            ... )
+            >>> # Alternatively, pass the kwargs to the ParallelEnv
+            >>> penv = ParallelEnv(
+            ...     2,
+            ...     [make_env_c0, make_env_c0],
+            ...     create_env_kwargs=[{"max_steps": 5}, {"max_steps": 4}],
+            ...     mp_start_method="spawn",
+            ... )
 
     """
 

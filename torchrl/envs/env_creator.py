@@ -98,7 +98,16 @@ class EnvCreator:
         self.init_()
 
     def make_variant(self, **kwargs) -> EnvCreator:
-        """Creates a variant of the EnvCreator, pointing to the same underlying metadata but with different keyword arguments during construction."""
+        """Creates a variant of the EnvCreator, pointing to the same underlying metadata but with different keyword arguments during construction.
+
+        This can be useful with transforms that share a state, like :class:`~torchrl.envs.TrajCounter`.
+
+        Examples:
+            >>> from torchrl.envs import GymEnv
+            >>> env_creator_pendulum = EnvCreator(GymEnv, env_name="Pendulum-v1")
+            >>> env_creator_cartpole = env_creator_pendulum(env_name="CartPole-v1")
+
+        """
         # Copy self
         out = type(self).__new__(type(self))
         out.__dict__.update(self.__dict__)
