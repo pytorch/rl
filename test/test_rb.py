@@ -24,6 +24,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         get_default_devices,
         make_tc,
     )
+    from pytorch.rl.test.mocking_classes import CountingEnv
 else:
     from _utils_internal import (
         capture_log_records,
@@ -31,8 +32,8 @@ else:
         get_default_devices,
         make_tc,
     )
+    from mocking_classes import CountingEnv
 
-from mocking_classes import CountingEnv
 from packaging import version
 from packaging.version import parse
 from tensordict import (

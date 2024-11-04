@@ -27,7 +27,6 @@ except ModuleNotFoundError as err:
 
 import torch
 
-from mocking_classes import ContinuousActionVecMockEnv, CountingEnv
 from torch import multiprocessing as mp, nn
 
 from torchrl.collectors.collectors import (
@@ -43,6 +42,11 @@ from torchrl.collectors.distributed import (
 )
 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 from torchrl.envs.utils import RandomPolicy
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
+else:
+    from mocking_classes import ContinuousActionVecMockEnv, CountingEnv
 
 TIMEOUT = 200
 

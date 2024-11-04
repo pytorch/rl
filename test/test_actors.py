@@ -8,7 +8,6 @@ import os
 import pytest
 import torch
 
-from mocking_classes import NestedCountingEnv
 from tensordict import TensorDict
 from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
@@ -33,8 +32,10 @@ from torchrl.modules.tensordict_module.actors import (
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
+    from pytorch.rl.test.mocking_classes import NestedCountingEnv
 else:
     from _utils_internal import get_default_devices
+    from mocking_classes import NestedCountingEnv
 
 
 @pytest.mark.parametrize(

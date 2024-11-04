@@ -14,9 +14,10 @@ import torch
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices, retry
+    from pytorch.rl.test.mocking_classes import MockBatchedUnLockedEnv
 else:
     from _utils_internal import get_default_devices, retry
-from mocking_classes import MockBatchedUnLockedEnv
+    from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
 from torch import nn
