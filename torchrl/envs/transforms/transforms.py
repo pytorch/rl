@@ -18,10 +18,12 @@ from typing import (
     Callable,
     Dict,
     List,
+    Mapping,
     Optional,
     OrderedDict,
     Sequence,
     Tuple,
+    TypeVar,
     Union,
 )
 
@@ -80,6 +82,8 @@ IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
 
 FORWARD_NOT_IMPLEMENTED = "class {} cannot be executed without a parent environment."
+
+T = TypeVar("T", bound="Transform")
 
 
 def _apply_to_composite(function):
@@ -458,7 +462,7 @@ class Transform(nn.Module):
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
-    def clone(self):
+    def clone(self) -> T:
         self_copy = copy(self)
         state = copy(self.__dict__)
         state["_container"] = None
@@ -1221,7 +1225,7 @@ class Compose(Transform):
             t.reset_parent()
         super().reset_parent()
 
-    def clone(self):
+    def clone(self) -> T:
         transforms = []
         for t in self.transforms:
             transforms.append(t.clone())
@@ -8678,3 +8682,207 @@ class ActionDiscretizer(Transform):
         if self.sampling == self.SamplingStrategy.RANDOM:
             action = action + self.jitters * torch.rand_like(self.jitters)
         return tensordict.set(self.in_keys_inv[0], action)
+
+
+class TrajCounter(Transform):
+    """Global trajectory counter transform.
+
+    TrajCounter can be used to count the number of trajectories (i.e., the number of times `reset` is called) in any
+    TorchRL environment.
+    This transform will work within a single node across multiple processes (see note below).
+    A single transform can only count the trajectories associated with a single done state, but nested done states are
+    accepted as long as their prefix matches the prefix of the counter key.
+
+    Args:
+        out_key (NestedKey, optional): The entry name of the trajectory counter. Defaults to ``"traj_count"``.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv, StepCounter, TrajCounter
+        >>> env = GymEnv("Pendulum-v1").append_transform(StepCounter(6))
+        >>> env = env.append_transform(TrajCounter())
+        >>> r = env.rollout(18, break_when_any_done=False)  # 18 // 6 = 3 trajectories
+        >>> r["next", "traj_count"]
+        tensor([[0],
+                [0],
+                [0],
+                [0],
+                [0],
+                [0],
+                [1],
+                [1],
+                [1],
+                [1],
+                [1],
+                [1],
+                [2],
+                [2],
+                [2],
+                [2],
+                [2],
+                [2]])
+
+    .. note::
+        Sharing a trajectory counter among workers can be done in multiple ways, but it will usually involve wrapping the environment in a :class:`~torchrl.envs.EnvCreator`. Not doing so may result in an error during serialization of the transform. The counter will be shared among the workers, meaning that at any point in time, it is guaranteed that there will not be two environments that will share the same trajectory count (and each (step-count, traj-count) pair will be unique).
+        Here are examples of valid ways of sharing a ``TrajCounter`` object between processes:
+
+            >>> # Option 1: Create the trajectory counter outside the environment.
+            >>> #  This requires the counter to be cloned within the transformed env, as a single transform object cannot have two parents.
+            >>> t = TrajCounter()
+            >>> def make_env(max_steps=4, t=t):
+            ...     # See CountingEnv in torchrl.test.mocking_classes
+            ...     env = TransformedEnv(CountingEnv(max_steps=max_steps), t.clone())
+            ...     env.transform.transform_observation_spec(env.base_env.observation_spec)
+            ...     return env
+            >>> penv = ParallelEnv(
+            ...     2,
+            ...     [EnvCreator(make_env, max_steps=4), EnvCreator(make_env, max_steps=5)],
+            ...     mp_start_method="spawn",
+            ... )
+            >>> # Option 2: Create the transform within the constructor.
+            >>> #  In this scenario, we still need to tell each sub-env what kwarg has to be used.
+            >>> #  Both EnvCreator and ParallelEnv offer that possibility.
+            >>> def make_env(max_steps=4):
+            ...     t = TrajCounter()
+            ...     env = TransformedEnv(CountingEnv(max_steps=max_steps), t)
+            ...     env.transform.transform_observation_spec(env.base_env.observation_spec)
+            ...     return env
+            >>> make_env_c0 = EnvCreator(make_env)
+            >>> # Create a variant of the env with different kwargs
+            >>> make_env_c1 = make_env_c0.make_variant(max_steps=5)
+            >>> penv = ParallelEnv(
+            ...     2,
+            ...     [make_env_c0, make_env_c1],
+            ...     mp_start_method="spawn",
+            ... )
+            >>> # Alternatively, pass the kwargs to the ParallelEnv
+            >>> penv = ParallelEnv(
+            ...     2,
+            ...     [make_env_c0, make_env_c0],
+            ...     create_env_kwargs=[{"max_steps": 5}, {"max_steps": 4}],
+            ...     mp_start_method="spawn",
+            ... )
+
+    """
+
+    def __init__(self, out_key: NestedKey = "traj_count"):
+        super().__init__(in_keys=[], out_keys=[out_key])
+        self._make_shared_value()
+        self._initialized = False
+
+    def _make_shared_value(self):
+        self._traj_count = mp.Value("i", 0)
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state["_traj_count"] = None
+        return state
+
+    def clone(self):
+        clone = super().clone()
+        # All clones share the same _traj_count and lock
+        clone._traj_count = self._traj_count
+        return clone
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        if not self._initialized:
+            self._initialized = True
+        rk = self.parent.reset_keys
+        traj_count_key = self.out_keys[0]
+        is_str = isinstance(traj_count_key, str)
+        for _rk in rk:
+            if is_str and isinstance(_rk, str):
+                rk = _rk
+                break
+            elif (
+                not is_str
+                and isinstance(_rk, tuple)
+                and _rk[:-1] == traj_count_key[:-1]
+            ):
+                rk = _rk
+                break
+        else:
+            raise RuntimeError(
+                f"Did not find reset key that matched the prefix of the traj counter key. Reset keys: {rk}, traj count: {traj_count_key}"
+            )
+        reset = None
+        if tensordict is not None:
+            reset = tensordict.get(rk, default=None)
+        if reset is None:
+            reset = torch.ones(
+                self.container.observation_spec[self.out_keys[0]].shape,
+                device=tensordict_reset.device,
+                dtype=torch.bool,
+            )
+        with (self._traj_count):
+            tc = int(self._traj_count.value)
+            self._traj_count.value = self._traj_count.value + reset.sum().item()
+            episodes = torch.arange(tc, tc + reset.sum(), device=self.parent.device)
+            episodes = torch.masked_scatter(
+                torch.zeros_like(reset, dtype=episodes.dtype), reset, episodes
+            )
+            tensordict_reset.set(traj_count_key, episodes)
+        return tensordict_reset
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        if not self._initialized:
+            raise RuntimeError("_step was called before _reset was called.")
+        next_tensordict.set(self.out_keys[0], tensordict.get(self.out_keys[0]))
+        return next_tensordict
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError(
+            f"{type(self).__name__} can only be called within an environment step or reset."
+        )
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError(
+            f"{type(self).__name__} can only be called within an environment step or reset."
+        )
+
+    def state_dict(self, *args, destination=None, prefix="", keep_vars=False):
+        return {
+            "traj_count": int(self._traj_count.value),
+        }
+
+    def load_state_dict(
+        self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False
+    ):
+        self._traj_count.value *= 0
+        self._traj_count.value += state_dict["traj_count"]
+
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
+        if not isinstance(observation_spec, Composite):
+            raise ValueError(
+                f"observation_spec was expected to be of type Composite. Got {type(observation_spec)} instead."
+            )
+        full_done_spec = self.parent.output_spec["full_done_spec"]
+        traj_count_key = self.out_keys[0]
+        # find a matching done key (there might be more than one)
+        for done_key in self.parent.done_keys:
+            # check root
+            if type(done_key) != type(traj_count_key):
+                continue
+            if isinstance(done_key, tuple):
+                if done_key[:-1] == traj_count_key[:-1]:
+                    shape = full_done_spec[done_key].shape
+                    break
+            if isinstance(done_key, str):
+                shape = full_done_spec[done_key].shape
+                break
+
+        else:
+            raise KeyError(
+                f"Could not find root of traj_count key {traj_count_key} in done keys {self.done_keys}."
+            )
+        observation_spec[traj_count_key] = Bounded(
+            shape=shape,
+            dtype=torch.int64,
+            device=observation_spec.device,
+            low=0,
+            high=torch.iinfo(torch.int64).max,
+        )
+        return super().transform_observation_spec(observation_spec)

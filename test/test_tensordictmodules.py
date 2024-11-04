@@ -4,10 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import os
 
 import pytest
 import torch
-from mocking_classes import CountingEnv, DiscreteActionVecMockEnv
 from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from torch import nn
@@ -51,6 +51,11 @@ from torchrl.modules.tensordict_module.probabilistic import (
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 from torchrl.modules.utils import get_primers_from_module
 from torchrl.objectives import DDPGLoss
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
+else:
+    from mocking_classes import CountingEnv, DiscreteActionVecMockEnv
 
 _has_functorch = False
 try:

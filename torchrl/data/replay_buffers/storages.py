@@ -1106,7 +1106,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         if self.device.type != "cpu":
             raise ValueError(
                 "Memory map device other than CPU isn't supported. To cast your data to the desired device, "
-                "use `buffer.append_transform(lambda x: x.to(device)` or a similar transform."
+                "use `buffer.append_transform(lambda x: x.to(device))` or a similar transform."
             )
         self._len = 0
 

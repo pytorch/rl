@@ -1408,7 +1408,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 # No certainty which module multiprocessing_context is
                 parent_pipe, child_pipe = ctx.Pipe()
                 env_fun = self.create_env_fn[idx]
-                if not isinstance(env_fun, EnvCreator):
+                if not isinstance(env_fun, (EnvCreator, CloudpickleWrapper)):
                     env_fun = CloudpickleWrapper(env_fun)
                 kwargs[idx].update(
                     {
