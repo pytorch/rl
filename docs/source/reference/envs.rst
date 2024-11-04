@@ -845,6 +845,7 @@ to be able to create this other composition:
     TensorDictPrimer
     TimeMaxPool
     ToTensorImage
+    TrajCounter
     UnsqueezeTransform
     VC1Transform
     VIPRewardTransform
