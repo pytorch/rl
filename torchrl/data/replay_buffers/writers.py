@@ -40,8 +40,9 @@ class Writer(ABC):
     _storage: Storage
     _rng: torch.Generator | None = None
 
-    def __init__(self) -> None:
+    def __init__(self, compilable: bool = False) -> None:
         self._storage = None
+        self._compilable = compilable
 
     def register_storage(self, storage: Storage) -> None:
         self._storage = storage
@@ -138,10 +139,17 @@ class ImmutableDatasetWriter(Writer):
 
 
 class RoundRobinWriter(Writer):
-    """A RoundRobin Writer class for composable replay buffers."""
+    """A RoundRobin Writer class for composable replay buffers.
 
-    def __init__(self, **kw) -> None:
-        super().__init__(**kw)
+    Args:
+        compilable (bool, optional): whether the writer is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
+
+    """
+
+    def __init__(self, compilable: bool = False) -> None:
+        super().__init__(compilable=compilable)
         self._cursor = 0
 
     def dumps(self, path):
@@ -197,7 +205,7 @@ class RoundRobinWriter(Writer):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities:
+        for ent in self._storage._attached_entities_iter():
             ent.mark_update(index)
         return index
 
@@ -213,30 +221,46 @@ class RoundRobinWriter(Writer):
     @property
     def _cursor(self):
         _cursor_value = self.__dict__.get("_cursor_value", None)
-        if _cursor_value is None:
-            _cursor_value = self._cursor_value = mp.Value("i", 0)
-        return _cursor_value.value
+        if not self._compilable:
+            if _cursor_value is None:
+                _cursor_value = self._cursor_value = mp.Value("i", 0)
+            return _cursor_value.value
+        else:
+            if _cursor_value is None:
+                _cursor_value = self._cursor_value = 0
+            return _cursor_value
 
     @_cursor.setter
     def _cursor(self, value):
-        _cursor_value = self.__dict__.get("_cursor_value", None)
-        if _cursor_value is None:
-            _cursor_value = self._cursor_value = mp.Value("i", 0)
-        _cursor_value.value = value
+        if not self._compilable:
+            _cursor_value = self.__dict__.get("_cursor_value", None)
+            if _cursor_value is None:
+                _cursor_value = self._cursor_value = mp.Value("i", 0)
+            _cursor_value.value = value
+        else:
+            self._cursor_value = value
 
     @property
     def _write_count(self):
         _write_count = self.__dict__.get("_write_count_value", None)
-        if _write_count is None:
-            _write_count = self._write_count_value = mp.Value("i", 0)
-        return _write_count.value
+        if not self._compilable:
+            if _write_count is None:
+                _write_count = self._write_count_value = mp.Value("i", 0)
+            return _write_count.value
+        else:
+            if _write_count is None:
+                _write_count = self._write_count_value = 0
+            return _write_count
 
     @_write_count.setter
     def _write_count(self, value):
-        _write_count = self.__dict__.get("_write_count_value", None)
-        if _write_count is None:
-            _write_count = self._write_count_value = mp.Value("i", 0)
-        _write_count.value = value
+        if not self._compilable:
+            _write_count = self.__dict__.get("_write_count_value", None)
+            if _write_count is None:
+                _write_count = self._write_count_value = mp.Value("i", 0)
+            _write_count.value = value
+        else:
+            self._write_count_value = value
 
     def __getstate__(self):
         state = super().__getstate__()
@@ -249,7 +273,10 @@ class RoundRobinWriter(Writer):
     def __setstate__(self, state):
         cursor = state.pop("cursor__context", None)
         if cursor is not None:
-            _cursor_value = mp.Value("i", cursor)
+            if not state["_compilable"]:
+                _cursor_value = mp.Value("i", cursor)
+            else:
+                _cursor_value = cursor
             state["_cursor_value"] = _cursor_value
         self.__dict__.update(state)
 
