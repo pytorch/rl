@@ -655,16 +655,23 @@ collector = SyncDataCollector(
 # There are many types of buffers, in this tutorial we use a basic buffer to store and sample tensordict
 # data randomly.
 #
+# This buffer uses :class:`~.data.LazyMemmapStorage`, which stores data on disk.
+# This allows to use the disk memory, but can result in slower sampling as it requires data to be cast to the training device.
+# To store your buffer on the GPU, you can use :class:`~.data.LazyTensorStorage`, passing the desired device.
+# This will result in faster sampling but is subject to the memory constraints of the selected device.
+#
 
 replay_buffers = {}
 for group, _agents in env.group_map.items():
     replay_buffer = ReplayBuffer(
         storage=LazyMemmapStorage(
-            memory_size, device=device
+            memory_size
         ),  # We will store up to memory_size multi-agent transitions
         sampler=RandomSampler(),
         batch_size=train_batch_size,  # We will sample batches of this size
     )
+    if device.type != "cpu":
+        replay_buffer.append_transform(lambda x: x.to(device))
     replay_buffers[group] = replay_buffer
 
 ######################################################################

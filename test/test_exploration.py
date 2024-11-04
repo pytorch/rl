@@ -8,11 +8,6 @@ import os
 
 import pytest
 import torch
-from mocking_classes import (
-    ContinuousActionVecMockEnv,
-    CountingEnvCountModule,
-    NestedCountingEnv,
-)
 from scipy.stats import ttest_1samp
 from tensordict import TensorDict
 
@@ -49,8 +44,18 @@ from torchrl.modules.tensordict_module.exploration import (
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
+    from pytorch.rl.test.mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingEnvCountModule,
+        NestedCountingEnv,
+    )
 else:
     from _utils_internal import get_default_devices
+    from mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingEnvCountModule,
+        NestedCountingEnv,
+    )
 
 
 class TestEGreedy:

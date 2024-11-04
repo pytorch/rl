@@ -7,9 +7,9 @@ from __future__ import annotations
 from typing import Callable, List
 
 import torch
+from torch.nn import Module
 
-
-class BinaryToDecimal(torch.nn.Module):
+class BinaryToDecimal(Module):
     """A Module to convert binaries encoded tensors to decimals.
 
     This is a utility class that allow to convert a binary encoding tensor (e.g. `1001`) to
@@ -71,7 +71,7 @@ class BinaryToDecimal(torch.nn.Module):
         return aggregated_digits
 
 
-class SipHash(torch.nn.Module):
+class SipHash(Module):
     """A Module to Compute SipHash values for given tensors.
 
     A hash function module based on SipHash implementation in python.
