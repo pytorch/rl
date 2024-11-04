@@ -11,7 +11,7 @@ import pytest
 import torch
 
 from tensordict import TensorDict
-from torchrl.data import LazyTensorStorage, ListStorage
+from torchrl.data import LazyTensorStorage, ListStorage, MCTSForest
 from torchrl.data.map import (
     BinaryToDecimal,
     QueryModule,
@@ -19,7 +19,7 @@ from torchrl.data.map import (
     SipHash,
     TensorDictMap,
 )
-from torchrl.envs import GymEnv
+from torchrl.envs import GymEnv, PendulumEnv, UnsqueezeTransform, CatTensors, StepCounter
 
 _has_gym = importlib.util.find_spec("gymnasium", None) or importlib.util.find_spec(
     "gym", None
@@ -239,7 +239,61 @@ class TesttTensorDictMap:
 
 class TestMCTSForest:
     def test_forest_build(self):
-        ...
+        forest = MCTSForest()
+        env = PendulumEnv()
+        obs_keys = list(env.observation_spec.keys(True, True))
+        state_keys = set(env.full_state_spec.keys(True, True)) - set(obs_keys)
+        # Appending transforms to get an "observation" key that concatenates the observations together
+        env = env.append_transform(
+            UnsqueezeTransform(
+                in_keys=obs_keys,
+                out_keys=[("unsqueeze", key) for key in obs_keys],
+                dim=-1
+            )
+        )
+        env = env.append_transform(
+            CatTensors([("unsqueeze", key) for key in obs_keys], "observation")
+        )
+        env = env.append_transform(StepCounter())
+        env.set_seed(0)
+        # Get a reset state, then make a rollout out of it
+        reset_state = env.reset()
+        rollout0 = env.rollout(6, auto_reset=False, tensordict=reset_state.clone())
+        # Append the rollout to the forest. We're removing the state entries for clarity
+        rollout0 = rollout0.copy()
+        rollout0.exclude(*state_keys, inplace=True)
+        rollout0.get("next").exclude(*state_keys, inplace=True)
+        forest.extend(rollout0)
+        # The forest should have 6 elements (the length of the rollout)
+        assert len(forest) == 6
+        # Let's make another rollout from the same reset state
+        rollout1 = env.rollout(6, auto_reset=False, tensordict=reset_state.clone())
+        rollout1.exclude(*state_keys, inplace=True)
+        rollout1.get("next").exclude(*state_keys, inplace=True)
+        forest.extend(rollout1)
+        assert len(forest) == 12
+        r = rollout0[0]
+        tree = forest.get_tree(r)
+        tree.shape
+        # (torch.Size([]), _StringKeys(dict_keys(['data_content', 'children', 'count'])))
+        tree.count
+         # tensor(2, dtype=torch.int32)
+        tree.children.shape
+        # (torch.Size([2]),
+        #  _StringKeys(dict_keys(['node', 'action', 'reward', 'index', 'hash'])))
+        starttd = rollout1[2]
+        rollout2 = env.rollout(6, auto_reset=False, tensordict=starttd)
+        rollout2.exclude(*state_keys, inplace=True)
+        rollout2.get("next").exclude(*state_keys, inplace=True)
+        forest.extend(rollout2)
+        assert len(forest) == 18
+        r = rollout0[0]
+        tree = forest.get_tree(r)
+        assert (tree.children.node.children.node.count == torch.tensor([[1], [2]])).all()
+        assert tree.children.node.children.node.shape == torch.Size((2, 1))
+        tree.children.node.children.node.children.shape, tree.children.node.children.node.children[0].shape, tree.children.node.children.node.children[1].shape
+
+
     def test_forest_extend_and_get(self):
         ...
 

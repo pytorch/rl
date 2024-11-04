@@ -30,6 +30,31 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         PONG_VERSIONED,
         rand_reset,
     )
+    from pytorch.rl.test.mocking_classes import (
+        ActionObsMergeLinear,
+        AutoResetHeteroCountingEnv,
+        AutoResettingCountingEnv,
+        ContinuousActionConvMockEnv,
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        DummyModelBasedEnvBase,
+        EnvWithDynamicSpec,
+        EnvWithMetadata,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
 else:
     from _utils_internal import (
         _make_envs,
@@ -42,31 +67,31 @@ else:
         PONG_VERSIONED,
         rand_reset,
     )
-from mocking_classes import (
-    ActionObsMergeLinear,
-    AutoResetHeteroCountingEnv,
-    AutoResettingCountingEnv,
-    ContinuousActionConvMockEnv,
-    ContinuousActionConvMockEnvNumpy,
-    ContinuousActionVecMockEnv,
-    CountingBatchedEnv,
-    CountingEnv,
-    CountingEnvCountPolicy,
-    DiscreteActionConvMockEnv,
-    DiscreteActionConvMockEnvNumpy,
-    DiscreteActionVecMockEnv,
-    DummyModelBasedEnvBase,
-    EnvWithDynamicSpec,
-    EnvWithMetadata,
-    HeterogeneousCountingEnv,
-    HeterogeneousCountingEnvPolicy,
-    MockBatchedLockedEnv,
-    MockBatchedUnLockedEnv,
-    MockSerialEnv,
-    MultiKeyCountingEnv,
-    MultiKeyCountingEnvPolicy,
-    NestedCountingEnv,
-)
+    from mocking_classes import (
+        ActionObsMergeLinear,
+        AutoResetHeteroCountingEnv,
+        AutoResettingCountingEnv,
+        ContinuousActionConvMockEnv,
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        DummyModelBasedEnvBase,
+        EnvWithDynamicSpec,
+        EnvWithMetadata,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
 from packaging import version
 from tensordict import (
     assert_allclose_td,
@@ -3380,16 +3405,16 @@ class TestCustomEnvs:
         )
         assert r.shape == (5, 100)
 
-    def test_pendulum_env(self):
-        env = PendulumEnv(device=None)
-        assert env.device is None
-        env = PendulumEnv(device="cpu")
-        assert env.device == torch.device("cpu")
+    @pytest.mark.parametrize("device", [None, *get_default_devices()])
+    def test_pendulum_env(self, device):
+        env = PendulumEnv(device=device)
+        assert env.device == device
         check_env_specs(env)
+
         for _ in range(10):
             r = env.rollout(10)
             assert r.shape == torch.Size((10,))
-            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
             assert r.shape == torch.Size((5, 10))
 
 

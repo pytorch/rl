@@ -4,12 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import weakref
 from typing import List
 
 import torch
 from tensordict import LazyStackedTensorDict, NestedKey, tensorclass, TensorDict
-from torchrl.data import ListStorage, TensorDictMap
-from torchrl.envs import EnvBase
+from torchrl.data.replay_buffers.storages import ListStorage
+from torchrl.data.map.tdstorage import TensorDictMap
+from torchrl.envs.common import EnvBase
 
 
 @tensorclass
@@ -29,21 +31,25 @@ class MCTSNode:
     data_content: TensorDict
     children: MCTSChildren | None = None
     count: torch.Tensor | None = None
+    forest: MCTSForest | None = None
 
+    def plot(self, backend="plotly", info=None):
+        forest = self.forest
+        if isinstance(forest, weakref.ref):
+            forest = forest()
+        return forest.plot(self, backend=backend, info=info)
 
 @tensorclass
 class MCTSChildren:
     """The children of a node.
 
-    This class contains data of the same batch-size: the ``action``, ``reward``, ``index`` and ``hash``
+    This class contains data of the same batch-size: the ``index`` and ``hash``
     associated with each ``node``. Therefore, each indexed element of a ``Children``
-    corresponds to one child with its associated action, reward and index.
+    corresponds to one child with its associated index. Actions .
 
     """
 
     node: MCTSNode
-    action: torch.Tensor | None = None
-    reward: torch.Tensor | None = None
     index: torch.Tensor | None = None
     hash: torch.Tensor | None = None
 
@@ -58,9 +64,7 @@ class MCTSForest:
         data_map (TensorDictMap, optional): the storage to use to store the data
             (observation, reward, states etc). If not provided, it is lazily
             initialized using :meth:`~torchrl.data.map.tdstorage.TensorDictMap.from_tensordict_pair`.
-        data_map (TensorDictMap, optional): the storage to use to store the data
-            (observation, reward, states etc). If not provided, it is lazily
-            initialized using :meth:`~torchrl.data.map.tdstorage.TensorDictMap.from_tensordict_pair`.
+        node_map (TensorDictMap, optional): TODO
         done_keys (list of NestedKey): the done keys of the environment. If not provided,
             defaults to ``("done", "terminated", "truncated")``.
             The :meth:`~.get_keys_from_env` can be used to automatically determine the keys.
@@ -73,6 +77,81 @@ class MCTSForest:
         observation_keys (list of NestedKey): the observation keys of the environment. If not provided,
             defaults to ``("observation",)``.
             The :meth:`~.get_keys_from_env` can be used to automatically determine the keys.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv
+        >>> import torch
+        >>> from tensordict import TensorDict, LazyStackedTensorDict
+        >>> from torchrl.data import TensorDictMap, ListStorage
+        >>> from torchrl.data.map.tree import MCTSForest
+        >>>
+        >>> from torchrl.envs import PendulumEnv, CatTensors, UnsqueezeTransform, StepCounter
+        >>> # Create the MCTS Forest
+        >>> forest = MCTSForest()
+        >>> # Create an environment. We're using a stateless env to be able to query it at any given state (like an oracle)
+        >>> env = PendulumEnv()
+        >>> obs_keys = list(env.observation_spec.keys(True, True))
+        >>> state_keys = set(env.full_state_spec.keys(True, True)) - set(obs_keys)
+        >>> # Appending transforms to get an "observation" key that concatenates the observations together
+        >>> env = env.append_transform(
+        ...     UnsqueezeTransform(
+        ...         in_keys=obs_keys,
+        ...         out_keys=[("unsqueeze", key) for key in obs_keys],
+        ...         dim=-1
+        ...     )
+        ... )
+        >>> env = env.append_transform(
+        ...     CatTensors([("unsqueeze", key) for key in obs_keys], "observation")
+        ... )
+        >>> env = env.append_transform(StepCounter())
+        >>> env.set_seed(0)
+        >>> # Get a reset state, then make a rollout out of it
+        >>> reset_state = env.reset()
+        >>> rollout0 = env.rollout(6, auto_reset=False, tensordict=reset_state.clone())
+        >>> # Append the rollout to the forest. We're removing the state entries for clarity
+        >>> rollout0 = rollout0.copy()
+        >>> rollout0.exclude(*state_keys, inplace=True)
+        >>> rollout0.get("next").exclude(*state_keys, inplace=True)
+        >>> forest.extend(rollout0)
+        >>> # The forest should have 6 elements (the length of the rollout)
+        >>> assert len(forest) == 6
+        >>> # Let's make another rollout from the same reset state
+        >>> rollout1 = env.rollout(6, auto_reset=False, tensordict=reset_state.clone())
+        >>> rollout1.exclude(*state_keys, inplace=True)
+        >>> rollout1.get("next").exclude(*state_keys, inplace=True)
+        >>> forest.extend(rollout1)
+        >>> assert len(forest) == 12
+        >>> # Since we have 2 rollouts starting at the same state, our tree should have two
+        >>> #  branches if we produce it from the reset entry. Take the sate, and call `get_tree`:
+        >>> r = rollout0[0]
+        >>> tree = forest.get_tree(r)
+        >>> tree.shape
+        (torch.Size([]), _StringKeys(dict_keys(['data_content', 'children', 'count'])))
+         >>> tree.count
+         tensor(2, dtype=torch.int32)
+        >>> tree.children.shape
+        (torch.Size([2]),
+         _StringKeys(dict_keys(['node', 'action', 'reward', 'index', 'hash'])))
+        >>> # Now, let's run a rollout from an intermediate step from the second rollout
+        >>> starttd = rollout1[2]
+        >>> rollout2 = env.rollout(6, auto_reset=False, tensordict=starttd)
+        >>> rollout2.exclude(*state_keys, inplace=True)
+        >>> rollout2.get("next").exclude(*state_keys, inplace=True)
+        >>> forest.extend(rollout2)
+        >>> assert len(forest) == 18
+        >>> # Now our tree is a bit more complex, since from the 3rd level we have 3 different branches
+        >>> #  When looking at the third level, we should see that the count for the left branch is 1, whereas the count
+        >>> #  for the right branch is 2.
+        >>> r = rollout0[0]
+        >>> tree = forest.get_tree(r)
+        >>> print(tree.children.node.children.node.count, tree.children.node.children.node.shape)
+        tensor([[1],
+                [2]], dtype=torch.int32) torch.Size([2, 1])
+        >>> # This is reflected by the shape of the children: the left has shape [1, 1], the right [1, 2]
+        >>> #  and tensordict represents this as shape [2, 1, -1]
+        >>> tree.children.node.children.node.children.shape, tree.children.node.children.node.children[0].shape, tree.children.node.children.node.children[1].shape
+        (torch.Size([2, 1, -1]), torch.Size([1, 1]), torch.Size([1, 2]))
+        >>> tree.plot(info=["step_count", "reward"])
 
     """
 
@@ -188,9 +267,9 @@ class MCTSForest:
             dest,
             in_keys=[*self.observation_keys],
             out_keys=[
-                *self.data_map.query_module.out_keys,
-                *self.action_keys,
-                *[("next", rk) for rk in self.reward_keys],
+                *self.data_map.query_module.out_keys, # hash and index
+                # *self.action_keys,
+                # *[("next", rk) for rk in self.reward_keys],
                 "count",
             ],
             storage_constructor=ListStorage,
@@ -199,7 +278,8 @@ class MCTSForest:
         )
 
     def extend(self, rollout):
-        source, dest = rollout, rollout.get("next")
+        source, dest = rollout.exclude("next").copy(), rollout.select("next", *self.action_keys).copy()
+
         if self.data_map is None:
             self._make_storage(source, dest)
 
@@ -224,11 +304,17 @@ class MCTSForest:
         recurse: bool = True,
         max_depth: int | None = None,
         as_tensordict: bool = False,
+        compact: bool=False,
     ):
         if root.batch_size:
+            if compact:
+                raise NotImplementedError
             func = self._get_tree_batched
         else:
-            func = self._get_tree_single
+            if compact:
+                func = self._get_tree_single_compact
+            else:
+                func = self._get_tree_single
         return func(
             root=root,
             inplace=inplace,
@@ -248,22 +334,13 @@ class MCTSForest:
         if root not in self.node_map:
             if as_tensordict:
                 return TensorDict({"data_content": root})
-            return MCTSNode(root)
+            return MCTSNode(root, forest=weakref.ref(self))
+
         branches = self.node_map[root]
 
         index = branches["_index"]
         hash_val = branches["_hash"]
         count = branches["count"]
-        action = (
-            branches.select(*self.action_keys)
-            if len(self.action_keys) > 1
-            else branches.get(*self.action_keys)
-        )
-        reward = (
-            branches.get("next").select(*self.reward_keys)
-            if len(self.reward_keys) > 1
-            else branches.get(("next", *self.reward_keys))
-        )
 
         children_node = self.data_map.storage[index]
         if not inplace:
@@ -283,20 +360,21 @@ class MCTSForest:
                     *(child._tensordict for child in children_node)
                 )
                 children_node = MCTSNode.from_tensordict(children_node)
+                children_node.forest = weakref.ref(self)
             else:
                 children_node = LazyStackedTensorDict(*children_node)
+
         if not as_tensordict:
             return MCTSNode(
                 data_content=root,
                 children=MCTSChildren(
                     node=children_node,
-                    action=action,
                     index=index,
                     hash=hash_val,
-                    reward=reward,
                     batch_size=children_node.batch_size,
                 ),
                 count=count,
+                forest=weakref.ref(self),
             )
         return TensorDict(
             {
@@ -304,10 +382,93 @@ class MCTSForest:
                 "children": TensorDict(
                     {
                         "node": children_node,
-                        "action": action,
                         "index": index,
                         "hash": hash_val,
-                        "reward": reward,
+                    },
+                    batch_sizde=children_node.batch_size,
+                ),
+                "count": count,
+            }
+        )
+
+    def _get_tree_single_compact(
+        self,
+        root,
+        inplace: bool = False,
+        recurse: bool = True,
+        max_depth: int | None = None,
+        as_tensordict: bool = False,
+    ):
+        if root not in self.node_map:
+            if as_tensordict:
+                return TensorDict({"data_content": root})
+            return MCTSNode(root, forest=weakref.ref(self))
+
+        stack = []
+        child = root.select(*self.observation_keys).copy()
+        while True:
+            if child not in self.node_map:
+                # we already know this doesn't happen during the first iter
+                break
+            branch = self.node_map[child]
+            index = branch["_index"]
+            if index.numel() == 1:
+                # child contains (action, next) so we can update the previous data with this
+                new_child = self.data_map.storage[index[0]]
+                child.update(new_child)
+                stack.append(child)
+                child = new_child.get("next").select(*self.observation_keys)
+            else:
+                break
+        if len(stack):
+            root = torch.stack(stack, -1)
+        elif not inplace:
+            root = child
+
+        hash_val = branch["_hash"]
+        count = branch["count"]
+
+        children_node = self.data_map.storage[index].get("next").select(*self.observation_keys)
+        if recurse:
+            children_node = children_node.unbind(0)
+            children_node = tuple(
+                self.get_tree(
+                    child,
+                    inplace=inplace,
+                    max_depth=max_depth - 1 if isinstance(max_depth, int) else None,
+                    compact=True
+                )
+                for child in children_node
+            )
+            if not as_tensordict:
+                children_node = LazyStackedTensorDict(
+                    *(child._tensordict for child in children_node)
+                )
+                children_node = MCTSNode.from_tensordict(children_node)
+                children_node.forest = weakref.ref(self)
+            else:
+                children_node = LazyStackedTensorDict(*children_node)
+
+        if not as_tensordict:
+            return MCTSNode(
+                data_content=root,
+                children=MCTSChildren(
+                    node=children_node,
+                    index=index,
+                    hash=hash_val,
+                    batch_size=children_node.batch_size,
+                ),
+                count=count,
+                forest=weakref.ref(self),
+            )
+        return TensorDict(
+            {
+                "data_content": root,
+                "children": TensorDict(
+                    {
+                        "node": children_node,
+                        "index": index,
+                        "hash": hash_val,
                     },
                     batch_sizde=children_node.batch_size,
                 ),
@@ -327,7 +488,7 @@ class MCTSForest:
         if not present.any():
             if as_tensordict:
                 return TensorDict({"data_content": root}, batch_size=root.batch_size)
-            return MCTSNode(root, batch_size=root.batch_size)
+            return MCTSNode(root, forest=weakref.ref(self), batch_size=root.batch_size)
         if present.all():
             root_present = root
         else:
@@ -344,30 +505,6 @@ class MCTSForest:
             )
             for idx in (~present).nonzero(as_tuple=True)[0].tolist():
                 children_node.insert(idx, TensorDict())  # TODO: replace with new_zero
-        if not any(d == -1 for d in children_node.batch_size):
-            action = (
-                branches.get(*self.action_keys)
-                if len(self.action_keys) == 1
-                else branches.select(*self.action_keys)
-            )
-            reward = (
-                branches.get(("next", *self.reward_keys))
-                if len(self.reward_keys) == 1
-                else branches.get("next").select(*self.reward_keys)
-            )
-        else:
-            if len(self.action_keys) == 1:
-                action = branches.get_nestedtensor(
-                    *self.action_keys, layout=torch.jagged
-                )
-            else:
-                action = branches.select(*self.action_keys)
-            if len(self.reward_keys) == 1:
-                reward = branches.get_nestedtensor(
-                    ("next", *self.reward_keys), layout=torch.jagged
-                )
-            else:
-                reward = branches.get("next").select(*self.reward_keys)
 
         if not inplace:
             root = root.copy()
@@ -388,10 +525,8 @@ class MCTSForest:
                 TensorDict(
                     {
                         "node": _children_node,
-                        "action": _action,
                         "index": _index,
                         "hash": _hash_val,
-                        "reward": _reward,
                     },
                     batch_size=_children_node.batch_size,
                 )
@@ -409,6 +544,7 @@ class MCTSForest:
                 data_content=root,
                 children=MCTSChildren._from_tensordict(children),
                 count=count,
+                forest=weakref.ref(self),
                 batch_size=root.batch_size,
             )
         return TensorDict(
@@ -423,14 +559,32 @@ class MCTSForest:
     def __len__(self):
         return len(self.data_map)
 
-    def plot(self, tree, backend="plotly"):
+    @staticmethod
+    def _label(info, tree, root=False):
+        labels = []
+        for key in info:
+            if key == "hash":
+                if not root:
+                    v = f"hash={tree.hash.item()}"
+                else:
+                    v = f"hash={tree.data_content['_hash'].item()}"
+            elif root:
+                v = f"{key}=None"
+            else:
+                v = f"{key}={tree.node.data_content[key].item()}"
+
+            labels.append(v)
+        return ", ".join(labels)
+
+    def plot(self, tree, backend="plotly", info=None):
         if backend == "plotly":
             import plotly.graph_objects as go
+            if info is None:
+                info = ["hash", "reward"]
 
             parents = [""]
-            labels = [
-                f"{tree.data_content['_hash'].item()}, R={tree.data_content['next', 'reward'].item(): 4.4f}"
-            ]
+            labels = [self._label(info, tree, root=True)]
+
             _tree = tree
 
             def extend(tree, parent):
@@ -438,10 +592,12 @@ class MCTSForest:
                 if children is None:
                     return
                 for child in children:
-                    labels.append(f"{child.hash.item()}, R={child.reward.item(): 4.4f}")
+                    labels.append(self._label(info, child))
                     parents.append(parent)
                     extend(child.node, labels[-1])
 
             extend(_tree, labels[-1])
             fig = go.Figure(go.Treemap(labels=labels, parents=parents))
             fig.show()
+        else:
+            raise NotImplementedError(f"Unkown plotting backend {backend}.")
