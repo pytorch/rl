@@ -7,7 +7,11 @@ import importlib.util
 import warnings
 
 from packaging.version import parse
-from torchrl import __version__
+
+try:
+    from .version import __version__
+except ImportError:
+    __version__ = None
 
 
 def is_module_available(*modules: str) -> bool:
@@ -28,6 +32,8 @@ def _init_extension():
 
 
 def _is_nightly(version):
+    if version is None:
+        return True
     parsed_version = parse(version)
     return parsed_version.local is not None
 
