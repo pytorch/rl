@@ -120,7 +120,9 @@ class HabitatEnv(GymEnv):
         import habitat.gym
 
         wrapper = cls.__new__(cls)
-        wrapper.__dict__.update(GymWrapper(habitat.gym.make_gym_from_config(cfg)).__dict__)
+        env = habitat.gym.make_gym_from_config(cfg)
+        env.reset()  # Prevents crash from TorchRL GymWrapper
+        wrapper.__dict__.update(GymWrapper(env).__dict__)
         return wrapper
 
     @_classproperty
