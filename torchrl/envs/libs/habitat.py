@@ -9,7 +9,7 @@ import torch
 from torchrl._utils import _make_ordinal_device
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.envs.libs.gym import GymEnv, set_gym_backend
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend, GymWrapper
 from torchrl.envs.utils import _classproperty
 
 _has_habitat = importlib.util.find_spec("habitat") is not None
@@ -105,6 +105,23 @@ class HabitatEnv(GymEnv):
             "habitat.simulator.concur_render=False",
         ]
         super().__init__(env_name=env_name, **kwargs)
+
+    @classmethod
+    def from_config(cls, cfg):
+        """Creates a HabitatEnv from the config.
+
+        Examples:
+            >>> config = habitat.get_config(
+            ...     "benchmark/nav/objectnav/objectnav_hssd-hab.yaml"
+            ... )
+            >>> env = HabitatEnv(config)
+
+        """
+        import habitat.gym
+
+        wrapper = cls.__new__(cls)
+        wrapper.__dict__.update(GymWrapper(habitat.gym.make_gym_from_config(cfg)).__dict__)
+        return wrapper
 
     @_classproperty
     def available_envs(cls):
