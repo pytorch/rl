@@ -46,7 +46,7 @@ mkdir data
 git lfs update
 
 #python -m habitat_sim.utils.datasets_download --uids rearrange_dataset_v1 rearrange_pick_dataset_v0 rearrange_task_assets --data-path ./data
-python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets --data-path ./data --prune_lfs 0
+python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets --data-path ./data --no-prune
 
 python -c "import habitat;import habitat.gym"
 python -c """from torchrl.envs.libs.habitat import HabitatEnv
