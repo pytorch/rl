@@ -39,6 +39,7 @@ jobs:
           export TORCH_VERSION=nightly
         fi
 
+        export COMPOSE_IGNORE_ORPHANS=true
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         # Commenting these out for now because the GPU test are not working inside docker
