@@ -835,7 +835,7 @@ class TensorSpec:
         return self.is_in(item)
 
     @abc.abstractmethod
-    def enumerate(self):
+    def enumerate(self) -> Any:
         """Returns all the samples that can be obtained from the TensorSpec.
 
         The samples will be stacked along the first dimension.
@@ -1281,7 +1281,7 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
                 return False
         return True
 
-    def enumerate(self):
+    def enumerate(self) -> torch.Tensor | TensorDictBase:
         return torch.stack(
             [spec.enumerate() for spec in self._specs], dim=self.stack_dim + 1
         )
@@ -1747,7 +1747,7 @@ class OneHot(TensorSpec):
             return np.array(vals).reshape(tuple(val.shape))
         return val
 
-    def enumerate(self):
+    def enumerate(self) -> torch.Tensor:
         return (
             torch.eye(self.n, dtype=self.dtype, device=self.device)
             .expand(*self.shape, self.n)
@@ -2078,7 +2078,7 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             domain=domain,
         )
 
-    def enumerate(self):
+    def enumerate(self) -> Any:
         raise NotImplementedError(
             f"enumerate is not implemented for spec of class {type(self).__name__}."
         )
@@ -2402,7 +2402,7 @@ class NonTensor(TensorSpec):
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
         )
 
-    def enumerate(self):
+    def enumerate(self) -> Any:
         raise NotImplementedError("Cannot enumerate a NonTensorSpec.")
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> NonTensor:
@@ -2641,7 +2641,7 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         return torch.as_tensor(val, dtype=self.dtype).reshape(self.shape)
 
-    def enumerate(self):
+    def enumerate(self) -> Any:
         raise NotImplementedError("enumerate cannot be called with continuous specs.")
 
     def expand(self, *shape):
@@ -2808,7 +2808,7 @@ class MultiOneHot(OneHot):
         )
         self.update_mask(mask)
 
-    def enumerate(self):
+    def enumerate(self) -> torch.Tensor:
         nvec = self.nvec
         enum_disc = self.to_categorical_spec().enumerate()
         enums = torch.cat(
@@ -3253,7 +3253,7 @@ class Categorical(TensorSpec):
         )
         self.update_mask(mask)
 
-    def enumerate(self):
+    def enumerate(self) -> torch.Tensor:
         arange = torch.arange(self.n, dtype=self.dtype, device=self.device)
         if self.ndim:
             arange = arange.view(-1, *(1,) * self.ndim)
@@ -3766,7 +3766,7 @@ class MultiCategorical(Categorical):
         self.update_mask(mask)
         self.remove_singleton = remove_singleton
 
-    def enumerate(self):
+    def enumerate(self) -> torch.Tensor:
         if self.mask is not None:
             raise RuntimeError(
                 "Cannot enumerate a masked TensorSpec. Submit an issue on github if this feature is requested."
@@ -4682,7 +4682,7 @@ class Composite(TensorSpec):
             shape=self.shape,
         )
 
-    def enumerate(self):
+    def enumerate(self) -> TensorDictBase:
         # We are going to use meshgrid to create samples of all the subspecs in here
         #  but first let's get rid of the batch size, we'll put it back later
         self_without_batch = self
@@ -4959,7 +4959,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
             self[key] = item
         return self
 
-    def enumerate(self):
+    def enumerate(self) -> TensorDictBase:
         dim = self.stack_dim
         return LazyStackedTensorDict.maybe_dense_stack(
             [spec.enumerate() for spec in self._specs], dim + 1

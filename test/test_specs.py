@@ -3823,6 +3823,7 @@ class TestSpecEnumerate:
             spec.enumerate()
             == torch.tensor([[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4]])
         ).all()
+        assert spec.is_in(spec.enumerate())
 
     def test_one_hot(self):
         spec = OneHotDiscreteTensorSpec(n=5, shape=(2, 5))
@@ -3839,15 +3840,18 @@ class TestSpecEnumerate:
                 dtype=torch.bool,
             )
         ).all()
+        assert spec.is_in(spec.enumerate())
 
     def test_multi_discrete(self):
         spec = MultiDiscreteTensorSpec([3, 4, 5], shape=(2, 3))
         enum = spec.enumerate()
+        assert spec.is_in(enum)
         assert enum.shape == torch.Size([60, 2, 3])
 
     def test_multi_onehot(self):
         spec = MultiOneHotDiscreteTensorSpec([3, 4, 5], shape=(2, 12))
         enum = spec.enumerate()
+        assert spec.is_in(enum)
         assert enum.shape == torch.Size([60, 2, 12])
 
     def test_composite(self):
@@ -3859,6 +3863,7 @@ class TestSpecEnumerate:
             shape=[3],
         )
         c_enum = c.enumerate()
+        assert c.is_in(c_enum)
         assert c_enum.shape == torch.Size((20, 3))
         assert c_enum["b"].shape == torch.Size((20, 3))
 
