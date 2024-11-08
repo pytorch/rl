@@ -171,10 +171,12 @@ class TensorDictMap(
         dest,
         in_keys: List[NestedKey],
         out_keys: List[NestedKey] | None = None,
+        max_size: int = 1000,
         storage_constructor: type | None = None,
         hash_module: Callable | None = None,
         collate_fn: Callable[[Any], Any] | None = None,
         write_fn: Callable[[Any, Any], Any] | None = None,
+        consolidated: bool | None = None,
     ):
         """Creates a new TensorDictStorage from a pair of tensordicts (source and dest) using pre-defined rules of thumb.
 
@@ -185,6 +187,8 @@ class TensorDictMap(
             out_keys (List[NestedKey]): a list of keys to return in the output tensordict.
                 All keys absent from out_keys, even if present in ``dest``, will not be stored
                 in the storage. Defaults to ``None`` (all keys are registered).
+            max_size (int, optional): the maximum number of elements in the storage. Ignored if the
+                ``storage_constructor`` is passed. Defaults to ``1000``.
             storage_constructor (type, optional): a type of tensor storage.
                 Defaults to :class:`~tensordict.nn.storage.LazyDynamicStorage`.
                 Other options include :class:`~tensordict.nn.storage.FixedStorage`.
@@ -195,6 +199,8 @@ class TensorDictMap(
                 storage. Defaults to a custom value for each known storage type (stack for
                 :class:`~torchrl.data.ListStorage`, identity for :class:`~torchrl.data.TensorStorage`
                 subtypes and others).
+            consolidated (bool, optional): whether to consolidate the storage in a single storage tensor.
+                Defaults to ``False``.
 
         Examples:
             >>> # The following example requires torchrl and gymnasium to be installed
@@ -242,7 +248,13 @@ class TensorDictMap(
 
         # Build key_to_storage
         if storage_constructor is None:
-            storage_constructor = functools.partial(LazyTensorStorage, 1000)
+            storage_constructor = functools.partial(
+                LazyTensorStorage, max_size, consolidated=bool(consolidated)
+            )
+        elif consolidated is not None:
+            storage_constructor = functools.partial(
+                storage_constructor, consolidated=consolidated
+            )
         storage = storage_constructor()
         result = cls(
             query_module=query_module,
@@ -257,7 +269,9 @@ class TensorDictMap(
         for mem in self.storage.values():
             mem.clear()
 
-    def _to_index(self, item: TensorDictBase, extend: bool, clone: bool | None=None) -> torch.Tensor:
+    def _to_index(
+        self, item: TensorDictBase, extend: bool, clone: bool | None = None
+    ) -> torch.Tensor:
         item = self.query_module(item, extend=extend, clone=clone)
         return item[self.index_key]
 

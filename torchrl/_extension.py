@@ -6,6 +6,13 @@
 import importlib.util
 import warnings
 
+from packaging.version import parse
+
+try:
+    from .version import __version__
+except ImportError:
+    __version__ = None
+
 
 def is_module_available(*modules: str) -> bool:
     """Returns if a top-level module with :attr:`name` exists *without** importing it.
@@ -24,8 +31,28 @@ def _init_extension():
         return
 
 
-EXTENSION_WARNING = (
-    "Failed to import torchrl C++ binaries. Some modules (eg, prioritized replay buffers) may not work with your installation. "
-    "If you installed TorchRL from PyPI, please report the bug on TorchRL github. "
-    "If you installed TorchRL locally and/or in development mode, check that you have all the required compiling packages."
-)
+def _is_nightly(version):
+    if version is None:
+        return True
+    parsed_version = parse(version)
+    return parsed_version.local is not None
+
+
+if _is_nightly(__version__):
+    EXTENSION_WARNING = (
+        "Failed to import torchrl C++ binaries. Some modules (eg, prioritized replay buffers) may not work with your installation. "
+        "You seem to be using the nightly version of TorchRL. If this is a local install, there might be an issue with "
+        "the local installation. Here are some tips to debug this:\n"
+        " - make sure ninja and cmake were installed\n"
+        " - make sure you ran `python setup.py clean && python setup.py develop` and that no error was raised\n"
+        " - make sure the version of PyTorch you are using matches the one that was present in your virtual env during "
+        "setup."
+    )
+
+else:
+    EXTENSION_WARNING = (
+        "Failed to import torchrl C++ binaries. Some modules (eg, prioritized replay buffers) may not work with your installation. "
+        "This is likely due to a discrepancy between your package version and the PyTorch version. Make sure both are compatible. "
+        "Usually, torchrl majors follow the pytorch majors within a few days around the release. "
+        "For instance, TorchRL 0.5 requires PyTorch 2.4.0, and TorchRL 0.6 requires PyTorch 2.5.0."
+    )
