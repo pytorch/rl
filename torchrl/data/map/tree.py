@@ -4,54 +4,288 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import weakref
-from typing import List
+from collections import deque
+
+from typing import Any, Callable, Dict, List, Literal, Tuple
 
 import torch
-from tensordict import LazyStackedTensorDict, NestedKey, tensorclass, TensorDict
-from torchrl.data.replay_buffers.storages import ListStorage
+from tensordict import (
+    merge_tensordicts,
+    NestedKey,
+    TensorClass,
+    TensorDict,
+    TensorDictBase,
+)
 from torchrl.data.map.tdstorage import TensorDictMap
+from torchrl.data.map.utils import _plot_plotly_box, _plot_plotly_tree
+from torchrl.data.replay_buffers.storages import ListStorage
 from torchrl.envs.common import EnvBase
 
 
-@tensorclass
-class MCTSNode:
-    """An MCTS node.
+class Tree(TensorClass["nocast"]):
+    """Representation of a single MCTS (Monte Carlo Tree Search) Tree.
 
-    The batch-size of a root node is indicative of the batch-size of the tree:
-    each indexed element of a ``Node`` corresponds to a separate tree.
+    This class encapsulates the data and behavior of a tree node in an MCTS algorithm.
+    It includes attributes for storing information about the node, such as its children,
+    visit count, and rollout data. Methods are provided for traversing the tree,
+    computing statistics, and visualizing the tree structure.
 
-    A node is characterized by its data (a tensordict with keys such as ``"observation"``,
-    or ``"done"``), a ``children`` field containing all the branches from that node
-    (one per action taken), and a ``count`` tensor indicating how many times this node
-    has been visited.
+    It is somewhat indistinguishable from a node or a vertex - we use the term "Tree" when talking about
+    a node with children, "node" or "vertex" when talking about a place in the tree where a branching occurs.
+    A node in the tree is defined primarily by its ``hash`` value. Usually, a ``hash`` is determined by a unique
+    combination of state (or observation) and action. If one observation (found in the ``node`` attribute) has more than
+    one action associated, each branch will be stored in the ``subtree`` attribute as a stack of ``Tree`` instances.
+
+    Attributes:
+        count (int): The number of visits to this node.
+        index (torch.Tensor): Indices of the child nodes in the data map.
+        hash (torch.Tensor): A hash value for this node.
+            It may be the case that ``hash`` is ``None`` in the specific case where the root of the tree
+            has more than one action associated. In that case, each subtree branch will have a different action
+            associated and a hash correspoding to the ``(observation, action)`` pair.
+        node_id (int): A unique identifier for this node.
+        rollout (TensorDict): Rollout data following the observation encoded in this node, in a TED format.
+            If there are multiple actions taken at this node, subtrees are stored in the corresponding
+            entry. Rollouts can be reconstructed using the :meth:`~.rollout_from_path` method.
+        node (TensorDict): Data defining this node (e.g., observations) before the next branching.
+            Entries usually matches the ``in_keys`` in ``MCTSForeset.node_map``.
+        subtree (Tree): A stack of subtrees produced when actions are taken.
+        num_children (int): The number of child nodes (read-only).
+        is_terminal (bool): whether the tree has children nodes (read-only).
+            If the tree is compact, ``is_terminal == True`` means that there are more than one child node in
+            ``self.subtree``.
+
+    Methods:
+        __contains__: Whether another tree can be found in the tree.
+        vertices: Returns a dictionary containing all vertices in the tree. Keys must be paths, ids or hashes.
+        num_vertices: Returns the total number of vertices in the tree, with or without duplicates.
+        edges: Returns a list of edges in the tree.
+        valid_paths: Yields all valid paths in the tree.
+        max_length: Returns the maximum length of any path in the tree.
+        rollout_from_path: Reconstructs a rollout from a given path.
+        plot: Visualizes the tree using a specified backend and figure type.
+        get_node_by_id: returns the vertex given by its id in the tree.
+        get_node_by_hash: returns the vertex given by its hash in the forest.
 
     """
 
-    data_content: TensorDict
-    children: MCTSChildren | None = None
-    count: torch.Tensor | None = None
-    forest: MCTSForest | None = None
-
-    def plot(self, backend="plotly", info=None):
-        forest = self.forest
-        if isinstance(forest, weakref.ref):
-            forest = forest()
-        return forest.plot(self, backend=backend, info=info)
-
-@tensorclass
-class MCTSChildren:
-    """The children of a node.
-
-    This class contains data of the same batch-size: the ``index`` and ``hash``
-    associated with each ``node``. Therefore, each indexed element of a ``Children``
-    corresponds to one child with its associated index. Actions .
-
-    """
-
-    node: MCTSNode
+    count: int = None
     index: torch.Tensor | None = None
-    hash: torch.Tensor | None = None
+    # The hash is None if the node has more than one action associated
+    hash: int | None = None
+    node_id: int | None = None
+
+    # rollout following the observation encoded in node, in a TorchRL (TED) format
+    rollout: TensorDict | None = None
+
+    # The data specifying the node
+    node: TensorDict | None = None
+
+    # Stack of subtrees. A subtree is produced when an action is taken.
+    subtree: "Tree" = None
+
+    @property
+    def num_children(self) -> int:
+        """Number of children of this node.
+
+        Equates to the number of elements in the ``self.subtree`` stack.
+        """
+        return len(self.subtree) if self.subtree is not None else 0
+
+    @property
+    def is_terminal(self):
+        """Returns True if the the tree has no children nodes."""
+        return self.subtree is None
+
+    def get_vertex_by_id(self, id: int) -> Tree:
+        """Goes through the tree and returns the node corresponding the given id."""
+        q = deque()
+        q.append(self)
+        while len(q):
+            tree = q.popleft()
+            if tree.node_id == id:
+                return tree
+            if tree.subtree is not None:
+                q.extend(tree.subtree.unbind(0))
+        raise ValueError(f"Node with id {id} not found.")
+
+    def get_vertex_by_hash(self, hash: int) -> Tree:
+        """Goes through the tree and returns the node corresponding the given hash."""
+        q = deque()
+        q.append(self)
+        while len(q):
+            tree = q.popleft()
+            if tree.hash == hash:
+                return tree
+            if tree.subtree is not None:
+                q.extend(tree.subtree.unbind(0))
+        raise ValueError(f"Node with hash {hash} not found.")
+
+    def __contains__(self, other: Tree) -> bool:
+        hash = other.hash
+        for vertex in self.vertices().values():
+            if vertex.hash == hash:
+                return True
+        else:
+            return False
+
+    def vertices(
+        self, *, key_type: Literal["id", "hash", "path"] = "hash"
+    ) -> Dict[int | Tuple[int], Tree]:
+        """Returns a map containing the vertices of the Tree.
+
+        Keyword args:
+            key_type (Literal["id", "hash", "path"], optional): Specifies the type of key to use for the vertices.
+
+                - "id": Use the vertex ID as the key.
+                - "hash": Use a hash of the vertex as the key.
+                - "path": Use the path to the vertex as the key. This may lead to a dictionary with a longer length than
+                    when ``"id"`` or ``"hash"`` are used as the same node may be part of multiple trajectories.
+                    Defaults to ``"hash"``.
+
+                Defaults to an empty string, which may imply a default behavior.
+
+        Returns:
+            Dict[int | Tuple[int], Tree]: A dictionary mapping keys to Tree vertices.
+
+        """
+        memo = set()
+        result = {}
+        q = deque()
+        cur_path = ()
+        q.append((self, cur_path))
+        use_hash = key_type == "hash"
+        use_id = key_type == "id"
+        use_path = key_type == "path"
+        while len(q):
+            tree, cur_path = q.popleft()
+            h = tree.hash
+            if h in memo and not use_path:
+                continue
+            memo.add(h)
+            r = tree.rollout
+            if r is not None:
+                r = r["next", "observation"]
+            if use_path:
+                result[cur_path] = tree
+            elif use_id:
+                result[tree.node_id] = tree
+            elif use_hash:
+                result[tree.node_id] = tree
+            else:
+                raise ValueError(
+                    f"key_type must be either 'hash', 'id' or 'path'. Got {key_type}."
+                )
+
+            n = int(tree.num_children)
+            for i in range(n):
+                cur_path_tree = cur_path + (i,)
+                q.append((tree.subtree[i], cur_path_tree))
+        return result
+
+    def num_vertices(self, *, count_repeat: bool = False) -> int:
+        """Returns the number of unique vertices in the Tree.
+
+        Keyword Args:
+            count_repeat (bool, optional): Determines whether to count repeated vertices.
+                - If ``False``, counts each unique vertex only once.
+                - If ``True``, counts vertices multiple times if they appear in different paths.
+                Defaults to ``False``.
+
+        Returns:
+            int: The number of unique vertices in the Tree.
+
+        """
+        return len(
+            {
+                v.node_id
+                for v in self.vertices(
+                    key_type="hash" if not count_repeat else "path"
+                ).values()
+            }
+        )
+
+    def edges(self) -> List[Tuple[int, int]]:
+        result = []
+        q = deque()
+        parent = self.node_id
+        q.append((self, parent))
+        while len(q):
+            tree, parent = q.popleft()
+            n = int(tree.num_children)
+            for i in range(n):
+                node = tree.subtree[i]
+                node_id = node.node_id
+                result.append((parent, node_id))
+                q.append((node, node_id))
+        return result
+
+    def valid_paths(self):
+        q = deque()
+        cur_path = ()
+        q.append((self, cur_path))
+        while len(q):
+            tree, cur_path = q.popleft()
+            n = int(tree.num_children)
+            if not n:
+                yield cur_path
+            for i in range(n):
+                cur_path_tree = cur_path + (i,)
+                q.append((tree.subtree[i], cur_path_tree))
+
+    def max_length(self):
+        return max(*(len(path) for path in self.valid_paths()))
+
+    def rollout_from_path(self, path: Tuple[int]) -> TensorDictBase | None:
+        r = self.rollout
+        tree = self
+        rollouts = []
+        if r is not None:
+            rollouts.append(r)
+        for i in path:
+            tree = tree.subtree[i]
+            r = tree.rollout
+            if r is not None:
+                rollouts.append(r)
+        if rollouts:
+            return torch.cat(rollouts, dim=-1)
+
+    @staticmethod
+    def _label(info: List[str], tree: "Tree", root=False):
+        labels = []
+        for key in info:
+            if key == "hash":
+                hash = tree.hash
+                if hash is not None:
+                    hash = hash.item()
+                v = f"hash={hash}"
+            elif root:
+                v = f"{key}=None"
+            else:
+                v = f"{key}={tree.rollout[key].mean().item()}"
+
+            labels.append(v)
+        return ", ".join(labels)
+
+    def plot(
+        self: Tree,
+        backend: str = "plotly",
+        figure: str = "tree",
+        info: List[str] = None,
+        make_labels: Callable[[Any], Any] | None = None,
+    ):
+        if backend == "plotly":
+            if figure == "box":
+                _plot_plotly_box(self)
+                return
+            elif figure == "tree":
+                _plot_plotly_tree(self, make_labels=make_labels)
+                return
+            else:
+                pass
+        raise NotImplementedError(
+            f"Unkown plotting backend {backend} with figure {figure}."
+        )
 
 
 class MCTSForest:
@@ -77,6 +311,8 @@ class MCTSForest:
         observation_keys (list of NestedKey): the observation keys of the environment. If not provided,
             defaults to ``("observation",)``.
             The :meth:`~.get_keys_from_env` can be used to automatically determine the keys.
+        consolidated (bool, optional): if ``True``, the data_map storage will be consolidated on disk.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs import GymEnv
@@ -110,49 +346,58 @@ class MCTSForest:
         >>> rollout0 = env.rollout(6, auto_reset=False, tensordict=reset_state.clone())
         >>> # Append the rollout to the forest. We're removing the state entries for clarity
         >>> rollout0 = rollout0.copy()
-        >>> rollout0.exclude(*state_keys, inplace=True)
-        >>> rollout0.get("next").exclude(*state_keys, inplace=True)
+        >>> rollout0.exclude(*state_keys, inplace=True).get("next").exclude(*state_keys, inplace=True)
         >>> forest.extend(rollout0)
         >>> # The forest should have 6 elements (the length of the rollout)
         >>> assert len(forest) == 6
         >>> # Let's make another rollout from the same reset state
         >>> rollout1 = env.rollout(6, auto_reset=False, tensordict=reset_state.clone())
-        >>> rollout1.exclude(*state_keys, inplace=True)
-        >>> rollout1.get("next").exclude(*state_keys, inplace=True)
+        >>> rollout1.exclude(*state_keys, inplace=True).get("next").exclude(*state_keys, inplace=True)
         >>> forest.extend(rollout1)
         >>> assert len(forest) == 12
-        >>> # Since we have 2 rollouts starting at the same state, our tree should have two
-        >>> #  branches if we produce it from the reset entry. Take the sate, and call `get_tree`:
-        >>> r = rollout0[0]
-        >>> tree = forest.get_tree(r)
-        >>> tree.shape
-        (torch.Size([]), _StringKeys(dict_keys(['data_content', 'children', 'count'])))
-         >>> tree.count
-         tensor(2, dtype=torch.int32)
-        >>> tree.children.shape
-        (torch.Size([2]),
-         _StringKeys(dict_keys(['node', 'action', 'reward', 'index', 'hash'])))
-        >>> # Now, let's run a rollout from an intermediate step from the second rollout
-        >>> starttd = rollout1[2]
-        >>> rollout2 = env.rollout(6, auto_reset=False, tensordict=starttd)
-        >>> rollout2.exclude(*state_keys, inplace=True)
-        >>> rollout2.get("next").exclude(*state_keys, inplace=True)
-        >>> forest.extend(rollout2)
+        >>> # Let's make another final rollout from an intermediate step in the second rollout
+        >>> rollout1b = env.rollout(6, auto_reset=False, tensordict=rollout1[3].exclude("next"))
+        >>> rollout1b.exclude(*state_keys, inplace=True)
+        >>> rollout1b.get("next").exclude(*state_keys, inplace=True)
+        >>> forest.extend(rollout1b)
         >>> assert len(forest) == 18
-        >>> # Now our tree is a bit more complex, since from the 3rd level we have 3 different branches
-        >>> #  When looking at the third level, we should see that the count for the left branch is 1, whereas the count
-        >>> #  for the right branch is 2.
+        >>> # Since we have 2 rollouts starting at the same state, our tree should have two
+        >>> #  branches if we produce it from the reset entry. Take the state, and call `get_tree`:
         >>> r = rollout0[0]
+        >>> # Let's get the compact tree that follows the initial reset. A compact tree is
+        >>> #  a tree where nodes that have a single child are collapsed.
         >>> tree = forest.get_tree(r)
-        >>> print(tree.children.node.children.node.count, tree.children.node.children.node.shape)
-        tensor([[1],
-                [2]], dtype=torch.int32) torch.Size([2, 1])
-        >>> # This is reflected by the shape of the children: the left has shape [1, 1], the right [1, 2]
-        >>> #  and tensordict represents this as shape [2, 1, -1]
-        >>> tree.children.node.children.node.children.shape, tree.children.node.children.node.children[0].shape, tree.children.node.children.node.children[1].shape
-        (torch.Size([2, 1, -1]), torch.Size([1, 1]), torch.Size([1, 2]))
-        >>> tree.plot(info=["step_count", "reward"])
-
+        >>> print(tree.max_length())
+        2
+        >>> print(list(tree.valid_paths()))
+        [(0,), (1, 0), (1, 1)]
+        >>> from tensordict import assert_close
+        >>> # We can manually rebuild the tree
+        >>> assert_close(
+        ...     rollout1,
+        ...     torch.cat([tree.subtree[1].rollout, tree.subtree[1].subtree[0].rollout]),
+        ...     intersection=True,
+        ... )
+        True
+        >>> # Or we can rebuild it using the dedicated method
+        >>> assert_close(
+        ...     rollout1,
+        ...     tree.rollout_from_path((1, 0)),
+        ...     intersection=True,
+        ... )
+        True
+        >>> tree.plot()
+        >>> tree = forest.get_tree(r, compact=False)
+        >>> print(tree.max_length())
+        9
+        >>> print(list(tree.valid_paths()))
+        [(0, 0, 0, 0, 0, 0), (1, 0, 0, 0, 0, 0), (1, 0, 0, 1, 0, 0, 0, 0, 0)]
+        >>> assert_close(
+        ...     rollout1,
+        ...     tree.rollout_from_path((1, 0, 0, 0, 0, 0)),
+        ...     intersection=True,
+        ... )
+        True
     """
 
     def __init__(
@@ -164,6 +409,7 @@ class MCTSForest:
         reward_keys: List[NestedKey] = None,
         observation_keys: List[NestedKey] = None,
         action_keys: List[NestedKey] = None,
+        consolidated: bool | None = None,
     ):
 
         self.data_map = data_map
@@ -174,6 +420,7 @@ class MCTSForest:
         self.action_keys = action_keys
         self.reward_keys = reward_keys
         self.observation_keys = observation_keys
+        self.consolidated = consolidated
 
     @property
     def done_keys(self):
@@ -236,7 +483,7 @@ class MCTSForest:
     @classmethod
     def _write_fn_stack(cls, new, old=None):
         if old is None:
-            result = new.apply(lambda x: x.unsqueeze(0))
+            result = new.apply(lambda x: x.unsqueeze(0), filter_empty=False)
             result.set(
                 "count", torch.ones(result.shape, dtype=torch.int, device=result.device)
             )
@@ -255,11 +502,17 @@ class MCTSForest:
         return result
 
     def _make_storage(self, source, dest):
-        self.data_map = TensorDictMap.from_tensordict_pair(
-            source,
-            dest,
-            in_keys=[*self.observation_keys, *self.action_keys],
-        )
+        try:
+            self.data_map = TensorDictMap.from_tensordict_pair(
+                source,
+                dest,
+                in_keys=[*self.observation_keys, *self.action_keys],
+                consolidated=self.consolidated,
+            )
+        except KeyError as err:
+            raise KeyError(
+                "A KeyError occurred during data map creation. This could be due to the wrong setting of a key in the MCTSForest constructor. Scroll up for more info."
+            ) from err
 
     def _make_storage_branches(self, source, dest):
         self.node_map = TensorDictMap.from_tensordict_pair(
@@ -267,7 +520,7 @@ class MCTSForest:
             dest,
             in_keys=[*self.observation_keys],
             out_keys=[
-                *self.data_map.query_module.out_keys, # hash and index
+                *self.data_map.query_module.out_keys,  # hash and index
                 # *self.action_keys,
                 # *[("next", rk) for rk in self.reward_keys],
                 "count",
@@ -278,7 +531,10 @@ class MCTSForest:
         )
 
     def extend(self, rollout):
-        source, dest = rollout.exclude("next").copy(), rollout.select("next", *self.action_keys).copy()
+        source, dest = (
+            rollout.exclude("next").copy(),
+            rollout.select("next", *self.action_keys).copy(),
+        )
 
         if self.data_map is None:
             self._make_storage(source, dest)
@@ -293,311 +549,122 @@ class MCTSForest:
             self._make_storage_branches(source, dest)
         self.node_map[source] = TensorDict.lazy_stack(value.unbind(0))
 
-    def get_child(self, root):
+    def get_child(self, root: TensorDictBase) -> TensorDictBase:
         return self.data_map[root]
+
+    def _make_local_tree(
+        self,
+        root: TensorDictBase,
+        index: torch.Tensor | None = None,
+        compact: bool = True,
+    ) -> Tuple[Tree, torch.Tensor | None, torch.Tensor | None]:
+        root = root.select(*self.node_map.in_keys)
+        node_meta = None
+        if root in self.node_map:
+            node_meta = self.node_map[root]
+        if index is None:
+            node_meta = self.node_map[root]
+            index = node_meta["_index"]
+        elif index is not None:
+            pass
+        else:
+            return None
+        steps = []
+        while index.numel() <= 1:
+            index = index.squeeze()
+            d = self.data_map.storage[index]
+            steps.append(merge_tensordicts(d, root, callback_exist=lambda *x: None))
+            d = d["next"]
+            if d in self.node_map:
+                root = d.select(*self.node_map.in_keys)
+                node_meta = self.node_map[root]
+                index = node_meta["_index"]
+                if not compact:
+                    break
+            else:
+                index = None
+                break
+        rollout = None
+        if steps:
+            rollout = torch.stack(steps, -1)
+        # Will be populated later
+        hash = node_meta["_hash"]
+        return (
+            Tree(
+                rollout=rollout,
+                count=node_meta["count"],
+                node=root,
+                index=index,
+                hash=None,
+                subtree=None,
+            ),
+            index,
+            hash,
+        )
+
+    # The recursive implementation is slower and less compatible with compile
+    # def _make_tree(self, root: TensorDictBase, index: torch.Tensor|None=None)->Tree:
+    #     tree, indices = self._make_local_tree(root, index=index)
+    #     subtrees = []
+    #     if indices is not None:
+    #         for i in indices:
+    #             subtree = self._make_tree(tree.node, index=i)
+    #             subtrees.append(subtree)
+    #         subtrees = TensorDict.lazy_stack(subtrees)
+    #         tree.subtree = subtrees
+    #     return tree
+    def _make_tree_iter(
+        self, root, index=None, max_depth: int | None = None, compact: bool = True
+    ):
+        q = deque()
+        memo = {}
+        tree, indices, hash = self._make_local_tree(root, index=index)
+        tree.node_id = 0
+
+        result = tree
+        depth = 0
+        counter = 1
+        if indices is not None:
+            q.append((tree, indices, hash, depth))
+        del tree, indices
+
+        while len(q):
+            tree, indices, hash, depth = q.popleft()
+            extend = max_depth is None or depth < max_depth
+            subtrees = []
+            for i, h in zip(indices, hash):
+                # TODO: remove the .item()
+                h = h.item()
+                subtree, subtree_indices, subtree_hash = memo.get(h, (None,) * 3)
+                if subtree is None:
+                    subtree, subtree_indices, subtree_hash = self._make_local_tree(
+                        tree.node, index=i, compact=compact
+                    )
+                    subtree.node_id = counter
+                    counter += 1
+                    subtree.hash = h
+                    memo[h] = (subtree, subtree_indices, subtree_hash)
+
+                subtrees.append(subtree)
+                if extend and subtree_indices is not None:
+                    q.append((subtree, subtree_indices, subtree_hash, depth + 1))
+            subtrees = TensorDict.lazy_stack(subtrees)
+            tree.subtree = subtrees
+
+        return result
 
     def get_tree(
         self,
         root,
         *,
-        inplace: bool = False,
-        recurse: bool = True,
         max_depth: int | None = None,
-        as_tensordict: bool = False,
-        compact: bool=False,
-    ):
-        if root.batch_size:
-            if compact:
-                raise NotImplementedError
-            func = self._get_tree_batched
-        else:
-            if compact:
-                func = self._get_tree_single_compact
-            else:
-                func = self._get_tree_single
-        return func(
-            root=root,
-            inplace=inplace,
-            recurse=recurse,
-            max_depth=max_depth,
-            as_tensordict=as_tensordict,
-        )
+        compact: bool = True,
+    ) -> Tree:
+        return self._make_tree_iter(root=root, max_depth=max_depth, compact=compact)
 
-    def _get_tree_single(
-        self,
-        root,
-        inplace: bool = False,
-        recurse: bool = True,
-        max_depth: int | None = None,
-        as_tensordict: bool = False,
-    ):
-        if root not in self.node_map:
-            if as_tensordict:
-                return TensorDict({"data_content": root})
-            return MCTSNode(root, forest=weakref.ref(self))
-
-        branches = self.node_map[root]
-
-        index = branches["_index"]
-        hash_val = branches["_hash"]
-        count = branches["count"]
-
-        children_node = self.data_map.storage[index]
-        if not inplace:
-            root = root.copy()
-        if recurse:
-            children_node = children_node.unbind(0)
-            children_node = tuple(
-                self.get_tree(
-                    child,
-                    inplace=inplace,
-                    max_depth=max_depth - 1 if isinstance(max_depth, int) else None,
-                )
-                for child in children_node
-            )
-            if not as_tensordict:
-                children_node = LazyStackedTensorDict(
-                    *(child._tensordict for child in children_node)
-                )
-                children_node = MCTSNode.from_tensordict(children_node)
-                children_node.forest = weakref.ref(self)
-            else:
-                children_node = LazyStackedTensorDict(*children_node)
-
-        if not as_tensordict:
-            return MCTSNode(
-                data_content=root,
-                children=MCTSChildren(
-                    node=children_node,
-                    index=index,
-                    hash=hash_val,
-                    batch_size=children_node.batch_size,
-                ),
-                count=count,
-                forest=weakref.ref(self),
-            )
-        return TensorDict(
-            {
-                "data_content": root,
-                "children": TensorDict(
-                    {
-                        "node": children_node,
-                        "index": index,
-                        "hash": hash_val,
-                    },
-                    batch_sizde=children_node.batch_size,
-                ),
-                "count": count,
-            }
-        )
-
-    def _get_tree_single_compact(
-        self,
-        root,
-        inplace: bool = False,
-        recurse: bool = True,
-        max_depth: int | None = None,
-        as_tensordict: bool = False,
-    ):
-        if root not in self.node_map:
-            if as_tensordict:
-                return TensorDict({"data_content": root})
-            return MCTSNode(root, forest=weakref.ref(self))
-
-        stack = []
-        child = root.select(*self.observation_keys).copy()
-        while True:
-            if child not in self.node_map:
-                # we already know this doesn't happen during the first iter
-                break
-            branch = self.node_map[child]
-            index = branch["_index"]
-            if index.numel() == 1:
-                # child contains (action, next) so we can update the previous data with this
-                new_child = self.data_map.storage[index[0]]
-                child.update(new_child)
-                stack.append(child)
-                child = new_child.get("next").select(*self.observation_keys)
-            else:
-                break
-        if len(stack):
-            root = torch.stack(stack, -1)
-        elif not inplace:
-            root = child
-
-        hash_val = branch["_hash"]
-        count = branch["count"]
-
-        children_node = self.data_map.storage[index].get("next").select(*self.observation_keys)
-        if recurse:
-            children_node = children_node.unbind(0)
-            children_node = tuple(
-                self.get_tree(
-                    child,
-                    inplace=inplace,
-                    max_depth=max_depth - 1 if isinstance(max_depth, int) else None,
-                    compact=True
-                )
-                for child in children_node
-            )
-            if not as_tensordict:
-                children_node = LazyStackedTensorDict(
-                    *(child._tensordict for child in children_node)
-                )
-                children_node = MCTSNode.from_tensordict(children_node)
-                children_node.forest = weakref.ref(self)
-            else:
-                children_node = LazyStackedTensorDict(*children_node)
-
-        if not as_tensordict:
-            return MCTSNode(
-                data_content=root,
-                children=MCTSChildren(
-                    node=children_node,
-                    index=index,
-                    hash=hash_val,
-                    batch_size=children_node.batch_size,
-                ),
-                count=count,
-                forest=weakref.ref(self),
-            )
-        return TensorDict(
-            {
-                "data_content": root,
-                "children": TensorDict(
-                    {
-                        "node": children_node,
-                        "index": index,
-                        "hash": hash_val,
-                    },
-                    batch_sizde=children_node.batch_size,
-                ),
-                "count": count,
-            }
-        )
-
-    def _get_tree_batched(
-        self,
-        root,
-        inplace: bool = False,
-        recurse: bool = True,
-        max_depth: int | None = None,
-        as_tensordict: bool = False,
-    ):
-        present = self.node_map.contains(root)
-        if not present.any():
-            if as_tensordict:
-                return TensorDict({"data_content": root}, batch_size=root.batch_size)
-            return MCTSNode(root, forest=weakref.ref(self), batch_size=root.batch_size)
-        if present.all():
-            root_present = root
-        else:
-            root_present = root[present]
-        branches = self.node_map[root_present]
-        index = branches.get_nestedtensor("_index", layout=torch.jagged)
-        hash_val = branches.get_nestedtensor("_hash", layout=torch.jagged)
-        count = branches.get("count")
-
-        children_node = self.data_map.storage[index.values()]
-        if not root_present.all():
-            children_node = LazyStackedTensorDict(
-                *children_node.split(index.offsets().diff().tolist())
-            )
-            for idx in (~present).nonzero(as_tuple=True)[0].tolist():
-                children_node.insert(idx, TensorDict())  # TODO: replace with new_zero
-
-        if not inplace:
-            root = root.copy()
-        if recurse:
-            children_node = children_node.unbind(0)
-            children_node = tuple(
-                self.get_tree(
-                    child,
-                    inplace=inplace,
-                    max_depth=max_depth - 1 if isinstance(max_depth, int) else None,
-                )
-                if present[i]
-                else child
-                for i, child in enumerate(children_node)
-            )
-        children = TensorDict.lazy_stack(
-            [
-                TensorDict(
-                    {
-                        "node": _children_node,
-                        "index": _index,
-                        "hash": _hash_val,
-                    },
-                    batch_size=_children_node.batch_size,
-                )
-                for (_children_node, _action, _index, _hash_val, _reward) in zip(
-                    children_node,
-                    action.unbind(0),
-                    index.unbind(0),
-                    hash_val.unbind(0),
-                    reward.unbind(0),
-                )
-            ]
-        )
-        if not as_tensordict:
-            return MCTSNode(
-                data_content=root,
-                children=MCTSChildren._from_tensordict(children),
-                count=count,
-                forest=weakref.ref(self),
-                batch_size=root.batch_size,
-            )
-        return TensorDict(
-            {
-                "data_content": root,
-                "children": children,
-                "count": count,
-            },
-            batch_size=root.batch_size,
-        )
+    @classmethod
+    def valid_paths(cls, tree: Tree):
+        yield from tree.valid_paths()
 
     def __len__(self):
         return len(self.data_map)
-
-    @staticmethod
-    def _label(info, tree, root=False):
-        labels = []
-        for key in info:
-            if key == "hash":
-                if not root:
-                    v = f"hash={tree.hash.item()}"
-                else:
-                    v = f"hash={tree.data_content['_hash'].item()}"
-            elif root:
-                v = f"{key}=None"
-            else:
-                v = f"{key}={tree.node.data_content[key].item()}"
-
-            labels.append(v)
-        return ", ".join(labels)
-
-    def plot(self, tree, backend="plotly", info=None):
-        if backend == "plotly":
-            import plotly.graph_objects as go
-            if info is None:
-                info = ["hash", "reward"]
-
-            parents = [""]
-            labels = [self._label(info, tree, root=True)]
-
-            _tree = tree
-
-            def extend(tree, parent):
-                children = tree.children
-                if children is None:
-                    return
-                for child in children:
-                    labels.append(self._label(info, child))
-                    parents.append(parent)
-                    extend(child.node, labels[-1])
-
-            extend(_tree, labels[-1])
-            fig = go.Figure(go.Treemap(labels=labels, parents=parents))
-            fig.show()
-        else:
-            raise NotImplementedError(f"Unkown plotting backend {backend}.")

@@ -275,7 +275,6 @@ def _main(argv):
         extras_require=extra_requires,
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",

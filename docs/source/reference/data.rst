@@ -985,11 +985,13 @@ TorchRL offers a set of classes and functions that can be used to represent tree
 
     BinaryToDecimal
     HashToInt
+    MCTSForeset
     QueryModule
     RandomProjectionHash
     SipHash
     TensorDictMap
     TensorMap
+    Tree
 
 
 Reinforcement Learning From Human Feedback (RLHF)
