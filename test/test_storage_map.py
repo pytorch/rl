@@ -318,7 +318,7 @@ class TestMCTSForest:
     def _make_forest(self) -> MCTSForest:
         r0, r1, r2, r3, r4 = self.dummy_rollouts()
         assert r0.shape
-        forest = MCTSForest(consolidated=True)
+        forest = MCTSForest()
         forest.extend(r0)
         forest.extend(r1)
         forest.extend(r2)
@@ -363,10 +363,24 @@ class TestMCTSForest:
         forest.extend(rollout5)
         return forest
 
+    @staticmethod
+    def make_labels(tree):
+        if tree.rollout is not None:
+            s = torch.cat(
+                [
+                    tree.rollout["observation"][:1],
+                    tree.rollout["next", "observation"],
+                ]
+            )
+            s = s.tolist()
+            return f"{tree.node_id}: {s}"
+        return f"{tree.node_id}"
+
     def test_forest_build(self):
         r0, *_ = self.dummy_rollouts()
         forest = self._make_forest()
         tree = forest.get_tree(r0[0])
+        # tree.plot(make_labels=self.make_labels)
 
     def test_forest_vertices(self):
         r0, *_ = self.dummy_rollouts()
@@ -435,18 +449,6 @@ class TestMCTSForest:
         forest = self._make_forest_intersect()
         tree = forest.get_tree(state0)
         subtree = forest.get_tree(TensorDict(observation=19))
-
-        def make_labels(tree):
-            if tree.rollout is not None:
-                s = torch.cat(
-                    [
-                        tree.rollout["observation"][:1],
-                        tree.rollout["next", "observation"],
-                    ]
-                )
-                s = s.tolist()
-                return f"{tree.node_id}: {s}"
-            return f"{tree.node_id}"
 
         # subtree.plot(make_labels=make_labels)
         # tree.plot(make_labels=make_labels)
