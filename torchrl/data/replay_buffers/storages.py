@@ -61,10 +61,15 @@ class Storage:
     _rng: torch.Generator | None = None
 
     def __init__(
-        self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
+        self,
+        max_size: int,
+        checkpointer: StorageCheckpointerBase | None = None,
+        compilable: bool = False,
     ) -> None:
         self.max_size = int(max_size)
         self.checkpointer = checkpointer
+        self._compilable = compilable
+        self._attached_entities_set = set()
 
     @property
     def checkpointer(self):
@@ -84,11 +89,14 @@ class Storage:
     def _attached_entities(self):
         # RBs that use a given instance of Storage should add
         # themselves to this set.
-        _attached_entities = self.__dict__.get("_attached_entities_set", None)
-        if _attached_entities is None:
-            _attached_entities = set()
-            self.__dict__["_attached_entities_set"] = _attached_entities
-        return _attached_entities
+        _attached_entities_set = getattr(self, "_attached_entities_set", None)
+        if _attached_entities_set is None:
+            self._attached_entities_set = _attached_entities_set = set()
+        return _attached_entities_set
+
+    @torch._dynamo.assume_constant_result
+    def _attached_entities_iter(self):
+        return list(self._attached_entities)
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any, *, set_cursor: bool = True):
@@ -144,29 +152,12 @@ class Storage:
     def _empty(self):
         ...
 
-    # NOTE: This property is used to enable compiled Storages. Calling
-    # `len(self)` on a TensorStorage should normally cause a graph break since
-    # it uses a `mp.Value`, and it does cause a break when the `len(self)` call
-    # happens within a method of TensorStorage itself. However, when the
-    # `len(self)` call happens in the Storage base class, for an unknown reason
-    # the compiler doesn't seem to recognize that there should be a graph break,
-    # and the lack of a break causes a recompile each time `len(self)` is called
-    # in this context. Also for an unknown reason, we can force the graph break
-    # to happen if we wrap the `len(self)` call with a `property`-decorated
-    # function. For another unknown reason, if we change
-    # `TensorStorage._len_value` from `mp.Value` to int, it seems like there
-    # should no longer be any need to recompile, but recompiles happen anyway.
-    # Ideally, this should all be investigated and understood in the future.
-    @property
-    def len(self):
-        return len(self)
-
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
             return torch.randint(
                 0,
-                self.len,
+                len(self),
                 (batch_size,),
                 generator=self._rng,
                 device=getattr(self, "device", None),
@@ -241,10 +232,10 @@ class ListStorage(Storage):
 
     _default_checkpointer = ListStorageCheckpointer
 
-    def __init__(self, max_size: int | None = None):
+    def __init__(self, max_size: int | None = None, compilable: bool = False):
         if max_size is None:
             max_size = torch.iinfo(torch.int64).max
-        super().__init__(max_size)
+        super().__init__(max_size, compilable=compilable)
         self._storage = []
 
     def set(
@@ -381,6 +372,9 @@ class TensorStorage(Storage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+        compilable (bool, optional): whether the storage is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
 
     Examples:
         >>> data = TensorDict({
@@ -440,6 +434,7 @@ class TensorStorage(Storage):
         *,
         device: torch.device = "cpu",
         ndim: int = 1,
+        compilable: bool = False,
     ):
         if not ((storage is None) ^ (max_size is None)):
             if storage is None:
@@ -455,7 +450,7 @@ class TensorStorage(Storage):
             else:
                 max_size = tree_flatten(storage)[0][0].shape[0]
         self.ndim = ndim
-        super().__init__(max_size)
+        super().__init__(max_size, compilable=compilable)
         self.initialized = storage is not None
         if self.initialized:
             self._len = max_size
@@ -474,16 +469,24 @@ class TensorStorage(Storage):
     @property
     def _len(self):
         _len_value = self.__dict__.get("_len_value", None)
-        if _len_value is None:
-            _len_value = self._len_value = mp.Value("i", 0)
-        return _len_value.value
+        if not self._compilable:
+            if _len_value is None:
+                _len_value = self._len_value = mp.Value("i", 0)
+            return _len_value.value
+        else:
+            if _len_value is None:
+                _len_value = self._len_value = 0
+            return _len_value
 
     @_len.setter
     def _len(self, value):
-        _len_value = self.__dict__.get("_len_value", None)
-        if _len_value is None:
-            _len_value = self._len_value = mp.Value("i", 0)
-        _len_value.value = value
+        if not self._compilable:
+            _len_value = self.__dict__.get("_len_value", None)
+            if _len_value is None:
+                _len_value = self._len_value = mp.Value("i", 0)
+            _len_value.value = value
+        else:
+            self._len_value = value
 
     @property
     def _total_shape(self):
@@ -550,7 +553,16 @@ class TensorStorage(Storage):
         if _total_shape is not None:
             return torch.Size([self._len_along_dim0] + list(_total_shape[1:]))
 
+    # TODO: Without this disable, compiler recompiles for back-to-back calls.
+    # Figuring out a way to avoid this disable would give better performance.
+    @torch._dynamo.disable()
     def _rand_given_ndim(self, batch_size):
+        return self._rand_given_ndim_impl(batch_size)
+
+    # At the moment, this is separated into its own function so that we can test
+    # it without the `torch._dynamo.disable` and detect if future updates to the
+    # compiler fix the recompile issue.
+    def _rand_given_ndim_impl(self, batch_size):
         if self.ndim == 1:
             return super()._rand_given_ndim(batch_size)
         shape = self.shape
@@ -623,8 +635,11 @@ class TensorStorage(Storage):
     def __setstate__(self, state):
         len = state.pop("len__context", None)
         if len is not None:
-            _len_value = mp.Value("i", len)
-            state["_len_value"] = _len_value
+            if not state["_compilable"]:
+                state["_len_value"] = len
+            else:
+                _len_value = mp.Value("i", len)
+                state["_len_value"] = _len_value
         self.__dict__.update(state)
 
     def state_dict(self) -> Dict[str, Any]:
@@ -674,7 +689,7 @@ class TensorStorage(Storage):
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
 
-    @implement_for("torch", "2.3")
+    @implement_for("torch", "2.3", compilable=True)
     def _set_tree_map(self, cursor, data, storage):
         def set_tensor(datum, store):
             store[cursor] = datum
@@ -682,7 +697,7 @@ class TensorStorage(Storage):
         # this won't be available until v2.3
         tree_map(set_tensor, data, storage)
 
-    @implement_for("torch", "2.0", "2.3")
+    @implement_for("torch", "2.0", "2.3", compilable=True)
     def _set_tree_map(self, cursor, data, storage):  # noqa: 534
         # flatten data and cursor
         data_flat = tree_flatten(data)[0]
@@ -700,7 +715,7 @@ class TensorStorage(Storage):
             numel = leaf.shape[:ndim].numel()
         self._len = min(self._len + numel, self.max_size)
 
-    @implement_for("torch", "2.0", None)
+    @implement_for("torch", "2.0", None, compilable=True)
     def set(
         self,
         cursor: Union[int, Sequence[int], slice],
@@ -742,7 +757,7 @@ class TensorStorage(Storage):
         else:
             self._set_tree_map(cursor, data, self._storage)
 
-    @implement_for("torch", None, "2.0")
+    @implement_for("torch", None, "2.0", compilable=True)
     def set(  # noqa: F811
         self,
         cursor: Union[int, Sequence[int], slice],
@@ -893,6 +908,11 @@ class LazyTensorStorage(TensorStorage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+        compilable (bool, optional): whether the storage is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
+        consolidated (bool, optional): if ``True``, the storage will be consolidated after
+            its first expansion. Defaults to ``False``.
 
     Examples:
         >>> data = TensorDict({
@@ -952,14 +972,26 @@ class LazyTensorStorage(TensorStorage):
         *,
         device: torch.device = "cpu",
         ndim: int = 1,
+        compilable: bool = False,
+        consolidated: bool = False,
     ):
-        super().__init__(storage=None, max_size=max_size, device=device, ndim=ndim)
+        super().__init__(
+            storage=None,
+            max_size=max_size,
+            device=device,
+            ndim=ndim,
+            compilable=compilable,
+        )
+        self.consolidated = consolidated
 
     def _init(
         self,
         data: Union[TensorDictBase, torch.Tensor, "PyTree"],  # noqa: F821
     ) -> None:
-        torchrl_logger.debug("Creating a TensorStorage...")
+        if not self._compilable:
+            # TODO: Investigate why this seems to have a performance impact with
+            # the compiler
+            torchrl_logger.debug("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
 
@@ -975,7 +1007,11 @@ class LazyTensorStorage(TensorStorage):
 
         if is_tensor_collection(data):
             out = data.to(self.device)
-            out = torch.empty_like(out.expand(max_size_along_dim0(data.shape)))
+            out: TensorDictBase = torch.empty_like(
+                out.expand(max_size_along_dim0(data.shape))
+            )
+            if self.consolidated:
+                out = out.consolidate()
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
@@ -986,6 +1022,8 @@ class LazyTensorStorage(TensorStorage):
                 ),
                 data,
             )
+            if self.consolidated:
+                raise ValueError("Cannot consolidate non-tensordict storages.")
 
         self._storage = out
         self.initialized = True
@@ -1089,8 +1127,9 @@ class LazyMemmapStorage(LazyTensorStorage):
         device: torch.device = "cpu",
         ndim: int = 1,
         existsok: bool = False,
+        compilable: bool = False,
     ):
-        super().__init__(max_size, ndim=ndim)
+        super().__init__(max_size, ndim=ndim, compilable=compilable)
         self.initialized = False
         self.scratch_dir = None
         self.existsok = existsok
@@ -1263,10 +1302,6 @@ class StorageEnsemble(Storage):
         self._rng_private = value
         for storage in self._storages:
             storage._rng = value
-
-    @property
-    def _attached_entities(self):
-        return set()
 
     def extend(self, value):
         raise RuntimeError

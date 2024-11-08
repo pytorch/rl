@@ -252,6 +252,11 @@ class implement_for:
     Keyword Args:
         class_method (bool, optional): if ``True``, the function will be written as a class method.
             Defaults to ``False``.
+        compilable (bool, optional): If ``False``, the module import happens
+            only on the first call to the wrapped function. If ``True``, the
+            module import happens when the wrapped function is initialized. This
+            allows the wrapped function to work well with ``torch.compile``.
+            Defaults to ``False``.
 
     Examples:
         >>> @implement_for("gym", "0.13", "0.14")
@@ -290,11 +295,13 @@ class implement_for:
         to_version: str = None,
         *,
         class_method: bool = False,
+        compilable: bool = False,
     ):
         self.module_name = module_name
         self.from_version = from_version
         self.to_version = to_version
         self.class_method = class_method
+        self._compilable = compilable
         implement_for._setters.append(self)
 
     @staticmethod
@@ -386,18 +393,27 @@ class implement_for:
         self.fn = fn
         implement_for._lazy_impl[self.func_name].append(self._call)
 
-        @wraps(fn)
-        def _lazy_call_fn(*args, **kwargs):
-            # first time we call the function, we also do the replacement.
-            # This will cause the imports to occur only during the first call to fn
+        if self._compilable:
+            _call_fn = self._delazify(self.func_name)
 
-            result = self._delazify(self.func_name)(*args, **kwargs)
-            return result
+            if self.class_method:
+                return classmethod(_call_fn)
 
-        if self.class_method:
-            return classmethod(_lazy_call_fn)
+            return _call_fn
+        else:
 
-        return _lazy_call_fn
+            @wraps(fn)
+            def _lazy_call_fn(*args, **kwargs):
+                # first time we call the function, we also do the replacement.
+                # This will cause the imports to occur only during the first call to fn
+
+                result = self._delazify(self.func_name)(*args, **kwargs)
+                return result
+
+            if self.class_method:
+                return classmethod(_lazy_call_fn)
+
+            return _lazy_call_fn
 
     def _call(self):
 
