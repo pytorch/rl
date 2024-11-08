@@ -3816,6 +3816,58 @@ class TestLegacy:
         assert not isinstance(non_tensor, MultiOneHot)
 
 
+class TestSpecEnumerate:
+    def test_discrete(self):
+        spec = DiscreteTensorSpec(n=5, shape=(3,))
+        assert (
+            spec.enumerate()
+            == torch.tensor([[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4]])
+        ).all()
+        assert spec.is_in(spec.enumerate())
+
+    def test_one_hot(self):
+        spec = OneHotDiscreteTensorSpec(n=5, shape=(2, 5))
+        assert (
+            spec.enumerate()
+            == torch.tensor(
+                [
+                    [[1, 0, 0, 0, 0], [1, 0, 0, 0, 0]],
+                    [[0, 1, 0, 0, 0], [0, 1, 0, 0, 0]],
+                    [[0, 0, 1, 0, 0], [0, 0, 1, 0, 0]],
+                    [[0, 0, 0, 1, 0], [0, 0, 0, 1, 0]],
+                    [[0, 0, 0, 0, 1], [0, 0, 0, 0, 1]],
+                ],
+                dtype=torch.bool,
+            )
+        ).all()
+        assert spec.is_in(spec.enumerate())
+
+    def test_multi_discrete(self):
+        spec = MultiDiscreteTensorSpec([3, 4, 5], shape=(2, 3))
+        enum = spec.enumerate()
+        assert spec.is_in(enum)
+        assert enum.shape == torch.Size([60, 2, 3])
+
+    def test_multi_onehot(self):
+        spec = MultiOneHotDiscreteTensorSpec([3, 4, 5], shape=(2, 12))
+        enum = spec.enumerate()
+        assert spec.is_in(enum)
+        assert enum.shape == torch.Size([60, 2, 12])
+
+    def test_composite(self):
+        c = CompositeSpec(
+            {
+                "a": OneHotDiscreteTensorSpec(n=5, shape=(3, 5)),
+                ("b", "c"): DiscreteTensorSpec(n=4, shape=(3,)),
+            },
+            shape=[3],
+        )
+        c_enum = c.enumerate()
+        assert c.is_in(c_enum)
+        assert c_enum.shape == torch.Size((20, 3))
+        assert c_enum["b"].shape == torch.Size((20, 3))
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
