@@ -115,7 +115,7 @@ class _JumanjiMakeRender(_EnvPostInit):
 
 
 class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
-    """Jumanji environment wrapper.
+    """Jumanji's environment wrapper.
 
     Jumanji offers a vectorized simulation framework based on Jax.
     TorchRL's wrapper incurs some overhead for the jax-to-torch conversion,
@@ -621,7 +621,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             plt.close()
             if not as_numpy:
                 return img_array[:3]
-            return img_array[:3].numpy()
+            return img_array[:3].numpy().copy()
         finally:
             jumanji.environments.is_notebook = is_notebook
 
@@ -679,10 +679,10 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         import jax
         from jax import numpy as jnp
 
-        if self.batch_locked:
+        if self.batch_locked or tensordict is None:
             numel = self.numel()
             batch_size = self.batch_size
-        else:
+        elif tensordict is not None:
             numel = tensordict.numel()
             batch_size = tensordict.batch_size
 
@@ -728,7 +728,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             reward = self.reward_spec.encode(reward, ignore_device=True)
         else:
             reward = torch.as_tensor(reward)
-            if reward.shape[-1] != self.reward_spec.shape[-1]:
+            if not reward.ndim or (reward.shape[-1] != self.reward_spec.shape[-1]):
                 reward = reward.unsqueeze(-1)
 
         if reward is None:

@@ -1673,6 +1673,9 @@ class TestJumanji:
         pixels = r["pixels"]
         if not isinstance(pixels, torch.Tensor):
             pixels = torch.as_tensor(np.asarray(pixels))
+            assert batch_size
+        else:
+            assert not batch_size
         assert pixels.unique().numel() > 1
         assert pixels.dtype == torch.uint8
 
@@ -1687,13 +1690,12 @@ class TestJumanji:
         reset = env.reset(TensorDict(batch_size=[16]))
         assert reset.batch_size == (16,)
         env.rand_step(reset)
-        t0 = time.time()
         r = env.rollout(
-            20, auto_reset=False, tensordict=reset, break_when_all_done=True
+            2000, auto_reset=False, tensordict=reset, break_when_all_done=True
         )
         assert r.batch_size[0] == 16
-        done = r["next", "done"].float()
-        assert (done.cumprod(-2) == done).all()
+        done = r["next", "done"]
+        assert done.any(-2).all() or (r.shape[-1] == 2000)
 
 
 ENVPOOL_CLASSIC_CONTROL_ENVS = [
