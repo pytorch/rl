@@ -186,6 +186,27 @@ class _EnvPostInit(abc.ABCMeta):
             return AutoResetEnv(
                 instance, AutoResetTransform(replace=auto_reset_replace)
             )
+
+        done_keys = set(instance.full_done_spec.keys(True, True))
+        obs_keys = set(instance.full_observation_spec.keys(True, True))
+        reward_keys = set(instance.full_reward_spec.keys(True, True))
+        # state_keys can match obs_keys so we don't test that
+        action_keys = set(instance.full_action_spec.keys(True, True))
+        state_keys = set(instance.full_state_spec.keys(True, True))
+        total_set = set()
+        for keyset in (done_keys, obs_keys, reward_keys):
+            if total_set.intersection(keyset):
+                raise RuntimeError(
+                    f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
+                )
+            total_set = total_set.union(keyset)
+        total_set = set()
+        for keyset in (state_keys, action_keys):
+            if total_set.intersection(keyset):
+                raise RuntimeError(
+                    f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
+                )
+            total_set = total_set.union(keyset)
         return instance
 
 
@@ -830,7 +851,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
-        return self.input_spec["full_action_spec"]
+        full_action_spec = self.input_spec.get("full_action_spec", None)
+        if full_action_spec is None:
+            full_action_spec = Composite(shape=self.batch_size, device=self.device)
+            self.input_spec.unlock_()
+            self.input_spec["full_action_spec"] = full_action_spec
+            self.input_spec.lock_()
+        return full_action_spec
 
     @full_action_spec.setter
     def full_action_spec(self, spec: Composite) -> None:
@@ -1313,7 +1340,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
-        observation_spec = self.output_spec["full_observation_spec"]
+        observation_spec = self.output_spec.get("full_observation_spec", default=None)
         if observation_spec is None:
             observation_spec = Composite(shape=self.batch_size, device=self.device)
             self.output_spec.unlock_()
@@ -2136,9 +2163,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self._assert_tensordict_shape(tensordict)
 
         tensordict_reset = self._reset(tensordict, **kwargs)
-        #        We assume that this is done properly
-        #        if reset.device != self.device:
-        #            reset = reset.to(self.device, non_blocking=True)
+        # We assume that this is done properly
+        # if reset.device != self.device:
+        #     reset = reset.to(self.device, non_blocking=True)
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
@@ -2326,6 +2353,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict: Optional[TensorDictBase] = None,
         set_truncated: bool = False,
         out=None,
+        trust_policy: bool = False,
     ):
         """Executes a rollout in the environment.
 
@@ -2367,6 +2395,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 ``done_spec``, an exception is raised.
                 Truncated keys can be set through ``env.add_truncated_keys``.
                 Defaults to ``False``.
+            trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
+                assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
+                and ``False`` otherwise.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -2565,7 +2596,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         if policy is not None:
             policy = _make_compatible_policy(
-                policy, self.observation_spec, env=self, fast_wrap=True
+                policy,
+                self.observation_spec,
+                env=self,
+                fast_wrap=True,
+                trust_policy=trust_policy,
             )
             if auto_cast_to_device:
                 try:

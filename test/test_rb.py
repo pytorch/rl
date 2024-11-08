@@ -17,15 +17,30 @@ import numpy as np
 import pytest
 import torch
 
-from _utils_internal import CARTPOLE_VERSIONED, get_default_devices, make_tc
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        capture_log_records,
+        CARTPOLE_VERSIONED,
+        get_default_devices,
+        make_tc,
+    )
+    from pytorch.rl.test.mocking_classes import CountingEnv
+else:
+    from _utils_internal import (
+        capture_log_records,
+        CARTPOLE_VERSIONED,
+        get_default_devices,
+        make_tc,
+    )
+    from mocking_classes import CountingEnv
 
-from mocking_classes import CountingEnv
 from packaging import version
 from packaging.version import parse
 from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
     is_tensorclass,
+    LazyStackedTensorDict,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -57,6 +72,11 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+)
+from torchrl.data.replay_buffers.scheduler import (
+    LinearScheduler,
+    SchedulerList,
+    StepScheduler,
 )
 
 from torchrl.data.replay_buffers.storages import (
@@ -99,11 +119,13 @@ from torchrl.envs.transforms.transforms import (
     VecNorm,
 )
 
+
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 torch_2_3 = version.parse(
     ".".join([str(s) for s in version.parse(str(torch.__version__)).release])
@@ -156,18 +178,24 @@ TensorDictReplayBufferRNG = functools.partial(
 )
 @pytest.mark.parametrize("size", [3, 5, 100])
 class TestComposableBuffers:
-    def _get_rb(self, rb_type, size, sampler, writer, storage):
+    def _get_rb(self, rb_type, size, sampler, writer, storage, compilable=False):
 
         if storage is not None:
-            storage = storage(size)
+            storage = storage(size, compilable=compilable)
 
         sampler_args = {}
         if sampler is samplers.PrioritizedSampler:
             sampler_args = {"max_capacity": size, "alpha": 0.8, "beta": 0.9}
 
         sampler = sampler(**sampler_args)
-        writer = writer()
-        rb = rb_type(storage=storage, sampler=sampler, writer=writer, batch_size=3)
+        writer = writer(compilable=compilable)
+        rb = rb_type(
+            storage=storage,
+            sampler=sampler,
+            writer=writer,
+            batch_size=3,
+            compilable=compilable,
+        )
         return rb
 
     def _get_datum(self, datatype):
@@ -392,6 +420,84 @@ class TestComposableBuffers:
         ) if cond else contextlib.nullcontext():
             rb.extend(data2)
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
+    # Compiling on Windows requires "cl" compiler to be installed.
+    # <https://github.com/pytorch/pytorch/blob/8231180147a096a703d8891756068c89365292e0/torch/_inductor/cpp_builder.py#L143>
+    # Our Windows CI jobs do not have "cl", so skip this test.
+    @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
+    @pytest.mark.parametrize("avoid_max_size", [False, True])
+    def test_extend_sample_recompile(
+        self, rb_type, sampler, writer, storage, size, datatype, avoid_max_size
+    ):
+        if rb_type is not ReplayBuffer:
+            pytest.skip(
+                "Only replay buffer of type 'ReplayBuffer' is currently supported."
+            )
+        if sampler is not RandomSampler:
+            pytest.skip("Only sampler of type 'RandomSampler' is currently supported.")
+        if storage is not LazyTensorStorage:
+            pytest.skip(
+                "Only storage of type 'LazyTensorStorage' is currently supported."
+            )
+        if writer is not RoundRobinWriter:
+            pytest.skip(
+                "Only writer of type 'RoundRobinWriter' is currently supported."
+            )
+        if datatype == "tensordict":
+            pytest.skip("'tensordict' datatype is not currently supported.")
+
+        torch._dynamo.reset_code_caches()
+
+        # Number of times to extend the replay buffer
+        num_extend = 10
+        data_size = size
+
+        # These two cases are separated because when the max storage size is
+        # reached, the code execution path changes, causing necessary
+        # recompiles.
+        if avoid_max_size:
+            storage_size = (num_extend + 1) * data_size
+        else:
+            storage_size = 2 * data_size
+
+        rb = self._get_rb(
+            rb_type=rb_type,
+            sampler=sampler,
+            writer=writer,
+            storage=storage,
+            size=storage_size,
+            compilable=True,
+        )
+        data = self._get_data(datatype, size=data_size)
+
+        @torch.compile
+        def extend_and_sample(data):
+            rb.extend(data)
+            return rb.sample()
+
+        # NOTE: The first three calls to 'extend' and 'sample' can currently
+        # cause recompilations, so avoid capturing those.
+        num_extend_before_capture = 3
+
+        for _ in range(num_extend_before_capture):
+            extend_and_sample(data)
+
+        try:
+            torch._logging.set_logs(recompiles=True)
+            records = []
+            capture_log_records(records, "torch._dynamo", "recompiles")
+
+            for _ in range(num_extend - num_extend_before_capture):
+                extend_and_sample(data)
+
+        finally:
+            torch._logging.set_logs()
+
+        assert len(rb) == min((num_extend * data_size), storage_size)
+        assert len(records) == 0
+
     def test_sample(self, rb_type, sampler, writer, storage, size, datatype):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
             pytest.skip(
@@ -545,6 +651,20 @@ class TestStorages:
             ValueError, match="The max-size and the storage shape mismatch"
         ):
             storage_type(data, max_size=4)
+
+    def test_existsok_lazymemmap(self, tmpdir):
+        storage0 = LazyMemmapStorage(10, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storage0)
+        rb.extend(TensorDict(a=torch.randn(3), batch_size=[3]))
+
+        storage1 = LazyMemmapStorage(10, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storage1)
+        with pytest.raises(RuntimeError, match="existsok"):
+            rb.extend(TensorDict(a=torch.randn(3), batch_size=[3]))
+
+        storage2 = LazyMemmapStorage(10, scratch_dir=tmpdir, existsok=True)
+        rb = ReplayBuffer(storage=storage2)
+        rb.extend(TensorDict(a=torch.randn(3), batch_size=[3]))
 
     @pytest.mark.parametrize(
         "data_type", ["tensor", "tensordict", "tensorclass", "pytree"]
@@ -700,6 +820,66 @@ class TestStorages:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample()
         assert (s.exclude("index") == 1).all()
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
+    @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
+    # This test checks if the `torch._dynamo.disable` wrapper around
+    # `TensorStorage._rand_given_ndim` is still necessary.
+    def test__rand_given_ndim_recompile(self):
+        torch._dynamo.reset_code_caches()
+
+        # Number of times to extend the replay buffer
+        num_extend = 10
+        data_size = 100
+        storage_size = (num_extend + 1) * data_size
+        sample_size = 3
+
+        storage = LazyTensorStorage(storage_size, compilable=True)
+        sampler = RandomSampler()
+
+        # Override to avoid the `torch._dynamo.disable` wrapper
+        storage._rand_given_ndim = storage._rand_given_ndim_impl
+
+        @torch.compile
+        def extend_and_sample(data):
+            storage.set(torch.arange(data_size) + len(storage), data)
+            return sampler.sample(storage, sample_size)
+
+        data = torch.randint(100, (data_size, 1))
+
+        try:
+            torch._logging.set_logs(recompiles=True)
+            records = []
+            capture_log_records(records, "torch._dynamo", "recompiles")
+
+            for _ in range(num_extend):
+                extend_and_sample(data)
+
+        finally:
+            torch._logging.set_logs()
+
+        assert len(storage) == num_extend * data_size
+        assert len(records) == 8, (
+            "If this ever decreases, that's probably good news and the "
+            "`torch._dynamo.disable` wrapper around "
+            "`TensorStorage._rand_given_ndim` can be removed."
+        )
+
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    def test_extend_lazystack(self, storage_type):
+
+        rb = ReplayBuffer(
+            storage=storage_type(6),
+            batch_size=2,
+        )
+        td1 = TensorDict(a=torch.rand(5, 4, 8), batch_size=5)
+        td2 = TensorDict(a=torch.rand(5, 3, 8), batch_size=5)
+        ltd = LazyStackedTensorDict(td1, td2, stack_dim=1)
+        rb.extend(ltd)
+        rb.sample(3)
+        assert len(rb) == 5
 
     @pytest.mark.parametrize("device_data", get_default_devices())
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
@@ -1741,10 +1921,8 @@ class TestTransforms:
                 not _has_tv, reason="needs torchvision dependency"
             ),
         ),
-        pytest.param(
-            partial(UnsqueezeTransform, unsqueeze_dim=-1), id="UnsqueezeTransform"
-        ),
-        pytest.param(partial(SqueezeTransform, squeeze_dim=-1), id="SqueezeTransform"),
+        pytest.param(partial(UnsqueezeTransform, dim=-1), id="UnsqueezeTransform"),
+        pytest.param(partial(SqueezeTransform, dim=-1), id="SqueezeTransform"),
         GrayScale,
         pytest.param(partial(ObservationNorm, loc=1, scale=2), id="ObservationNorm"),
         pytest.param(partial(CatFrames, dim=-3, N=4), id="CatFrames"),
@@ -2064,13 +2242,16 @@ class TestMultiProc:
         init=True,
         writer_type=TensorDictRoundRobinWriter,
         sampler_type=RandomSampler,
+        device=None,
     ):
         rb = TensorDictReplayBuffer(
             storage=storage_type(21), writer=writer_type(), sampler=sampler_type()
         )
         if init:
             td = TensorDict(
-                {"a": torch.zeros(10), "next": {"reward": torch.ones(10)}}, [10]
+                {"a": torch.zeros(10), "next": {"reward": torch.ones(10)}},
+                [10],
+                device=device,
             )
             rb.extend(td)
         q0 = mp.Queue(1)
@@ -2097,13 +2278,6 @@ class TestMultiProc:
         # list storage cannot be shared
         with pytest.raises(RuntimeError, match="Cannot share a storage of type"):
             self.exec_multiproc_rb(storage_type=ListStorage)
-
-    def test_error_nonshared(self):
-        # non shared tensor storage cannot be shared
-        with pytest.raises(
-            RuntimeError, match="The storage must be place in shared memory"
-        ):
-            self.exec_multiproc_rb(storage_type=LazyTensorStorage)
 
     def test_error_maxwriter(self):
         # TensorDictMaxValueWriter cannot be shared
@@ -2170,6 +2344,34 @@ class TestSamplers:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample(batch_size=1)
         assert (s.exclude("index") == 0).all()
+
+    def test_sampler_without_rep_dumps_loads(self, tmpdir):
+        d0 = tmpdir + "/save0"
+        d1 = tmpdir + "/save1"
+        d2 = tmpdir + "/dump"
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyMemmapStorage(max_size=100, scratch_dir=d0, device="cpu"),
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            batch_size=8,
+        )
+        replay_buffer2 = TensorDictReplayBuffer(
+            storage=LazyMemmapStorage(max_size=100, scratch_dir=d1, device="cpu"),
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            batch_size=8,
+        )
+        td = TensorDict(
+            {"a": torch.arange(0, 27), ("b", "c"): torch.arange(1, 28)}, batch_size=[27]
+        )
+        replay_buffer.extend(td)
+        for _ in replay_buffer:
+            break
+        replay_buffer.dumps(d2)
+        replay_buffer2.loads(d2)
+        assert (
+            replay_buffer.sampler._sample_list == replay_buffer2.sampler._sample_list
+        ).all()
+        s = replay_buffer2.sample(3)
+        assert (s["a"] == s["b", "c"] - 1).all()
 
     @pytest.mark.parametrize("drop_last", [False, True])
     def test_sampler_without_replacement_cap_prefetch(self, drop_last):
@@ -3016,6 +3218,77 @@ def test_prioritized_slice_sampler_episodes(device):
     ), "after priority update, only episode 1 and 3 are expected to be sampled"
 
 
+@pytest.mark.parametrize("alpha", [0.6, torch.tensor(1.0)])
+@pytest.mark.parametrize("beta", [0.7, torch.tensor(0.1)])
+@pytest.mark.parametrize("gamma", [0.1])
+@pytest.mark.parametrize("total_steps", [200])
+@pytest.mark.parametrize("n_annealing_steps", [100])
+@pytest.mark.parametrize("anneal_every_n", [10, 159])
+@pytest.mark.parametrize("alpha_min", [0, 0.2])
+@pytest.mark.parametrize("beta_max", [1, 1.4])
+def test_prioritized_parameter_scheduler(
+    alpha,
+    beta,
+    gamma,
+    total_steps,
+    n_annealing_steps,
+    anneal_every_n,
+    alpha_min,
+    beta_max,
+):
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=alpha, beta=beta, storage=ListStorage(max_size=1000)
+    )
+    data = TensorDict({"data": torch.randn(1000, 5)}, batch_size=1000)
+    rb.extend(data)
+    alpha_scheduler = LinearScheduler(
+        rb, param_name="alpha", final_value=alpha_min, num_steps=n_annealing_steps
+    )
+    beta_scheduler = StepScheduler(
+        rb,
+        param_name="beta",
+        gamma=gamma,
+        n_steps=anneal_every_n,
+        max_value=beta_max,
+        mode="additive",
+    )
+
+    scheduler = SchedulerList(schedulers=(alpha_scheduler, beta_scheduler))
+
+    alpha = alpha if torch.is_tensor(alpha) else torch.tensor(alpha)
+    alpha_min = torch.tensor(alpha_min)
+    expected_alpha_vals = torch.linspace(alpha, alpha_min, n_annealing_steps + 1)
+    expected_alpha_vals = torch.nn.functional.pad(
+        expected_alpha_vals, (0, total_steps - n_annealing_steps), value=alpha_min
+    )
+
+    expected_beta_vals = [beta]
+    annealing_steps = total_steps // anneal_every_n
+    gammas = torch.arange(0, annealing_steps + 1, dtype=torch.float32) * gamma
+    expected_beta_vals = (
+        (beta + gammas).repeat_interleave(anneal_every_n).clip(None, beta_max)
+    )
+    for i in range(total_steps):
+        curr_alpha = rb.sampler.alpha
+        torch.testing.assert_close(
+            curr_alpha
+            if torch.is_tensor(curr_alpha)
+            else torch.tensor(curr_alpha).float(),
+            expected_alpha_vals[i],
+            msg=f"expected {expected_alpha_vals[i]}, got {curr_alpha}",
+        )
+        curr_beta = rb.sampler.beta
+        torch.testing.assert_close(
+            curr_beta
+            if torch.is_tensor(curr_beta)
+            else torch.tensor(curr_beta).float(),
+            expected_beta_vals[i],
+            msg=f"expected {expected_beta_vals[i]}, got {curr_beta}",
+        )
+        rb.sample(20)
+        scheduler.step()
+
+
 class TestEnsemble:
     def _make_data(self, data_type):
         if data_type is torch.Tensor:
@@ -3437,7 +3710,10 @@ class TestRBMultidim:
     def test_rb_multidim_collector(
         self, rbtype, storage_cls, writer_cls, sampler_cls, transform, env_device
     ):
-        from _utils_internal import CARTPOLE_VERSIONED
+        if os.getenv("PYTORCH_TEST_FBCODE"):
+            from pytorch.rl.test._utils_internal import CARTPOLE_VERSIONED
+        else:
+            from _utils_internal import CARTPOLE_VERSIONED
 
         torch.manual_seed(0)
         env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()), device=env_device)

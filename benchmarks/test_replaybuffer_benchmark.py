@@ -13,6 +13,7 @@ from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -168,6 +169,82 @@ def test_rb_populate(benchmark, rb, storage, sampler, size):
             size=size,
         ),
         iterations=1,
+        rounds=50,
+    )
+
+
+class create_compiled_tensor_rb:
+    def __init__(
+        self, rb, storage, sampler, storage_size, data_size, iters, compilable=False
+    ):
+        self.storage = storage
+        self.rb = rb
+        self.sampler = sampler
+        self.storage_size = storage_size
+        self.data_size = data_size
+        self.iters = iters
+        self.compilable = compilable
+
+    def __call__(self):
+        kwargs = {}
+        if self.sampler is not None:
+            kwargs["sampler"] = self.sampler()
+        if self.storage is not None:
+            kwargs["storage"] = self.storage(
+                self.storage_size, compilable=self.compilable
+            )
+
+        rb = self.rb(batch_size=3, compilable=self.compilable, **kwargs)
+        data = torch.randn(self.data_size, 1)
+        return ((rb, data, self.iters), {})
+
+
+def extend_and_sample(rb, td, iters):
+    for _ in range(iters):
+        rb.extend(td)
+        rb.sample()
+
+
+def extend_and_sample_compiled(rb, td, iters):
+    @torch.compile
+    def fn(td):
+        rb.extend(td)
+        rb.sample()
+
+    for _ in range(iters):
+        fn(td)
+
+
+@pytest.mark.parametrize(
+    "rb,storage,sampler,storage_size,data_size,iters,compiled",
+    [
+        [ReplayBuffer, LazyTensorStorage, RandomSampler, 10_000, 10_000, 100, True],
+        [ReplayBuffer, LazyTensorStorage, RandomSampler, 10_000, 10_000, 100, False],
+        [ReplayBuffer, LazyTensorStorage, RandomSampler, 100_000, 10_000, 100, True],
+        [ReplayBuffer, LazyTensorStorage, RandomSampler, 100_000, 10_000, 100, False],
+        [ReplayBuffer, LazyTensorStorage, RandomSampler, 1_000_000, 10_000, 100, True],
+        [ReplayBuffer, LazyTensorStorage, RandomSampler, 1_000_000, 10_000, 100, False],
+    ],
+)
+def test_rb_extend_sample(
+    benchmark, rb, storage, sampler, storage_size, data_size, iters, compiled
+):
+    if compiled:
+        torch._dynamo.reset_code_caches()
+
+    benchmark.pedantic(
+        extend_and_sample_compiled if compiled else extend_and_sample,
+        setup=create_compiled_tensor_rb(
+            rb=rb,
+            storage=storage,
+            sampler=sampler,
+            storage_size=storage_size,
+            data_size=data_size,
+            iters=iters,
+            compilable=compiled,
+        ),
+        iterations=1,
+        warmup_rounds=10,
         rounds=50,
     )
 

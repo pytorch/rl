@@ -46,7 +46,7 @@ formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
+VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DEBUG))))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
 if RL_WARNINGS:
@@ -252,6 +252,11 @@ class implement_for:
     Keyword Args:
         class_method (bool, optional): if ``True``, the function will be written as a class method.
             Defaults to ``False``.
+        compilable (bool, optional): If ``False``, the module import happens
+            only on the first call to the wrapped function. If ``True``, the
+            module import happens when the wrapped function is initialized. This
+            allows the wrapped function to work well with ``torch.compile``.
+            Defaults to ``False``.
 
     Examples:
         >>> @implement_for("gym", "0.13", "0.14")
@@ -269,7 +274,7 @@ class implement_for:
         ...     # More recent gym versions will return x + 2
         ...     return x + 2
         ...
-        >>> @implement_for("gymnasium")
+        >>> @implement_for("gymnasium", None, "1.0.0")
         >>> def fun(self, x):
         ...     # If gymnasium is to be used instead of gym, x+3 will be returned
         ...     return x + 3
@@ -290,11 +295,13 @@ class implement_for:
         to_version: str = None,
         *,
         class_method: bool = False,
+        compilable: bool = False,
     ):
         self.module_name = module_name
         self.from_version = from_version
         self.to_version = to_version
         self.class_method = class_method
+        self._compilable = compilable
         implement_for._setters.append(self)
 
     @staticmethod
@@ -386,18 +393,27 @@ class implement_for:
         self.fn = fn
         implement_for._lazy_impl[self.func_name].append(self._call)
 
-        @wraps(fn)
-        def _lazy_call_fn(*args, **kwargs):
-            # first time we call the function, we also do the replacement.
-            # This will cause the imports to occur only during the first call to fn
+        if self._compilable:
+            _call_fn = self._delazify(self.func_name)
 
-            result = self._delazify(self.func_name)(*args, **kwargs)
-            return result
+            if self.class_method:
+                return classmethod(_call_fn)
 
-        if self.class_method:
-            return classmethod(_lazy_call_fn)
+            return _call_fn
+        else:
 
-        return _lazy_call_fn
+            @wraps(fn)
+            def _lazy_call_fn(*args, **kwargs):
+                # first time we call the function, we also do the replacement.
+                # This will cause the imports to occur only during the first call to fn
+
+                result = self._delazify(self.func_name)(*args, **kwargs)
+                return result
+
+            if self.class_method:
+                return classmethod(_lazy_call_fn)
+
+            return _lazy_call_fn
 
     def _call(self):
 
@@ -785,4 +801,6 @@ def _make_ordinal_device(device: torch.device):
         return device
     if device.type == "cuda" and device.index is None:
         return torch.device("cuda", index=torch.cuda.current_device())
+    if device.type == "mps" and device.index is None:
+        return torch.device("mps", index=0)
     return device

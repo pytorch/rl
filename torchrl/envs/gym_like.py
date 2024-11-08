@@ -12,10 +12,10 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import NonTensorData, TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
+from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.common import _EnvWrapper, EnvBase
 
 
@@ -149,7 +149,7 @@ class default_info_dict_reader(BaseInfoDictReader):
 class GymLikeEnv(_EnvWrapper):
     """A gym-like env is an environment.
 
-    Its behaviour is similar to gym environments in what common methods (specifically reset and step) are expected to do.
+    Its behavior is similar to gym environments in what common methods (specifically reset and step) are expected to do.
 
     A :obj:`GymLikeEnv` has a :obj:`.step()` method with the following signature:
 
@@ -283,9 +283,12 @@ class GymLikeEnv(_EnvWrapper):
             observations = observations_dict
         else:
             for key, val in observations.items():
-                observations[key] = self.observation_spec[key].encode(
-                    val, ignore_device=True
-                )
+                if isinstance(self.observation_spec[key], NonTensor):
+                    observations[key] = NonTensorData(val)
+                else:
+                    observations[key] = self.observation_spec[key].encode(
+                        val, ignore_device=True
+                    )
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -508,7 +511,7 @@ class GymLikeEnv(_EnvWrapper):
         the info is filled at reset time.
 
         .. note:: This method requires running a few iterations in the environment to
-          manually check that the behaviour matches expectations.
+          manually check that the behavior matches expectations.
 
         Args:
             ignore_private (bool, optional): If ``True``, private infos (starting with

@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 
 import os.path
 import time
+import unittest
 from functools import wraps
 
 # Get relative file path
@@ -56,7 +58,7 @@ def HALFCHEETAH_VERSIONED():
 
 def PONG_VERSIONED():
     # load gym
-    # Gymnasium says that the ale_py behaviour changes from 1.0
+    # Gymnasium says that the ale_py behavior changes from 1.0
     # but with python 3.12 it is already the case with 0.29.1
     try:
         import ale_py  # noqa
@@ -70,7 +72,7 @@ def PONG_VERSIONED():
 
 def BREAKOUT_VERSIONED():
     # load gym
-    # Gymnasium says that the ale_py behaviour changes from 1.0
+    # Gymnasium says that the ale_py behavior changes from 1.0
     # but with python 3.12 it is already the case with 0.29.1
     try:
         import ale_py  # noqa
@@ -121,7 +123,7 @@ def _set_gym_environments():  # noqa: F811
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
-@implement_for("gymnasium")
+@implement_for("gymnasium", None, "1.0.0")
 def _set_gym_environments():  # noqa: F811
     global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
 
@@ -130,6 +132,11 @@ def _set_gym_environments():  # noqa: F811
     _PENDULUM_VERSIONED = "Pendulum-v1"
     _PONG_VERSIONED = "ALE/Pong-v5"
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
+
+
+@implement_for("gymnasium", "1.0.0", None)
+def _set_gym_environments():  # noqa: F811
+    raise ImportError
 
 
 if _has_gym:
@@ -155,6 +162,8 @@ def get_default_devices():
         return [torch.device("cpu")]
     elif num_cuda == 1:
         return [torch.device("cuda:0")]
+    elif torch.mps.is_available():
+        return [torch.device("mps:0")]
     else:
         # then run on all devices
         return get_available_devices()
@@ -195,6 +204,31 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
         return f_retry  # true decorator
 
     return deco_retry
+
+
+# After calling this function, any log record whose name contains 'record_name'
+# and is emitted from the logger that has qualified name 'logger_qname' is
+# appended to the 'records' list.
+# NOTE: This function is based on testing utilities for 'torch._logging'
+def capture_log_records(records, logger_qname, record_name):
+    assert isinstance(records, list)
+    logger = logging.getLogger(logger_qname)
+
+    class EmitWrapper:
+        def __init__(self, old_emit):
+            self.old_emit = old_emit
+
+        def __call__(self, record):
+            nonlocal records
+            self.old_emit(record)
+            if record_name in record.name:
+                records.append(record)
+
+    for handler in logger.handlers:
+        new_emit = EmitWrapper(handler.emit)
+        contextlib.ExitStack().enter_context(
+            unittest.mock.patch.object(handler, "emit", new_emit)
+        )
 
 
 @pytest.fixture

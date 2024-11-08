@@ -386,7 +386,7 @@ class TD3BCLoss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    def actor_loss(self, tensordict):
+    def actor_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
         """Compute the actor loss.
 
         The actor loss should be computed after the :meth:`~.qvalue_loss` and is usually delayed 1-3 critic updates.
@@ -433,7 +433,7 @@ class TD3BCLoss(LossModule):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         return loss_actor, metadata
 
-    def qvalue_loss(self, tensordict):
+    def qvalue_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
         """Compute the q-value loss.
 
         The q-value loss should be computed before the :meth:`~.actor_loss`.

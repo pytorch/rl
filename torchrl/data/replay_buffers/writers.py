@@ -40,8 +40,9 @@ class Writer(ABC):
     _storage: Storage
     _rng: torch.Generator | None = None
 
-    def __init__(self) -> None:
+    def __init__(self, compilable: bool = False) -> None:
         self._storage = None
+        self._compilable = compilable
 
     def register_storage(self, storage: Storage) -> None:
         self._storage = storage
@@ -138,10 +139,17 @@ class ImmutableDatasetWriter(Writer):
 
 
 class RoundRobinWriter(Writer):
-    """A RoundRobin Writer class for composable replay buffers."""
+    """A RoundRobin Writer class for composable replay buffers.
 
-    def __init__(self, **kw) -> None:
-        super().__init__(**kw)
+    Args:
+        compilable (bool, optional): whether the writer is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
+
+    """
+
+    def __init__(self, compilable: bool = False) -> None:
+        super().__init__(compilable=compilable)
         self._cursor = 0
 
     def dumps(self, path):
@@ -163,6 +171,7 @@ class RoundRobinWriter(Writer):
         self._cursor = (self._cursor + 1) % self._storage._max_size_along_dim0(
             single_data=data
         )
+        self._write_count += 1
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(_cursor, data)
@@ -191,11 +200,12 @@ class RoundRobinWriter(Writer):
         )
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % max_size_along0
+        self._write_count += batch_size
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities:
+        for ent in self._storage._attached_entities_iter():
             ent.mark_update(index)
         return index
 
@@ -211,16 +221,46 @@ class RoundRobinWriter(Writer):
     @property
     def _cursor(self):
         _cursor_value = self.__dict__.get("_cursor_value", None)
-        if _cursor_value is None:
-            _cursor_value = self._cursor_value = mp.Value("i", 0)
-        return _cursor_value.value
+        if not self._compilable:
+            if _cursor_value is None:
+                _cursor_value = self._cursor_value = mp.Value("i", 0)
+            return _cursor_value.value
+        else:
+            if _cursor_value is None:
+                _cursor_value = self._cursor_value = 0
+            return _cursor_value
 
     @_cursor.setter
     def _cursor(self, value):
-        _cursor_value = self.__dict__.get("_cursor_value", None)
-        if _cursor_value is None:
-            _cursor_value = self._cursor_value = mp.Value("i", 0)
-        _cursor_value.value = value
+        if not self._compilable:
+            _cursor_value = self.__dict__.get("_cursor_value", None)
+            if _cursor_value is None:
+                _cursor_value = self._cursor_value = mp.Value("i", 0)
+            _cursor_value.value = value
+        else:
+            self._cursor_value = value
+
+    @property
+    def _write_count(self):
+        _write_count = self.__dict__.get("_write_count_value", None)
+        if not self._compilable:
+            if _write_count is None:
+                _write_count = self._write_count_value = mp.Value("i", 0)
+            return _write_count.value
+        else:
+            if _write_count is None:
+                _write_count = self._write_count_value = 0
+            return _write_count
+
+    @_write_count.setter
+    def _write_count(self, value):
+        if not self._compilable:
+            _write_count = self.__dict__.get("_write_count_value", None)
+            if _write_count is None:
+                _write_count = self._write_count_value = mp.Value("i", 0)
+            _write_count.value = value
+        else:
+            self._write_count_value = value
 
     def __getstate__(self):
         state = super().__getstate__()
@@ -233,7 +273,10 @@ class RoundRobinWriter(Writer):
     def __setstate__(self, state):
         cursor = state.pop("cursor__context", None)
         if cursor is not None:
-            _cursor_value = mp.Value("i", cursor)
+            if not state["_compilable"]:
+                _cursor_value = mp.Value("i", cursor)
+            else:
+                _cursor_value = cursor
             state["_cursor_value"] = _cursor_value
         self.__dict__.update(state)
 
@@ -249,6 +292,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # we need to update the cursor first to avoid race conditions between workers
         max_size_along_dim0 = self._storage._max_size_along_dim0(single_data=data)
         self._cursor = (index + 1) % max_size_along_dim0
+        self._write_count += 1
         if not is_tensorclass(data):
             data.set(
                 "index",
@@ -275,6 +319,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         )
         # we need to update the cursor first to avoid race conditions between workers
         self._cursor = (batch_size + cur_size) % max_size_along_dim0
+        self._write_count += batch_size
         # storage must convert the data to the appropriate format if needed
         if not is_tensorclass(data):
             data.set(
@@ -460,6 +505,20 @@ class TensorDictMaxValueWriter(Writer):
 
         return ret
 
+    @property
+    def _write_count(self):
+        _write_count = self.__dict__.get("_write_count_value", None)
+        if _write_count is None:
+            _write_count = self._write_count_value = mp.Value("i", 0)
+        return _write_count.value
+
+    @_write_count.setter
+    def _write_count(self, value):
+        _write_count = self.__dict__.get("_write_count_value", None)
+        if _write_count is None:
+            _write_count = self._write_count_value = mp.Value("i", 0)
+        _write_count.value = value
+
     def add(self, data: Any) -> int | torch.Tensor:
         """Inserts a single element of data at an appropriate index, and returns that index.
 
@@ -469,6 +528,7 @@ class TensorDictMaxValueWriter(Writer):
         index = self.get_insert_index(data)
         if index is not None:
             data.set("index", index)
+            self._write_count += 1
             # Replicate index requires the shape of the storage to be known
             # Other than that, a "flat" (1d) index is ok to write the data
             self._storage.set(index, data)
@@ -488,6 +548,7 @@ class TensorDictMaxValueWriter(Writer):
         for data_idx, sample in enumerate(data):
             storage_idx = self.get_insert_index(sample)
             if storage_idx is not None:
+                self._write_count += 1
                 data_to_replace[storage_idx] = data_idx
 
         # -1 will be interpreted as invalid by prioritized buffers
@@ -517,7 +578,8 @@ class TensorDictMaxValueWriter(Writer):
     def __getstate__(self):
         if get_spawning_popen() is not None:
             raise RuntimeError(
-                f"Writers of type {type(self)} cannot be shared between processes."
+                f"Writers of type {type(self)} cannot be shared between processes. "
+                f"Please submit an issue at https://github.com/pytorch/rl if this feature is needed."
             )
         state = super().__getstate__()
         return state

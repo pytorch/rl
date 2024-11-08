@@ -3,8 +3,8 @@
 set -euxo pipefail
 set -v
 
-# ==================================================================================== #
-# ================================ Setup env ========================================= #
+# =============================================================================== #
+# ================================ Init ========================================= #
 
 
 if [[ $OSTYPE != 'darwin'* ]]; then
@@ -30,6 +30,10 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   # from cudagl docker image
   cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 fi
+
+
+# ==================================================================================== #
+# ================================ Setup env ========================================= #
 
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
@@ -61,7 +65,7 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-# 4. Install Conda dependencies
+# 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
@@ -76,7 +80,7 @@ export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
 
 # legacy from bash scripts: remove?
-conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False
+conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False RL_LOGGING_LEVEL=DEBUG
 
 pip3 install pip --upgrade
 pip install virtualenv
@@ -88,10 +92,14 @@ conda deactivate
 conda activate "${env_dir}"
 
 echo "installing gymnasium"
-pip3 install "gymnasium"
-pip3 install ale_py
-pip3 install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
-pip3 install "mujoco<3.2.1" -U
+if [[ "$PYTHON_VERSION" == "3.12" ]]; then
+  pip3 install ale-py
+  pip3 install sympy
+  pip3 install "gymnasium[accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+else
+  pip3 install "gymnasium[atari,accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+fi
+pip3 install "mujoco" -U
 
 # sanity check: remove?
 python3 -c """
@@ -127,13 +135,13 @@ if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu -U
   else
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION -U
   fi
 else
   printf "Failed to install pytorch"
@@ -181,7 +189,9 @@ fi
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
-# Avoid error: "fatal: unsafe repository"
+## Avoid error: "fatal: unsafe repository"
+#git config --global --add safe.directory '*'
+#root_dir="$(git rev-parse --show-toplevel)"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
 #export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
@@ -198,7 +208,8 @@ if [ "${CU_VERSION:-}" != cpu ] ; then
     --timeout=120 --mp_fork_if_no_cuda
 else
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py --ignore test/test_distributed.py \
+    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
+    --ignore test/test_distributed.py \
     --timeout=120 --mp_fork_if_no_cuda
 fi
 

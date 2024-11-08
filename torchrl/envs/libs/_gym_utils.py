@@ -14,7 +14,7 @@ from torch.utils._pytree import tree_map
 from torchrl._utils import implement_for
 from torchrl.data import Composite
 from torchrl.envs import step_mdp, TransformedEnv
-from torchrl.envs.libs.gym import _torchrl_to_gym_spec_transform
+from torchrl.envs.libs.gym import _torchrl_to_gym_spec_transform, GYMNASIUM_1_ERROR
 
 _has_gym = importlib.util.find_spec("gym", None) is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium", None) is not None
@@ -125,7 +125,11 @@ if _has_gymnasium:
     import gymnasium
 
     class _TorchRLGymnasiumWrapper(gymnasium.Env, _BaseGymWrapper):
-        @implement_for("gymnasium")
+        @implement_for("gymnasium", "1.0.0")
+        def step(self, action):  # noqa: F811
+            raise ImportError(GYMNASIUM_1_ERROR)
+
+        @implement_for("gymnasium", None, "1.0.0")
         def step(self, action):  # noqa: F811
             action_keys = self._action_keys
             if len(action_keys) == 1:
@@ -153,7 +157,7 @@ if _has_gymnasium:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
             return out
 
-        @implement_for("gymnasium")
+        @implement_for("gymnasium", None, "1.0.0")
         def reset(self):  # noqa: F811
             self._tensordict = self.torchrl_env.reset()
             observation = self._tensordict
@@ -166,6 +170,10 @@ if _has_gymnasium:
             if self.to_numpy:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
             return out
+
+        @implement_for("gymnasium", "1.0.0")
+        def reset(self):  # noqa: F811
+            raise ImportError(GYMNASIUM_1_ERROR)
 
 else:
 

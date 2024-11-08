@@ -18,42 +18,80 @@ import pytest
 import torch
 import yaml
 
-from _utils_internal import (
-    _make_envs,
-    CARTPOLE_VERSIONED,
-    check_rollout_consistency_multikey_env,
-    decorate_thread_sub_func,
-    get_default_devices,
-    HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    rand_reset,
-)
-from mocking_classes import (
-    ActionObsMergeLinear,
-    AutoResetHeteroCountingEnv,
-    AutoResettingCountingEnv,
-    ContinuousActionConvMockEnv,
-    ContinuousActionConvMockEnvNumpy,
-    ContinuousActionVecMockEnv,
-    CountingBatchedEnv,
-    CountingEnv,
-    CountingEnvCountPolicy,
-    DiscreteActionConvMockEnv,
-    DiscreteActionConvMockEnvNumpy,
-    DiscreteActionVecMockEnv,
-    DummyModelBasedEnvBase,
-    EnvWithDynamicSpec,
-    EnvWithMetadata,
-    HeterogeneousCountingEnv,
-    HeterogeneousCountingEnvPolicy,
-    MockBatchedLockedEnv,
-    MockBatchedUnLockedEnv,
-    MockSerialEnv,
-    MultiKeyCountingEnv,
-    MultiKeyCountingEnvPolicy,
-    NestedCountingEnv,
-)
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        _make_envs,
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+    )
+    from pytorch.rl.test.mocking_classes import (
+        ActionObsMergeLinear,
+        AutoResetHeteroCountingEnv,
+        AutoResettingCountingEnv,
+        ContinuousActionConvMockEnv,
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        DummyModelBasedEnvBase,
+        EnvWithDynamicSpec,
+        EnvWithMetadata,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
+else:
+    from _utils_internal import (
+        _make_envs,
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+    )
+    from mocking_classes import (
+        ActionObsMergeLinear,
+        AutoResetHeteroCountingEnv,
+        AutoResettingCountingEnv,
+        ContinuousActionConvMockEnv,
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        DummyModelBasedEnvBase,
+        EnvWithDynamicSpec,
+        EnvWithMetadata,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
 from packaging import version
 from tensordict import (
     assert_allclose_td,
@@ -491,6 +529,26 @@ class TestModelBasedEnvBase:
 
 
 class TestParallel:
+    def test_create_env_fn(self, maybe_fork_ParallelEnv):
+        def make_env():
+            return GymEnv(PENDULUM_VERSIONED())
+
+        with pytest.raises(
+            RuntimeError, match="len\\(create_env_fn\\) and num_workers mismatch"
+        ):
+            maybe_fork_ParallelEnv(4, [make_env, make_env])
+
+    def test_create_env_kwargs(self, maybe_fork_ParallelEnv):
+        def make_env():
+            return GymEnv(PENDULUM_VERSIONED())
+
+        with pytest.raises(
+            RuntimeError, match="len\\(create_env_kwargs\\) and num_workers mismatch"
+        ):
+            maybe_fork_ParallelEnv(
+                4, make_env, create_env_kwargs=[{"seed": 0}, {"seed": 1}]
+            )
+
     @pytest.mark.skipif(
         not torch.cuda.device_count(), reason="No cuda device detected."
     )
@@ -1120,6 +1178,25 @@ class TestParallel:
 
         env1.close()
         env2.close()
+
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_parallel_env_update_kwargs(self, parallel, maybe_fork_ParallelEnv):
+        def make_env(seed=None):
+            env = DiscreteActionConvMockEnv()
+            if seed is not None:
+                env.set_seed(seed)
+            return env
+
+        _class = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = _class(
+            num_workers=2,
+            create_env_fn=make_env,
+            create_env_kwargs=[{"seed": 0}, {"seed": 1}],
+        )
+        with pytest.raises(
+            RuntimeError, match="len\\(kwargs\\) and num_workers mismatch"
+        ):
+            env.update_kwargs([{"seed": 42}])
 
     @pytest.mark.parametrize("batch_size", [(32, 5), (4,), (1,), ()])
     @pytest.mark.parametrize("n_workers", [2, 1])
@@ -3328,16 +3405,16 @@ class TestCustomEnvs:
         )
         assert r.shape == (5, 100)
 
-    def test_pendulum_env(self):
-        env = PendulumEnv(device=None)
-        assert env.device is None
-        env = PendulumEnv(device="cpu")
-        assert env.device == torch.device("cpu")
+    @pytest.mark.parametrize("device", [None, *get_default_devices()])
+    def test_pendulum_env(self, device):
+        env = PendulumEnv(device=device)
+        assert env.device == device
         check_env_specs(env)
+
         for _ in range(10):
             r = env.rollout(10)
             assert r.shape == torch.Size((10,))
-            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
             assert r.shape == torch.Size((5, 10))
 
 

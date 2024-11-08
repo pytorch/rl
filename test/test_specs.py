@@ -4,13 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import contextlib
+import os
 import warnings
 
 import numpy as np
 import pytest
 import torch
 import torchrl.data.tensor_specs
-from _utils_internal import get_available_devices, get_default_devices, set_global_var
 from scipy.stats import chisquare
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.utils import _unravel_key_to_tuple
@@ -44,6 +44,19 @@ from torchrl.data.tensor_specs import (
     UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        get_available_devices,
+        get_default_devices,
+        set_global_var,
+    )
+else:
+    from _utils_internal import (
+        get_available_devices,
+        get_default_devices,
+        set_global_var,
+    )
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
@@ -3801,6 +3814,58 @@ class TestLegacy:
         assert isinstance(non_tensor, NonTensorSpec)
         assert isinstance(non_tensor, NonTensor)
         assert not isinstance(non_tensor, MultiOneHot)
+
+
+class TestSpecEnumerate:
+    def test_discrete(self):
+        spec = DiscreteTensorSpec(n=5, shape=(3,))
+        assert (
+            spec.enumerate()
+            == torch.tensor([[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4]])
+        ).all()
+        assert spec.is_in(spec.enumerate())
+
+    def test_one_hot(self):
+        spec = OneHotDiscreteTensorSpec(n=5, shape=(2, 5))
+        assert (
+            spec.enumerate()
+            == torch.tensor(
+                [
+                    [[1, 0, 0, 0, 0], [1, 0, 0, 0, 0]],
+                    [[0, 1, 0, 0, 0], [0, 1, 0, 0, 0]],
+                    [[0, 0, 1, 0, 0], [0, 0, 1, 0, 0]],
+                    [[0, 0, 0, 1, 0], [0, 0, 0, 1, 0]],
+                    [[0, 0, 0, 0, 1], [0, 0, 0, 0, 1]],
+                ],
+                dtype=torch.bool,
+            )
+        ).all()
+        assert spec.is_in(spec.enumerate())
+
+    def test_multi_discrete(self):
+        spec = MultiDiscreteTensorSpec([3, 4, 5], shape=(2, 3))
+        enum = spec.enumerate()
+        assert spec.is_in(enum)
+        assert enum.shape == torch.Size([60, 2, 3])
+
+    def test_multi_onehot(self):
+        spec = MultiOneHotDiscreteTensorSpec([3, 4, 5], shape=(2, 12))
+        enum = spec.enumerate()
+        assert spec.is_in(enum)
+        assert enum.shape == torch.Size([60, 2, 12])
+
+    def test_composite(self):
+        c = CompositeSpec(
+            {
+                "a": OneHotDiscreteTensorSpec(n=5, shape=(3, 5)),
+                ("b", "c"): DiscreteTensorSpec(n=4, shape=(3,)),
+            },
+            shape=[3],
+        )
+        c_enum = c.enumerate()
+        assert c.is_in(c_enum)
+        assert c_enum.shape == torch.Size((20, 3))
+        assert c_enum["b"].shape == torch.Size((20, 3))
 
 
 if __name__ == "__main__":
