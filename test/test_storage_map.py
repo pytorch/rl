@@ -372,15 +372,16 @@ class TestMCTSForest:
                     tree.rollout["next", "observation"],
                 ]
             )
+            a = tree.rollout["action"].tolist()
             s = s.tolist()
-            return f"{tree.node_id}: {s}"
-        return f"{tree.node_id}"
+            return f"node {tree.node_id}: states {s}, actions {a}"
+        return f"node {tree.node_id}"
 
     def test_forest_build(self):
         r0, *_ = self.dummy_rollouts()
         forest = self._make_forest()
         tree = forest.get_tree(r0[0])
-        # tree.plot(make_labels=self.make_labels)
+        tree.plot(make_labels=self.make_labels)
 
     def test_forest_vertices(self):
         r0, *_ = self.dummy_rollouts()

@@ -53,7 +53,7 @@ def _plot_plotly_tree(
             x=Xe,
             y=Ye,
             mode="lines",
-            line={"color": "rgb(210,210,210)", "width": 1},
+            line={"color": "rgb(210,210,210)", "width": 5},
             hoverinfo="none",
         )
     )
@@ -61,16 +61,17 @@ def _plot_plotly_tree(
         go.Scatter(
             x=Xn,
             y=Yn,
-            mode="markers",
+            mode="markers+text",
             name="bla",
             marker={
                 "symbol": "circle-dot",
-                "size": 18,
+                "size": 40,
                 "color": "#6175c1",  # '#DB4551',
                 "line": {"color": "rgb(50,50,50)", "width": 1},
             },
             text=labels,
             hoverinfo="text",
+            textposition="middle right",
             opacity=0.8,
         )
     )

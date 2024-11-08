@@ -975,7 +975,72 @@ The following classes are deprecated and just point to the classes above:
 Trees and Forests
 -----------------
 
-TorchRL offers a set of classes and functions that can be used to represent trees and forests efficiently.
+TorchRL offers a set of classes and functions that can be used to represent trees and forests efficiently,
+which is particularly useful for Monte Carlo Tree Search (MCTS) algorithms.
+
+TensorDictMap
+~~~~~~~~~~~~~
+
+At its core, the MCTS API relies on the :class:`~torchrl.data.TensorDictMap` which acts like a storage where indices can
+be any numerical object. In traditional storages (e.g., :class:`~torchrl.data.TensorStorage`), only integer indices
+are allowed:
+
+    >>> storage = TensorStorage(...)
+    >>> data = storage[3]
+
+:class:`~torchrl.data.TensorDictMap` allows us to make more advanced queries in the storage. The typical example is
+when we have a storage containing a set of MDPs and we want to rebuild a trajectory given its initial observation, action
+pair. In tensor terms, this could be written with the following pseudocode:
+
+    >>> next_state = storage[observation, action]
+
+(if there is more than one next state associated with this pair one could return a stack of ``next_states`` instead).
+This API would make sense but it would be restrictive: allowing observations or actions that are composed of
+multiple tensors may be hard to implement. Instead, we provide a tensordict containing these values and let the storage
+know what ``in_keys`` to look at to query the next state:
+
+    >>> td = TensorDict(observation=observation, action=action)
+    >>> next_td = storage[td]
+
+Of course, this class also allows us to extend the storage with new data:
+
+    >>> storage[td] = next_state
+
+This comes in handy because it allows us to represent complex rollout structures where different actions are undertaken
+at a given node (ie, for a given observation). All `(observation, action)` pairs that have been observed may lead us to
+a (set of) rollout that we can use further.
+
+MCTSForest
+~~~~~~~~~~
+
+Building a tree from an initial observation then becomes just a matter of organizing data efficiently.
+The :class:`~torchrl.data.MCTSForest` has at its core two storages: a first storage links observations to hashes and
+indices of actions encountered in the past in the dataset:
+
+    >>> data = TensorDict(observation=observation)
+    >>> metadata = forest.node_map[data]
+    >>> index = metadata["_index"]
+
+where ``forest`` is a :class:`~torchrl.data.MCTSForest` instance.
+Then, a second storage keeps track of the actions and results associated with the observation:
+
+    >>> next_data = forest.data_map[index]
+
+The ``next_data`` entry can have any shape, but it will usually match the shape of ``index`` (since at each index
+corresponds one action). Once ``next_data`` is obtrained, it can be put together with ``data`` to form a set of nodes,
+and the tree can be expanded for each of these. The following figure shows how this is done.
+
+.. figure:: /_static/img/collector-copy.png
+
+    Building a :class:`~torchrl.data.Tree` from a :class:`~torchrl.data.MCTSForest` object.
+    The flowchart represents a tree being built from an initial observation `o`. The :class:`~torchrl.data.MCTSForest.get_tree`
+    method passed the input data structure (the root node) to the ``node_map`` :class:`~torchrl.data.TensorDictMap` instance
+    that returns a set of hashes and indices. These indices are then used to query the corresponding tuples of
+    actions, next observations, rewards etc. that are associated with the root node.
+    A vertex is created from each of them (possibly with a longer rollout when a compact representation is asked).
+    The stack of vertices is then used to build up the tree further, and these vertices are stacked together and make
+    up the branches of the tree at the root. This process is repeated for a given depth or until the tree cannot be
+    expanded anymore.
 
 .. currentmodule:: torchrl.data
 
