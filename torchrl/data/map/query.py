@@ -169,10 +169,10 @@ class QueryModule(TensorDictModuleBase):
     def forward(
         self,
         tensordict: TensorDictBase,
-            *,
+        *,
         extend: bool = True,
         write_hash: bool = True,
-            clone: bool| None = None,
+        clone: bool | None = None,
     ) -> TensorDictBase:
         hash_values = []
 

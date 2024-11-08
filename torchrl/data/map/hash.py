@@ -9,6 +9,7 @@ from typing import Callable, List
 import torch
 from torch.nn import Module
 
+
 class BinaryToDecimal(Module):
     """A Module to convert binaries encoded tensors to decimals.
 
