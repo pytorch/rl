@@ -5,17 +5,20 @@
 
 import argparse
 import importlib.util
+import os
 
 import pytest
 import torch
 import torch.nn.functional as F
 
-from _utils_internal import get_default_devices
 from tensordict import TensorDictBase
 from torch import autograd, nn
+from torch.utils._pytree import tree_map
 from torchrl.modules import (
     NormalParamWrapper,
     OneHotCategorical,
+    OneHotOrdinal,
+    Ordinal,
     ReparamGradientStrategy,
     TanhNormal,
     TruncatedNormal,
@@ -27,6 +30,12 @@ from torchrl.modules.distributions import (
     TanhDelta,
 )
 from torchrl.modules.distributions.continuous import SafeTanhTransform
+from torchrl.modules.distributions.discrete import _generate_ordinal_logits
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import get_default_devices
+else:
+    from _utils_internal import get_default_devices
 
 _has_scipy = importlib.util.find_spec("scipy", None) is not None
 
@@ -182,7 +191,7 @@ class TestTruncatedNormal:
     @pytest.mark.parametrize("device", get_default_devices())
     def test_truncnormal(self, min, max, vecs, upscale, shape, device):
         torch.manual_seed(0)
-        *vecs, min, max, vecs, upscale = torch.utils._pytree.tree_map(
+        *vecs, min, max, vecs, upscale = tree_map(
             lambda t: torch.as_tensor(t, device=device),
             (*vecs, min, max, vecs, upscale),
         )
@@ -190,8 +199,8 @@ class TestTruncatedNormal:
         d = TruncatedNormal(
             *vecs,
             upscale=upscale,
-            min=min,
-            max=max,
+            low=min,
+            high=max,
         )
         assert d.device == device
         for _ in range(100):
@@ -218,7 +227,7 @@ class TestTruncatedNormal:
         high = 2
         low = -1
         log_pi_x = TruncatedNormal(
-            mu, sigma, min=low, max=high, tanh_loc=False
+            mu, sigma, low=low, high=high, tanh_loc=False
         ).log_prob(x)
         pi_x = torch.exp(log_pi_x)
         log_pi_x.backward(torch.ones_like(log_pi_x))
@@ -264,8 +273,8 @@ class TestTruncatedNormal:
         d = TruncatedNormal(
             *vecs,
             upscale=upscale,
-            min=min,
-            max=max,
+            low=min,
+            high=max,
         )
         assert d.mode is not None
         assert d.entropy() is not None
@@ -669,6 +678,125 @@ class TestMaskedOneHotCategorical:
         assert s.shape[-1] == 100
         s[s.detach().bool()].sum().backward()
         assert logits.grad is not None and logits.grad.norm() > 0
+
+
+class TestOrdinal:
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("logit_shape", [(10,), (1, 1), (10, 10), (5, 10, 20)])
+    def test_correct_sampling_shape(
+        self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
+    ) -> None:
+        logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
+
+        sampler = Ordinal(scores=logits)
+        actions = sampler.sample()  # type: ignore[no-untyped-call]
+        log_probs = sampler.log_prob(actions)  # type: ignore[no-untyped-call]
+
+        expected_log_prob_shape = logit_shape[:-1]
+        expected_action_shape = logit_shape[:-1]
+
+        assert actions.size() == torch.Size(expected_action_shape)
+        assert log_probs.size() == torch.Size(expected_log_prob_shape)
+
+    @pytest.mark.parametrize("num_categories", [1, 10, 20])
+    def test_correct_range(self, num_categories: int) -> None:
+        seq_size = 10
+        batch_size = 100
+        logits = torch.ones((batch_size, seq_size, num_categories))
+
+        sampler = Ordinal(scores=logits)
+
+        actions = sampler.sample()  # type: ignore[no-untyped-call]
+
+        assert actions.min() >= 0
+        assert actions.max() < num_categories
+
+    def test_bounded_gradients(self) -> None:
+        logits = torch.tensor(
+            [[1.0, 0.0, torch.finfo().max], [1.0, 0.0, torch.finfo().min]],
+            requires_grad=True,
+            dtype=torch.float32,
+        )
+
+        sampler = Ordinal(scores=logits)
+
+        actions = sampler.sample()
+        log_probs = sampler.log_prob(actions)
+
+        dummy_objective = log_probs.sum()
+        dummy_objective.backward()
+
+        assert logits.grad is not None
+        assert not torch.isnan(logits.grad).any()
+
+    def test_generate_ordinal_logits_numerical(self) -> None:
+        logits = torch.ones((3, 4))
+
+        ordinal_logits = _generate_ordinal_logits(scores=logits)
+
+        expected_ordinal_logits = torch.tensor(
+            [
+                [-4.2530, -3.2530, -2.2530, -1.2530],
+                [-4.2530, -3.2530, -2.2530, -1.2530],
+                [-4.2530, -3.2530, -2.2530, -1.2530],
+            ]
+        )
+
+        torch.testing.assert_close(
+            ordinal_logits, expected_ordinal_logits, atol=1e-4, rtol=1e-6
+        )
+
+
+class TestOneHotOrdinal:
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("logit_shape", [(10,), (10, 10), (5, 10, 20)])
+    def test_correct_sampling_shape(
+        self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
+    ) -> None:
+        logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
+
+        sampler = OneHotOrdinal(scores=logits)
+        actions = sampler.sample()  # type: ignore[no-untyped-call]
+        log_probs = sampler.log_prob(actions)  # type: ignore[no-untyped-call]
+        expected_log_prob_shape = logit_shape[:-1]
+
+        expected_action_shape = logit_shape
+
+        assert actions.size() == torch.Size(expected_action_shape)
+        assert log_probs.size() == torch.Size(expected_log_prob_shape)
+
+    @pytest.mark.parametrize("num_categories", [2, 10, 20])
+    def test_correct_range(self, num_categories: int) -> None:
+        seq_size = 10
+        batch_size = 100
+        logits = torch.ones((batch_size, seq_size, num_categories))
+
+        sampler = OneHotOrdinal(scores=logits)
+
+        actions = sampler.sample()  # type: ignore[no-untyped-call]
+
+        assert torch.all(actions.sum(-1))
+        assert actions.shape[-1] == num_categories
+
+    def test_bounded_gradients(self) -> None:
+        logits = torch.tensor(
+            [[1.0, 0.0, torch.finfo().max], [1.0, 0.0, torch.finfo().min]],
+            requires_grad=True,
+            dtype=torch.float32,
+        )
+
+        sampler = OneHotOrdinal(scores=logits)
+
+        actions = sampler.sample()
+        log_probs = sampler.log_prob(actions)
+
+        dummy_objective = log_probs.sum()
+        dummy_objective.backward()
+
+        assert logits.grad is not None
+        assert not torch.isnan(logits.grad).any()
 
 
 if __name__ == "__main__":

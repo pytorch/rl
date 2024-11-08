@@ -104,7 +104,6 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         out_keys: Optional[Union[NestedKey, List[NestedKey]]] = None,
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
-        default_interaction_mode: str = None,
         default_interaction_type: str = InteractionType.DETERMINISTIC,
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
@@ -117,7 +116,6 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             in_keys=in_keys,
             out_keys=out_keys,
             default_interaction_type=default_interaction_type,
-            default_interaction_mode=default_interaction_mode,
             distribution_class=distribution_class,
             distribution_kwargs=distribution_kwargs,
             return_log_prob=return_log_prob,
@@ -130,7 +128,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, Composite):
-            if len(self.out_keys) > 1:
+            if len(self.out_keys) - return_log_prob > 1:
                 raise RuntimeError(
                     f"got more than one out_key for the SafeModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a Composite object or no spec at all."

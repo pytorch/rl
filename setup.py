@@ -72,10 +72,10 @@ def _get_pytorch_version(is_nightly, is_local):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
     if is_nightly:
-        return "torch>=2.5.0.dev"
+        return "torch>=2.6.0.dev"
     elif is_local:
         return "torch"
-    return "torch>=2.4.0"
+    return "torch>=2.5.0"
 
 
 def _get_packages():
@@ -152,11 +152,15 @@ def get_extensions():
     }
     sources = list(extension_sources)
 
+    include_dirs = [this_dir]
+    python_include_dir = os.getenv("PYTHON_INCLUDE_DIR")
+    if python_include_dir is not None:
+        include_dirs.append(python_include_dir)
     ext_modules = [
         extension(
             "torchrl._torchrl",
             sources,
-            include_dirs=[this_dir],
+            include_dirs=include_dirs,
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
         )
@@ -172,7 +176,7 @@ def _main(argv):
     if is_nightly:
         tensordict_dep = "tensordict-nightly"
     else:
-        tensordict_dep = "tensordict>=0.5.0"
+        tensordict_dep = "tensordict>=0.6.1"
 
     if is_nightly:
         version = get_nightly_version()
@@ -203,7 +207,7 @@ def _main(argv):
             "pygame",
         ],
         "dm_control": ["dm_control"],
-        "gym_continuous": ["gymnasium", "mujoco"],
+        "gym_continuous": ["gymnasium<1.0", "mujoco"],
         "rendering": ["moviepy"],
         "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
         "utils": [
@@ -229,6 +233,7 @@ def _main(argv):
             "pillow",
         ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"],
+        "open_spiel": ["open_spiel>=1.5"],
     }
     extra_requires["all"] = set()
     for key in list(extra_requires.keys()):
@@ -270,7 +275,6 @@ def _main(argv):
         extras_require=extra_requires,
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",

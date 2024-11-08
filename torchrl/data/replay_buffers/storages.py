@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import abc
+
+import logging
 import os
 import textwrap
 import warnings
@@ -22,7 +24,9 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
+from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
@@ -57,10 +61,15 @@ class Storage:
     _rng: torch.Generator | None = None
 
     def __init__(
-        self, max_size: int, checkpointer: StorageCheckpointerBase | None = None
+        self,
+        max_size: int,
+        checkpointer: StorageCheckpointerBase | None = None,
+        compilable: bool = False,
     ) -> None:
         self.max_size = int(max_size)
         self.checkpointer = checkpointer
+        self._compilable = compilable
+        self._attached_entities_set = set()
 
     @property
     def checkpointer(self):
@@ -80,11 +89,14 @@ class Storage:
     def _attached_entities(self):
         # RBs that use a given instance of Storage should add
         # themselves to this set.
-        _attached_entities = self.__dict__.get("_attached_entities_set", None)
-        if _attached_entities is None:
-            _attached_entities = set()
-            self.__dict__["_attached_entities_set"] = _attached_entities
-        return _attached_entities
+        _attached_entities_set = getattr(self, "_attached_entities_set", None)
+        if _attached_entities_set is None:
+            self._attached_entities_set = _attached_entities_set = set()
+        return _attached_entities_set
+
+    @torch._dynamo.assume_constant_result
+    def _attached_entities_iter(self):
+        return list(self._attached_entities)
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any, *, set_cursor: bool = True):
@@ -143,7 +155,13 @@ class Storage:
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
-            return torch.randint(0, len(self), (batch_size,), generator=self._rng)
+            return torch.randint(
+                0,
+                len(self),
+                (batch_size,),
+                generator=self._rng,
+                device=getattr(self, "device", None),
+            )
         raise RuntimeError(
             f"Random number generation is not implemented for storage of type {type(self)} with ndim {self.ndim}. "
             f"Please report this exception as well as the use case (incl. buffer construction) on github."
@@ -191,6 +209,13 @@ class Storage:
         state["_rng"] = None
         return state
 
+    def __contains__(self, item):
+        return self.contains(item)
+
+    @abc.abstractmethod
+    def contains(self, item):
+        ...
+
 
 class ListStorage(Storage):
     """A storage stored in a list.
@@ -200,14 +225,17 @@ class ListStorage(Storage):
     (like lists, tuples, tensors or tensordicts with non-empty batch-size).
 
     Args:
-        max_size (int): the maximum number of elements stored in the storage.
+        max_size (int, optional): the maximum number of elements stored in the storage.
+            If not provided, an unlimited storage is created.
 
     """
 
     _default_checkpointer = ListStorageCheckpointer
 
-    def __init__(self, max_size: int):
-        super().__init__(max_size)
+    def __init__(self, max_size: int | None = None, compilable: bool = False):
+        if max_size is None:
+            max_size = torch.iinfo(torch.int64).max
+        super().__init__(max_size, compilable=compilable)
         self._storage = []
 
     def set(
@@ -239,7 +267,7 @@ class ListStorage(Storage):
                     np.ndarray,
                 ),
             ):
-                for _cursor, _data in zip(cursor, data):
+                for _cursor, _data in _zip_strict(cursor, data):
                     self.set(_cursor, _data, set_cursor=set_cursor)
             else:
                 raise TypeError(
@@ -311,6 +339,20 @@ class ListStorage(Storage):
     def __repr__(self):
         return f"{self.__class__.__name__}(items=[{self._storage[0]}, ...])"
 
+    def contains(self, item):
+        if isinstance(item, int):
+            if item < 0:
+                item += len(self._storage)
+
+            return 0 <= item < len(self._storage)
+        if isinstance(item, torch.Tensor):
+            return torch.tensor(
+                [self.contains(elt) for elt in item.tolist()],
+                dtype=torch.bool,
+                device=item.device,
+            ).reshape_as(item)
+        raise NotImplementedError(f"type {type(item)} is not supported yet.")
+
 
 class TensorStorage(Storage):
     """A storage for tensors and tensordicts.
@@ -330,6 +372,9 @@ class TensorStorage(Storage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+        compilable (bool, optional): whether the storage is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
 
     Examples:
         >>> data = TensorDict({
@@ -389,6 +434,7 @@ class TensorStorage(Storage):
         *,
         device: torch.device = "cpu",
         ndim: int = 1,
+        compilable: bool = False,
     ):
         if not ((storage is None) ^ (max_size is None)):
             if storage is None:
@@ -404,7 +450,7 @@ class TensorStorage(Storage):
             else:
                 max_size = tree_flatten(storage)[0][0].shape[0]
         self.ndim = ndim
-        super().__init__(max_size)
+        super().__init__(max_size, compilable=compilable)
         self.initialized = storage is not None
         if self.initialized:
             self._len = max_size
@@ -423,16 +469,24 @@ class TensorStorage(Storage):
     @property
     def _len(self):
         _len_value = self.__dict__.get("_len_value", None)
-        if _len_value is None:
-            _len_value = self._len_value = mp.Value("i", 0)
-        return _len_value.value
+        if not self._compilable:
+            if _len_value is None:
+                _len_value = self._len_value = mp.Value("i", 0)
+            return _len_value.value
+        else:
+            if _len_value is None:
+                _len_value = self._len_value = 0
+            return _len_value
 
     @_len.setter
     def _len(self, value):
-        _len_value = self.__dict__.get("_len_value", None)
-        if _len_value is None:
-            _len_value = self._len_value = mp.Value("i", 0)
-        _len_value.value = value
+        if not self._compilable:
+            _len_value = self.__dict__.get("_len_value", None)
+            if _len_value is None:
+                _len_value = self._len_value = mp.Value("i", 0)
+            _len_value.value = value
+        else:
+            self._len_value = value
 
     @property
     def _total_shape(self):
@@ -499,12 +553,22 @@ class TensorStorage(Storage):
         if _total_shape is not None:
             return torch.Size([self._len_along_dim0] + list(_total_shape[1:]))
 
+    # TODO: Without this disable, compiler recompiles for back-to-back calls.
+    # Figuring out a way to avoid this disable would give better performance.
+    @torch._dynamo.disable()
     def _rand_given_ndim(self, batch_size):
+        return self._rand_given_ndim_impl(batch_size)
+
+    # At the moment, this is separated into its own function so that we can test
+    # it without the `torch._dynamo.disable` and detect if future updates to the
+    # compiler fix the recompile issue.
+    def _rand_given_ndim_impl(self, batch_size):
         if self.ndim == 1:
             return super()._rand_given_ndim(batch_size)
         shape = self.shape
         return tuple(
-            torch.randint(_dim, (batch_size,), generator=self._rng) for _dim in shape
+            torch.randint(_dim, (batch_size,), generator=self._rng, device=self.device)
+            for _dim in shape
         )
 
     def flatten(self):
@@ -547,23 +611,35 @@ class TensorStorage(Storage):
             # check that the content is shared, otherwise tell the user we can't help
             storage = self._storage
             STORAGE_ERR = "The storage must be place in shared memory or memmapped before being shared between processes."
-            if is_tensor_collection(storage):
-                if not storage.is_memmap() and not storage.is_shared():
-                    raise RuntimeError(STORAGE_ERR)
-            else:
-                if (
-                    not isinstance(storage, MemoryMappedTensor)
-                    and not storage.is_shared()
+
+            # If the content is on cpu, it will be placed in shared memory.
+            # If it's on cuda it's already shared.
+            # If it's memmaped no worry in this case either.
+            # Only if the device is not "cpu" or "cuda" we may have a problem.
+            def assert_is_sharable(tensor):
+                if tensor.device is None or tensor.device.type in (
+                    "cuda",
+                    "cpu",
+                    "meta",
                 ):
-                    raise RuntimeError(STORAGE_ERR)
+                    return
+                raise RuntimeError(STORAGE_ERR)
+
+            if is_tensor_collection(storage):
+                storage.apply(assert_is_sharable, filter_empty=True)
+            else:
+                tree_map(storage, assert_is_sharable)
 
         return state
 
     def __setstate__(self, state):
         len = state.pop("len__context", None)
         if len is not None:
-            _len_value = mp.Value("i", len)
-            state["_len_value"] = _len_value
+            if not state["_compilable"]:
+                state["_len_value"] = len
+            else:
+                _len_value = mp.Value("i", len)
+                state["_len_value"] = _len_value
         self.__dict__.update(state)
 
     def state_dict(self) -> Dict[str, Any]:
@@ -613,7 +689,7 @@ class TensorStorage(Storage):
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
 
-    @implement_for("torch", "2.3")
+    @implement_for("torch", "2.3", compilable=True)
     def _set_tree_map(self, cursor, data, storage):
         def set_tensor(datum, store):
             store[cursor] = datum
@@ -621,7 +697,7 @@ class TensorStorage(Storage):
         # this won't be available until v2.3
         tree_map(set_tensor, data, storage)
 
-    @implement_for("torch", "2.0", "2.3")
+    @implement_for("torch", "2.0", "2.3", compilable=True)
     def _set_tree_map(self, cursor, data, storage):  # noqa: 534
         # flatten data and cursor
         data_flat = tree_flatten(data)[0]
@@ -639,7 +715,7 @@ class TensorStorage(Storage):
             numel = leaf.shape[:ndim].numel()
         self._len = min(self._len + numel, self.max_size)
 
-    @implement_for("torch", "2.0", None)
+    @implement_for("torch", "2.0", None, compilable=True)
     def set(
         self,
         cursor: Union[int, Sequence[int], slice],
@@ -681,7 +757,7 @@ class TensorStorage(Storage):
         else:
             self._set_tree_map(cursor, data, self._storage)
 
-    @implement_for("torch", None, "2.0")
+    @implement_for("torch", None, "2.0", compilable=True)
     def set(  # noqa: F811
         self,
         cursor: Union[int, Sequence[int], slice],
@@ -730,7 +806,7 @@ class TensorStorage(Storage):
                     "A cursor of length superior to the storage capacity was provided. "
                     "To accommodate for this, the cursor will be truncated to its last "
                     "element such that its length matched the length of the storage. "
-                    "This may **not** be the optimal behaviour for your application! "
+                    "This may **not** be the optimal behavior for your application! "
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )
@@ -790,6 +866,30 @@ class TensorStorage(Storage):
         maxsize_str = textwrap.indent(f"max_size={self.max_size}", 4 * " ")
         return f"{self.__class__.__name__}(\n{storage_str}, \n{shape_str}, \n{len_str}, \n{maxsize_str})"
 
+    def contains(self, item):
+        if isinstance(item, int):
+            if item < 0:
+                item += self._len_along_dim0
+
+            return 0 <= item < self._len_along_dim0
+        if isinstance(item, torch.Tensor):
+
+            def _is_valid_index(idx):
+                try:
+                    torch.zeros(self.shape, device="meta")[idx]
+                    return True
+                except IndexError:
+                    return False
+
+            if item.ndim:
+                return torch.tensor(
+                    [_is_valid_index(idx) for idx in item],
+                    dtype=torch.bool,
+                    device=item.device,
+                )
+            return torch.tensor(_is_valid_index(item), device=item.device)
+        raise NotImplementedError(f"type {type(item)} is not supported yet.")
+
 
 class LazyTensorStorage(TensorStorage):
     """A pre-allocated tensor storage for tensors and tensordicts.
@@ -808,6 +908,11 @@ class LazyTensorStorage(TensorStorage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+        compilable (bool, optional): whether the storage is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
+        consolidated (bool, optional): if ``True``, the storage will be consolidated after
+            its first expansion. Defaults to ``False``.
 
     Examples:
         >>> data = TensorDict({
@@ -867,14 +972,26 @@ class LazyTensorStorage(TensorStorage):
         *,
         device: torch.device = "cpu",
         ndim: int = 1,
+        compilable: bool = False,
+        consolidated: bool = False,
     ):
-        super().__init__(storage=None, max_size=max_size, device=device, ndim=ndim)
+        super().__init__(
+            storage=None,
+            max_size=max_size,
+            device=device,
+            ndim=ndim,
+            compilable=compilable,
+        )
+        self.consolidated = consolidated
 
     def _init(
         self,
         data: Union[TensorDictBase, torch.Tensor, "PyTree"],  # noqa: F821
     ) -> None:
-        torchrl_logger.debug("Creating a TensorStorage...")
+        if not self._compilable:
+            # TODO: Investigate why this seems to have a performance impact with
+            # the compiler
+            torchrl_logger.debug("Creating a TensorStorage...")
         if self.device == "auto":
             self.device = data.device
 
@@ -890,9 +1007,11 @@ class LazyTensorStorage(TensorStorage):
 
         if is_tensor_collection(data):
             out = data.to(self.device)
-            out = out.expand(max_size_along_dim0(data.shape))
-            out = out.clone()
-            out = out.zero_()
+            out: TensorDictBase = torch.empty_like(
+                out.expand(max_size_along_dim0(data.shape))
+            )
+            if self.consolidated:
+                out = out.consolidate()
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
@@ -903,6 +1022,8 @@ class LazyTensorStorage(TensorStorage):
                 ),
                 data,
             )
+            if self.consolidated:
+                raise ValueError("Cannot consolidate non-tensordict storages.")
 
         self._storage = out
         self.initialized = True
@@ -914,6 +1035,8 @@ class LazyMemmapStorage(LazyTensorStorage):
     Args:
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
+
+    Keyword Args:
         scratch_dir (str or path): directory where memmap-tensors will be written.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
@@ -924,6 +1047,9 @@ class LazyMemmapStorage(LazyTensorStorage):
             measuring the storage size. For instance, a storage of shape ``[3, 4]``
             has capacity ``3`` if ``ndim=1`` and ``12`` if ``ndim=2``.
             Defaults to ``1``.
+        existsok (bool, optional): whether an error should be raised if any of the
+            tensors already exists on disk. Defaults to ``True``. If ``False``, the
+            tensor will be opened as is, not overewritten.
 
     .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is
         already stored to avoid executing long copies of data that is already stored on disk.
@@ -1000,10 +1126,13 @@ class LazyMemmapStorage(LazyTensorStorage):
         scratch_dir=None,
         device: torch.device = "cpu",
         ndim: int = 1,
+        existsok: bool = False,
+        compilable: bool = False,
     ):
-        super().__init__(max_size, ndim=ndim)
+        super().__init__(max_size, ndim=ndim, compilable=compilable)
         self.initialized = False
         self.scratch_dir = None
+        self.existsok = existsok
         if scratch_dir is not None:
             self.scratch_dir = str(scratch_dir)
             if self.scratch_dir[-1] != "/":
@@ -1016,7 +1145,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         if self.device.type != "cpu":
             raise ValueError(
                 "Memory map device other than CPU isn't supported. To cast your data to the desired device, "
-                "use `buffer.append_transform(lambda x: x.to(device)` or a similar transform."
+                "use `buffer.append_transform(lambda x: x.to(device))` or a similar transform."
             )
         self._len = 0
 
@@ -1099,17 +1228,23 @@ class LazyMemmapStorage(LazyTensorStorage):
         if is_tensor_collection(data):
             out = data.clone().to(self.device)
             out = out.expand(max_size_along_dim0(data.shape))
-            out = out.memmap_like(prefix=self.scratch_dir)
-            for key, tensor in sorted(
-                out.items(include_nested=True, leaves_only=True), key=str
-            ):
-                try:
-                    filesize = os.path.getsize(tensor.filename) / 1024 / 1024
-                    torchrl_logger.debug(
-                        f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
-                    )
-                except (AttributeError, RuntimeError):
-                    pass
+            out = out.memmap_like(prefix=self.scratch_dir, existsok=self.existsok)
+            if torchrl_logger.isEnabledFor(logging.DEBUG):
+                for key, tensor in sorted(
+                    out.items(
+                        include_nested=True,
+                        leaves_only=True,
+                        is_leaf=_NESTED_TENSORS_AS_LISTS,
+                    ),
+                    key=str,
+                ):
+                    try:
+                        filesize = os.path.getsize(tensor.filename) / 1024 / 1024
+                        torchrl_logger.debug(
+                            f"\t{key}: {tensor.filename}, {filesize} Mb of storage (size: {tensor.shape})."
+                        )
+                    except (AttributeError, RuntimeError):
+                        pass
         else:
             out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
@@ -1167,10 +1302,6 @@ class StorageEnsemble(Storage):
         self._rng_private = value
         for storage in self._storages:
             storage._rng = value
-
-    @property
-    def _attached_entities(self):
-        return set()
 
     def extend(self, value):
         raise RuntimeError
@@ -1288,10 +1419,42 @@ def _collate_list_tensordict(x):
     return out
 
 
-def _stack_anything(x):
-    if is_tensor_collection(x[0]):
-        return LazyStackedTensorDict.maybe_dense_stack(x)
-    return torch.stack(x)
+@implement_for("torch", "2.4")
+def _stack_anything(data):
+    if is_tensor_collection(data[0]):
+        return LazyStackedTensorDict.maybe_dense_stack(data)
+    return tree_map(
+        lambda *x: torch.stack(x),
+        *data,
+        is_leaf=lambda x: isinstance(x, torch.Tensor) or is_tensor_collection(x),
+    )
+
+
+@implement_for("torch", None, "2.4")
+def _stack_anything(data):  # noqa: F811
+    from tensordict import _pytree
+
+    if not _pytree.PYTREE_REGISTERED_TDS:
+        raise RuntimeError(
+            "TensorDict is not registered within PyTree. "
+            "If you see this error, it means tensordicts instances cannot be natively stacked using tree_map. "
+            "To solve this issue, (a) upgrade pytorch to a version > 2.4, or (b) make sure TensorDict is registered in PyTree. "
+            "If this error persists, open an issue on https://github.com/pytorch/rl/issues"
+        )
+    if is_tensor_collection(data[0]):
+        return LazyStackedTensorDict.maybe_dense_stack(data)
+    flat_trees = []
+    spec = None
+    for d in data:
+        flat_tree, spec = tree_flatten(d)
+        flat_trees.append(flat_tree)
+
+    leaves = []
+    for leaf in zip(*flat_trees):
+        leaf = torch.stack(leaf)
+        leaves.append(leaf)
+
+    return tree_unflatten(leaves, spec)
 
 
 def _collate_id(x):
@@ -1300,10 +1463,7 @@ def _collate_id(x):
 
 def _get_default_collate(storage, _is_tensordict=False):
     if isinstance(storage, ListStorage):
-        if _is_tensordict:
-            return _collate_list_tensordict
-        else:
-            return torch.utils.data._utils.collate.default_collate
+        return _stack_anything
     elif isinstance(storage, TensorStorage):
         return _collate_id
     else:

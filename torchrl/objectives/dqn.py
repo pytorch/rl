@@ -47,7 +47,7 @@ class DQNLoss(LossModule):
             Defaults to "l2".
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
-            create a DQN with a target network. Default is ``False``.
+            create a DQN with a target network. Default is ``True``.
         double_dqn (bool, optional): whether to use Double DQN, as described in
             https://arxiv.org/abs/1509.06461. Defaults to ``False``.
         action_space (str or TensorSpec, optional): Action space. Must be one of
@@ -224,7 +224,7 @@ class DQNLoss(LossModule):
         if action_space is None:
             warnings.warn(
                 "action_space was not specified. DQNLoss will default to 'one-hot'."
-                "This behaviour will be deprecated soon and a space will have to be passed."
+                "This behavior will be deprecated soon and a space will have to be passed."
                 "Check the DQNLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"

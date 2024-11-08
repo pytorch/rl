@@ -89,7 +89,7 @@ Key learnings:
 #    wrapper for either PettingZoo or VMAS.
 #
 # 3. Following that, we will formulate the policy and critic networks, discussing the effects of various choices on
-#    parameter sharing and critic centralisation.
+#    parameter sharing and critic centralization.
 #
 # 4. Afterwards, we will create the sampling collector and the replay buffer.
 #
@@ -179,7 +179,7 @@ iteration_when_stop_training_evaders = n_iters // 2
 memory_size = 1_000_000  # The replay buffer of each group can store this many frames
 
 # Training
-n_optimiser_steps = 100  # Number of optimisation steps per training iteration
+n_optimiser_steps = 100  # Number of optimization steps per training iteration
 train_batch_size = 128  # Number of frames trained in each optimiser step
 lr = 3e-4  # Learning rate
 max_grad_norm = 1.0  # Maximum norm for the gradients
@@ -193,7 +193,7 @@ polyak_tau = 0.005  # Tau for the soft-update of the target network
 # -----------
 #
 # Multi-agent environments simulate multiple agents interacting with the world.
-# TorchRL API allows integrating various types of multi-agent environment flavours.
+# TorchRL API allows integrating various types of multi-agent environment flavors.
 # In this tutorial we will focus on environments where multiple agent groups interact in parallel.
 # That is: at every step all agents will get an observation and take an action synchronously.
 #
@@ -310,7 +310,7 @@ print("observation_spec:", base_env.observation_spec)
 # Looking at the ``done_spec``, we can see that there are some keys that are outside of agent groups
 # (``"done", "terminated", "truncated"``), which do not have a leading multi-agent dimension.
 # These keys are shared by all agents and represent the environment global done state used for resetting.
-# By default, like in this case, parallel PettingZoo environments are done when any agent is done, but this behaviour
+# By default, like in this case, parallel PettingZoo environments are done when any agent is done, but this behavior
 # can be overridden by setting ``done_on_any`` at PettingZoo environment construction.
 #
 # To quickly access the keys for each of these values in tensordicts, we can simply ask the environment for the
@@ -415,7 +415,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # Another important decision we need to make is whether we want the agents within a team to **share the policy parameters**.
 # On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
 # each other's experiences. This will also result in faster training.
-# On the other hand, it will make them behaviourally *homogenous*, as they will in fact share the same model.
+# On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same model.
 # For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
 # speed, but it is important to always think about this decision in your own problems!
 #
@@ -424,7 +424,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # **First**: define a neural network ``n_obs_per_agent`` -> ``n_actions_per_agents``
 #
 # For this we use the ``MultiAgentMLP``, a TorchRL module made exactly for
-# multiple agents, with much customisation available.
+# multiple agents, with much customization available.
 #
 # We will define a different policy for each group and store them in a dictionary.
 #
@@ -655,16 +655,23 @@ collector = SyncDataCollector(
 # There are many types of buffers, in this tutorial we use a basic buffer to store and sample tensordict
 # data randomly.
 #
+# This buffer uses :class:`~.data.LazyMemmapStorage`, which stores data on disk.
+# This allows to use the disk memory, but can result in slower sampling as it requires data to be cast to the training device.
+# To store your buffer on the GPU, you can use :class:`~.data.LazyTensorStorage`, passing the desired device.
+# This will result in faster sampling but is subject to the memory constraints of the selected device.
+#
 
 replay_buffers = {}
 for group, _agents in env.group_map.items():
     replay_buffer = ReplayBuffer(
         storage=LazyMemmapStorage(
-            memory_size, device=device
+            memory_size
         ),  # We will store up to memory_size multi-agent transitions
         sampler=RandomSampler(),
         batch_size=train_batch_size,  # We will sample batches of this size
     )
+    if device.type != "cpu":
+        replay_buffer.append_transform(lambda x: x.to(device))
     replay_buffers[group] = replay_buffer
 
 ######################################################################

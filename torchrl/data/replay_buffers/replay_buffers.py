@@ -7,6 +7,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import json
+import multiprocessing
 import textwrap
 import threading
 import warnings
@@ -17,6 +18,11 @@ from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
 import numpy as np
 
 import torch
+
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 from tensordict import (
     is_tensor_collection,
@@ -30,6 +36,7 @@ from tensordict import (
 from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
+from torch.utils._pytree import tree_map
 
 from torchrl._utils import _make_ordinal_device, accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
@@ -128,6 +135,11 @@ class ReplayBuffer:
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
+            Defaults to ``False``.
+        compilable (bool, optional): whether the writer is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -212,11 +224,21 @@ class ReplayBuffer:
         dim_extend: int | None = None,
         checkpointer: "StorageCheckpointerBase" | None = None,  # noqa: F821
         generator: torch.Generator | None = None,
+        shared: bool = False,
+        compilable: bool = None,
     ) -> None:
-        self._storage = storage if storage is not None else ListStorage(max_size=1_000)
+        self._storage = (
+            storage
+            if storage is not None
+            else ListStorage(max_size=1_000, compilable=compilable)
+        )
         self._storage.attach(self)
         self._sampler = sampler if sampler is not None else RandomSampler()
-        self._writer = writer if writer is not None else RoundRobinWriter()
+        self._writer = (
+            writer
+            if writer is not None
+            else RoundRobinWriter(compilable=bool(compilable))
+        )
         self._writer.register_storage(self._storage)
 
         self._get_collate_fn(collate_fn)
@@ -227,6 +249,9 @@ class ReplayBuffer:
         self._prefetch_queue = collections.deque()
         if self._prefetch_cap:
             self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
+
+        self.shared = shared
+        self.share(self.shared)
 
         self._replay_lock = threading.RLock()
         self._futures_lock = threading.RLock()
@@ -272,6 +297,13 @@ class ReplayBuffer:
         self._storage.checkpointer = checkpointer
         self.set_rng(generator=generator)
 
+    def share(self, shared: bool = True):
+        self.shared = shared
+        if self.shared:
+            self._write_lock = multiprocessing.Lock()
+        else:
+            self._write_lock = contextlib.nullcontext()
+
     def set_rng(self, generator):
         self._rng = generator
         self._storage._rng = generator
@@ -305,9 +337,7 @@ class ReplayBuffer:
     def _transpose(self, data):
         if is_tensor_collection(data):
             return data.transpose(self.dim_extend, 0)
-        return torch.utils._pytree.tree_map(
-            lambda x: x.transpose(self.dim_extend, 0), data
-        )
+        return tree_map(lambda x: x.transpose(self.dim_extend, 0), data)
 
     def _get_collate_fn(self, collate_fn):
         self._collate_fn = (
@@ -349,6 +379,11 @@ class ReplayBuffer:
     def __len__(self) -> int:
         with self._replay_lock:
             return len(self._storage)
+
+    @property
+    def write_count(self):
+        """The total number of items written so far in the buffer through add and extend."""
+        return self._writer._write_count
 
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose
@@ -576,13 +611,15 @@ class ReplayBuffer:
         return self._add(data)
 
     def _add(self, data):
-        with self._replay_lock:
+        with self._replay_lock, self._write_lock:
             index = self._writer.add(data)
             self._sampler.add(index)
         return index
 
     def _extend(self, data: Sequence) -> torch.Tensor:
-        with self._replay_lock:
+        is_compiling = is_dynamo_compiling()
+        nc = contextlib.nullcontext()
+        with self._replay_lock if not is_compiling else nc, self._write_lock if not is_compiling else nc:
             if self.dim_extend > 0:
                 data = self._transpose(data)
             index = self._writer.extend(data)
@@ -630,12 +667,12 @@ class ReplayBuffer:
         if self.dim_extend > 0 and priority.ndim > 1:
             priority = self._transpose(priority).flatten()
             # priority = priority.flatten()
-        with self._replay_lock:
+        with self._replay_lock, self._write_lock:
             self._sampler.update_priority(index, priority, storage=self.storage)
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
-        with self._replay_lock:
+        with self._replay_lock if not is_dynamo_compiling() else contextlib.nullcontext():
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)
@@ -694,7 +731,7 @@ class ReplayBuffer:
                 "for a proper usage of the batch-size arguments."
             )
         if not self._prefetch:
-            ret = self._sample(batch_size)
+            result = self._sample(batch_size)
         else:
             with self._futures_lock:
                 while (
@@ -704,11 +741,15 @@ class ReplayBuffer:
                 ) or not len(self._prefetch_queue):
                     fut = self._prefetch_executor.submit(self._sample, batch_size)
                     self._prefetch_queue.append(fut)
-                ret = self._prefetch_queue.popleft().result()
+                result = self._prefetch_queue.popleft().result()
 
         if return_info:
-            return ret
-        return ret[0]
+            out, info = result
+            if getattr(self.storage, "device", None) is not None:
+                device = self.storage.device
+                info = tree_map(lambda x: x.to(device) if hasattr(x, "to") else x, info)
+            return out, info
+        return result[0]
 
     def mark_update(self, index: Union[int, torch.Tensor]) -> None:
         self._sampler.mark_update(index, storage=self._storage)
@@ -1053,6 +1094,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1265,7 +1308,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if include_info is not None:
             warnings.warn(
                 "include_info is going to be deprecated soon."
-                "The default behaviour has changed to `include_info=True` "
+                "The default behavior has changed to `include_info=True` "
                 "to avoid bugs linked to wrongly preassigned values in the "
                 "output tensordict."
             )
@@ -1392,6 +1435,8 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1466,6 +1511,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         batch_size: int | None = None,
         dim_extend: int | None = None,
         generator: torch.Generator | None = None,
+        shared: bool = False,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -1483,6 +1529,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             batch_size=batch_size,
             dim_extend=dim_extend,
             generator=generator,
+            shared=shared,
         )
 
 
@@ -1523,7 +1570,7 @@ class InPlaceSampler:
 
     .. warning:: This class is deprecated and will be removed in v0.7.
 
-    To be used cautiously as this may lead to unexpected behaviour (i.e. tensordicts
+    To be used cautiously as this may lead to unexpected behavior (i.e. tensordicts
     overwritten during execution).
 
     """
@@ -1635,6 +1682,8 @@ class ReplayBufferEnsemble(ReplayBuffer):
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs import Compose, ToTensorImage, Resize, RenameTransform
@@ -1725,6 +1774,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
         sample_from_all: bool = False,
         num_buffer_sampled: int | None = None,
         generator: torch.Generator | None = None,
+        shared: bool = False,
         **kwargs,
     ):
 
@@ -1762,6 +1812,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
             batch_size=batch_size,
             collate_fn=collate_fn,
             generator=generator,
+            shared=shared,
             **kwargs,
         )
 

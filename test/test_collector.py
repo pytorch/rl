@@ -7,42 +7,14 @@ from __future__ import annotations
 import argparse
 import functools
 import gc
+import os
 
 import sys
 
 import numpy as np
 import pytest
 import torch
-
-from _utils_internal import (
-    CARTPOLE_VERSIONED,
-    check_rollout_consistency_multikey_env,
-    decorate_thread_sub_func,
-    generate_seeds,
-    get_available_devices,
-    get_default_devices,
-    LSTMNet,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    retry,
-)
-from mocking_classes import (
-    ContinuousActionVecMockEnv,
-    CountingBatchedEnv,
-    CountingEnv,
-    CountingEnvCountPolicy,
-    DiscreteActionConvMockEnv,
-    DiscreteActionConvPolicy,
-    DiscreteActionVecMockEnv,
-    DiscreteActionVecPolicy,
-    EnvWithDynamicSpec,
-    HeterogeneousCountingEnv,
-    HeterogeneousCountingEnvPolicy,
-    MockSerialEnv,
-    MultiKeyCountingEnv,
-    MultiKeyCountingEnvPolicy,
-    NestedCountingEnv,
-)
+from packaging import version
 from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
@@ -50,7 +22,12 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
+from tensordict.nn import (
+    CudaGraphModule,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictSequential,
+)
 
 from torch import nn
 from torchrl._utils import (
@@ -69,12 +46,14 @@ from torchrl.collectors.collectors import (
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
+    LazyMemmapStorage,
     LazyTensorStorage,
     NonTensor,
     ReplayBuffer,
     TensorSpec,
     Unbounded,
 )
+from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
     EnvBase,
     EnvCreator,
@@ -94,11 +73,73 @@ from torchrl.envs.utils import (
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        generate_seeds,
+        get_available_devices,
+        get_default_devices,
+        LSTMNet,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        retry,
+    )
+    from pytorch.rl.test.mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvPolicy,
+        DiscreteActionVecMockEnv,
+        DiscreteActionVecPolicy,
+        EnvWithDynamicSpec,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
+else:
+    from _utils_internal import (
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        generate_seeds,
+        get_available_devices,
+        get_default_devices,
+        LSTMNet,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        retry,
+    )
+    from mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvPolicy,
+        DiscreteActionVecMockEnv,
+        DiscreteActionVecPolicy,
+        EnvWithDynamicSpec,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
+
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"
 IS_OSX = sys.platform == "darwin"
 PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 class WrappablePolicy(nn.Module):
@@ -112,19 +153,6 @@ class WrappablePolicy(nn.Module):
         if self.multiple_outputs:
             return output, output.sum(), output.min(), output.max()
         return self.linear(observation)
-
-
-class TensorDictCompatiblePolicy(nn.Module):
-    def __init__(self, out_features: int):
-        super().__init__()
-        self.in_keys = ["observation"]
-        self.out_keys = ["action"]
-        self.linear = nn.LazyLinear(out_features)
-
-    def forward(self, tensordict):
-        return tensordict.set(
-            self.out_keys[0], self.linear(tensordict.get(self.in_keys[0]))
-        )
 
 
 class UnwrappablePolicy(nn.Module):
@@ -1596,8 +1624,8 @@ class TestAutoWrap:
         policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])
         with pytest.raises(
             TypeError,
-            match=(r"Arguments to policy.forward are incompatible with entries in"),
-        ) if collector_class is SyncDataCollector else pytest.raises(EOFError):
+            match=("Arguments to policy.forward are incompatible with entries in"),
+        ):
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
             )
@@ -1826,10 +1854,15 @@ def test_set_truncated(collector_cls):
         NestedCountingEnv(), InitTracker()
     ).add_truncated_keys()
     env = env_fn()
-    policy = env.rand_action
+    policy = CloudpickleWrapper(env.rand_action)
     if collector_cls == SyncDataCollector:
         collector = collector_cls(
-            env, policy=policy, frames_per_batch=20, total_frames=-1, set_truncated=True
+            env,
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=-1,
+            set_truncated=True,
+            trust_policy=True,
         )
     else:
         collector = collector_cls(
@@ -1839,6 +1872,7 @@ def test_set_truncated(collector_cls):
             total_frames=-1,
             cat_results="stack",
             set_truncated=True,
+            trust_policy=True,
         )
     try:
         for data in collector:
@@ -1936,7 +1970,13 @@ class TestNestedEnvsCollector:
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
-        from mocking_classes import CountingEnvCountPolicy, NestedCountingEnv
+        if os.getenv("PYTORCH_TEST_FBCODE"):
+            from pytorch.rl.test.mocking_classes import (
+                CountingEnvCountPolicy,
+                NestedCountingEnv,
+            )
+        else:
+            from mocking_classes import CountingEnvCountPolicy, NestedCountingEnv
 
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
@@ -2146,7 +2186,10 @@ class TestMultiKeyEnvsCollector:
         assert_allclose_td(c2.unsqueeze(0), d2)
 
 
-@pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
+@pytest.mark.skipif(
+    not torch.cuda.is_available() and not torch.mps.is_available(),
+    reason="No casting if no cuda",
+)
 class TestUpdateParams:
     class DummyEnv(EnvBase):
         def __init__(self, device, batch_size=[]):  # noqa: B006
@@ -2204,8 +2247,8 @@ class TestUpdateParams:
     @pytest.mark.parametrize(
         "policy_device,env_device",
         [
-            ["cpu", "cuda"],
-            ["cuda", "cpu"],
+            ["cpu", get_default_devices()[0]],
+            [get_default_devices()[0], "cpu"],
             # ["cpu", "cuda:0"],  # 1226: faster execution
             # ["cuda:0", "cpu"],
             # ["cuda", "cuda:0"],
@@ -2229,9 +2272,7 @@ class TestUpdateParams:
                     policy.param.data += 1
                     policy.buf.data += 2
                     if give_weights:
-                        d = dict(policy.named_parameters())
-                        d.update(policy.named_buffers())
-                        p_w = TensorDict(d, [])
+                        p_w = TensorDict.from_module(policy)
                     else:
                         p_w = None
                     col.update_policy_weights_(p_w)
@@ -2585,8 +2626,15 @@ class TestUniqueTraj:
                 buffer.extend(d)
             assert c._use_buffers
             traj_ids = buffer[:].get(("collector", "traj_ids"))
-            # check that we have as many trajs as expected (no skip)
-            assert traj_ids.unique().numel() == traj_ids.max() + 1
+            # Ideally, we'd like that (sorted_traj.values == sorted_traj.indices).all()
+            #  but in practice, one env can reach the end of the rollout and do a reset
+            #  (which we don't want to prevent) and increment the global traj count,
+            #  when the others have not finished yet. In that case, this traj number will never
+            #  appear.
+            # sorted_traj = traj_ids.unique().sort()
+            # assert (sorted_traj.values == sorted_traj.indices).all()
+            # assert traj_ids.unique().numel() == traj_ids.max() + 1
+
             # check that trajs are not overlapping
             if stack_results:
                 sets = [
@@ -2644,6 +2692,93 @@ class TestDynamicEnvs:
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
             assert data.names[-1] == "time"
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+)
+@pytest.mark.skipif(IS_WINDOWS, reason="windows is not supported for compile tests.")
+class TestCompile:
+    @pytest.mark.parametrize(
+        "collector_cls",
+        # Clearing compiled policies causes segfault on machines with cuda
+        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+        if not torch.cuda.is_available()
+        else [SyncDataCollector],
+    )
+    @pytest.mark.parametrize("compile_policy", [True, {}, {"mode": "default"}])
+    @pytest.mark.parametrize(
+        "device", [torch.device("cuda:0" if torch.cuda.is_available() else "cpu")]
+    )
+    def test_compiled_policy(self, collector_cls, compile_policy, device):
+        policy = TensorDictModule(
+            nn.Linear(7, 7, device=device), in_keys=["observation"], out_keys=["action"]
+        )
+        make_env = functools.partial(ContinuousActionVecMockEnv, device=device)
+        if collector_cls is SyncDataCollector:
+            torch._dynamo.reset_code_caches()
+            collector = SyncDataCollector(
+                make_env(),
+                policy,
+                frames_per_batch=30,
+                total_frames=120,
+                compile_policy=compile_policy,
+            )
+            assert collector.compiled_policy
+        else:
+            collector = collector_cls(
+                [make_env] * 2,
+                policy,
+                frames_per_batch=30,
+                total_frames=120,
+                compile_policy=compile_policy,
+            )
+            assert collector.compiled_policy
+        try:
+            for data in collector:
+                assert data is not None
+        finally:
+            collector.shutdown()
+            del collector
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+    @pytest.mark.parametrize(
+        "collector_cls",
+        [SyncDataCollector],
+    )
+    @pytest.mark.parametrize("cudagraph_policy", [True, {}, {"warmup": 10}])
+    def test_cudagraph_policy(self, collector_cls, cudagraph_policy):
+        device = torch.device("cuda:0")
+        policy = TensorDictModule(
+            nn.Linear(7, 7, device=device), in_keys=["observation"], out_keys=["action"]
+        )
+        make_env = functools.partial(ContinuousActionVecMockEnv, device=device)
+        if collector_cls is SyncDataCollector:
+            collector = SyncDataCollector(
+                make_env(),
+                policy,
+                frames_per_batch=30,
+                total_frames=120,
+                cudagraph_policy=cudagraph_policy,
+                device=device,
+            )
+            assert collector.cudagraphed_policy
+        else:
+            collector = collector_cls(
+                [make_env] * 2,
+                policy,
+                frames_per_batch=30,
+                total_frames=120,
+                cudagraph_policy=cudagraph_policy,
+                device=device,
+            )
+            assert collector.cudagraphed_policy
+        try:
+            for data in collector:
+                assert data is not None
+        finally:
+            collector.shutdown()
+            del collector
 
 
 @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
@@ -2749,6 +2884,292 @@ class TestCollectorsNonTensor:
         finally:
             collector.shutdown()
             del collector
+
+
+class TestCollectorRB:
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    def test_collector_rb_sync(self):
+        env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
+        env.set_seed(0)
+        rb = ReplayBuffer(storage=LazyTensorStorage(256, ndim=2), batch_size=5)
+        collector = SyncDataCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=16,
+        )
+        torch.manual_seed(0)
+
+        for c in collector:
+            assert c is None
+            rb.sample()
+        rbdata0 = rb[:].clone()
+        collector.shutdown()
+        if not env.is_closed:
+            env.close()
+        del collector, env
+
+        env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
+        env.set_seed(0)
+        rb = ReplayBuffer(storage=LazyTensorStorage(256, ndim=2), batch_size=5)
+        collector = SyncDataCollector(
+            env, RandomPolicy(env.action_spec), total_frames=256, frames_per_batch=16
+        )
+        torch.manual_seed(0)
+
+        for i, c in enumerate(collector):
+            rb.extend(c)
+            torch.testing.assert_close(
+                rbdata0[:, : (i + 1) * 2]["observation"], rb[:]["observation"]
+            )
+            assert c is not None
+            rb.sample()
+
+        rbdata1 = rb[:].clone()
+        collector.shutdown()
+        if not env.is_closed:
+            env.close()
+        del collector, env
+        assert assert_allclose_td(rbdata0, rbdata1)
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("env_creator", [False, True])
+    @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_rb_multisync(
+        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+    ):
+        if not env_creator:
+            env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
+            env.set_seed(0)
+            action_spec = env.action_spec
+            env = lambda env=env: env
+        else:
+            env = EnvCreator(
+                lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp).append_transform(
+                    StepCounter()
+                )
+            )
+            action_spec = env.meta_data.specs["input_spec", "full_action_spec"]
+
+        if storagetype == LazyMemmapStorage:
+            storagetype = functools.partial(LazyMemmapStorage, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storagetype(256), batch_size=5)
+
+        collector = MultiSyncDataCollector(
+            [env, env],
+            RandomPolicy(action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=32,
+            replay_buffer_chunk=replay_buffer_chunk,
+        )
+        torch.manual_seed(0)
+        pred_len = 0
+        for c in collector:
+            pred_len += 32
+            assert c is None
+            assert len(rb) == pred_len
+        collector.shutdown()
+        assert len(rb) == 256
+        if not replay_buffer_chunk:
+            steps_counts = rb["step_count"].squeeze().split(16)
+            collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
+            for step_count, ids in zip(steps_counts, collector_ids):
+                step_countdiff = step_count.diff()
+                idsdiff = ids.diff()
+                assert (
+                    (step_countdiff == 1) | (step_countdiff < 0)
+                ).all(), steps_counts
+                assert (idsdiff >= 0).all()
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("env_creator", [False, True])
+    @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
+    def test_collector_rb_multiasync(
+        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+    ):
+        if not env_creator:
+            env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
+            env.set_seed(0)
+            action_spec = env.action_spec
+            env = lambda env=env: env
+        else:
+            env = EnvCreator(
+                lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp).append_transform(
+                    StepCounter()
+                )
+            )
+            action_spec = env.meta_data.specs["input_spec", "full_action_spec"]
+
+        if storagetype == LazyMemmapStorage:
+            storagetype = functools.partial(LazyMemmapStorage, scratch_dir=tmpdir)
+        rb = ReplayBuffer(storage=storagetype(256), batch_size=5)
+
+        collector = MultiaSyncDataCollector(
+            [env, env],
+            RandomPolicy(action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=16,
+            replay_buffer_chunk=replay_buffer_chunk,
+        )
+        torch.manual_seed(0)
+        pred_len = 0
+        for c in collector:
+            pred_len += 16
+            assert c is None
+            assert len(rb) >= pred_len
+        collector.shutdown()
+        assert len(rb) == 256
+        if not replay_buffer_chunk:
+            steps_counts = rb["step_count"].squeeze().split(16)
+            collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
+            for step_count, ids in zip(steps_counts, collector_ids):
+                step_countdiff = step_count.diff()
+                idsdiff = ids.diff()
+                assert (
+                    (step_countdiff == 1) | (step_countdiff < 0)
+                ).all(), steps_counts
+                assert (idsdiff >= 0).all()
+
+
+def __deepcopy_error__(*args, **kwargs):
+    raise RuntimeError("deepcopy not allowed")
+
+
+@pytest.mark.filterwarnings(
+    "error::UserWarning", "ignore:Tensordict is registered in PyTree:UserWarning"
+)
+@pytest.mark.parametrize(
+    "collector_type",
+    [
+        SyncDataCollector,
+        MultiaSyncDataCollector,
+        functools.partial(MultiSyncDataCollector, cat_results="stack"),
+    ],
+)
+def test_no_deepcopy_policy(collector_type):
+    # Tests that the collector instantiation does not make a deepcopy of the policy if not necessary.
+    #
+    # The only situation where we want to deepcopy the policy is when the policy_device differs from the actual device
+    # of the policy. This can only be checked if the policy is an nn.Module and any of the params is not on the desired
+    # device.
+    #
+    # If the policy is not a nn.Module or has no parameter, policy_device should warn (we don't know what to do but we
+    # can trust that the user knows what to do).
+
+    # warnings.warn("Tensordict is registered in PyTree", category=UserWarning)
+
+    shared_device = torch.device("cpu")
+    if torch.cuda.is_available():
+        original_device = torch.device("cuda:0")
+    elif torch.mps.is_available():
+        original_device = torch.device("mps")
+    else:
+        pytest.skip("No GPU or MPS device")
+
+    def make_policy(device=None, nn_module=True):
+        if nn_module:
+            return TensorDictModule(
+                nn.Linear(7, 7, device=device),
+                in_keys=["observation"],
+                out_keys=["action"],
+            )
+        policy = make_policy(device=device)
+        return CloudpickleWrapper(policy)
+
+    def make_and_test_policy(
+        policy,
+        policy_device=None,
+        env_device=None,
+        device=None,
+        trust_policy=None,
+    ):
+        # make sure policy errors when copied
+
+        policy.__deepcopy__ = __deepcopy_error__
+        envs = ContinuousActionVecMockEnv(device=env_device)
+        if collector_type is not SyncDataCollector:
+            envs = [envs, envs]
+        c = collector_type(
+            envs,
+            policy=policy,
+            total_frames=1000,
+            frames_per_batch=10,
+            policy_device=policy_device,
+            env_device=env_device,
+            device=device,
+            trust_policy=trust_policy,
+        )
+        for _ in c:
+            return
+
+    # Simplest use cases
+    policy = make_policy()
+    make_and_test_policy(policy)
+
+    if collector_type is SyncDataCollector or original_device.type != "mps":
+        # mps cannot be shared
+        policy = make_policy(device=original_device)
+        make_and_test_policy(policy, env_device=original_device)
+
+    if collector_type is SyncDataCollector or original_device.type != "mps":
+        policy = make_policy(device=original_device)
+        make_and_test_policy(
+            policy, policy_device=original_device, env_device=original_device
+        )
+
+    # a deepcopy must occur when the policy_device differs from the actual device
+    with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        policy = make_policy(device=original_device)
+        make_and_test_policy(
+            policy, policy_device=shared_device, env_device=shared_device
+        )
+
+    # a deepcopy must occur when device differs from the actual device
+    with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        policy = make_policy(device=original_device)
+        make_and_test_policy(policy, device=shared_device)
+
+    # If the policy is not an nn.Module, we can't cast it to device, so we assume that the policy device
+    # is there to inform us
+    substitute_device = (
+        original_device if torch.cuda.is_available() else torch.device("cpu")
+    )
+    policy = make_policy(substitute_device, nn_module=False)
+    with pytest.warns(UserWarning):
+        make_and_test_policy(
+            policy, policy_device=substitute_device, env_device=substitute_device
+        )
+    # For instance, if the env is on CPU, knowing the policy device helps with casting stuff on the right device
+    with pytest.warns(UserWarning):
+        make_and_test_policy(
+            policy, policy_device=substitute_device, env_device=shared_device
+        )
+    make_and_test_policy(
+        policy,
+        policy_device=substitute_device,
+        env_device=shared_device,
+        trust_policy=True,
+    )
+
+    # If there is no policy_device, we assume that the user is doing things right too but don't warn
+    if collector_type is SyncDataCollector or original_device.type != "mps":
+        policy = make_policy(original_device, nn_module=False)
+        make_and_test_policy(policy, env_device=original_device)
+
+    # If the policy is a CudaGraphModule, we know it's on cuda - no need to warn
+    if torch.cuda.is_available() and collector_type is SyncDataCollector:
+        policy = make_policy(original_device)
+        cudagraph_policy = CudaGraphModule(policy)
+        make_and_test_policy(
+            cudagraph_policy,
+            policy_device=original_device,
+            env_device=shared_device,
+        )
 
 
 if __name__ == "__main__":

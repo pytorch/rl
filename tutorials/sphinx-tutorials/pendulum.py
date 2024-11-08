@@ -128,7 +128,7 @@ DEFAULT_Y = 1.0
 # * :meth:`EnvBase._reset`, which codes for the resetting of the simulator
 #   at a (potentially random) initial state;
 # * :meth:`EnvBase._step` which codes for the state transition dynamic;
-# * :meth:`EnvBase._set_seed`` which implements the seeding mechanism;
+# * :meth:`EnvBase._set_seed` which implements the seeding mechanism;
 # * the environment specs.
 #
 # Let us first describe the problem at hand: we would like to model a simple
@@ -609,7 +609,7 @@ env = TransformedEnv(
     env,
     # ``Unsqueeze`` the observations that we will concatenate
     UnsqueezeTransform(
-        unsqueeze_dim=-1,
+        dim=-1,
         in_keys=["th", "thdot"],
         in_keys_inv=["th", "thdot"],
     ),

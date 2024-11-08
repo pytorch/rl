@@ -5,6 +5,7 @@
 import functools
 import gc
 import importlib.util
+import urllib.error
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -18,26 +19,43 @@ import importlib
 import os
 
 import time
+import urllib
 from contextlib import nullcontext
 from pathlib import Path
 from sys import platform
 from typing import Optional, Union
+from unittest import mock
 
 import numpy as np
 import pytest
 import torch
 
-from _utils_internal import (
-    _make_multithreaded_env,
-    CARTPOLE_VERSIONED,
-    get_available_devices,
-    get_default_devices,
-    HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    rand_reset,
-    rollout_consistency_assertion,
-)
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
+else:
+    from _utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
 from packaging import version
 from tensordict import (
     assert_allclose_td,
@@ -107,9 +125,15 @@ from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
+from torchrl.envs.libs.openspiel import _has_pyspiel, OpenSpielEnv, OpenSpielWrapper
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
+from torchrl.envs.libs.unity_mlagents import (
+    _has_unity_mlagents,
+    UnityMLAgentsEnv,
+    UnityMLAgentsWrapper,
+)
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
@@ -151,6 +175,16 @@ elif _has_gym:
     assert gym_backend() is gym
 
 _has_meltingpot = importlib.util.find_spec("meltingpot") is not None
+
+_has_minigrid = importlib.util.find_spec("minigrid") is not None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def maybe_init_minigrid():
+    if _has_minigrid and _has_gymnasium:
+        import minigrid
+
+        minigrid.register_minigrid_envs()
 
 
 def get_gym_pixel_wrapper():
@@ -266,7 +300,7 @@ class TestGym:
             shape=batch_size,
         )
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     def _make_spec(  # noqa: F811
         self, batch_size, cat, cat_shape, multicat, multicat_shape
     ):
@@ -311,7 +345,7 @@ class TestGym:
 
     # @pytest.mark.parametrize("order", ["seq_tuple", "tuple_seq"])
     @pytest.mark.parametrize("order", ["tuple_seq"])
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     def test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
         with set_gym_backend("gymnasium"):
             if order == "seq_tuple":
@@ -827,7 +861,7 @@ class TestGym:
         finally:
             set_gym_backend(gb).set()
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     def test_one_hot_and_categorical(self):
         # tests that one-hot and categorical work ok when an integer is expected as action
         cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
@@ -846,7 +880,7 @@ class TestGym:
         # versions.
         return
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     @pytest.mark.parametrize(
         "envname",
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
@@ -872,7 +906,7 @@ class TestGym:
         assert env.batch_size == torch.Size([2])
         check_env_specs(env)
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
@@ -1034,7 +1068,7 @@ class TestGym:
         finally:
             set_gym_backend(gym).set()
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     @pytest.mark.parametrize("wrapper", [True, False])
     def test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
@@ -1137,7 +1171,7 @@ class TestGym:
         del c
         return
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", None, "1.0.0")
     def test_vecenvs_nan(self):  # noqa: F811
         # new versions of gym must never return nan for next values when there is a done state
         torch.manual_seed(0)
@@ -1278,6 +1312,24 @@ class TestGym:
                 gc.collect()
 
 
+@pytest.mark.skipif(
+    not _has_minigrid or not _has_gymnasium, reason="MiniGrid not found"
+)
+class TestMiniGrid:
+    @pytest.mark.parametrize(
+        "id",
+        [
+            "BabyAI-KeyCorridorS6R3-v0",
+            "MiniGrid-Empty-16x16-v0",
+            "MiniGrid-BlockedUnlockPickup-v0",
+        ],
+    )
+    def test_minigrid(self, id):
+        env_base = gymnasium.make(id)
+        env = GymWrapper(env_base)
+        check_env_specs(env)
+
+
 @implement_for("gym", None, "0.26")
 def _make_gym_environment(env_name):  # noqa: F811
     gym = gym_backend()
@@ -1290,7 +1342,7 @@ def _make_gym_environment(env_name):  # noqa: F811
     return gym.make(env_name, render_mode="rgb_array")
 
 
-@implement_for("gymnasium")
+@implement_for("gymnasium", None, "1.0.0")
 def _make_gym_environment(env_name):  # noqa: F811
     gym = gym_backend()
     return gym.make(env_name, render_mode="rgb_array")
@@ -2811,34 +2863,11 @@ def _minari_selected_datasets():
 
     torch.manual_seed(0)
 
-    # We rely on sorting the keys as v0 < v1 but if the version is greater than 9 this won't work
-    total_keys = sorted(minari.list_remote_datasets())
-    assert not any(
-        key[-2:] == "10" for key in total_keys
-    ), "You should adapt the Minari test scripts as some dataset have a version >= 10 and sorting will fail."
-    total_keys_splits = [key.split("-") for key in total_keys]
+    total_keys = sorted(
+        minari.list_remote_datasets(latest_version=True, compatible_minari_version=True)
+    )
     indices = torch.randperm(len(total_keys))[:20]
     keys = [total_keys[idx] for idx in indices]
-    keys = [
-        key
-        for key in keys
-        if "=0.4" in minari.list_remote_datasets()[key]["minari_version"]
-    ]
-
-    def _replace_with_max(key):
-        key_split = key.split("-")
-        same_entries = (
-            torch.tensor(
-                [total_key[:-1] == key_split[:-1] for total_key in total_keys_splits]
-            )
-            .nonzero()
-            .squeeze()
-            .tolist()
-        )
-        last_same_entry = same_entries[-1]
-        return total_keys[last_same_entry]
-
-    keys = [_replace_with_max(key) for key in keys]
 
     assert len(keys) > 5, keys
     _MINARI_DATASETS += keys
@@ -2868,12 +2897,8 @@ class TestMinari:
                 break
 
     def test_minari_preproc(self, tmpdir):
-        global _MINARI_DATASETS
-        if not _MINARI_DATASETS:
-            _minari_selected_datasets()
-        selected_dataset = _MINARI_DATASETS[0]
         dataset = MinariExperienceReplay(
-            selected_dataset,
+            "D4RL/pointmaze/large-v2",
             batch_size=32,
             split_trajs=False,
             download="force",
@@ -3080,7 +3105,7 @@ class TestAtariDQN:
 
         t = Compose(
             UnsqueezeTransform(
-                unsqueeze_dim=-3, in_keys=["observation", ("next", "observation")]
+                dim=-3, in_keys=["observation", ("next", "observation")]
             ),
             Resize(32, in_keys=["observation", ("next", "observation")]),
             RenameTransform(in_keys=["action"], out_keys=["other_action"]),
@@ -3699,7 +3724,7 @@ class TestRoboHive:
     # The other option would be not to use parametrize but that also
     # means less informative error trace stacks.
     # In the CI, robohive should not coexist with other libs so that's fine.
-    # Robohive logging behaviour can be controlled via ROBOHIVE_VERBOSITY=ALL/INFO/(WARN)/ERROR/ONCE/ALWAYS/SILENT
+    # Robohive logging behavior can be controlled via ROBOHIVE_VERBOSITY=ALL/INFO/(WARN)/ERROR/ONCE/ALWAYS/SILENT
     @pytest.mark.parametrize("from_pixels", [False, True])
     @pytest.mark.parametrize("from_depths", [False, True])
     @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
@@ -3817,6 +3842,270 @@ class TestSmacv2:
         for _ in collector:
             break
         collector.shutdown()
+
+
+# List of OpenSpiel games to test
+# TODO: Some of the games in `OpenSpielWrapper.available_envs` raise errors for
+# a few different reasons, mostly because we do not support chance nodes yet. So
+# we cannot run tests on all of them yet.
+_openspiel_games = [
+    # ----------------
+    # Sequential games
+    # 1-player
+    "morpion_solitaire",
+    # 2-player
+    "amazons",
+    "battleship",
+    "breakthrough",
+    "checkers",
+    "chess",
+    "cliff_walking",
+    "clobber",
+    "connect_four",
+    "cursor_go",
+    "dark_chess",
+    "dark_hex",
+    "dark_hex_ir",
+    "dots_and_boxes",
+    "go",
+    "havannah",
+    "hex",
+    "kriegspiel",
+    "mancala",
+    "nim",
+    "nine_mens_morris",
+    "othello",
+    "oware",
+    "pentago",
+    "phantom_go",
+    "phantom_ttt",
+    "phantom_ttt_ir",
+    "sheriff",
+    "tic_tac_toe",
+    "twixt",
+    "ultimate_tic_tac_toe",
+    "y",
+    # --------------
+    # Parallel games
+    # 2-player
+    "blotto",
+    "matrix_bos",
+    "matrix_brps",
+    "matrix_cd",
+    "matrix_coordination",
+    "matrix_mp",
+    "matrix_pd",
+    "matrix_rps",
+    "matrix_rpsw",
+    "matrix_sh",
+    "matrix_shapleys_game",
+    "oshi_zumo",
+    # 3-player
+    "matching_pennies_3p",
+]
+
+
+@pytest.mark.skipif(not _has_pyspiel, reason="open_spiel not found")
+class TestOpenSpiel:
+    @pytest.mark.parametrize("game_string", _openspiel_games)
+    @pytest.mark.parametrize("return_state", [False, True])
+    @pytest.mark.parametrize("categorical_actions", [False, True])
+    def test_all_envs(self, game_string, return_state, categorical_actions):
+        env = OpenSpielEnv(
+            game_string,
+            categorical_actions=categorical_actions,
+            return_state=return_state,
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("game_string", _openspiel_games)
+    @pytest.mark.parametrize("return_state", [False, True])
+    @pytest.mark.parametrize("categorical_actions", [False, True])
+    def test_wrapper(self, game_string, return_state, categorical_actions):
+        import pyspiel
+
+        base_env = pyspiel.load_game(game_string).new_initial_state()
+        env_torchrl = OpenSpielWrapper(
+            base_env, categorical_actions=categorical_actions, return_state=return_state
+        )
+        env_torchrl.rollout(max_steps=5)
+
+    @pytest.mark.parametrize("game_string", _openspiel_games)
+    @pytest.mark.parametrize("return_state", [False, True])
+    @pytest.mark.parametrize("categorical_actions", [False, True])
+    def test_reset_state(self, game_string, return_state, categorical_actions):
+        env = OpenSpielEnv(
+            game_string,
+            categorical_actions=categorical_actions,
+            return_state=return_state,
+        )
+        td = env.reset()
+        td_init = td.clone()
+
+        # Perform an action
+        td = env.step(env.full_action_spec.rand())
+
+        # Save the current td for reset
+        td_reset = td["next"].clone()
+
+        # Perform a second action
+        td = env.step(env.full_action_spec.rand())
+
+        # Resetting to a specific state can only happen if `return_state` is
+        # enabled. Otherwise, it is reset to the initial state.
+        if return_state:
+            # Check that the state was reset to the specified state
+            td = env.reset(td_reset)
+            assert (td == td_reset).all()
+        else:
+            # Check that the state was reset to the initial state
+            td = env.reset()
+            assert (td == td_init).all()
+
+    def test_chance_not_implemented(self):
+        with pytest.raises(
+            NotImplementedError,
+            match="not yet supported",
+        ):
+            OpenSpielEnv("bridge")
+
+
+# NOTE: Each of the registered envs are around 180 MB, so only test a few.
+_mlagents_registered_envs = [
+    "3DBall",
+    "StrikersVsGoalie",
+]
+
+
+@pytest.mark.skipif(not _has_unity_mlagents, reason="mlagents_envs not found")
+class TestUnityMLAgents:
+    @mock.patch("mlagents_envs.env_utils.launch_executable")
+    @mock.patch("mlagents_envs.environment.UnityEnvironment._get_communicator")
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ONE_GROUP_PER_AGENT, MarlGroupMapType.ALL_IN_ONE_GROUP],
+    )
+    def test_env(self, mock_communicator, mock_launcher, group_map):
+        from mlagents_envs.mock_communicator import MockCommunicator
+
+        mock_communicator.return_value = MockCommunicator(
+            discrete_action=False, visual_inputs=0
+        )
+        env = UnityMLAgentsEnv(" ", group_map=group_map)
+        try:
+            check_env_specs(env)
+        finally:
+            env.close()
+
+    @mock.patch("mlagents_envs.env_utils.launch_executable")
+    @mock.patch("mlagents_envs.environment.UnityEnvironment._get_communicator")
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ONE_GROUP_PER_AGENT, MarlGroupMapType.ALL_IN_ONE_GROUP],
+    )
+    def test_wrapper(self, mock_communicator, mock_launcher, group_map):
+        from mlagents_envs.environment import UnityEnvironment
+        from mlagents_envs.mock_communicator import MockCommunicator
+
+        mock_communicator.return_value = MockCommunicator(
+            discrete_action=False, visual_inputs=0
+        )
+        env = UnityMLAgentsWrapper(UnityEnvironment(" "), group_map=group_map)
+        try:
+            check_env_specs(env)
+        finally:
+            env.close()
+
+    @mock.patch("mlagents_envs.env_utils.launch_executable")
+    @mock.patch("mlagents_envs.environment.UnityEnvironment._get_communicator")
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ONE_GROUP_PER_AGENT, MarlGroupMapType.ALL_IN_ONE_GROUP],
+    )
+    def test_rollout(self, mock_communicator, mock_launcher, group_map):
+        from mlagents_envs.environment import UnityEnvironment
+        from mlagents_envs.mock_communicator import MockCommunicator
+
+        mock_communicator.return_value = MockCommunicator(
+            discrete_action=False, visual_inputs=0
+        )
+        env = UnityMLAgentsWrapper(UnityEnvironment(" "), group_map=group_map)
+        try:
+            env.rollout(
+                max_steps=500, break_when_any_done=False, break_when_all_done=False
+            )
+        finally:
+            env.close()
+
+    @pytest.mark.unity_editor
+    def test_with_editor(self):
+        print("Please press play in the Unity editor")  # noqa: T201
+        env = UnityMLAgentsEnv(timeout_wait=30)
+        try:
+            env.reset()
+            check_env_specs(env)
+
+            # Perform a rollout
+            td = env.reset()
+            env.rollout(
+                max_steps=100, break_when_any_done=False, break_when_all_done=False
+            )
+
+            # Step manually
+            tensordicts = []
+            td = env.reset()
+            tensordicts.append(td)
+            traj_len = 200
+            for _ in range(traj_len - 1):
+                td = env.step(td.update(env.full_action_spec.rand()))
+                tensordicts.append(td)
+
+            traj = torch.stack(tensordicts)
+            assert traj.batch_size == torch.Size([traj_len])
+        finally:
+            env.close()
+
+    @retry(
+        (
+            urllib.error.HTTPError,
+            urllib.error.URLError,
+            urllib.error.ContentTooShortError,
+        ),
+        5,
+    )
+    @pytest.mark.parametrize("registered_name", _mlagents_registered_envs)
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ONE_GROUP_PER_AGENT, MarlGroupMapType.ALL_IN_ONE_GROUP],
+    )
+    def test_registered_envs(self, registered_name, group_map):
+        env = UnityMLAgentsEnv(
+            registered_name=registered_name,
+            no_graphics=True,
+            group_map=group_map,
+        )
+        try:
+            check_env_specs(env)
+
+            # Perform a rollout
+            td = env.reset()
+            env.rollout(
+                max_steps=20, break_when_any_done=False, break_when_all_done=False
+            )
+
+            # Step manually
+            tensordicts = []
+            td = env.reset()
+            tensordicts.append(td)
+            traj_len = 20
+            for _ in range(traj_len - 1):
+                td = env.step(td.update(env.full_action_spec.rand()))
+                tensordicts.append(td)
+
+            traj = torch.stack(tensordicts)
+            assert traj.batch_size == torch.Size([traj_len])
+        finally:
+            env.close()
 
 
 @pytest.mark.skipif(not _has_meltingpot, reason="Meltingpot not found")
