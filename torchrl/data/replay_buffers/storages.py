@@ -911,6 +911,8 @@ class LazyTensorStorage(TensorStorage):
         compilable (bool, optional): whether the storage is compilable.
             If ``True``, the writer cannot be shared between multiple processes.
             Defaults to ``False``.
+        consolidated (bool, optional): if ``True``, the storage will be consolidated after
+            its first expansion. Defaults to ``False``.
 
     Examples:
         >>> data = TensorDict({
@@ -971,6 +973,7 @@ class LazyTensorStorage(TensorStorage):
         device: torch.device = "cpu",
         ndim: int = 1,
         compilable: bool = False,
+        consolidated: bool = False,
     ):
         super().__init__(
             storage=None,
@@ -979,6 +982,7 @@ class LazyTensorStorage(TensorStorage):
             ndim=ndim,
             compilable=compilable,
         )
+        self.consolidated = consolidated
 
     def _init(
         self,
@@ -1003,7 +1007,11 @@ class LazyTensorStorage(TensorStorage):
 
         if is_tensor_collection(data):
             out = data.to(self.device)
-            out = torch.empty_like(out.expand(max_size_along_dim0(data.shape)))
+            out: TensorDictBase = torch.empty_like(
+                out.expand(max_size_along_dim0(data.shape))
+            )
+            if self.consolidated:
+                out = out.consolidate()
         else:
             # if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype
             out = tree_map(
@@ -1014,6 +1022,8 @@ class LazyTensorStorage(TensorStorage):
                 ),
                 data,
             )
+            if self.consolidated:
+                raise ValueError("Cannot consolidate non-tensordict storages.")
 
         self._storage = out
         self.initialized = True

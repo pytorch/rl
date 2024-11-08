@@ -6,3 +6,4 @@
 from .hash import BinaryToDecimal, RandomProjectionHash, SipHash
 from .query import HashToInt, QueryModule
 from .tdstorage import TensorDictMap, TensorMap
+from .tree import MCTSForest, Tree
