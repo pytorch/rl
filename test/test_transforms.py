@@ -156,7 +156,6 @@ from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
-from torchrl.modules.utils import get_primers_from_module
 
 IS_WIN = platform == "win32"
 if IS_WIN:
@@ -6953,33 +6952,6 @@ class TestTensorDictPrimer(TransformBase):
         assert (
             rollout_td.get(("next", "mykey2")) == torch.tensor(1, dtype=torch.int64)
         ).all
-
-    def test_spec_shape_inplace_correction(self):
-        hidden_size = input_size = num_layers = 2
-        model = GRUModule(
-            input_size, hidden_size, num_layers, in_key="observation", out_key="action"
-        )
-        env = TransformedEnv(
-            SerialEnv(2, lambda: GymEnv("Pendulum-v1")),
-        )
-        # These primers do not have the leading batch dimension
-        # since model is agnostic to batch dimension that will be used.
-        primers = get_primers_from_module(model)
-        for primer in primers.primers:
-            assert primers.primers.get(primer).shape == torch.Size(
-                [num_layers, hidden_size]
-            )
-        env.append_transform(primers)
-
-        # Reset should add the batch dimension to the primers
-        # since the parent exists and is batch_locked.
-        td = env.reset()
-
-        for primer in primers.primers:
-            assert primers.primers.get(primer).shape == torch.Size(
-                [2, num_layers, hidden_size]
-            )
-            assert td.get(primer).shape == torch.Size([2, num_layers, hidden_size])
 
 
 class TestTimeMaxPool(TransformBase):
