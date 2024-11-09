@@ -13,6 +13,7 @@ from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )

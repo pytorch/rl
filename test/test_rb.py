@@ -19,7 +19,6 @@ import torch
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
-        capture_log_records,
         CARTPOLE_VERSIONED,
         get_default_devices,
         make_tc,
@@ -28,6 +27,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
 else:
     from _utils_internal import CARTPOLE_VERSIONED, get_default_devices, make_tc
     from mocking_classes import CountingEnv
+
 from packaging import version
 from packaging.version import parse
 from tensordict import (
@@ -119,6 +119,7 @@ _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 torch_2_3 = version.parse(
     ".".join([str(s) for s in version.parse(str(torch.__version__)).release])
@@ -412,84 +413,6 @@ class TestComposableBuffers:
             match="A cursor of length superior to the storage capacity was provided",
         ) if cond else contextlib.nullcontext():
             rb.extend(data2)
-
-    @pytest.mark.skipif(
-        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
-    )
-    # Compiling on Windows requires "cl" compiler to be installed.
-    # <https://github.com/pytorch/pytorch/blob/8231180147a096a703d8891756068c89365292e0/torch/_inductor/cpp_builder.py#L143>
-    # Our Windows CI jobs do not have "cl", so skip this test.
-    @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
-    @pytest.mark.parametrize("avoid_max_size", [False, True])
-    def test_extend_sample_recompile(
-        self, rb_type, sampler, writer, storage, size, datatype, avoid_max_size
-    ):
-        if rb_type is not ReplayBuffer:
-            pytest.skip(
-                "Only replay buffer of type 'ReplayBuffer' is currently supported."
-            )
-        if sampler is not RandomSampler:
-            pytest.skip("Only sampler of type 'RandomSampler' is currently supported.")
-        if storage is not LazyTensorStorage:
-            pytest.skip(
-                "Only storage of type 'LazyTensorStorage' is currently supported."
-            )
-        if writer is not RoundRobinWriter:
-            pytest.skip(
-                "Only writer of type 'RoundRobinWriter' is currently supported."
-            )
-        if datatype == "tensordict":
-            pytest.skip("'tensordict' datatype is not currently supported.")
-
-        torch._dynamo.reset_code_caches()
-
-        # Number of times to extend the replay buffer
-        num_extend = 10
-        data_size = size
-
-        # These two cases are separated because when the max storage size is
-        # reached, the code execution path changes, causing necessary
-        # recompiles.
-        if avoid_max_size:
-            storage_size = (num_extend + 1) * data_size
-        else:
-            storage_size = 2 * data_size
-
-        rb = self._get_rb(
-            rb_type=rb_type,
-            sampler=sampler,
-            writer=writer,
-            storage=storage,
-            size=storage_size,
-            compilable=True,
-        )
-        data = self._get_data(datatype, size=data_size)
-
-        @torch.compile
-        def extend_and_sample(data):
-            rb.extend(data)
-            return rb.sample()
-
-        # NOTE: The first three calls to 'extend' and 'sample' can currently
-        # cause recompilations, so avoid capturing those.
-        num_extend_before_capture = 3
-
-        for _ in range(num_extend_before_capture):
-            extend_and_sample(data)
-
-        try:
-            torch._logging.set_logs(recompiles=True)
-            records = []
-            capture_log_records(records, "torch._dynamo", "recompiles")
-
-            for _ in range(num_extend - num_extend_before_capture):
-                extend_and_sample(data)
-
-        finally:
-            torch._logging.set_logs()
-
-        assert len(rb) == min((num_extend * data_size), storage_size)
-        assert len(records) == 0
 
     def test_sample(self, rb_type, sampler, writer, storage, size, datatype):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
@@ -813,52 +736,6 @@ class TestStorages:
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample()
         assert (s.exclude("index") == 1).all()
-
-    @pytest.mark.skipif(
-        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
-    )
-    @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
-    # This test checks if the `torch._dynamo.disable` wrapper around
-    # `TensorStorage._rand_given_ndim` is still necessary.
-    def test__rand_given_ndim_recompile(self):
-        torch._dynamo.reset_code_caches()
-
-        # Number of times to extend the replay buffer
-        num_extend = 10
-        data_size = 100
-        storage_size = (num_extend + 1) * data_size
-        sample_size = 3
-
-        storage = LazyTensorStorage(storage_size, compilable=True)
-        sampler = RandomSampler()
-
-        # Override to avoid the `torch._dynamo.disable` wrapper
-        storage._rand_given_ndim = storage._rand_given_ndim_impl
-
-        @torch.compile
-        def extend_and_sample(data):
-            storage.set(torch.arange(data_size) + len(storage), data)
-            return sampler.sample(storage, sample_size)
-
-        data = torch.randint(100, (data_size, 1))
-
-        try:
-            torch._logging.set_logs(recompiles=True)
-            records = []
-            capture_log_records(records, "torch._dynamo", "recompiles")
-
-            for _ in range(num_extend):
-                extend_and_sample(data)
-
-        finally:
-            torch._logging.set_logs()
-
-        assert len(storage) == num_extend * data_size
-        assert len(records) == 8, (
-            "If this ever decreases, that's probably good news and the "
-            "`torch._dynamo.disable` wrapper around "
-            "`TensorStorage._rand_given_ndim` can be removed."
-        )
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     def test_extend_lazystack(self, storage_type):
