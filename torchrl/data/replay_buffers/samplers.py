@@ -2148,6 +2148,7 @@ class SamplerEnsemble(Sampler):
                     len(self._samplers),
                     (self.num_buffer_sampled,),
                     generator=self._rng,
+                    device=getattr(storage, "device", None),
                 )
             else:
                 buffer_ids = torch.multinomial(self.p, self.num_buffer_sampled, True)

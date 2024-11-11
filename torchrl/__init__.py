@@ -27,6 +27,11 @@ try:
 except ImportError:
     __version__ = None
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
+
 _init_extension()
 
 try:
@@ -69,7 +74,7 @@ def _inv(self):
         inv = self._inv()
     if inv is None:
         inv = _InverseTransform(self)
-        if not torch.compiler.is_dynamo_compiling():
+        if not is_dynamo_compiling():
             self._inv = weakref.ref(inv)
     return inv
 
@@ -84,7 +89,7 @@ def _inv(self):
         inv = self._inv()
     if inv is None:
         inv = ComposeTransform([p.inv for p in reversed(self.parts)])
-        if not torch.compiler.is_dynamo_compiling():
+        if not is_dynamo_compiling():
             self._inv = weakref.ref(inv)
             inv._inv = weakref.ref(self)
         else:

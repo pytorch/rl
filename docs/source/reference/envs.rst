@@ -996,11 +996,9 @@ Helpers
 
     RandomPolicy
     check_env_specs
-    exploration_mode #deprecated
     exploration_type
     get_available_libraries
     make_composite_from_td
-    set_exploration_mode #deprecated
     set_exploration_type
     step_mdp
     terminated_or_truncated
@@ -1122,6 +1120,8 @@ the following function will return ``1`` when queried:
     RoboHiveEnv
     SMACv2Env
     SMACv2Wrapper
+    UnityMLAgentsEnv
+    UnityMLAgentsWrapper
     VmasEnv
     VmasWrapper
     gym_backend

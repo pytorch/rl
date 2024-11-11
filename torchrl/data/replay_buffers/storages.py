@@ -26,6 +26,7 @@ from tensordict import (
 )
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
@@ -146,7 +147,13 @@ class Storage:
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
-            return torch.randint(0, len(self), (batch_size,), generator=self._rng)
+            return torch.randint(
+                0,
+                len(self),
+                (batch_size,),
+                generator=self._rng,
+                device=getattr(self, "device", None),
+            )
         raise RuntimeError(
             f"Random number generation is not implemented for storage of type {type(self)} with ndim {self.ndim}. "
             f"Please report this exception as well as the use case (incl. buffer construction) on github."
@@ -194,6 +201,13 @@ class Storage:
         state["_rng"] = None
         return state
 
+    def __contains__(self, item):
+        return self.contains(item)
+
+    @abc.abstractmethod
+    def contains(self, item):
+        ...
+
 
 class ListStorage(Storage):
     """A storage stored in a list.
@@ -203,13 +217,16 @@ class ListStorage(Storage):
     (like lists, tuples, tensors or tensordicts with non-empty batch-size).
 
     Args:
-        max_size (int): the maximum number of elements stored in the storage.
+        max_size (int, optional): the maximum number of elements stored in the storage.
+            If not provided, an unlimited storage is created.
 
     """
 
     _default_checkpointer = ListStorageCheckpointer
 
-    def __init__(self, max_size: int):
+    def __init__(self, max_size: int | None = None):
+        if max_size is None:
+            max_size = torch.iinfo(torch.int64).max
         super().__init__(max_size)
         self._storage = []
 
@@ -242,7 +259,7 @@ class ListStorage(Storage):
                     np.ndarray,
                 ),
             ):
-                for _cursor, _data in zip(cursor, data):
+                for _cursor, _data in _zip_strict(cursor, data):
                     self.set(_cursor, _data, set_cursor=set_cursor)
             else:
                 raise TypeError(
@@ -313,6 +330,20 @@ class ListStorage(Storage):
 
     def __repr__(self):
         return f"{self.__class__.__name__}(items=[{self._storage[0]}, ...])"
+
+    def contains(self, item):
+        if isinstance(item, int):
+            if item < 0:
+                item += len(self._storage)
+
+            return 0 <= item < len(self._storage)
+        if isinstance(item, torch.Tensor):
+            return torch.tensor(
+                [self.contains(elt) for elt in item.tolist()],
+                dtype=torch.bool,
+                device=item.device,
+            ).reshape_as(item)
+        raise NotImplementedError(f"type {type(item)} is not supported yet.")
 
 
 class TensorStorage(Storage):
@@ -507,7 +538,8 @@ class TensorStorage(Storage):
             return super()._rand_given_ndim(batch_size)
         shape = self.shape
         return tuple(
-            torch.randint(_dim, (batch_size,), generator=self._rng) for _dim in shape
+            torch.randint(_dim, (batch_size,), generator=self._rng, device=self.device)
+            for _dim in shape
         )
 
     def flatten(self):
@@ -801,6 +833,30 @@ class TensorStorage(Storage):
         len_str = textwrap.indent(f"len={len(self)}", 4 * " ")
         maxsize_str = textwrap.indent(f"max_size={self.max_size}", 4 * " ")
         return f"{self.__class__.__name__}(\n{storage_str}, \n{shape_str}, \n{len_str}, \n{maxsize_str})"
+
+    def contains(self, item):
+        if isinstance(item, int):
+            if item < 0:
+                item += self._len_along_dim0
+
+            return 0 <= item < self._len_along_dim0
+        if isinstance(item, torch.Tensor):
+
+            def _is_valid_index(idx):
+                try:
+                    torch.zeros(self.shape, device="meta")[idx]
+                    return True
+                except IndexError:
+                    return False
+
+            if item.ndim:
+                return torch.tensor(
+                    [_is_valid_index(idx) for idx in item],
+                    dtype=torch.bool,
+                    device=item.device,
+                )
+            return torch.tensor(_is_valid_index(item), device=item.device)
+        raise NotImplementedError(f"type {type(item)} is not supported yet.")
 
 
 class LazyTensorStorage(TensorStorage):
@@ -1311,10 +1367,14 @@ def _collate_list_tensordict(x):
     return out
 
 
-def _stack_anything(x):
-    if is_tensor_collection(x[0]):
-        return LazyStackedTensorDict.maybe_dense_stack(x)
-    return torch.stack(x)
+def _stack_anything(data):
+    if is_tensor_collection(data[0]):
+        return LazyStackedTensorDict.maybe_dense_stack(data)
+    return torch.utils._pytree.tree_map(
+        lambda *x: torch.stack(x),
+        *data,
+        is_leaf=lambda x: isinstance(x, torch.Tensor) or is_tensor_collection(x),
+    )
 
 
 def _collate_id(x):
@@ -1323,10 +1383,7 @@ def _collate_id(x):
 
 def _get_default_collate(storage, _is_tensordict=False):
     if isinstance(storage, ListStorage):
-        if _is_tensordict:
-            return _collate_list_tensordict
-        else:
-            return torch.utils.data._utils.collate.default_collate
+        return _stack_anything
     elif isinstance(storage, TensorStorage):
         return _collate_id
     else:

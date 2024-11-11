@@ -1,5 +1,4 @@
 name: Continuous Benchmark (PR)
-
 on:
   pull_request:
 
@@ -12,6 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
   benchmark_cpu:
     name: CPU Pytest benchmark
     runs-on: ubuntu-20.04
@@ -26,16 +26,7 @@ jobs:
       - name: Python Setup
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
-      - name: Setup Environment
-        run: |
-          python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U 
-          python3 -m pip install git+https://github.com/pytorch/tensordict 
-          python3 setup.py develop
-          python3 -m pip install pytest pytest-benchmark
-          python3 -m pip install "gym[accept-rom-license,atari]"
-          python3 -m pip install "dm_control" "mujoco"
-          export TD_GET_DEFAULTS_TO_NONE=1
+          python-version: '3.10'
       - name: Setup benchmarks
         run: |
           echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
@@ -43,11 +34,22 @@ jobs:
           echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
           echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
           echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
-      - name: Run benchmarks
+      - name: Setup Environment and tests
         run: |
+          python3.10 -m venv ./py310
+          source ./py310/bin/activate
+
+          python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U 
+          python3 -m pip install git+https://github.com/pytorch/tensordict 
+          python3 setup.py develop
+          python3 -m pip install pytest pytest-benchmark
+          python3 -m pip install "gym[accept-rom-license,atari]"
+          python3 -m pip install "dm_control" "mujoco"
+          
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
-          RUN_BENCHMARK="pytest --rank 0 --benchmark-json "
+          export TD_GET_DEFAULTS_TO_NONE=1
+          RUN_BENCHMARK="python3 -m pytest -vvv --rank 0 --ignore test_collectors_benchmark.py --benchmark-json "
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
@@ -71,22 +73,23 @@ jobs:
       run:
         shell: bash -l {0}
     container:
-      image: nvidia/cuda:12.3.0-base-ubuntu22.04
+      image: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
       options: --gpus all
     steps:
+      - name: Set GITHUB_BRANCH environment variable
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            export GITHUB_BRANCH=${{ github.event.branch }}
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            export GITHUB_BRANCH=${{ github.event.pull_request.head.ref }}
+          else
+            echo "Unsupported event type"
+            exit 1
+          fi
+          echo "GITHUB_BRANCH=$GITHUB_BRANCH" >> $GITHUB_ENV
       - name: Who triggered this?
         run: |
           echo "Action triggered by ${{ github.event.pull_request.html_url }}"
-      - name: Install deps
-        run: |
-          export TZ=Europe/London
-          export DEBIAN_FRONTEND=noninteractive  # tzdata bug
-          apt-get update -y
-          apt-get install software-properties-common -y
-          add-apt-repository ppa:git-core/candidate -y
-          apt-get update -y
-          apt-get upgrade -y
-          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
       - name: Check ldd --version
         run: ldd --version
       - name: Checkout
@@ -96,26 +99,22 @@ jobs:
       - name: Python Setup
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: '3.10'
+      - name: Setup Environment
+        run: |
+          export TZ=Europe/London
+          export DEBIAN_FRONTEND=noninteractive  # tzdata bug
+          apt-get update -y
+          apt-get install software-properties-common -y
+          add-apt-repository ppa:git-core/candidate -y
+          apt-get update -y
+          apt-get upgrade -y
+          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev libpython3.10-dev
       - name: Setup git
         run: git config --global --add safe.directory /__w/rl/rl
       - name: setup Path
         run: |
           echo /usr/local/bin >> $GITHUB_PATH
-      - name: Setup Environment
-        run: |
-          python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121 -U
-          python3 -m pip install git+https://github.com/pytorch/tensordict 
-          python3 setup.py develop
-          python3 -m pip install pytest pytest-benchmark
-          python3 -m pip install "gym[accept-rom-license,atari]"
-          python3 -m pip install "dm_control" "mujoco"
-          export TD_GET_DEFAULTS_TO_NONE=1
-      - name: check GPU presence
-        run: |
-          python -c """import torch
-          assert torch.cuda.device_count()
-          """
       - name: Setup benchmarks
         run: |
           echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
@@ -123,11 +122,27 @@ jobs:
           echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
           echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
           echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
-      - name: Run benchmarks
+      - name: Run
         run: |
+          python3.10 -m venv --system-site-packages ./py310
+          source ./py310/bin/activate
+          export PYTHON_INCLUDE_DIR=/usr/include/python3.10
+
+          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 -U
+          python3.10 -m pip install cmake ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]"
+          python3.10 -m pip install git+https://github.com/pytorch/tensordict 
+          python3.10 setup.py develop
+          # python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
+
+          # test import
+          python3 -c """import torch
+          assert torch.cuda.device_count()
+          """
+
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
-          RUN_BENCHMARK="pytest --rank 0 --benchmark-json "
+          export TD_GET_DEFAULTS_TO_NONE=1
+          RUN_BENCHMARK="python3 -m pytest -vvv --rank 0 --ignore test_collectors_benchmark.py --benchmark-json "
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}

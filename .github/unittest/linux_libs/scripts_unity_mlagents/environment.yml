@@ -2,17 +2,13 @@ channels:
   - pytorch
   - defaults
 dependencies:
+  - python==3.10.12
   - pip
-  - protobuf
   - pip:
-    # Initial version is required to install Atari ROMS in setup_env.sh
-    - gymnasium<1.0
+    - mlagents_envs==1.0.0
     - hypothesis
     - future
     - cloudpickle
-    - pygame
-    - moviepy
-    - tqdm
     - pytest
     - pytest-cov
     - pytest-mock
@@ -23,6 +19,3 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - patchelf
-    - mujoco==2.3.3
-    - dm_control==1.0.11

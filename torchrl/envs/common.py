@@ -186,6 +186,27 @@ class _EnvPostInit(abc.ABCMeta):
             return AutoResetEnv(
                 instance, AutoResetTransform(replace=auto_reset_replace)
             )
+
+        done_keys = set(instance.full_done_spec.keys(True, True))
+        obs_keys = set(instance.full_observation_spec.keys(True, True))
+        reward_keys = set(instance.full_reward_spec.keys(True, True))
+        # state_keys can match obs_keys so we don't test that
+        action_keys = set(instance.full_action_spec.keys(True, True))
+        state_keys = set(instance.full_state_spec.keys(True, True))
+        total_set = set()
+        for keyset in (done_keys, obs_keys, reward_keys):
+            if total_set.intersection(keyset):
+                raise RuntimeError(
+                    f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
+                )
+            total_set = total_set.union(keyset)
+        total_set = set()
+        for keyset in (state_keys, action_keys):
+            if total_set.intersection(keyset):
+                raise RuntimeError(
+                    f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
+                )
+            total_set = total_set.union(keyset)
         return instance
 
 
@@ -830,7 +851,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
-        return self.input_spec["full_action_spec"]
+        full_action_spec = self.input_spec.get("full_action_spec", None)
+        if full_action_spec is None:
+            full_action_spec = Composite(shape=self.batch_size, device=self.device)
+            self.input_spec.unlock_()
+            self.input_spec["full_action_spec"] = full_action_spec
+            self.input_spec.lock_()
+        return full_action_spec
 
     @full_action_spec.setter
     def full_action_spec(self, spec: Composite) -> None:
@@ -1313,7 +1340,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
-        observation_spec = self.output_spec["full_observation_spec"]
+        observation_spec = self.output_spec.get("full_observation_spec", default=None)
         if observation_spec is None:
             observation_spec = Composite(shape=self.batch_size, device=self.device)
             self.output_spec.unlock_()

@@ -32,13 +32,8 @@ from tensordict import (
 from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
-    # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
-    #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
-    #       See more details: https://github.com/pytorch/rl/issues/1016
-    interaction_mode as exploration_mode,
     interaction_type as exploration_type,
     InteractionType as ExplorationType,
-    set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
 from tensordict.utils import is_non_tensor, NestedKey
@@ -55,9 +50,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import check_no_exclusive_keys, CloudpickleWrapper
 
 __all__ = [
-    "exploration_mode",
     "exploration_type",
-    "set_exploration_mode",
     "set_exploration_type",
     "ExplorationType",
     "check_env_specs",
@@ -77,12 +70,6 @@ ACTION_MASK_ERROR = RuntimeError(
     "For more info on using action masks, see the docs at: "
     "https://pytorch.org/rl/main/reference/envs.html#environments-with-masked-actions"
 )
-
-
-def _convert_exploration_type(*, exploration_mode, exploration_type):
-    if exploration_mode is not None:
-        return ExplorationType.from_str(exploration_mode)
-    return exploration_type
 
 
 class _classproperty(property):
