@@ -1480,6 +1480,77 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def full_state_spec(self, spec: Composite) -> None:
         self.state_spec = spec
 
+    # Single-env specs can be used to remove the batch size from the spec
+    @property
+    def batch_dims(self):
+        return len(self.batch_size)
+
+    def _make_single_env_spec(self, spec: TensorSpec) -> TensorSpec:
+        if not self.batch_dims:
+            return spec
+        idx = tuple(0 for _ in range(self.batch_dims))
+        return spec[idx]
+
+    @property
+    def single_full_action_spec(self) -> Composite:
+        """Returns the action spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_action_spec)
+
+    @property
+    def single_action_spec(self) -> TensorSpec:
+        """Returns the action spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.action_spec)
+
+    @property
+    def single_full_observation_spec(self) -> Composite:
+        """Returns the observation spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_action_spec)
+
+    @property
+    def single_observation_spec(self) -> Composite:
+        """Returns the observation spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.observation_spec)
+
+    @property
+    def single_full_reward_spec(self) -> Composite:
+        """Returns the reward spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_action_spec)
+
+    @property
+    def single_reward_spec(self) -> TensorSpec:
+        """Returns the reward spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.reward_spec)
+
+    @property
+    def single_full_done_spec(self) -> Composite:
+        """Returns the done spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_action_spec)
+
+    @property
+    def single_done_spec(self) -> TensorSpec:
+        """Returns the done spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.done_spec)
+
+    @property
+    def single_output_spec(self) -> Composite:
+        """Returns the output spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.output_spec)
+
+    @property
+    def single_input_spec(self) -> Composite:
+        """Returns the input spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.input_spec)
+
+    @property
+    def single_full_state_spec(self) -> Composite:
+        """Returns the state spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_state_spec)
+
+    @property
+    def single_state_spec(self) -> TensorSpec:
+        """Returns the state spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.state_spec)
+
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
