@@ -48,7 +48,7 @@ def make_env(
 # --------------------------------------------------------------------
 
 
-def make_ppo_models_state(proof_environment, device):
+def make_ppo_models_state(proof_environment, device, *, compile: bool = False):
 
     # Define input shape
     input_shape = proof_environment.observation_spec["observation"].shape
@@ -60,6 +60,7 @@ def make_ppo_models_state(proof_environment, device):
         "low": proof_environment.action_spec.space.low.to(device),
         "high": proof_environment.action_spec.space.high.to(device),
         "tanh_loc": False,
+        "safe_tanh": not compile,
     }
 
     # Define policy architecture
@@ -124,9 +125,11 @@ def make_ppo_models_state(proof_environment, device):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name, device):
+def make_ppo_models(env_name, device, *, compile: bool = False):
     proof_environment = make_env(env_name, device="cpu")
-    actor, critic = make_ppo_models_state(proof_environment, device=device)
+    actor, critic = make_ppo_models_state(
+        proof_environment, device=device, compile=compile
+    )
     return actor, critic
 
 

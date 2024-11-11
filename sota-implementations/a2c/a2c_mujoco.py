@@ -39,7 +39,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     ) * num_mini_batches
 
     # Create models (check utils_mujoco.py)
-    actor, critic = make_ppo_models(cfg.env.env_name, device=device)
+    actor, critic = make_ppo_models(
+        cfg.env.env_name, device=device, compile=cfg.loss.compile
+    )
 
     # Create data buffer
     sampler = SamplerWithoutReplacement()
@@ -120,6 +122,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         critic_optim.zero_grad(set_to_none=True)
         return loss.select("loss_critic", "loss_objective").detach()  # , "loss_entropy"
 
+    compile_mode = None
     if cfg.loss.compile:
         compile_mode = cfg.loss.compile_mode
         if compile_mode in ("", None):
@@ -147,6 +150,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         storing_device=device,
         max_frames_per_traj=-1,
         trust_policy=True,
+        compile_policy=compile_mode if cfg.loss.compile else False,
+        cudagraph_policy=cfg.loss.cudagraphs,
     )
 
     test_env.eval()

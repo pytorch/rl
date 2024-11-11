@@ -41,11 +41,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create models (check utils_atari.py)
     actor, critic, critic_head = make_ppo_models(cfg.env.env_name, device=device)
-    actor, critic, critic_head = (
-        actor.to(device),
-        critic.to(device),
-        critic_head.to(device),
-    )
 
     # Create data buffer
     sampler = SamplerWithoutReplacement()
@@ -142,12 +137,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             else:
                 compile_mode = "reduce-overhead"
         update = torch.compile(update, mode=compile_mode)
-        actor = torch.compile(actor, mode=compile_mode)
         adv_module = torch.compile(adv_module, mode=compile_mode)
 
     if cfg.loss.cudagraphs:
         update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
-        actor = CudaGraphModule(actor)
         adv_module = CudaGraphModule(adv_module)
 
     # Create collector
@@ -159,6 +152,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         storing_device=device,
         policy_device=device,
+        compile_policy=cfg.loss.compile_mode if cfg.loss.compile else False,
+        cudagraph_policy=cfg.loss.cudagraphs,
     )
 
     # Main loop

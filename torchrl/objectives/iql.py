@@ -373,16 +373,9 @@ class IQLLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        shape = None
-        if tensordict.ndimension() > 1:
-            shape = tensordict.shape
-            tensordict_reshape = tensordict.reshape(-1)
-        else:
-            tensordict_reshape = tensordict
-
-        loss_actor, metadata = self.actor_loss(tensordict_reshape)
-        loss_qvalue, metadata_qvalue = self.qvalue_loss(tensordict_reshape)
-        loss_value, metadata_value = self.value_loss(tensordict_reshape)
+        loss_actor, metadata = self.actor_loss(tensordict)
+        loss_qvalue, metadata_qvalue = self.qvalue_loss(tensordict)
+        loss_value, metadata_value = self.value_loss(tensordict)
         metadata.update(metadata_qvalue)
         metadata.update(metadata_value)
 
@@ -392,13 +385,10 @@ class IQLLoss(LossModule):
             raise RuntimeError(
                 f"Losses shape mismatch: {loss_actor.shape}, {loss_qvalue.shape} and {loss_value.shape}"
             )
-        tensordict_reshape.set(
+        tensordict.set(
             self.tensor_keys.priority, metadata.pop("td_error").detach().max(0).values
         )
-        if shape:
-            tensordict.update(tensordict_reshape.view(shape))
-
-        entropy = -tensordict_reshape.get(self.tensor_keys.log_prob).detach()
+        entropy = -tensordict.get(self.tensor_keys.log_prob).detach()
         out = {
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,

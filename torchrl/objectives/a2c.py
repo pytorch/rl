@@ -20,6 +20,7 @@ from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDic
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
+from torchrl.modules.distributions import HAS_ENTROPY
 from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
@@ -400,9 +401,9 @@ class A2CLoss(LossModule):
         pass
 
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
-        try:
+        if HAS_ENTROPY.get(type(dist), False):
             entropy = dist.entropy()
-        except NotImplementedError:
+        else:
             x = dist.rsample((self.samples_mc_entropy,))
             log_prob = dist.log_prob(x)
             if is_tensor_collection(log_prob):

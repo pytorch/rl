@@ -46,6 +46,19 @@ def _delezify(func):
     return new_func
 
 
+def compute_log_prob(action_dist, action_or_tensordict, tensor_key):
+    """Compute the log probability of an action given a distribution."""
+    if isinstance(action_or_tensordict, torch.Tensor):
+        log_p = action_dist.log_prob(action_or_tensordict)
+    else:
+        maybe_log_prob = action_dist.log_prob(action_or_tensordict)
+        if not isinstance(maybe_log_prob, torch.Tensor):
+            log_p = maybe_log_prob.get(tensor_key)
+        else:
+            log_p = maybe_log_prob
+    return log_p
+
+
 class SACLoss(LossModule):
     """TorchRL implementation of the SAC loss.
 
@@ -251,7 +264,7 @@ class SACLoss(LossModule):
             state_action_value (NestedKey): The input tensordict key where the
                 state action value is expected.  Defaults to ``"state_action_value"``.
             log_prob (NestedKey): The input tensordict key where the log probability is expected.
-                Defaults to ``"_log_prob"``.
+                Defaults to ``"sample_log_prob"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
@@ -267,7 +280,7 @@ class SACLoss(LossModule):
         action: NestedKey = "action"
         value: NestedKey = "state_value"
         state_action_value: NestedKey = "state_action_value"
-        log_prob: NestedKey = "_log_prob"
+        log_prob: NestedKey = "sample_log_prob"
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
@@ -450,9 +463,7 @@ class SACLoss(LossModule):
             else:
                 action_container_shape = action_spec.shape
             target_entropy = -float(
-                action_spec[self.tensor_keys.action]
-                .shape[len(action_container_shape) :]
-                .numel()
+                action_spec.shape[len(action_container_shape) :].numel()
             )
         delattr(self, "_target_entropy")
         self.register_buffer(
@@ -566,30 +577,21 @@ class SACLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        shape = None
-        if tensordict.ndimension() > 1:
-            shape = tensordict.shape
-            tensordict_reshape = tensordict.reshape(-1)
-        else:
-            tensordict_reshape = tensordict
-
         if self._version == 1:
-            loss_qvalue, value_metadata = self._qvalue_v1_loss(tensordict_reshape)
-            loss_value, _ = self._value_loss(tensordict_reshape)
+            loss_qvalue, value_metadata = self._qvalue_v1_loss(tensordict)
+            loss_value, _ = self._value_loss(tensordict)
         else:
-            loss_qvalue, value_metadata = self._qvalue_v2_loss(tensordict_reshape)
+            loss_qvalue, value_metadata = self._qvalue_v2_loss(tensordict)
             loss_value = None
-        loss_actor, metadata_actor = self._actor_loss(tensordict_reshape)
+        loss_actor, metadata_actor = self._actor_loss(tensordict)
         loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
-        tensordict_reshape.set(self.tensor_keys.priority, value_metadata["td_error"])
+        tensordict.set(self.tensor_keys.priority, value_metadata["td_error"])
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
         ):
             raise RuntimeError(
                 f"Losses shape mismatch: {loss_actor.shape}, {loss_qvalue.shape} and {loss_value.shape}"
             )
-        if shape:
-            tensordict.update(tensordict_reshape.view(shape))
         entropy = -metadata_actor["log_prob"]
         out = {
             "loss_actor": loss_actor,
@@ -622,7 +624,7 @@ class SACLoss(LossModule):
         ), self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict)
             a_reparm = dist.rsample()
-        log_prob = dist.log_prob(a_reparm)
+        log_prob = compute_log_prob(dist, a_reparm, self.tensor_keys.log_prob)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
@@ -713,7 +715,9 @@ class SACLoss(LossModule):
                 next_dist = self.actor_network.get_dist(next_tensordict)
                 next_action = next_dist.rsample()
                 next_tensordict.set(self.tensor_keys.action, next_action)
-                next_sample_log_prob = next_dist.log_prob(next_action)
+                next_sample_log_prob = compute_log_prob(
+                    next_dist, next_action, self.tensor_keys.log_prob
+                )
 
             # get q-values
             next_tensordict_expand = self._vmap_qnetworkN0(
@@ -780,7 +784,8 @@ class SACLoss(LossModule):
             td_copy.get(self.tensor_keys.state_action_value).squeeze(-1).min(0)[0]
         )
 
-        log_p = action_dist.log_prob(action)
+        log_p = compute_log_prob(action_dist, action, self.tensor_keys.log_prob)
+
         if log_p.shape != min_qval.shape:
             raise RuntimeError(
                 f"Losses shape mismatch: {min_qval.shape} and {log_p.shape}"
@@ -1144,26 +1149,17 @@ class DiscreteSACLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        shape = None
-        if tensordict.ndimension() > 1:
-            shape = tensordict.shape
-            tensordict_reshape = tensordict.reshape(-1)
-        else:
-            tensordict_reshape = tensordict
-
-        loss_value, metadata_value = self._value_loss(tensordict_reshape)
-        loss_actor, metadata_actor = self._actor_loss(tensordict_reshape)
+        loss_value, metadata_value = self._value_loss(tensordict)
+        loss_actor, metadata_actor = self._actor_loss(tensordict)
         loss_alpha = self._alpha_loss(
             log_prob=metadata_actor["log_prob"],
         )
 
-        tensordict_reshape.set(self.tensor_keys.priority, metadata_value["td_error"])
+        tensordict.set(self.tensor_keys.priority, metadata_value["td_error"])
         if loss_actor.shape != loss_value.shape:
             raise RuntimeError(
                 f"Losses shape mismatch: {loss_actor.shape}, and {loss_value.shape}"
             )
-        if shape:
-            tensordict.update(tensordict_reshape.view(shape))
         entropy = -metadata_actor["log_prob"]
         out = {
             "loss_actor": loss_actor,

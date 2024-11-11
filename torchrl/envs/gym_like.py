@@ -224,7 +224,7 @@ class GymLikeEnv(_EnvWrapper):
         if truncated is not None and done is None:
             done = truncated | terminated
         elif truncated is None and done is None:
-            done = terminated.clone()
+            done = terminated
         do_break = done.any() if not isinstance(done, bool) else done
         if isinstance(done, bool):
             done = [done]
@@ -309,7 +309,6 @@ class GymLikeEnv(_EnvWrapper):
 
             if _reward is not None:
                 reward = reward + _reward
-
             terminated, truncated, done, do_break = self.read_done(
                 terminated=terminated, truncated=truncated, done=done
             )
