@@ -10,6 +10,7 @@ results from Schulman et al. 2017 for the on MuJoCo Environments.
 import hydra
 from torchrl._utils import logger as torchrl_logger
 from torchrl.record import VideoRecorder
+from torchrl.trainers.agents.ppo import ContinuousControlPPOTrainer
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
@@ -28,7 +29,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.objectives import ClipPPOLoss
     from torchrl.objectives.value.advantages import GAE
     from torchrl.record.loggers import generate_exp_name, get_logger
-    from utils_mujoco import eval_model, make_env, make_ppo_models
 
     device = "cpu" if not torch.cuda.device_count() else "cuda"
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
@@ -39,12 +39,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create models (check utils_mujoco.py)
-    actor, critic = make_ppo_models(cfg.env.env_name)
+    actor, critic = ContinuousControlPPOTrainer.make_ppo_models(cfg.env.env_name)
     actor, critic = actor.to(device), critic.to(device)
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_env(cfg.env.env_name, device),
+        create_env_fn=ContinuousControlPPOTrainer.make_env(cfg.env.env_name, device),
         policy=actor,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
@@ -102,7 +102,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger_video = False
 
     # Create test environment
-    test_env = make_env(cfg.env.env_name, device, from_pixels=logger_video)
+    test_env = ContinuousControlPPOTrainer.make_env(
+        cfg.env.env_name, device, from_pixels=logger_video
+    )
     if logger_video:
         test_env = test_env.append_transform(
             VideoRecorder(logger, tag="rendering/test", in_keys=["pixels"])
@@ -216,7 +218,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             ) // cfg_logger_test_interval:
                 actor.eval()
                 eval_start = time.time()
-                test_rewards = eval_model(
+                test_rewards = ContinuousControlPPOTrainer.eval_model(
                     actor, test_env, num_episodes=cfg_logger_num_test_episodes
                 )
                 eval_time = time.time() - eval_start

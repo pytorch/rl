@@ -10,6 +10,7 @@ results from Schulman et al. 2017 for the on Atari Environments.
 import hydra
 from torchrl._utils import logger as torchrl_logger
 from torchrl.record import VideoRecorder
+from torchrl.trainers.agents.ppo import AtariPPOTrainer
 
 
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
@@ -28,7 +29,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.objectives import ClipPPOLoss
     from torchrl.objectives.value.advantages import GAE
     from torchrl.record.loggers import generate_exp_name, get_logger
-    from utils_atari import eval_model, make_parallel_env, make_ppo_models
 
     device = "cpu" if not torch.cuda.device_count() else "cuda"
 
@@ -40,12 +40,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     test_interval = cfg.logger.test_interval // frame_skip
 
     # Create models (check utils_atari.py)
-    actor, critic = make_ppo_models(cfg.env.env_name)
+    actor, critic = AtariPPOTrainer.make_ppo_models(cfg.env.env_name)
     actor, critic = actor.to(device), critic.to(device)
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, "cpu"),
+        create_env_fn=AtariPPOTrainer.make_parallel_env(
+            cfg.env.env_name, cfg.env.num_envs, "cpu"
+        ),
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -110,7 +112,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger_video = False
 
     # Create test environment
-    test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
+    test_env = AtariPPOTrainer.make_parallel_env(
+        cfg.env.env_name, 1, device, is_test=True
+    )
     if logger_video:
         test_env = test_env.append_transform(
             VideoRecorder(logger, tag="rendering/test", in_keys=["pixels_int"])
@@ -223,7 +227,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             ) // test_interval:
                 actor.eval()
                 eval_start = time.time()
-                test_rewards = eval_model(
+                test_rewards = AtariPPOTrainer.eval_model(
                     actor, test_env, num_episodes=cfg_logger_num_test_episodes
                 )
                 eval_time = time.time() - eval_start
