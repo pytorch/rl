@@ -3510,6 +3510,22 @@ class TestPartialSteps:
             assert (td[3].get("next") != 0).any()
 
 
+def test_single_env_spec():
+    env = NestedCountingEnv(batch_size=[3, 1, 7])
+    assert not env.single_full_action_spec.shape
+    assert not env.single_full_done_spec.shape
+    assert not env.single_input_spec.shape
+    assert not env.single_full_observation_spec.shape
+    assert not env.single_output_spec.shape
+    assert not env.single_full_reward_spec.shape
+
+    assert env.single_action_spec.shape
+    assert env.single_reward_spec.shape
+
+    assert env.output_spec.is_in(env.single_output_spec.zeros(env.shape))
+    assert env.input_spec.is_in(env.single_input_spec.zeros(env.shape))
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
