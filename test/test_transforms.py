@@ -7098,7 +7098,6 @@ class TestTensorDictPrimer(TransformBase):
         torch.manual_seed(0)
         env.set_seed(0)
         r1 = env.rollout(100, break_when_any_done=break_when_any_done)
-
         tensordict.assert_close(r0, r1)
 
     def test_callable_default_value(self):
