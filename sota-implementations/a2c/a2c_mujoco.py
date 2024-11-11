@@ -16,6 +16,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import torch.optim
     import tqdm
 
+    from torchrl._utils import timeit
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -127,7 +128,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         compile_mode = cfg.loss.compile_mode
         if compile_mode in ("", None):
             if cfg.loss.cudagraphs:
-                compile_mode = None
+                compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
 
@@ -150,7 +151,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         storing_device=device,
         max_frames_per_traj=-1,
         trust_policy=True,
-        compile_policy=compile_mode if cfg.loss.compile else False,
+        compile_policy={"mode": compile_mode} if cfg.loss.compile else False,
         cudagraph_policy=cfg.loss.cudagraphs,
     )
 
@@ -164,7 +165,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
     sampling_start = time.time()
-    for i, data in enumerate(collector):
+    c_iter = iter(collector)
+    for i in range(len(collector)):
+        with timeit("collecting"):
+            torch.compiler.cudagraph_mark_step_begin()
+            data = next(c_iter)
 
         log_info = {}
         sampling_time = time.time() - sampling_start
@@ -188,27 +193,33 @@ def main(cfg: "DictConfig"):  # noqa: F821
         training_start = time.time()
 
         # Compute GAE
-        with torch.no_grad():
+        with torch.no_grad(), timeit("advantage"):
             data = adv_module(data)
         data_reshape = data.reshape(-1)
 
         # Update the data buffer
-        data_buffer.extend(data_reshape)
+        with timeit("emptying"):
+            data_buffer.empty()
+        with timeit("extending"):
+            data_buffer.extend(data_reshape)
 
-        for batch in data_buffer:
+        with timeit("optim"):
+            for batch in data_buffer:
 
-            # Linearly decrease the learning rate and clip epsilon
-            alpha = 1.0
-            if cfg.optim.anneal_lr:
-                alpha = 1 - (num_network_updates / total_network_updates)
-                for group in actor_optim.param_groups:
-                    group["lr"].copy_(lr * alpha)
-                for group in critic_optim.param_groups:
-                    group["lr"].copy_(lr * alpha)
-            num_network_updates += 1
-            torch.compiler.cudagraph_mark_step_begin()
-            loss = update(batch)
-            losses.append(loss)
+                # Linearly decrease the learning rate and clip epsilon
+                with timeit("optim - lr"):
+                    alpha = 1.0
+                    if cfg.optim.anneal_lr:
+                        alpha = 1 - (num_network_updates / total_network_updates)
+                        for group in actor_optim.param_groups:
+                            group["lr"].copy_(lr * alpha)
+                        for group in critic_optim.param_groups:
+                            group["lr"].copy_(lr * alpha)
+                num_network_updates += 1
+                with timeit("optim - update"):
+                    torch.compiler.cudagraph_mark_step_begin()
+                    loss = update(batch)
+                losses.append(loss)
 
         # Get training losses
         training_time = time.time() - training_start
@@ -220,8 +231,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "train/lr": alpha * cfg.optim.lr,
                 "train/sampling_time": sampling_time,
                 "train/training_time": training_time,
+                **timeit.todict(prefix="time"),
             }
         )
+        if i % 200 == 0:
+            timeit.print()
+            timeit.erase()
 
         # Get test rewards
         with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):

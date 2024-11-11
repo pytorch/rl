@@ -129,11 +129,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
             .set("grad_norm", gn)
         )
 
+    compile_mode = None
     if cfg.loss.compile:
         compile_mode = cfg.loss.compile_mode
         if compile_mode in ("", None):
             if cfg.loss.cudagraphs:
-                compile_mode = None
+                compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
         update = torch.compile(update, mode=compile_mode)
@@ -152,7 +153,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         storing_device=device,
         policy_device=device,
-        compile_policy=cfg.loss.compile_mode if cfg.loss.compile else False,
+        compile_policy={"mode": compile_mode} if cfg.loss.compile else False,
         cudagraph_policy=cfg.loss.cudagraphs,
     )
 
@@ -222,9 +223,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     loss = update(batch)
                 losses.append(loss)
 
-        if i % 200 == 0:
-            timeit.print()
-            timeit.erase()
         # Get training losses
         training_time = time.time() - training_start
         losses = torch.stack(losses).float().mean()
@@ -239,6 +237,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 **timeit.todict(prefix="time"),
             }
         )
+        if i % 200 == 0:
+            timeit.print()
+            timeit.erase()
 
         # Get test rewards
         with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
