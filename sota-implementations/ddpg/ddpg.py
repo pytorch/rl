@@ -48,6 +48,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
             device = "cpu"
     device = torch.device(device)
 
+    collector_device = cfg.collector.device
+    if collector_device in ("", None):
+        if torch.cuda.is_available():
+            collector_device = "cuda:0"
+        else:
+            collector_device = "cpu"
+    collector_device = torch.device(collector_device)
+    cfg.collector.device = collector_device
+
     # Create logger
     exp_name = generate_exp_name("DDPG", cfg.logger.exp_name)
     logger = None
