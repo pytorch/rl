@@ -95,6 +95,7 @@ class DecisionTransformer(nn.Module):
         if device is not None:
             with torch.device(device):
                 return self.__init__(state_dim, action_dim, config)
+
         if not _has_transformers:
             raise ImportError(
                 "transformers is not installed. Please install it with `pip install transformers`."

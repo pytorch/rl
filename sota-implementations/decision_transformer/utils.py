@@ -406,7 +406,7 @@ def make_dt_model(cfg, device: torch.device|None=None):
     ]
 
     actor_net = DTActor(
-        state_dim=obs_spec["observation"],
+        state_dim=obs_spec["observation"].shape[-1],
         action_dim=action_spec.shape[-1],
         transformer_config=cfg.transformer,
         device=device,
