@@ -99,7 +99,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         transformer_loss.backward()
         transformer_optim.step()
 
-        scheduler.step()
         return loss_vals
 
     compile_mode = None
@@ -126,6 +125,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             data = offline_buffer.sample().to(model_device)
         with timeit("update"):
             loss_vals = update(data)
+        scheduler.step()
         # Log metrics
         to_log = {"train/loss": loss_vals["loss"]}
 

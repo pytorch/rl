@@ -490,9 +490,10 @@ def make_odt_optimizer(optim_cfg, loss_module):
 def make_dt_optimizer(optim_cfg, loss_module):
     dt_optimizer = torch.optim.Adam(
         loss_module.actor_network_params.flatten_keys().values(),
-        lr=optim_cfg.lr,
+        lr=torch.as_tensor(optim_cfg.lr),
         weight_decay=optim_cfg.weight_decay,
         eps=1.0e-8,
+        capturable=True,
     )
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         dt_optimizer, lambda steps: min((steps + 1) / optim_cfg.warmup_steps, 1)
