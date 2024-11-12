@@ -343,7 +343,7 @@ class DTLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
-        tensordict = tensordict.clone(False)
+        tensordict = tensordict.copy()
         target_actions = tensordict.get(self.tensor_keys.action_target).detach()
 
         with self.actor_network_params.to_module(self.actor_network):
@@ -356,8 +356,5 @@ class DTLoss(LossModule):
             loss_function=self.loss_function,
         )
         loss = _reduce(loss, reduction=self.reduction)
-        out = {
-            "loss": loss,
-        }
-        td_out = TensorDict(out, [])
+        td_out = TensorDict(loss=loss)
         return td_out

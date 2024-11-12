@@ -11,6 +11,8 @@ import hydra
 import numpy as np
 import torch
 import tqdm
+from tensordict import TensorDict
+
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.libs.gym import set_gym_backend
 
@@ -89,12 +91,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pretrain_gradient_steps = cfg.optim.pretrain_gradient_steps
     clip_grad = cfg.optim.clip_grad
 
-    def update(data):
+    def update(data: TensorDict) -> TensorDict:
+        transformer_optim.zero_grad(set_to_none=True)
         # Compute loss
         loss_vals = loss_module(data)
         transformer_loss = loss_vals["loss"]
 
-        transformer_optim.zero_grad(set_to_none=True)
         torch.nn.utils.clip_grad_norm_(actor.parameters(), clip_grad)
         transformer_loss.backward()
         transformer_optim.step()
