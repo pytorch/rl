@@ -157,6 +157,7 @@ def make_parallel_env(
         obs_std,
         train,
     )
+    env.start()
     return env
 
 
