@@ -436,7 +436,8 @@ def make_dt_model(cfg, device: torch.device|None=None):
 
     # init the lazy layers
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = proof_environment.rollout(max_steps=100)
+        td = proof_environment.fake_tensordict()
+        td = td.expand((100, *td.shape))
         td["action"] = td["next", "action"]
         actor(td)
 
