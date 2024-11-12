@@ -90,7 +90,15 @@ def make_environment(cfg):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore, device):
+def make_collector(
+    cfg,
+    train_env,
+    actor_model_explore,
+    device,
+    compile=False,
+    compile_mode=None,
+    cudagraph=False,
+):
     """Make collector."""
     collector = SyncDataCollector(
         train_env,
@@ -99,6 +107,8 @@ def make_collector(cfg, train_env, actor_model_explore, device):
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         device=device,
+        compile_policy={"mode": compile_mode} if compile else False,
+        cudagraph_policy=cudagraph,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -147,9 +157,7 @@ def make_crossQ_agent(cfg, train_env, device):
     """Make CrossQ agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    if train_env.batch_size:
-        action_spec = action_spec[(0,) * len(train_env.batch_size)]
+    action_spec = train_env.single_action_spec
     actor_net_kwargs = {
         "num_cells": cfg.network.actor_hidden_sizes,
         "out_features": 2 * action_spec.shape[-1],
@@ -169,6 +177,7 @@ def make_crossQ_agent(cfg, train_env, device):
         "low": action_spec.space.low,
         "high": action_spec.space.high,
         "tanh_loc": False,
+        "safe_tanh": not cfg.network.compile,
     }
 
     actor_extractor = NormalParamExtractor(
