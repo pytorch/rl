@@ -122,7 +122,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         td_loss["loss_qvalue"] = q_loss
         td_loss["loss_actor"] = float("nan")
         td_loss["loss_alpha"] = float("nan")
-        return TensorDict(td_loss).detach()
+        return TensorDict(td_loss, device=device).detach()
 
     def update_all(
         sampled_tensordict: TensorDict, update_qloss=update_qloss
@@ -146,7 +146,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         td_loss["loss_actor"] = actor_loss
         td_loss["loss_alpha"] = alpha_loss
 
-        return TensorDict(td_loss).detach()
+        return TensorDict(td_loss, device=device).detach()
 
     if compile_mode:
         update_all = torch.compile(update_all, mode=compile_mode)

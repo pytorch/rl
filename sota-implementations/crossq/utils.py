@@ -174,8 +174,8 @@ def make_crossQ_agent(cfg, train_env, device):
 
     dist_class = TanhNormal
     dist_kwargs = {
-        "low": action_spec.space.low,
-        "high": action_spec.space.high,
+        "low": torch.as_tensor(action_spec.space.low, device=device),
+        "high": torch.as_tensor(action_spec.space.high, device=device),
         "tanh_loc": False,
         "safe_tanh": not cfg.network.compile,
     }

@@ -217,8 +217,8 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "low": action_spec.space.low,
-            "high": action_spec.space.high,
+            "low": torch.as_tensor(action_spec.space.low, device=device),
+            "high": torch.as_tensor(action_spec.space.high, device=device),
             "tanh_loc": False,
             "safe_tanh": not cfg.loss.compile,
         },
