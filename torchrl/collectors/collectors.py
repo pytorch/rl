@@ -66,6 +66,12 @@ from torchrl.envs.utils import (
     RandomPolicy,
     set_exploration_type,
 )
+try:
+    from torch.compiler import cudagraph_mark_step_begin
+except ImportError:
+    def cudagraph_mark_step_begin():
+        """Placeholder when cudagraph_mark_step_begin is missing."""
+        ...
 
 _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
@@ -1145,6 +1151,7 @@ class SyncDataCollector(DataCollectorBase):
                     else:
                         policy_input = self._shuttle
                     # we still do the assignment for security
+                    cudagraph_mark_step_begin()
                     policy_output = self.policy(policy_input)
                     if self._shuttle is not policy_output:
                         # ad-hoc update shuttle

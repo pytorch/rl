@@ -181,6 +181,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 with timeit("rb - sample"):
                     sampled_tensordict = replay_buffer.sample().to(device)
                 with timeit("update"):
+                    torch.compiler.cudagraph_mark_step_begin()
                     td_loss = update(sampled_tensordict)
                 tds.append(td_loss.clone())
 
