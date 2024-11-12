@@ -1044,9 +1044,9 @@ class _OrnsteinUhlenbeckProcess:
             * np.sqrt(self.dt)
             * torch.randn_like(prev_noise)
         )
-        tensordict.set_(self.noise_key, noise - self.x0)
-        tensordict.set_(self.key, tensordict.get(self.key) + eps * noise)
-        tensordict.set_(self.steps_key, n_steps + 1)
+        tensordict.set(self.noise_key, noise - self.x0)
+        tensordict.set(self.key, tensordict.get(self.key) + eps * noise)
+        tensordict.set(self.steps_key, n_steps + 1)
         return tensordict
 
     def current_sigma(self, n_steps: torch.Tensor) -> torch.Tensor:
