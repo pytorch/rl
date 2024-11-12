@@ -10,6 +10,7 @@ It supports state environments like gym and gymnasium.
 
 The helper functions are coded in the utils.py associated with this script.
 """
+import warnings
 
 import hydra
 import numpy as np
@@ -126,6 +127,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if compile_mode:
         update = torch.compile(update, mode=compile_mode)
     if cfg.loss.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
         update = CudaGraphModule(update, warmup=50)
 
     # Main loop

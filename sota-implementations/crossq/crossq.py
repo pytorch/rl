@@ -10,6 +10,7 @@ It supports state environments like MuJoCo.
 
 The helper functions are coded in the utils.py associated with this script.
 """
+import warnings
 
 import hydra
 
@@ -160,6 +161,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         update_all = torch.compile(update_all, mode=compile_mode)
         update_qloss = torch.compile(update_qloss, mode=compile_mode)
     if cfg.network.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
         update_all = CudaGraphModule(update_all, warmup=50)
         update_qloss = CudaGraphModule(update_qloss, warmup=50)
 
@@ -216,7 +221,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 with timeit("update"):
                     torch.compiler.cudagraph_mark_step_begin()
                     td_loss = update(sampled_tensordict, update_actor=update_actor)
-                tds.append(td_loss)
+                tds.append(td_loss.clone())
                 # Update priority
                 if prb:
                     replay_buffer.update_priority(sampled_tensordict)
