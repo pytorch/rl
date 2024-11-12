@@ -993,8 +993,8 @@ class _OrnsteinUhlenbeckProcess:
             noise = tensordict.get(self.noise_key)
             steps = tensordict.get(self.steps_key)
         if is_init is not None:
-            noise[is_init] = 0
-            steps[is_init] = 0
+            noise = torch.masked_fill(noise, is_init, 0)
+            steps = torch.masked_fill(steps, is_init, 0)
         return noise, steps
 
     def add_sample(
