@@ -6,7 +6,7 @@ import functools
 
 import torch
 
-from tensordict.nn import TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictSequential
 
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
@@ -30,8 +30,6 @@ from torchrl.modules import (
     AdditiveGaussianModule,
     MLP,
     OrnsteinUhlenbeckProcessModule,
-    SafeModule,
-    SafeSequential,
     TanhModule,
     ValueOperator,
 )
@@ -181,9 +179,7 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
     """Make DDPG agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    if train_env.batch_size:
-        action_spec = action_spec[(0,) * len(train_env.batch_size)]
+    action_spec = train_env.single_action_spec
     actor_net_kwargs = {
         "num_cells": cfg.network.hidden_sizes,
         "out_features": action_spec.shape[-1],
@@ -193,19 +189,16 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
     actor_net = MLP(**actor_net_kwargs)
 
     in_keys_actor = in_keys
-    actor_module = SafeModule(
+    actor_module = TensorDictModule(
         actor_net,
         in_keys=in_keys_actor,
-        out_keys=[
-            "param",
-        ],
+        out_keys=["param"],
     )
-    actor = SafeSequential(
+    actor = TensorDictSequential(
         actor_module,
         TanhModule(
             in_keys=["param"],
             out_keys=["action"],
-            spec=action_spec,
         ),
     )
 
@@ -243,6 +236,7 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
             OrnsteinUhlenbeckProcessModule(
                 spec=action_spec,
                 annealing_num_steps=1_000_000,
+                safe=False,
             ).to(device),
         )
     elif cfg.network.noise_type == "gaussian":
@@ -254,6 +248,7 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
                 sigma_init=1.0,
                 mean=0.0,
                 std=0.1,
+                safe=False,
             ).to(device),
         )
     else:

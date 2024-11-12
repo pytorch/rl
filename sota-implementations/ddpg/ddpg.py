@@ -120,9 +120,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         target_net_updater.step()
         return td_loss.detach()
 
-    if cfg.loss.compile:
+    if cfg.network.compile:
         update = torch.compile(update, mode=compile_mode)
-    if cfg.loss.cudagraphs:
+    if cfg.network.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
