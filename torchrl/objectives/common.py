@@ -12,6 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
+import torch
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
@@ -515,7 +516,22 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         from :obj:`torchrl.objectives.utils.DEFAULT_VALUE_FUN_PARAMS`.
 
         """
-        self.make_value_estimator(self.default_value_estimator)
+        self.make_value_estimator(
+            self.default_value_estimator, device=self._default_device
+        )
+
+    @property
+    def _default_device(self) -> torch.device | None:
+        """A util to find the default device.
+
+        Returns ``None`` if parameters are spread across multiple devices.
+        """
+        devices = set()
+        for p in self.parameters():
+            devices.add(p.device)
+        if len(devices) == 1:
+            return list(devices)[0]
+        return None
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         """Value-function constructor.

@@ -9,6 +9,11 @@ import torch
 from torch import autograd, distributions as d
 from torch.distributions import Independent, Transform, TransformedDistribution
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
+
 
 def _cast_device(elt: Union[torch.Tensor, float], device) -> Union[torch.Tensor, float]:
     if isinstance(elt, torch.Tensor):
@@ -40,10 +45,12 @@ class FasterTransformedDistribution(TransformedDistribution):
     __doc__ = __doc__ + TransformedDistribution.__doc__
 
     def __init__(self, base_distribution, transforms, validate_args=None):
+        if is_dynamo_compiling():
+            return super().__init__(
+                base_distribution, transforms, validate_args=validate_args
+            )
         if isinstance(transforms, Transform):
-            self.transforms = [
-                transforms,
-            ]
+            self.transforms = [transforms]
         elif isinstance(transforms, list):
             raise ValueError("Make a ComposeTransform first.")
         else:

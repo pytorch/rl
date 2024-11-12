@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict.nn import NormalParamExtractor
+from torch import distributions as torch_dist
 
 from .continuous import (
     Delta,
@@ -36,4 +37,17 @@ distributions_maps = {
         Ordinal,
         OneHotOrdinal,
     )
+}
+
+HAS_ENTROPY = {
+    Delta: False,
+    IndependentNormal: True,
+    TanhDelta: False,
+    TanhNormal: False,
+    TruncatedNormal: False,
+    MaskedCategorical: False,
+    MaskedOneHotCategorical: False,
+    OneHotCategorical: True,
+    torch_dist.Categorical: True,
+    torch_dist.Normal: True,
 }

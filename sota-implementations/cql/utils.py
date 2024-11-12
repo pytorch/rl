@@ -113,7 +113,14 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(
+    cfg,
+    train_env,
+    actor_model_explore,
+    compile=False,
+    compile_mode=None,
+    cudagraph=False,
+):
     """Make collector."""
     collector = SyncDataCollector(
         train_env,
@@ -123,6 +130,8 @@ def make_collector(cfg, train_env, actor_model_explore):
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
+        compile_policy={"mode": compile_mode} if compile else False,
+        cudagraph_policy=cudagraph,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -191,7 +200,7 @@ def make_offline_replay_buffer(rb_cfg):
 def make_cql_model(cfg, train_env, eval_env, device="cpu"):
     model_cfg = cfg.model
 
-    action_spec = train_env.action_spec
+    action_spec = train_env.single_action_spec
 
     actor_net, q_net = make_cql_modules_state(model_cfg, eval_env)
     in_keys = ["observation"]
@@ -208,11 +217,10 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "low": action_spec.space.low[len(train_env.batch_size) :],
-            "high": action_spec.space.high[
-                len(train_env.batch_size) :
-            ],  # remove batch-size
+            "low": torch.as_tensor(action_spec.space.low, device=device),
+            "high": torch.as_tensor(action_spec.space.high, device=device),
             "tanh_loc": False,
+            "safe_tanh": not cfg.loss.compile,
         },
         default_interaction_type=ExplorationType.RANDOM,
     )
@@ -307,7 +315,7 @@ def make_cql_modules_state(model_cfg, proof_environment):
 # ---------
 
 
-def make_continuous_loss(loss_cfg, model):
+def make_continuous_loss(loss_cfg, model, device: torch.device | None = None):
     loss_module = CQLLoss(
         model[0],
         model[1],
@@ -320,19 +328,19 @@ def make_continuous_loss(loss_cfg, model):
         with_lagrange=loss_cfg.with_lagrange,
         lagrange_thresh=loss_cfg.lagrange_thresh,
     )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
 
     return loss_module, target_net_updater
 
 
-def make_discrete_loss(loss_cfg, model):
+def make_discrete_loss(loss_cfg, model, device: torch.device | None = None):
     loss_module = DiscreteCQLLoss(
         model,
         loss_function=loss_cfg.loss_function,
         delay_value=True,
     )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
 
     return loss_module, target_net_updater
