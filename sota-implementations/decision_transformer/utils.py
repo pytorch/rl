@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import os
+from pathlib import Path
 
 import torch.nn
 
@@ -261,6 +263,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         direct_download=True,
         prefetch=4,
         writer=RoundRobinWriter(),
+        root=Path(os.environ["HOME"]) / ".cache" / "torchrl" / "data" / "d4rl",
     )
 
     # since we're not extending the data, adding keys can only be done via
