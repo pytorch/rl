@@ -35,7 +35,9 @@ from tensordict import (
 )
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import CudaGraphModule, TensorDictModule
+from tensordict.utils import Buffer
 from torch import multiprocessing as mp
+from torch.nn import Parameter
 from torch.utils.data import IterableDataset
 
 from torchrl._utils import (
@@ -202,17 +204,17 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             policy_device=policy_device,
         ):
 
-            is_param = isinstance(weight, nn.Parameter)
-            is_buffer = isinstance(weight, nn.Buffer)
+            is_param = isinstance(weight, Parameter)
+            is_buffer = isinstance(weight, Buffer)
             weight = weight.data
             if weight.device != policy_device:
                 weight = weight.to(policy_device)
             elif weight.device.type in ("cpu", "mps"):
                 weight = weight.share_memory_()
             if is_param:
-                weight = nn.Parameter(weight, requires_grad=False)
+                weight = Parameter(weight, requires_grad=False)
             elif is_buffer:
-                weight = nn.Buffer(weight)
+                weight = Buffer(weight)
             return weight
 
         # Create a stateless policy, then populate this copy with params on device
@@ -3089,12 +3091,12 @@ def _main_async_collector(
 
 
 def _make_meta_params(param):
-    is_param = isinstance(param, nn.Parameter)
+    is_param = isinstance(param, Parameter)
 
     pd = param.detach().to("meta")
 
     if is_param:
-        pd = nn.Parameter(pd, requires_grad=False)
+        pd = Parameter(pd, requires_grad=False)
     return pd
 
 

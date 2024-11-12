@@ -18,42 +18,80 @@ import pytest
 import torch
 import yaml
 
-from _utils_internal import (
-    _make_envs,
-    CARTPOLE_VERSIONED,
-    check_rollout_consistency_multikey_env,
-    decorate_thread_sub_func,
-    get_default_devices,
-    HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    rand_reset,
-)
-from mocking_classes import (
-    ActionObsMergeLinear,
-    AutoResetHeteroCountingEnv,
-    AutoResettingCountingEnv,
-    ContinuousActionConvMockEnv,
-    ContinuousActionConvMockEnvNumpy,
-    ContinuousActionVecMockEnv,
-    CountingBatchedEnv,
-    CountingEnv,
-    CountingEnvCountPolicy,
-    DiscreteActionConvMockEnv,
-    DiscreteActionConvMockEnvNumpy,
-    DiscreteActionVecMockEnv,
-    DummyModelBasedEnvBase,
-    EnvWithDynamicSpec,
-    EnvWithMetadata,
-    HeterogeneousCountingEnv,
-    HeterogeneousCountingEnvPolicy,
-    MockBatchedLockedEnv,
-    MockBatchedUnLockedEnv,
-    MockSerialEnv,
-    MultiKeyCountingEnv,
-    MultiKeyCountingEnvPolicy,
-    NestedCountingEnv,
-)
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        _make_envs,
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+    )
+    from pytorch.rl.test.mocking_classes import (
+        ActionObsMergeLinear,
+        AutoResetHeteroCountingEnv,
+        AutoResettingCountingEnv,
+        ContinuousActionConvMockEnv,
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        DummyModelBasedEnvBase,
+        EnvWithDynamicSpec,
+        EnvWithMetadata,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
+else:
+    from _utils_internal import (
+        _make_envs,
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+    )
+    from mocking_classes import (
+        ActionObsMergeLinear,
+        AutoResetHeteroCountingEnv,
+        AutoResettingCountingEnv,
+        ContinuousActionConvMockEnv,
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        DummyModelBasedEnvBase,
+        EnvWithDynamicSpec,
+        EnvWithMetadata,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
 from packaging import version
 from tensordict import (
     assert_allclose_td,
@@ -3367,16 +3405,16 @@ class TestCustomEnvs:
         )
         assert r.shape == (5, 100)
 
-    def test_pendulum_env(self):
-        env = PendulumEnv(device=None)
-        assert env.device is None
-        env = PendulumEnv(device="cpu")
-        assert env.device == torch.device("cpu")
+    @pytest.mark.parametrize("device", [None, *get_default_devices()])
+    def test_pendulum_env(self, device):
+        env = PendulumEnv(device=device)
+        assert env.device == device
         check_env_specs(env)
+
         for _ in range(10):
             r = env.rollout(10)
             assert r.shape == torch.Size((10,))
-            r = env.rollout(10, tensordict=TensorDict(batch_size=[5]))
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
             assert r.shape == torch.Size((5, 10))
 
 
@@ -3470,6 +3508,22 @@ class TestPartialSteps:
             assert (td[1].get("next") != 0).any()
             assert (td[2].get("next") == 0).all()
             assert (td[3].get("next") != 0).any()
+
+
+def test_single_env_spec():
+    env = NestedCountingEnv(batch_size=[3, 1, 7])
+    assert not env.single_full_action_spec.shape
+    assert not env.single_full_done_spec.shape
+    assert not env.single_input_spec.shape
+    assert not env.single_full_observation_spec.shape
+    assert not env.single_output_spec.shape
+    assert not env.single_full_reward_spec.shape
+
+    assert env.single_action_spec.shape
+    assert env.single_reward_spec.shape
+
+    assert env.output_spec.is_in(env.single_output_spec.zeros(env.shape))
+    assert env.input_spec.is_in(env.single_input_spec.zeros(env.shape))
 
 
 if __name__ == "__main__":

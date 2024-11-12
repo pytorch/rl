@@ -4,15 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import os
 
 import pytest
 import torch
-from _utils_internal import get_default_devices
-from mocking_classes import (
-    ContinuousActionVecMockEnv,
-    CountingEnvCountModule,
-    NestedCountingEnv,
-)
 from scipy.stats import ttest_1samp
 from tensordict import TensorDict
 
@@ -46,6 +41,21 @@ from torchrl.modules.tensordict_module.exploration import (
     OrnsteinUhlenbeckProcessModule,
     OrnsteinUhlenbeckProcessWrapper,
 )
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import get_default_devices
+    from pytorch.rl.test.mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingEnvCountModule,
+        NestedCountingEnv,
+    )
+else:
+    from _utils_internal import get_default_devices
+    from mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingEnvCountModule,
+        NestedCountingEnv,
+    )
 
 
 class TestEGreedy:
@@ -757,7 +767,7 @@ class TestConsistentDropout:
 
         # NOTE: Please only put a module with one dropout layer.
         # That's how this test is constructed anyways.
-        @torch.no_grad
+        @torch.no_grad()
         def inner_verify_routine(module, env):
             # Perform transitions.
             collector = SyncDataCollector(

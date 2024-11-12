@@ -7,42 +7,14 @@ from __future__ import annotations
 import argparse
 import functools
 import gc
+import os
 
 import sys
 
 import numpy as np
 import pytest
 import torch
-
-from _utils_internal import (
-    CARTPOLE_VERSIONED,
-    check_rollout_consistency_multikey_env,
-    decorate_thread_sub_func,
-    generate_seeds,
-    get_available_devices,
-    get_default_devices,
-    LSTMNet,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    retry,
-)
-from mocking_classes import (
-    ContinuousActionVecMockEnv,
-    CountingBatchedEnv,
-    CountingEnv,
-    CountingEnvCountPolicy,
-    DiscreteActionConvMockEnv,
-    DiscreteActionConvPolicy,
-    DiscreteActionVecMockEnv,
-    DiscreteActionVecPolicy,
-    EnvWithDynamicSpec,
-    HeterogeneousCountingEnv,
-    HeterogeneousCountingEnvPolicy,
-    MockSerialEnv,
-    MultiKeyCountingEnv,
-    MultiKeyCountingEnvPolicy,
-    NestedCountingEnv,
-)
+from packaging import version
 from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
@@ -101,11 +73,73 @@ from torchrl.envs.utils import (
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        generate_seeds,
+        get_available_devices,
+        get_default_devices,
+        LSTMNet,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        retry,
+    )
+    from pytorch.rl.test.mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvPolicy,
+        DiscreteActionVecMockEnv,
+        DiscreteActionVecPolicy,
+        EnvWithDynamicSpec,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
+else:
+    from _utils_internal import (
+        CARTPOLE_VERSIONED,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        generate_seeds,
+        get_available_devices,
+        get_default_devices,
+        LSTMNet,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        retry,
+    )
+    from mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvPolicy,
+        DiscreteActionVecMockEnv,
+        DiscreteActionVecPolicy,
+        EnvWithDynamicSpec,
+        HeterogeneousCountingEnv,
+        HeterogeneousCountingEnvPolicy,
+        MockSerialEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
+
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"
 IS_OSX = sys.platform == "darwin"
 PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 class WrappablePolicy(nn.Module):
@@ -1936,7 +1970,13 @@ class TestNestedEnvsCollector:
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
-        from mocking_classes import CountingEnvCountPolicy, NestedCountingEnv
+        if os.getenv("PYTORCH_TEST_FBCODE"):
+            from pytorch.rl.test.mocking_classes import (
+                CountingEnvCountPolicy,
+                NestedCountingEnv,
+            )
+        else:
+            from mocking_classes import CountingEnvCountPolicy, NestedCountingEnv
 
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
@@ -2654,6 +2694,10 @@ class TestDynamicEnvs:
             assert data.names[-1] == "time"
 
 
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+)
+@pytest.mark.skipif(IS_WINDOWS, reason="windows is not supported for compile tests.")
 class TestCompile:
     @pytest.mark.parametrize(
         "collector_cls",
@@ -2996,8 +3040,9 @@ def __deepcopy_error__(*args, **kwargs):
     raise RuntimeError("deepcopy not allowed")
 
 
-@pytest.mark.filterwarnings("error")
-@pytest.mark.filterwarnings("ignore:Tensordict is registered in PyTree")
+@pytest.mark.filterwarnings(
+    "error::UserWarning", "ignore:Tensordict is registered in PyTree:UserWarning"
+)
 @pytest.mark.parametrize(
     "collector_type",
     [
@@ -3015,6 +3060,8 @@ def test_no_deepcopy_policy(collector_type):
     #
     # If the policy is not a nn.Module or has no parameter, policy_device should warn (we don't know what to do but we
     # can trust that the user knows what to do).
+
+    # warnings.warn("Tensordict is registered in PyTree", category=UserWarning)
 
     shared_device = torch.device("cpu")
     if torch.cuda.is_available():

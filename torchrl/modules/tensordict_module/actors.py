@@ -1356,9 +1356,9 @@ class ActorValueOperator(SafeSequential):
         +-------------+ +------------+
 
     .. note::
-      For a similar class that returns an action and a Quality value :math:`Q(s, a)`
-      see :class:`~.ActorCriticOperator`. For a version without common embeddig
-      refet to :class:`~.ActorCriticWrapper`.
+      For a similar class that returns an action and a Quality value :math:`Q(s, a)`,
+      see :class:`~.ActorCriticOperator`. For a version without common embedding,
+      refer to :class:`~.ActorCriticWrapper`.
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
     will both return a standalone TDModule with the dedicated functionality.

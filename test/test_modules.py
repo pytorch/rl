@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import os
 import re
 
 from numbers import Number
@@ -11,8 +12,12 @@ import numpy as np
 import pytest
 import torch
 
-from _utils_internal import get_default_devices, retry
-from mocking_classes import MockBatchedUnLockedEnv
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import get_default_devices, retry
+    from pytorch.rl.test.mocking_classes import MockBatchedUnLockedEnv
+else:
+    from _utils_internal import get_default_devices, retry
+    from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
 from torch import nn
