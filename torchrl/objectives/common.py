@@ -471,6 +471,30 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         # mainly used for PPO with KL target
         pass
 
+    def _reset_module_parameters(self, module_name, module):
+        params_name = f"{module_name}_params"
+        target_name = f"target_{module_name}_params"
+        params = self._modules.get(params_name, None)
+        target = self._modules.get(target_name, None)
+
+        if params is not None:
+            with params.to_module(module):
+                module.reset_parameters_recursive()
+        else:
+            module.reset_parameters_recursive()
+
+        if target is not None:
+            with target.to_module(module):
+                module.reset_parameters_recursive()
+
+    def reset_parameters_recursive(
+        self,
+    ):
+        """Reset the parameters of the module."""
+        for key, item in self.__dict__.items():
+            if isinstance(item, nn.Module):
+                self._reset_module_parameters(key, item)
+
     @property
     def value_estimator(self) -> ValueEstimatorBase:
         """The value function blends in the reward and value estimate(s) from upcoming state(s)/state-action pair(s) into a target value estimate for the value network."""

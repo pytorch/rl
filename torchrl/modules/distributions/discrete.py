@@ -8,14 +8,12 @@ from typing import Any, Optional, Sequence, Union
 
 import torch
 import torch.distributions as D
+import torch.nn.functional as F
 
 from torch.distributions.utils import lazy_property, logits_to_probs, probs_to_logits
 
 
-__all__ = [
-    "OneHotCategorical",
-    "MaskedCategorical",
-]
+__all__ = ["OneHotCategorical", "MaskedCategorical", "Ordinal", "OneHotOrdinal"]
 
 
 def _treat_categorical_params(
@@ -58,7 +56,7 @@ class ReparamGradientStrategy(Enum):
 class OneHotCategorical(D.Categorical):
     """One-hot categorical distribution.
 
-    This class behaves excacly as torch.distributions.Categorical except that it reads and produces one-hot encodings
+    This class behaves exactly as torch.distributions.Categorical except that it reads and produces one-hot encodings
     of the discrete tensors.
 
     Args:
@@ -68,7 +66,7 @@ class OneHotCategorical(D.Categorical):
             reparameterized samples.
             ``ReparamGradientStrategy.PassThrough`` will compute the sample gradients
              by using the softmax valued log-probability as a proxy to the
-             samples gradients.
+             sample gradients.
             ``ReparamGradientStrategy.RelaxedOneHot`` will use
             :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.
 
@@ -85,6 +83,7 @@ class OneHotCategorical(D.Categorical):
 
     num_params: int = 1
 
+    # This is to make the compiler happy, see https://github.com/pytorch/pytorch/issues/140266
     @lazy_property
     def logits(self):
         return probs_to_logits(self.probs)
@@ -171,7 +170,7 @@ class MaskedCategorical(D.Categorical):
     Args:
         logits (torch.Tensor): event log probabilities (unnormalized)
         probs (torch.Tensor): event probabilities. If provided, the probabilities
-            corresponding to to masked items will be zeroed and the probability
+            corresponding to masked items will be zeroed and the probability
             re-normalized along its last dimension.
 
     Keyword Args:
@@ -330,7 +329,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
     Args:
         logits (torch.Tensor): event log probabilities (unnormalized)
         probs (torch.Tensor): event probabilities. If provided, the probabilities
-            corresponding to to masked items will be zeroed and the probability
+            corresponding to masked items will be zeroed and the probability
             re-normalized along its last dimension.
 
     Keyword Args:
@@ -501,3 +500,82 @@ class MaskedOneHotCategorical(MaskedCategorical):
             raise ValueError(
                 f"Unknown reparametrization strategy {self.reparam_strategy}."
             )
+
+
+class Ordinal(D.Categorical):
+    """A discrete distribution for learning to sample from finite ordered sets.
+
+    It is defined in contrast with the `Categorical` distribution, which does
+    not impose any notion of proximity or ordering over its support's atoms.
+    The `Ordinal` distribution explicitly encodes those concepts, which is
+    useful for learning discrete sampling from continuous sets. See §5 of
+    `Tang & Agrawal, 2020<https://arxiv.org/pdf/1901.10500.pdf>`_ for details.
+
+    .. note::
+        This class is mostly useful when you want to learn a distribution over
+        a finite set which is obtained by discretising a continuous set.
+
+    Args:
+        scores (torch.Tensor): a tensor of shape [..., N] where N is the size of the set which supports the distributions.
+            Typically, the output of a neural network parametrising the distribution.
+
+    Examples:
+        >>> num_atoms, num_samples = 5, 20
+        >>> mean = (num_atoms - 1) / 2  # Target mean for samples, centered around the middle atom
+        >>> torch.manual_seed(42)
+        >>> logits = torch.ones((num_atoms), requires_grad=True)
+        >>> optimizer = torch.optim.Adam([logits], lr=0.1)
+        >>>
+        >>> # Perform optimisation loop to minimise deviation from `mean`
+        >>> for _ in range(20):
+        >>>     sampler = Ordinal(scores=logits)
+        >>>     samples = sampler.sample((num_samples,))
+        >>>     # Define loss to encourage samples around the mean by penalising deviation from mean
+        >>>     loss = torch.mean((samples - mean) ** 2 * sampler.log_prob(samples))
+        >>>     loss.backward()
+        >>>     optimizer.step()
+        >>>     optimizer.zero_grad()
+        >>>
+        >>> sampler.probs
+        tensor([0.0308, 0.1586, 0.4727, 0.2260, 0.1120], ...)
+        >>> # Print histogram to observe sample distribution frequency across 5 bins (0, 1, 2, 3, and 4)
+        >>> torch.histogram(sampler.sample((1000,)).reshape(-1).float(), bins=num_atoms)
+        torch.return_types.histogram(
+            hist=tensor([ 24., 158., 478., 228., 112.]),
+            bin_edges=tensor([0.0000, 0.8000, 1.6000, 2.4000, 3.2000, 4.0000]))
+    """
+
+    def __init__(self, scores: torch.Tensor):
+        logits = _generate_ordinal_logits(scores)
+        super().__init__(logits=logits)
+
+
+class OneHotOrdinal(OneHotCategorical):
+    """The one-hot version of the :class:`~tensordict.nn.distributions.Ordinal` distribution.
+
+    Args:
+        scores (torch.Tensor): a tensor of shape [..., N] where N is the size of the set which supports the distributions.
+            Typically, the output of a neural network parametrising the distribution.
+    """
+
+    def __init__(self, scores: torch.Tensor):
+        logits = _generate_ordinal_logits(scores)
+        super().__init__(logits=logits)
+
+
+def _generate_ordinal_logits(scores: torch.Tensor) -> torch.Tensor:
+    """Implements Eq. 4 of `Tang & Agrawal, 2020<https://arxiv.org/pdf/1901.10500.pdf>`__."""
+    # Assigns Bernoulli-like probabilities for each class in the set
+    log_probs = F.logsigmoid(scores)
+    complementary_log_probs = F.logsigmoid(-scores)
+
+    # Total log-probability for being "larger than k"
+    larger_than_log_probs = log_probs.cumsum(dim=-1)
+
+    # Total log-probability for being "smaller than k"
+    smaller_than_log_probs = (
+        complementary_log_probs.flip(dims=[-1]).cumsum(dim=-1).flip(dims=[-1])
+        - complementary_log_probs
+    )
+
+    return larger_than_log_probs + smaller_than_log_probs

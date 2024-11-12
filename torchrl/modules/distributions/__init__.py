@@ -18,6 +18,8 @@ from .discrete import (
     MaskedCategorical,
     MaskedOneHotCategorical,
     OneHotCategorical,
+    OneHotOrdinal,
+    Ordinal,
     ReparamGradientStrategy,
 )
 
@@ -32,6 +34,8 @@ distributions_maps = {
         MaskedCategorical,
         MaskedOneHotCategorical,
         OneHotCategorical,
+        Ordinal,
+        OneHotOrdinal,
     )
 }
 

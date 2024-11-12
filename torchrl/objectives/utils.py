@@ -408,12 +408,18 @@ class hold_out_net(_context_manager):
 
     def __enter__(self) -> None:
         if self.mode:
-            self.params = TensorDict.from_module(self.network)
-            self.params.data.to_module(self.network)
+            if is_dynamo_compiling():
+                self._params = TensorDict.from_module(self.network)
+                self._params.data.to_module(self.network)
+            else:
+                self.network.requires_grad_(False)
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         if self.mode:
-            self.params.to_module(self.network)
+            if is_dynamo_compiling():
+                self._params.to_module(self.network)
+            else:
+                self.network.requires_grad_()
 
 
 class hold_out_params(_context_manager):

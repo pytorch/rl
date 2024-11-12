@@ -12,7 +12,7 @@ import torch.nn as nn
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn.common import TensorDictModuleBase
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data.map import SipHash
+from torchrl.data.map.hash import SipHash
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -82,7 +82,8 @@ class QueryModule(TensorDictModuleBase):
             provided but no aggregator is passed, it will default to ``SipHash``.
        clone (bool, optional): if ``True``, a shallow clone of the input TensorDict will be
             returned. This can be used to retrieve the integer index within the storage,
-            corresponding to a given input tensordict.
+            corresponding to a given input tensordict. This can be overridden at runtime by
+            providing the ``clone`` argument to the forward method.
             Defaults to ``False``.
     d
         Examples:
@@ -168,8 +169,10 @@ class QueryModule(TensorDictModuleBase):
     def forward(
         self,
         tensordict: TensorDictBase,
+        *,
         extend: bool = True,
         write_hash: bool = True,
+        clone: bool | None = None,
     ) -> TensorDictBase:
         hash_values = []
 
@@ -186,7 +189,8 @@ class QueryModule(TensorDictModuleBase):
 
         td_hash_value = self.hash_to_int(hash_values, extend=extend)
 
-        if self.clone:
+        clone = clone if clone is not None else self.clone
+        if clone:
             output = tensordict.copy()
         else:
             output = tensordict

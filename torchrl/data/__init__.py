@@ -6,11 +6,13 @@
 from .map import (
     BinaryToDecimal,
     HashToInt,
+    MCTSForest,
     QueryModule,
     RandomProjectionHash,
     SipHash,
     TensorDictMap,
     TensorMap,
+    Tree,
 )
 from .postprocs import MultiStep
 from .replay_buffers import (

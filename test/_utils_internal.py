@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 
 import os.path
 import time
+import unittest
 from functools import wraps
 
 # Get relative file path
@@ -202,6 +204,31 @@ def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
         return f_retry  # true decorator
 
     return deco_retry
+
+
+# After calling this function, any log record whose name contains 'record_name'
+# and is emitted from the logger that has qualified name 'logger_qname' is
+# appended to the 'records' list.
+# NOTE: This function is based on testing utilities for 'torch._logging'
+def capture_log_records(records, logger_qname, record_name):
+    assert isinstance(records, list)
+    logger = logging.getLogger(logger_qname)
+
+    class EmitWrapper:
+        def __init__(self, old_emit):
+            self.old_emit = old_emit
+
+        def __call__(self, record):
+            nonlocal records
+            self.old_emit(record)
+            if record_name in record.name:
+                records.append(record)
+
+    for handler in logger.handlers:
+        new_emit = EmitWrapper(handler.emit)
+        contextlib.ExitStack().enter_context(
+            unittest.mock.patch.object(handler, "emit", new_emit)
+        )
 
 
 @pytest.fixture

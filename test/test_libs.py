@@ -30,18 +30,32 @@ import numpy as np
 import pytest
 import torch
 
-from _utils_internal import (
-    _make_multithreaded_env,
-    CARTPOLE_VERSIONED,
-    get_available_devices,
-    get_default_devices,
-    HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,
-    PONG_VERSIONED,
-    rand_reset,
-    retry,
-    rollout_consistency_assertion,
-)
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
+else:
+    from _utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
 from packaging import version
 from tensordict import (
     assert_allclose_td,
@@ -1591,7 +1605,7 @@ class TestJumanji:
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
     def test_jumanji_batch_size(self, envname, batch_size):
-        env = JumanjiEnv(envname, batch_size=batch_size)
+        env = JumanjiEnv(envname, batch_size=batch_size, jit=True)
         env.set_seed(0)
         tdreset = env.reset()
         tdrollout = env.rollout(max_steps=50)
@@ -1602,7 +1616,7 @@ class TestJumanji:
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
     def test_jumanji_spec_rollout(self, envname, batch_size):
-        env = JumanjiEnv(envname, batch_size=batch_size)
+        env = JumanjiEnv(envname, batch_size=batch_size, jit=True)
         env.set_seed(0)
         check_env_specs(env)
 
@@ -1613,7 +1627,7 @@ class TestJumanji:
         import numpy as onp
         from torchrl.envs.libs.jax_utils import _tree_flatten
 
-        env = JumanjiEnv(envname, batch_size=batch_size)
+        env = JumanjiEnv(envname, batch_size=batch_size, jit=True)
         obs_keys = list(env.observation_spec.keys(True))
         env.set_seed(1)
         rollout = env.rollout(10)
@@ -1651,7 +1665,7 @@ class TestJumanji:
     @pytest.mark.parametrize("batch_size", [[3], []])
     def test_jumanji_rendering(self, envname, batch_size):
         # check that this works with a batch-size
-        env = JumanjiEnv(envname, from_pixels=True, batch_size=batch_size)
+        env = JumanjiEnv(envname, from_pixels=True, batch_size=batch_size, jit=True)
         env.set_seed(0)
         env.transform.transform_observation_spec(env.base_env.observation_spec)
 
@@ -1659,10 +1673,29 @@ class TestJumanji:
         pixels = r["pixels"]
         if not isinstance(pixels, torch.Tensor):
             pixels = torch.as_tensor(np.asarray(pixels))
+            assert batch_size
+        else:
+            assert not batch_size
         assert pixels.unique().numel() > 1
         assert pixels.dtype == torch.uint8
 
         check_env_specs(env)
+
+    @pytest.mark.parametrize("jit", [True, False])
+    def test_jumanji_batch_unlocked(self, envname, jit):
+        torch.manual_seed(0)
+        env = JumanjiEnv(envname, jit=jit)
+        env.set_seed(0)
+        assert not env.batch_locked
+        reset = env.reset(TensorDict(batch_size=[16]))
+        assert reset.batch_size == (16,)
+        env.rand_step(reset)
+        r = env.rollout(
+            2000, auto_reset=False, tensordict=reset, break_when_all_done=True
+        )
+        assert r.batch_size[0] == 16
+        done = r["next", "done"]
+        assert done.any(-2).all() or (r.shape[-1] == 2000)
 
 
 ENVPOOL_CLASSIC_CONTROL_ENVS = [

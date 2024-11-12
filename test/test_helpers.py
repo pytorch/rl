@@ -5,6 +5,7 @@
 
 import argparse
 import dataclasses
+import os
 import pathlib
 import sys
 from time import sleep
@@ -12,24 +13,8 @@ from time import sleep
 import pytest
 import torch
 
-from _utils_internal import generate_seeds, get_default_devices
-from torchrl._utils import timeit
-
-try:
-    from hydra import compose, initialize
-    from hydra.core.config_store import ConfigStore
-
-    _has_hydra = True
-except ImportError:
-    _has_hydra = False
-from mocking_classes import (
-    ContinuousActionConvMockEnvNumpy,
-    ContinuousActionVecMockEnv,
-    DiscreteActionConvMockEnvNumpy,
-    DiscreteActionVecMockEnv,
-    MockSerialEnv,
-)
 from packaging import version
+from torchrl._utils import timeit
 from torchrl.data import Bounded, Composite
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import ObservationNorm
@@ -50,7 +35,34 @@ from torchrl.trainers.helpers.models import (
     make_dqn_actor,
 )
 
-TORCH_VERSION = version.parse(torch.__version__)
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import generate_seeds, get_default_devices
+    from pytorch.rl.test.mocking_classes import (
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        MockSerialEnv,
+    )
+else:
+    from _utils_internal import generate_seeds, get_default_devices
+    from mocking_classes import (
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        MockSerialEnv,
+    )
+
+try:
+    from hydra import compose, initialize
+    from hydra.core.config_store import ConfigStore
+
+    _has_hydra = True
+except ImportError:
+    _has_hydra = False
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 if TORCH_VERSION < version.parse("1.12.0"):
     UNSQUEEZE_SINGLETON = True
 else:
