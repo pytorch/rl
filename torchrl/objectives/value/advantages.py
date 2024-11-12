@@ -37,6 +37,10 @@ from torchrl.objectives.value.functional import (
     vtrace_advantage_estimate,
 )
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 try:
     from torch import vmap
@@ -67,92 +71,6 @@ def _self_set_skip_existing(fun):
         return fun(self, *args, **kwargs)
 
     return new_func
-
-
-def _call_value_nets(
-    value_net: TensorDictModuleBase,
-    data: TensorDictBase,
-    params: TensorDictBase,
-    next_params: TensorDictBase,
-    single_call: bool,
-    value_key: NestedKey,
-    detach_next: bool,
-    vmap_randomness: str = "error",
-):
-    in_keys = value_net.in_keys
-    if single_call:
-        for i, name in enumerate(data.names):
-            if name == "time":
-                ndim = i + 1
-                break
-        else:
-            ndim = None
-        if ndim is not None:
-            # get data at t and last of t+1
-            idx0 = (slice(None),) * (ndim - 1) + (slice(-1, None),)
-            idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
-            idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
-            data_in = torch.cat(
-                [
-                    data.select(*in_keys, value_key, strict=False),
-                    data.get("next").select(*in_keys, value_key, strict=False)[idx0],
-                ],
-                ndim - 1,
-            )
-        else:
-            if RL_WARNINGS:
-                warnings.warn(
-                    "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
-                    "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
-                )
-            ndim = data.ndim
-            idx = (slice(None),) * (ndim - 1) + (slice(None, data.shape[ndim - 1]),)
-            idx_ = (slice(None),) * (ndim - 1) + (slice(data.shape[ndim - 1], None),)
-            data_in = torch.cat(
-                [
-                    data.select(*in_keys, value_key, strict=False),
-                    data.get("next").select(*in_keys, value_key, strict=False),
-                ],
-                ndim - 1,
-            )
-
-        # next_params should be None or be identical to params
-        if next_params is not None and next_params is not params:
-            raise ValueError(
-                "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
-            )
-        if params is not None:
-            with params.to_module(value_net):
-                value_est = value_net(data_in).get(value_key)
-        else:
-            value_est = value_net(data_in).get(value_key)
-        value, value_ = value_est[idx], value_est[idx_]
-    else:
-        data_in = torch.stack(
-            [
-                data.select(*in_keys, value_key, strict=False),
-                data.get("next").select(*in_keys, value_key, strict=False),
-            ],
-            0,
-        )
-        if (params is not None) ^ (next_params is not None):
-            raise ValueError(
-                "params and next_params must be either both provided or not."
-            )
-        elif params is not None:
-            params_stack = torch.stack([params, next_params], 0).contiguous()
-            data_out = _vmap_func(value_net, (0, 0), randomness=vmap_randomness)(
-                data_in, params_stack
-            )
-        else:
-            data_out = vmap(value_net, (0,), randomness=vmap_randomness)(data_in)
-        value_est = data_out.get(value_key)
-        value, value_ = value_est[0], value_est[1]
-    data.set(value_key, value)
-    data.set(("next", value_key), value_)
-    if detach_next:
-        value_ = value_.detach()
-    return value, value_
 
 
 def _call_actor_net(
@@ -432,6 +350,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
     @property
     def vmap_randomness(self):
         if self._vmap_randomness is None:
+            if is_dynamo_compiling():
+                self._vmap_randomness = "different"
+                return "different"
             do_break = False
             for val in self.__dict__.values():
                 if isinstance(val, torch.nn.Module):
@@ -466,6 +387,99 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 if name == "time":
                     return i
         return data.ndim - 1
+
+    def _call_value_nets(
+        self,
+        data: TensorDictBase,
+        params: TensorDictBase,
+        next_params: TensorDictBase,
+        single_call: bool,
+        value_key: NestedKey,
+        detach_next: bool,
+        vmap_randomness: str = "error",
+        *,
+        value_net: TensorDictModuleBase | None = None,
+    ):
+        if value_net is None:
+            value_net = self.value_network
+        in_keys = value_net.in_keys
+        if single_call:
+            for i, name in enumerate(data.names):
+                if name == "time":
+                    ndim = i + 1
+                    break
+            else:
+                ndim = None
+            if ndim is not None:
+                # get data at t and last of t+1
+                idx0 = (slice(None),) * (ndim - 1) + (slice(-1, None),)
+                idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
+                idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
+                data_in = torch.cat(
+                    [
+                        data.select(*in_keys, value_key, strict=False),
+                        data.get("next").select(*in_keys, value_key, strict=False)[
+                            idx0
+                        ],
+                    ],
+                    ndim - 1,
+                )
+            else:
+                if RL_WARNINGS:
+                    warnings.warn(
+                        "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
+                        "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
+                    )
+                ndim = data.ndim
+                idx = (slice(None),) * (ndim - 1) + (slice(None, data.shape[ndim - 1]),)
+                idx_ = (slice(None),) * (ndim - 1) + (
+                    slice(data.shape[ndim - 1], None),
+                )
+                data_in = torch.cat(
+                    [
+                        data.select(*in_keys, value_key, strict=False),
+                        data.get("next").select(*in_keys, value_key, strict=False),
+                    ],
+                    ndim - 1,
+                )
+
+            # next_params should be None or be identical to params
+            if next_params is not None and next_params is not params:
+                raise ValueError(
+                    "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
+                )
+            if params is not None:
+                with params.to_module(value_net):
+                    value_est = value_net(data_in).get(value_key)
+            else:
+                value_est = value_net(data_in).get(value_key)
+            value, value_ = value_est[idx], value_est[idx_]
+        else:
+            data_in = torch.stack(
+                [
+                    data.select(*in_keys, value_key, strict=False),
+                    data.get("next").select(*in_keys, value_key, strict=False),
+                ],
+                0,
+            )
+            if (params is not None) ^ (next_params is not None):
+                raise ValueError(
+                    "params and next_params must be either both provided or not."
+                )
+            elif params is not None:
+                params_stack = torch.stack([params, next_params], 0).contiguous()
+                data_out = _vmap_func(value_net, (0, 0), randomness=vmap_randomness)(
+                    data_in, params_stack
+                )
+            else:
+                data_out = vmap(value_net, (0,), randomness=vmap_randomness)(data_in)
+            value_est = data_out.get(value_key)
+            value, value_ = value_est[0], value_est[1]
+        data.set(value_key, value)
+        data.set(("next", value_key), value_)
+        if detach_next:
+            value_ = value_.detach()
+        return value, value_
 
 
 class TD0Estimator(ValueEstimatorBase):
@@ -623,8 +637,7 @@ class TD0Estimator(ValueEstimatorBase):
             ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = _call_value_nets(
-                    value_net=self.value_network,
+                value, next_value = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -837,8 +850,7 @@ class TD1Estimator(ValueEstimatorBase):
             ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = _call_value_nets(
-                    value_net=self.value_network,
+                value, next_value = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -1063,8 +1075,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = _call_value_nets(
-                    value_net=self.value_network,
+                value, next_value = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -1155,7 +1166,7 @@ class GAE(ValueEstimatorBase):
               pass detached parameters for functional modules.
 
         vectorized (bool, optional): whether to use the vectorized version of the
-            lambda return. Default is `True`.
+            lambda return. Default is `True` if not compiling.
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, i.e., the value of :func:`tensordict.nn.skip_existing()`
@@ -1205,7 +1216,7 @@ class GAE(ValueEstimatorBase):
         value_network: TensorDictModule,
         average_gae: bool = False,
         differentiable: bool = False,
-        vectorized: bool = True,
+        vectorized: bool | None = None,
         skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
@@ -1228,6 +1239,16 @@ class GAE(ValueEstimatorBase):
         self.average_gae = average_gae
         self.vectorized = vectorized
         self.time_dim = time_dim
+
+    @property
+    def vectorized(self):
+        if is_dynamo_compiling():
+            return False
+        return self._vectorized
+
+    @vectorized.setter
+    def vectorized(self, value):
+        self._vectorized = value
 
     @_self_set_skip_existing
     @_self_set_grad_enabled
@@ -1328,10 +1349,10 @@ class GAE(ValueEstimatorBase):
             with hold_out_net(self.value_network) if (
                 params is None and target_params is None
             ) else nullcontext():
+                # with torch.no_grad():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = _call_value_nets(
-                    value_net=self.value_network,
+                value, next_value = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -1417,8 +1438,7 @@ class GAE(ValueEstimatorBase):
             ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = _call_value_nets(
-                    value_net=self.value_network,
+                value, next_value = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -1682,8 +1702,7 @@ class VTrace(ValueEstimatorBase):
             with hold_out_net(self.value_network):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = _call_value_nets(
-                    value_net=self.value_network,
+                value, next_value = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
