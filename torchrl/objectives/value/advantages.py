@@ -197,6 +197,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
                 target params to be passed to the functional value network module.
+            device (torch.device, optional): the device where the buffers will be instantiated.
+                Defaults to ``torch.get_default_device()``.
 
         Returns:
             An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
@@ -213,8 +215,14 @@ class ValueEstimatorBase(TensorDictModuleBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        device: torch.device | None = None,
     ):
         super().__init__()
+        if device is None:
+            device = torch.get_default_device()
+        # this is saved for tracking only and should not be used to cast anything else than buffers during
+        # init.
+        self._device = device
         self._tensor_keys = None
         self.differentiable = differentiable
         self.skip_existing = skip_existing
@@ -518,7 +526,8 @@ class TD0Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        device (torch.device, optional): device of the module.
+        device (torch.device, optional): the device where the buffers will be instantiated.
+            Defaults to ``torch.get_default_device()``.
 
     """
 
@@ -544,8 +553,9 @@ class TD0Estimator(ValueEstimatorBase):
             value_target_key=value_target_key,
             value_key=value_key,
             skip_existing=skip_existing,
+            device=device,
         )
-        self.register_buffer("gamma", torch.tensor(gamma, device=device))
+        self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
 
     @_self_set_skip_existing
@@ -664,7 +674,9 @@ class TD0Estimator(ValueEstimatorBase):
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-        gamma = self.gamma.to(device)
+        if self.gamma.device != device:
+            self.gamma = self.gamma.to(device)
+        gamma = self.gamma
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -723,7 +735,8 @@ class TD1Estimator(ValueEstimatorBase):
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
-        device (torch.device, optional): device of the module.
+        device (torch.device, optional): the device where the buffers will be instantiated.
+            Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
             markes with the ``"time"`` name if any, and to the last dimension
@@ -757,8 +770,9 @@ class TD1Estimator(ValueEstimatorBase):
             value_key=value_key,
             shifted=shifted,
             skip_existing=skip_existing,
+            device=device,
         )
-        self.register_buffer("gamma", torch.tensor(gamma, device=device))
+        self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
         self.time_dim = time_dim
 
@@ -879,7 +893,9 @@ class TD1Estimator(ValueEstimatorBase):
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-        gamma = self.gamma.to(device)
+        if self.gamma.device != device:
+            self.gamma = self.gamma.to(device)
+        gamma = self.gamma
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -943,7 +959,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
-        device (torch.device, optional): device of the module.
+        device (torch.device, optional): the device where the buffers will be instantiated.
+            Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
             markes with the ``"time"`` name if any, and to the last dimension
@@ -979,9 +996,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
             value_key=value_key,
             skip_existing=skip_existing,
             shifted=shifted,
+            device=device,
         )
-        self.register_buffer("gamma", torch.tensor(gamma, device=device))
-        self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
+        self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
+        self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))
         self.average_rewards = average_rewards
         self.vectorized = vectorized
         self.time_dim = time_dim
@@ -1103,7 +1121,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-        gamma = self.gamma.to(device)
+        if self.gamma.device != device:
+            self.gamma = self.gamma.to(device)
+        gamma = self.gamma
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -1185,7 +1205,8 @@ class GAE(ValueEstimatorBase):
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
-        device (torch.device, optional): device of the module.
+        device (torch.device, optional): the device where the buffers will be instantiated.
+            Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
             marked with the ``"time"`` name if any, and to the last dimension
@@ -1233,9 +1254,10 @@ class GAE(ValueEstimatorBase):
             value_target_key=value_target_key,
             value_key=value_key,
             skip_existing=skip_existing,
+            device=device,
         )
-        self.register_buffer("gamma", torch.tensor(gamma, device=device))
-        self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
+        self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
+        self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))
         self.average_gae = average_gae
         self.vectorized = vectorized
         self.time_dim = time_dim
@@ -1336,7 +1358,12 @@ class GAE(ValueEstimatorBase):
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-        gamma, lmbda = self.gamma.to(device), self.lmbda.to(device)
+        if self.gamma.device != device:
+            self.gamma = self.gamma.to(device)
+        gamma = self.gamma
+        if self.lmbda.device != device:
+            self.lmbda = self.lmbda.to(device)
+        lmbda = self.lmbda
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -1417,7 +1444,12 @@ class GAE(ValueEstimatorBase):
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-        gamma, lmbda = self.gamma.to(device), self.lmbda.to(device)
+        if self.gamma.device != device:
+            self.gamma = self.gamma.to(device)
+        gamma = self.gamma
+        if self.lmbda.device != device:
+            self.lmbda = self.lmbda.to(device)
+        lmbda = self.lmbda
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -1506,7 +1538,8 @@ class VTrace(ValueEstimatorBase):
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
             parameters are to be used). Defaults to ``False``.
-        device (torch.device, optional): device of the module.
+        device (torch.device, optional): the device where the buffers will be instantiated.
+            Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
             markes with the ``"time"`` name if any, and to the last dimension
@@ -1551,13 +1584,14 @@ class VTrace(ValueEstimatorBase):
             value_target_key=value_target_key,
             value_key=value_key,
             skip_existing=skip_existing,
+            device=device,
         )
         if not isinstance(gamma, torch.Tensor):
-            gamma = torch.tensor(gamma, device=device)
+            gamma = torch.tensor(gamma, device=self._device)
         if not isinstance(rho_thresh, torch.Tensor):
-            rho_thresh = torch.tensor(rho_thresh, device=device)
+            rho_thresh = torch.tensor(rho_thresh, device=self._device)
         if not isinstance(c_thresh, torch.Tensor):
-            c_thresh = torch.tensor(c_thresh, device=device)
+            c_thresh = torch.tensor(c_thresh, device=self._device)
 
         self.register_buffer("gamma", gamma)
         self.register_buffer("rho_thresh", rho_thresh)
@@ -1688,7 +1722,9 @@ class VTrace(ValueEstimatorBase):
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-        gamma = self.gamma.to(device)
+        if self.gamma.device != device:
+            self.gamma = self.gamma.to(device)
+        gamma = self.gamma
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
