@@ -7,6 +7,8 @@ from tensordict.nn import CudaGraphModule
 from torchrl._utils import logger as torchrl_logger
 from torchrl.record import VideoRecorder
 
+import torch
+torch.set_float32_matmul_precision('high')
 
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821

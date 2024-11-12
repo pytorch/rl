@@ -34,6 +34,8 @@ from utils import (
     make_replay_buffer,
 )
 
+import torch
+torch.set_float32_matmul_precision('high')
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -71,7 +73,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model, exploration_policy = make_crossQ_agent(cfg, train_env, device)
 
     # Create CrossQ loss
-    loss_module = make_loss_module(cfg, model)
+    loss_module = make_loss_module(cfg, model, device=device)
 
     compile_mode = None
     if cfg.network.compile:
@@ -206,6 +208,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 with timeit("rb - sample"):
                     sampled_tensordict = replay_buffer.sample().to(device)
                 with timeit("update"):
+                    torch.compiler.cudagraph_mark_step_begin()
                     td_loss = update(sampled_tensordict, update_actor=update_actor)
                 tds.append(td_loss)
                 # Update priority

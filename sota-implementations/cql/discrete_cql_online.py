@@ -33,6 +33,8 @@ from utils import (
     make_replay_buffer,
 )
 
+import torch
+torch.set_float32_matmul_precision('high')
 
 @hydra.main(version_base="1.1", config_path="", config_name="discrete_cql_config")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -70,7 +72,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model, explore_policy = make_discretecql_model(cfg, train_env, eval_env, device)
 
     # Create loss
-    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model, device=device)
 
     compile_mode = None
     if cfg.loss.compile:
@@ -170,6 +172,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     sampled_tensordict = replay_buffer.sample()
                     sampled_tensordict = sampled_tensordict.to(device)
                 with timeit("update"):
+                    torch.compiler.cudagraph_mark_step_begin()
                     loss_dict = update(sampled_tensordict)
                 tds.append(loss_dict)
 

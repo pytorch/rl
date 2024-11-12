@@ -247,7 +247,7 @@ def make_crossQ_agent(cfg, train_env, device):
 # ---------
 
 
-def make_loss_module(cfg, model):
+def make_loss_module(cfg, model, device: torch.device|None=None):
     """Make loss module and target network updater."""
     # Create CrossQ loss
     loss_module = CrossQLoss(
@@ -257,7 +257,7 @@ def make_loss_module(cfg, model):
         loss_function=cfg.optim.loss_function,
         alpha_init=cfg.optim.alpha_init,
     )
-    loss_module.make_value_estimator(gamma=cfg.optim.gamma)
+    loss_module.make_value_estimator(gamma=cfg.optim.gamma, device=device)
 
     return loss_module
 

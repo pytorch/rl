@@ -33,6 +33,8 @@ from utils import (
     make_environment,
     make_replay_buffer,
 )
+import torch
+torch.set_float32_matmul_precision('high')
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="online_config")
@@ -103,7 +105,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create loss
-    loss_module, target_net_updater = make_continuous_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_continuous_loss(cfg.loss, model, device=device)
 
     # Create optimizer
     (

@@ -32,6 +32,8 @@ from utils import (
     make_offline_replay_buffer,
 )
 
+import torch
+torch.set_float32_matmul_precision('high')
 
 @hydra.main(config_path="", config_name="offline_config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -77,7 +79,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         eval_env.start()
 
     # Create loss
-    loss_module, target_net_updater = make_continuous_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_continuous_loss(cfg.loss, model, device=device)
 
     # Create Optimizer
     (
@@ -154,6 +156,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         with timeit("update"):
             # compute loss
+            torch.compiler.cudagraph_mark_step_begin()
             i_device = torch.tensor(i, device=device)
             loss, loss_vals = update(
                 data.to(device), policy_eval_start=policy_eval_start, iteration=i_device
