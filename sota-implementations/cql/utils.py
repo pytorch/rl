@@ -315,7 +315,7 @@ def make_cql_modules_state(model_cfg, proof_environment):
 # ---------
 
 
-def make_continuous_loss(loss_cfg, model, device: torch.device|None=None):
+def make_continuous_loss(loss_cfg, model, device: torch.device | None = None):
     loss_module = CQLLoss(
         model[0],
         model[1],
@@ -334,7 +334,7 @@ def make_continuous_loss(loss_cfg, model, device: torch.device|None=None):
     return loss_module, target_net_updater
 
 
-def make_discrete_loss(loss_cfg, model, device: torch.device|None=None):
+def make_discrete_loss(loss_cfg, model, device: torch.device | None = None):
     loss_module = DiscreteCQLLoss(
         model,
         loss_function=loss_cfg.loss_function,

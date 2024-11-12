@@ -13,6 +13,7 @@ import time
 
 import hydra
 import numpy as np
+
 import torch
 import tqdm
 from tensordict.nn import CudaGraphModule
@@ -32,8 +33,8 @@ from utils import (
     make_offline_replay_buffer,
 )
 
-import torch
-torch.set_float32_matmul_precision('high')
+torch.set_float32_matmul_precision("high")
+
 
 @hydra.main(config_path="", config_name="offline_config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -79,7 +80,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         eval_env.start()
 
     # Create loss
-    loss_module, target_net_updater = make_continuous_loss(cfg.loss, model, device=device)
+    loss_module, target_net_updater = make_continuous_loss(
+        cfg.loss, model, device=device
+    )
 
     # Create Optimizer
     (

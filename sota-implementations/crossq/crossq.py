@@ -14,6 +14,7 @@ The helper functions are coded in the utils.py associated with this script.
 import hydra
 
 import numpy as np
+
 import torch
 import torch.cuda
 import tqdm
@@ -34,8 +35,8 @@ from utils import (
     make_replay_buffer,
 )
 
-import torch
-torch.set_float32_matmul_precision('high')
+torch.set_float32_matmul_precision("high")
+
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -126,11 +127,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         td_loss["loss_alpha"] = float("nan")
         return TensorDict(td_loss, device=device).detach()
 
-    def update_all(
-        sampled_tensordict: TensorDict, update_qloss=update_qloss
-    ):  # bind update_qloss
-        # Compute loss
-        td_loss = update_qloss(sampled_tensordict)
+    def update_all(sampled_tensordict: TensorDict):
+        optimizer_critic.zero_grad(set_to_none=True)
+        optimizer_actor.zero_grad(set_to_none=True)
+        optimizer_alpha.zero_grad(set_to_none=True)
+
+        td_loss = {}
+        q_loss, value_meta = loss_module.qvalue_loss(sampled_tensordict)
+        sampled_tensordict.set(loss_module.tensor_keys.priority, value_meta["td_error"])
+        q_loss = q_loss.mean()
 
         actor_loss, metadata_actor = loss_module.actor_loss(sampled_tensordict)
         actor_loss = actor_loss.mean()
@@ -138,13 +143,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_prob=metadata_actor["log_prob"].detach()
         ).mean()
 
-        # Update actor
-        (actor_loss + actor_loss).backward()
+        # Updates
+        (q_loss + actor_loss + actor_loss).backward()
+        optimizer_critic.step()
         optimizer_actor.step()
-
-        # Update alpha
         optimizer_alpha.step()
 
+        # Update critic
+        td_loss["loss_qvalue"] = q_loss
         td_loss["loss_actor"] = actor_loss
         td_loss["loss_alpha"] = alpha_loss
 

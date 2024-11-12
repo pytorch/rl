@@ -13,6 +13,7 @@ The helper functions are coded in the utils.py associated with this script.
 
 import hydra
 import numpy as np
+
 import torch
 import torch.cuda
 import tqdm
@@ -33,8 +34,8 @@ from utils import (
     make_replay_buffer,
 )
 
-import torch
-torch.set_float32_matmul_precision('high')
+torch.set_float32_matmul_precision("high")
+
 
 @hydra.main(version_base="1.1", config_path="", config_name="discrete_cql_config")
 def main(cfg: "DictConfig"):  # noqa: F821
