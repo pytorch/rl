@@ -118,7 +118,7 @@ def make_collector(
     compile=False,
     compile_mode=None,
     cudagraph=False,
-        device: torch.device|None=None,
+    device: torch.device | None = None,
 ):
     """Make collector."""
     collector = SyncDataCollector(

@@ -66,12 +66,15 @@ from torchrl.envs.utils import (
     RandomPolicy,
     set_exploration_type,
 )
+
 try:
     from torch.compiler import cudagraph_mark_step_begin
 except ImportError:
+
     def cudagraph_mark_step_begin():
         """Placeholder when cudagraph_mark_step_begin is missing."""
         ...
+
 
 _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20

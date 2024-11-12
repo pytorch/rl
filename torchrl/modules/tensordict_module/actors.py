@@ -1783,6 +1783,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
             For example for an observation input of shape [batch_size, context, obs_dim] with context=20 and inference_context=5, the first 15 entries
             of the context will be masked. Defaults to 5.
         spec (Optional[TensorSpec]): The spec of the input TensorDict. If None, it will be inferred from the policy module.
+        device (torch.device, optional): if provided, the device where the buffers / specs will be placed.
 
     Examples:
         >>> import torch
@@ -1836,6 +1837,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         *,
         inference_context: int = 5,
         spec: Optional[TensorSpec] = None,
+        device: torch.device | None = None,
     ):
         super().__init__(policy)
         self.observation_key = "observation"
@@ -1857,6 +1859,8 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
                 self._spec[self.action_key] = None
         else:
             self._spec = Composite({key: None for key in policy.out_keys})
+        if device is not None:
+            self._spec = self._spec.to(device)
         self.checked = False
 
     @property
