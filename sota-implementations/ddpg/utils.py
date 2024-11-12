@@ -129,7 +129,7 @@ def make_collector(
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
         total_frames=cfg.collector.total_frames,
         device=device,
-        compile_policy={"mode": compile_mode} if compile else False,
+        compile_policy={"mode": compile_mode, "fullgraph": True} if compile else False,
         cudagraph_policy=cudagraph,
     )
     collector.set_seed(cfg.env.seed)
