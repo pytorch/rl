@@ -24,7 +24,6 @@ from tensordict.nn import CudaGraphModule
 
 from torchrl._utils import timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.objectives import group_optimizers
 
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
@@ -113,11 +112,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         optimizer_critic,
         optimizer_alpha,
     ) = make_crossQ_optimizer(cfg, loss_module)
-    optimizer = group_optimizers(optimizer_actor, optimizer_critic, optimizer_alpha)
-    del optimizer_actor, optimizer_critic, optimizer_alpha
+    # optimizer = group_optimizers(optimizer_actor, optimizer_critic, optimizer_alpha)
+    # del optimizer_actor, optimizer_critic, optimizer_alpha
 
     def update_qloss(sampled_tensordict):
-        optimizer.zero_grad(set_to_none=True)
+        optimizer_critic.zero_grad(set_to_none=True)
         td_loss = {}
         q_loss, value_meta = loss_module.qvalue_loss(sampled_tensordict)
         sampled_tensordict.set(loss_module.tensor_keys.priority, value_meta["td_error"])
@@ -125,14 +124,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Update critic
         q_loss.backward()
-        optimizer.step()
+        optimizer_critic.step()
         td_loss["loss_qvalue"] = q_loss
         td_loss["loss_actor"] = float("nan")
         td_loss["loss_alpha"] = float("nan")
         return TensorDict(td_loss, device=device).detach()
 
     def update_all(sampled_tensordict: TensorDict):
-        optimizer.zero_grad(set_to_none=True)
+        optimizer_critic.zero_grad(set_to_none=True)
+        optimizer_actor.zero_grad(set_to_none=True)
+        optimizer_alpha.zero_grad(set_to_none=True)
 
         td_loss = {}
         q_loss, value_meta = loss_module.qvalue_loss(sampled_tensordict)
@@ -147,7 +148,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Updates
         (q_loss + actor_loss + actor_loss).backward()
-        optimizer.step()
+        optimizer_critic.step()
+        optimizer_actor.step()
+        optimizer_alpha.step()
 
         # Update critic
         td_loss["loss_qvalue"] = q_loss
