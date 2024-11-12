@@ -113,7 +113,14 @@ def make_environment(cfg, logger):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(
+    cfg,
+    train_env,
+    actor_model_explore,
+    compile=False,
+    compile_mode=None,
+    cudagraph=False,
+):
     """Make collector."""
     collector = SyncDataCollector(
         train_env,
@@ -123,6 +130,8 @@ def make_collector(cfg, train_env, actor_model_explore):
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
+        compile_policy={"mode": compile_mode} if compile else False,
+        cudagraph_policy=cudagraph,
     )
     collector.set_seed(cfg.env.seed)
     return collector
