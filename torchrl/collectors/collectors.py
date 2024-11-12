@@ -1151,8 +1151,11 @@ class SyncDataCollector(DataCollectorBase):
                     else:
                         policy_input = self._shuttle
                     # we still do the assignment for security
-                    cudagraph_mark_step_begin()
+                    if self.cudagraphed_policy:
+                        cudagraph_mark_step_begin()
                     policy_output = self.policy(policy_input)
+                    if self.cudagraphed_policy:
+                        policy_output = policy_output.clone()
                     if self._shuttle is not policy_output:
                         # ad-hoc update shuttle
                         self._shuttle.update(

@@ -990,6 +990,7 @@ class _OrnsteinUhlenbeckProcess:
             tensordict.set(self.noise_key, noise)
             tensordict.set(self.steps_key, steps)
         else:
+            # We must clone for cudagraph, otherwise the same tensor may re-enter the compiled region
             noise = tensordict.get(self.noise_key).clone()
             steps = tensordict.get(self.steps_key).clone()
         if is_init is not None:
