@@ -66,10 +66,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create policy model
-    actor = make_dt_model(cfg).to(model_device)
+    actor = make_dt_model(cfg, device=model_device)
 
     # Create loss
-    loss_module = make_dt_loss(cfg.loss, actor)
+    loss_module = make_dt_loss(cfg.loss, actor, device=model_device)
 
     # Create optimizer
     transformer_optim, scheduler = make_dt_optimizer(cfg.optim, loss_module)

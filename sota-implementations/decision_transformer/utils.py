@@ -391,16 +391,14 @@ def make_odt_model(cfg):
     return actor
 
 
-def make_dt_model(cfg):
+def make_dt_model(cfg, device: torch.device|None=None):
     env_cfg = cfg.env
     proof_environment = make_transformed_env(
         make_base_env(env_cfg), env_cfg, obs_loc=0, obs_std=1
     )
 
-    action_spec = proof_environment.action_spec
-    for key, value in proof_environment.observation_spec.items():
-        if key == "observation":
-            state_dim = value.shape[-1]
+    action_spec = proof_environment.single_action_spec
+    obs_spec = proof_environment.single_observation_spec
     in_keys = [
         "observation_cat",
         "action_cat",
@@ -408,9 +406,10 @@ def make_dt_model(cfg):
     ]
 
     actor_net = DTActor(
-        state_dim=state_dim,
+        state_dim=obs_spec["observation"],
         action_dim=action_spec.shape[-1],
         transformer_config=cfg.transformer,
+        device=device,
     )
 
     actor_module = TensorDictModule(
@@ -425,7 +424,7 @@ def make_dt_model(cfg):
     }
 
     actor = ProbabilisticActor(
-        spec=action_spec,
+        spec=action_spec.to(device),
         in_keys=["param"],
         out_keys=["action"],
         module=actor_module,
@@ -459,10 +458,11 @@ def make_odt_loss(loss_cfg, actor_network):
     return loss
 
 
-def make_dt_loss(loss_cfg, actor_network):
+def make_dt_loss(loss_cfg, actor_network, device: torch.device|None=None):
     loss = DTLoss(
         actor_network,
         loss_function=loss_cfg.loss_function,
+        device=device,
     )
     loss.set_keys(action_target="action_cat")
     return loss
