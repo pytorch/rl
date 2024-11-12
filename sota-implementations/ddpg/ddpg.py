@@ -55,7 +55,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         else:
             collector_device = "cpu"
     collector_device = torch.device(collector_device)
-    cfg.collector.device = collector_device
 
     # Create logger
     exp_name = generate_exp_name("DDPG", cfg.logger.exp_name)
@@ -103,6 +102,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         compile=cfg.network.compile,
         compile_mode=compile_mode,
         cudagraph=cfg.network.cudagraphs,
+        device=collector_device,
     )
 
     # Create replay buffer

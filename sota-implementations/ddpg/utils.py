@@ -118,6 +118,7 @@ def make_collector(
     compile=False,
     compile_mode=None,
     cudagraph=False,
+        device: torch.device|None=None,
 ):
     """Make collector."""
     collector = SyncDataCollector(
@@ -127,7 +128,7 @@ def make_collector(
         init_random_frames=cfg.collector.init_random_frames,
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
         total_frames=cfg.collector.total_frames,
-        policy_device=cfg.collector.device,
+        policy_device=device,
         env_device=train_env.device,
         compile_policy={"mode": compile_mode} if compile else False,
         cudagraph_policy=cudagraph,
