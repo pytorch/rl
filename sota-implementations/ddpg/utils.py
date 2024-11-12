@@ -128,8 +128,7 @@ def make_collector(
         init_random_frames=cfg.collector.init_random_frames,
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
         total_frames=cfg.collector.total_frames,
-        policy_device=device,
-        env_device=train_env.device,
+        device=device,
         compile_policy={"mode": compile_mode} if compile else False,
         cudagraph_policy=cudagraph,
     )
