@@ -113,7 +113,14 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(
+    cfg,
+    train_env,
+    actor_model_explore,
+    compile=False,
+    compile_mode=None,
+    cudagraph=False,
+):
     """Make collector."""
     collector = SyncDataCollector(
         train_env,
@@ -123,6 +130,8 @@ def make_collector(cfg, train_env, actor_model_explore):
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
+        compile_policy={"mode": compile_mode} if compile else False,
+        cudagraph_policy=cudagraph,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -191,7 +200,7 @@ def make_offline_replay_buffer(rb_cfg):
 def make_cql_model(cfg, train_env, eval_env, device="cpu"):
     model_cfg = cfg.model
 
-    action_spec = train_env.action_spec
+    action_spec = train_env.single_action_spec
 
     actor_net, q_net = make_cql_modules_state(model_cfg, eval_env)
     in_keys = ["observation"]
@@ -208,11 +217,10 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "low": action_spec.space.low[len(train_env.batch_size) :],
-            "high": action_spec.space.high[
-                len(train_env.batch_size) :
-            ],  # remove batch-size
+            "low": action_spec.space.low,
+            "high": action_spec.space.high,
             "tanh_loc": False,
+            "safe_tanh": not cfg.loss.compile,
         },
         default_interaction_type=ExplorationType.RANDOM,
     )

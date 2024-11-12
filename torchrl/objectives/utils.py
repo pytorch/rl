@@ -597,3 +597,21 @@ def _get_default_device(net):
         return p.device
     else:
         return torch.get_default_device()
+
+
+def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimizer:
+    """Groups multiple optimizers into a single one.
+
+    All optimizers are expected to have the same type.
+    """
+    cls = None
+    params = []
+    for optimizer in optimizers:
+        if optimizer is None:
+            continue
+        if cls is None:
+            cls = type(optimizer)
+        if cls is not type(optimizer):
+            raise ValueError("Cannot group optimizers of different type.")
+        params.extend(optimizer.param_groups)
+    return cls(params)

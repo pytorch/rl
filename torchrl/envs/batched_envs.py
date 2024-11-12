@@ -1356,12 +1356,15 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         from torchrl.envs.env_creator import EnvCreator
 
-        if self.num_threads is None:
-            self.num_threads = max(
-                1, torch.get_num_threads() - self.num_workers
-            )  # 1 more thread for this proc
+        num_threads = max(
+            1, torch.get_num_threads() - self.num_workers
+        )  # 1 more thread for this proc
 
-        torch.set_num_threads(self.num_threads)
+        if self.num_threads is None:
+            self.num_threads = num_threads
+
+        if self.num_threads != torch.get_num_threads():
+            torch.set_num_threads(self.num_threads)
 
         if self._mp_start_method is not None:
             ctx = mp.get_context(self._mp_start_method)

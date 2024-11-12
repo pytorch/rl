@@ -308,11 +308,12 @@ Utils
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    HardUpdate
+    SoftUpdate
+    ValueEstimators
+    default_value_kwargs
     distance_loss
+    group_optimizers
     hold_out_net
     hold_out_params
     next_state_value
-    SoftUpdate
-    HardUpdate
-    ValueEstimators
-    default_value_kwargs
