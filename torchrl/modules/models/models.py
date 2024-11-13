@@ -201,6 +201,9 @@ class MLP(nn.Sequential):
         if not isinstance(out_features, Number):
             _out_features_num = prod(out_features)
         self.out_features = out_features
+        self._reshape_out = not isinstance(
+            self.out_features, (int, torch.SymInt, Number)
+        )
         self._out_features_num = _out_features_num
         self.activation_class = activation_class
         self.norm_class = norm_class
@@ -302,7 +305,7 @@ class MLP(nn.Sequential):
             inputs = (torch.cat([*inputs], -1),)
 
         out = super().forward(*inputs)
-        if not isinstance(self.out_features, Number):
+        if self._reshape_out:
             out = out.view(*out.shape[:-1], *self.out_features)
         return out
 
@@ -548,6 +551,27 @@ class ConvNet(nn.Sequential):
         if len(batch) > 1:
             out = out.unflatten(0, batch)
         return out
+
+    @classmethod
+    def default_atari_dqn(cls, num_actions: int):
+        """Returns the default DQN as presented in the seminal DQN paper.
+
+        Args:
+            num_actions (int): the action space of the atari game.
+
+        """
+        cnn = ConvNet(
+            activation_class=torch.nn.ReLU,
+            num_cells=[32, 64, 64],
+            kernel_sizes=[8, 4, 3],
+            strides=[4, 2, 1],
+        )
+        mlp = MLP(
+            activation_class=torch.nn.ReLU,
+            out_features=num_actions,
+            num_cells=[512],
+        )
+        return nn.Sequential(cnn, mlp)
 
 
 Conv2dNet = ConvNet
