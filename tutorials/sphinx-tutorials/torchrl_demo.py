@@ -415,11 +415,9 @@ from torchrl.envs import (
     TransformedEnv,
 )
 
-base_env = GymEnv("Pendulum-v1", frame_skip=3, from_pixels=True, pixels_only=False)
+base_env = GymEnv("HalfCheetah-v4", frame_skip=3, from_pixels=True, pixels_only=False)
 env = TransformedEnv(base_env, Compose(NoopResetEnv(3), ToTensorImage()))
-env.append_transform(ObservationNorm(in_keys=["pixels"], loc=2, scale=1))
-
-###############################################################################
+env = env.append_transform(ObservationNorm(in_keys=["pixels"], loc=2, scale=1))
 
 env.reset()
 
