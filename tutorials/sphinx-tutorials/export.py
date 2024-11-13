@@ -201,6 +201,17 @@ output = exported_policy.module()(pixels=pixels)
 print("Exported module output", output)
 
 #####################################
+# Further details on exporting :class:`~tensordict.nn.TensorDictModule` instances can be found in the tensordict
+# `documentation <https://pytorch.org/tensordict/stable/tutorials/export.html>`_.
+#
+# .. note::
+#    Exporting modules that take and output nested keys is perfectly fine.
+#    The corresponding kwargs will be the `"_".join(key)` version of the key, i.e., the `("group0", "agent0", "obs")`
+#    key will correspond to the `"group0_agent0_obs"` keyword argument. Colliding keys (e.g., `("group0_agent0", "obs")`
+#    and `("group0", "agent0_obs")` may lead to undefined behaviours and should be avoided at all cost.
+#    Obviously, key names should also always produce valid keyword arguments, i.e., they should not contain special
+#    characters such as spaces or commas.
+#
 # ``torch.export`` has many other features that we will explore further below. Before this, let us just do a small
 # digression on exploration and stochastic policies in the context of test-time inference.
 #
@@ -322,16 +333,14 @@ with set_exploration_type("DETERMINISTIC"):
     onnx_policy_export = torch.onnx.dynamo_export(policy_transform, pixels=pixels)
 
 #####################################
-# We can now save the program on disk:
-tmpdir = tempfile.TemporaryDirectory()
-onnx_file_path = str(Path(tmpdir) / "policy.onnx")
-onnx_policy_export.save(onnx_file_path)
+# We can now save the program on disk and load it:
+with tempfile.TemporaryDirectory() as tmpdir:
+    onnx_file_path = str(Path(tmpdir) / "policy.onnx")
+    onnx_policy_export.save(onnx_file_path)
 
-#####################################
-# And then load the program:
-ort_session = onnxruntime.InferenceSession(
-    onnx_file_path, providers=["CPUExecutionProvider"]
-)
+    ort_session = onnxruntime.InferenceSession(
+        onnx_file_path, providers=["CPUExecutionProvider"]
+    )
 
 onnxruntime_input = {ort_session.get_inputs()[0].name: screen_obs}
 onnx_policy = ort_session.run(None, onnxruntime_input)
