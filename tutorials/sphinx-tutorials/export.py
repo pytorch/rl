@@ -257,12 +257,12 @@ from tempfile import TemporaryDirectory
 # `AOTI documentation <https://pytorch.org/docs/main/torch.compiler_aot_inductor.html>`_:
 #
 
-from torch._inductor.package import load_package
+from torch._inductor import aoti_compile_and_package, aoti_load_package
 
 with TemporaryDirectory() as tmpdir:
     path = str(Path(tmpdir) / "model.pt2")
     with torch.no_grad():
-        so_path = torch._inductor.aoti_compile_and_package(
+        pkg_path = aoti_compile_and_package(
             exported_policy,
             args=(),
             kwargs={"pixels": pixels},
@@ -270,7 +270,7 @@ with TemporaryDirectory() as tmpdir:
             package_path=path,
         )
 
-    compiled_module = load_package(str(Path(tmpdir) / "model.pt2"))
+    compiled_module = aoti_load_package(str(Path(tmpdir) / "model.pt2"))
     # Print the structor of our temporary directory, including file size
     tensordict.utils.print_directory_tree(tmpdir)
 
