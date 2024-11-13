@@ -96,9 +96,15 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix=None):  # noqa: T202
+    def print(prefix=None) -> str:  # noqa: T202
+        """Prints the state of the timer.
+
+        Returns:
+            the string printed using the logger.
+        """
         keys = list(timeit._REG)
         keys.sort()
+        string = []
         for name in keys:
             strings = []
             if prefix:
@@ -106,7 +112,9 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            logger.info(" -- ".join(strings))
+            string.append(" -- ".join(strings))
+            logger.info(string[-1])
+        return "\n".join(string)
 
     @classmethod
     def todict(cls, percall=True):

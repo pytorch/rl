@@ -356,7 +356,7 @@ with TemporaryDirectory() as tmpdir:
     print("pkg_path", pkg_path)
 
     # Print the structor of our temporary directory, including file size
-    tensordict.utils.print_directory_tree(tmpdir)
+    print(tensordict.utils.print_directory_tree(tmpdir))
 
     compiled_module = aoti_load_package(pkg_path)
 
@@ -463,7 +463,7 @@ with timeit("ONNX rollout"):
 with timeit("TorchRL version"), torch.no_grad(), set_exploration_type("DETERMINISTIC"):
     env.rollout(num_steps, policy_explore)
 
-timeit.print()
+print(timeit.print())
 
 #####################################
 # Note that ONNX also offers the possibility of optimizing models directly, but this is beyond the scope of this
