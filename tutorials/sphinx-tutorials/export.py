@@ -355,9 +355,6 @@ with TemporaryDirectory() as tmpdir:
         )
     print("pkg_path", pkg_path)
 
-    # Print the structor of our temporary directory, including file size
-    print(tensordict.utils.print_directory_tree(tmpdir))
-
     compiled_module = aoti_load_package(pkg_path)
 
 print(compiled_module(pixels=pixels))
