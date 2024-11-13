@@ -45,6 +45,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         IncrementingEnv,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
+        MultiAgentCountingEnv,
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
         NestedCountingEnv,
@@ -71,6 +72,7 @@ else:
         IncrementingEnv,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
+        MultiAgentCountingEnv,
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
         NestedCountingEnv,
@@ -134,6 +136,7 @@ from torchrl.envs import (
     SerialEnv,
     SignTransform,
     SqueezeTransform,
+    Stack,
     StepCounter,
     TargetReturn,
     TensorDictPrimer,
@@ -141,12 +144,14 @@ from torchrl.envs import (
     ToTensorImage,
     TrajCounter,
     TransformedEnv,
+    UnityMLAgentsEnv,
     UnsqueezeTransform,
     VC1Transform,
     VIPTransform,
 )
 from torchrl.envs.libs.dm_control import _has_dm_control
 from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
+from torchrl.envs.libs.unity_mlagents import _has_unity_mlagents
 from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.rlhf import KLRewardTransform
@@ -159,7 +164,7 @@ from torchrl.envs.transforms.transforms import (
 )
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
-from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
 from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
 from torchrl.modules.utils import get_primers_from_module
 
@@ -2147,6 +2152,393 @@ class TestTrajCounter(TransformBase):
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
     def test_transform_no_env(self, device, batch):
         pytest.skip("TrajCounter cannot be called without env")
+
+
+class TestStack(TransformBase):
+    def test_single_trans_env_check(self):
+        t = Stack(
+            in_keys=["observation", "observation_orig"],
+            out_key="observation_out",
+            dim=-1,
+            del_keys=False,
+        )
+        env = TransformedEnv(ContinuousActionVecMockEnv(), t)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            t = Stack(
+                in_keys=["observation", "observation_orig"],
+                out_key="observation_out",
+                dim=-1,
+                del_keys=False,
+            )
+            return TransformedEnv(ContinuousActionVecMockEnv(), t)
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        def make_env():
+            t = Stack(
+                in_keys=["observation", "observation_orig"],
+                out_key="observation_out",
+                dim=-1,
+                del_keys=False,
+            )
+            return TransformedEnv(ContinuousActionVecMockEnv(), t)
+
+        env = maybe_fork_ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        t = Stack(
+            in_keys=["observation", "observation_orig"],
+            out_key="observation_out",
+            dim=-2,
+            del_keys=False,
+        )
+
+        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), t)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        t = Stack(
+            in_keys=["observation", "observation_orig"],
+            out_key="observation_out",
+            dim=-2,
+            del_keys=False,
+        )
+
+        env = TransformedEnv(maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv), t)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    @pytest.mark.parametrize("del_keys", [True, False])
+    def test_transform_del_keys(self, del_keys):
+        td_orig = TensorDict(
+            {
+                "group_0": TensorDict(
+                    {
+                        "agent_0": TensorDict({"obs": torch.randn(10)}),
+                        "agent_1": TensorDict({"obs": torch.randn(10)}),
+                    }
+                ),
+                "group_1": TensorDict(
+                    {
+                        "agent_2": TensorDict({"obs": torch.randn(10)}),
+                        "agent_3": TensorDict({"obs": torch.randn(10)}),
+                    }
+                ),
+            }
+        )
+        t = Stack(
+            in_keys=[
+                ("group_0", "agent_0", "obs"),
+                ("group_0", "agent_1", "obs"),
+                ("group_1", "agent_2", "obs"),
+                ("group_1", "agent_3", "obs"),
+            ],
+            out_key="observations",
+            del_keys=del_keys,
+        )
+        td = td_orig.clone()
+        t(td)
+        keys = td.keys(include_nested=True)
+        if del_keys:
+            assert ("group_0",) not in keys
+            assert ("group_0", "agent_0", "obs") not in keys
+            assert ("group_0", "agent_1", "obs") not in keys
+            assert ("group_1", "agent_2", "obs") not in keys
+            assert ("group_1", "agent_3", "obs") not in keys
+        else:
+            assert ("group_0", "agent_0", "obs") in keys
+            assert ("group_0", "agent_1", "obs") in keys
+            assert ("group_1", "agent_2", "obs") in keys
+            assert ("group_1", "agent_3", "obs") in keys
+
+        assert ("observations",) in keys
+
+    def _test_transform_no_env_tensor(self, compose=False):
+        td_orig = TensorDict(
+            {
+                "key1": torch.rand(1, 3),
+                "key2": torch.rand(1, 3),
+                "key3": torch.rand(1, 3),
+            },
+            [1],
+        )
+        td = td_orig.clone()
+        t = Stack(
+            in_keys=[("key1",), ("key2",)],
+            out_key=("stacked",),
+            in_key_inv=("stacked",),
+            out_keys_inv=[("key1",), ("key2",)],
+            dim=-2,
+        )
+        if compose:
+            t = Compose(t)
+
+        td = t(td)
+
+        assert ("key1",) not in td.keys()
+        assert ("key2",) not in td.keys()
+        assert ("key3",) in td.keys()
+        assert ("stacked",) in td.keys()
+
+        assert td["stacked"].shape == torch.Size([1, 2, 3])
+        assert (td["stacked"][:, 0] == td_orig["key1"]).all()
+        assert (td["stacked"][:, 1] == td_orig["key2"]).all()
+
+        td = t.inv(td)
+        assert (td == td_orig).all()
+
+    def _test_transform_no_env_tensordict(self, compose=False):
+        def gen_value():
+            return TensorDict(
+                {
+                    "a": torch.rand(3),
+                    "b": torch.rand(2, 4),
+                }
+            )
+
+        td_orig = TensorDict(
+            {
+                "key1": gen_value(),
+                "key2": gen_value(),
+                "key3": gen_value(),
+            },
+            [],
+        )
+        td = td_orig.clone()
+        t = Stack(
+            in_keys=[("key1",), ("key2",)],
+            out_key=("stacked",),
+            in_key_inv=("stacked",),
+            out_keys_inv=[("key1",), ("key2",)],
+            dim=0,
+            allow_positive_dim=True,
+        )
+        if compose:
+            t = Compose(t)
+        td = t(td)
+
+        assert ("key1",) not in td.keys()
+        assert ("key2",) not in td.keys()
+        assert ("stacked", "a") in td.keys(include_nested=True)
+        assert ("stacked", "b") in td.keys(include_nested=True)
+        assert ("key3",) in td.keys()
+
+        assert td["stacked", "a"].shape == torch.Size([2, 3])
+        assert td["stacked", "b"].shape == torch.Size([2, 2, 4])
+        assert (td["stacked"][0] == td_orig["key1"]).all()
+        assert (td["stacked"][1] == td_orig["key2"]).all()
+        assert (td["key3"] == td_orig["key3"]).all()
+
+        td = t.inv(td)
+        assert (td == td_orig).all()
+
+    @pytest.mark.parametrize("datatype", ["tensor", "tensordict"])
+    def test_transform_no_env(self, datatype):
+        if datatype == "tensor":
+            self._test_transform_no_env_tensor()
+
+        elif datatype == "tensordict":
+            self._test_transform_no_env_tensordict()
+
+        else:
+            raise RuntimeError(f"please add a test case for datatype {datatype}")
+
+    @pytest.mark.parametrize("datatype", ["tensor", "tensordict"])
+    def test_transform_compose(self, datatype):
+        if datatype == "tensor":
+            self._test_transform_no_env_tensor(compose=True)
+
+        elif datatype == "tensordict":
+            self._test_transform_no_env_tensordict(compose=True)
+
+        else:
+            raise RuntimeError(f"please add a test case for datatype {datatype}")
+
+    @pytest.mark.parametrize("envtype", ["mock", "unity"])
+    def test_transform_env(self, envtype):
+        if envtype == "mock":
+            base_env = MultiAgentCountingEnv(
+                n_agents=5,
+            )
+            rollout_len = 6
+            t = Stack(
+                in_keys=[
+                    ("agents", "agent_0"),
+                    ("agents", "agent_2"),
+                    ("agents", "agent_3"),
+                ],
+                out_key="stacked_agents",
+                in_key_inv="stacked_agents",
+                out_keys_inv=[
+                    ("agents", "agent_0"),
+                    ("agents", "agent_2"),
+                    ("agents", "agent_3"),
+                ],
+            )
+
+        elif envtype == "unity":
+            if not _has_unity_mlagents:
+                raise pytest.skip("mlagents not installed")
+            base_env = UnityMLAgentsEnv(
+                registered_name="3DBall",
+                no_graphics=True,
+                group_map=MarlGroupMapType.ALL_IN_ONE_GROUP,
+            )
+            rollout_len = 200
+            t = Stack(
+                in_keys=[("agents", f"agent_{idx}") for idx in range(12)],
+                out_key="stacked_agents",
+                in_key_inv="stacked_agents",
+                out_keys_inv=[("agents", f"agent_{idx}") for idx in range(12)],
+            )
+
+        try:
+            env = TransformedEnv(base_env, t)
+            check_env_specs(env)
+
+            if envtype == "mock":
+                base_env.set_seed(123)
+            td_orig = base_env.reset()
+            if envtype == "mock":
+                env.set_seed(123)
+            td = env.reset()
+
+            td_keys = td.keys(include_nested=True)
+
+            if envtype == "mock":
+                assert ("agents", "agent_0") not in td_keys
+                assert ("agents", "agent_2") not in td_keys
+                assert ("agents", "agent_3") not in td_keys
+                assert ("agents", "agent_1") in td_keys
+                assert ("agents", "agent_4") in td_keys
+                assert ("stacked_agents",) in td_keys
+
+                assert (td["stacked_agents"][0] == td_orig["agents", "agent_0"]).all()
+                assert (td["stacked_agents"][1] == td_orig["agents", "agent_2"]).all()
+                assert (td["stacked_agents"][2] == td_orig["agents", "agent_3"]).all()
+                assert (td["agents", "agent_1"] == td_orig["agents", "agent_1"]).all()
+                assert (td["agents", "agent_4"] == td_orig["agents", "agent_4"]).all()
+            else:
+                assert ("agents",) not in td_keys
+                assert ("stacked_agents",) in td_keys
+                assert td["stacked_agents"].shape[0] == 12
+
+                assert ("agents",) not in env.full_action_spec.keys(include_nested=True)
+                assert ("stacked_agents",) in env.full_action_spec.keys(
+                    include_nested=True
+                )
+
+            td = env.step(env.full_action_spec.rand())
+            td = env.rollout(rollout_len)
+
+            if envtype == "mock":
+                assert td["next", "stacked_agents", "done"].shape == torch.Size(
+                    [6, 3, 1]
+                )
+                assert not (td["next", "stacked_agents", "done"][:-1]).any()
+                assert (td["next", "stacked_agents", "done"][-1]).all()
+        finally:
+            base_env.close()
+
+    def test_transform_model(self):
+        t = Stack(
+            in_keys=[("next", "observation"), ("observation",)],
+            out_key="observation_out",
+            dim=-2,
+            del_keys=True,
+        )
+        model = nn.Sequential(t, nn.Identity())
+        td = TensorDict(
+            {("next", "observation"): torch.randn(3), "observation": torch.randn(3)}, []
+        )
+        td = model(td)
+        assert "observation_out" in td.keys()
+        assert "observation" not in td.keys()
+        assert ("next", "observation") not in td.keys(True)
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        t = Stack(
+            in_keys=[("next", "observation"), "observation"],
+            out_key="observation_out",
+            dim=-2,
+            del_keys=True,
+        )
+        rb = rbclass(storage=LazyTensorStorage(10))
+        rb.append_transform(t)
+        td = TensorDict(
+            {
+                "observation": TensorDict({"stuff": torch.randn(3, 4)}, [3, 4]),
+                "next": TensorDict(
+                    {"observation": TensorDict({"stuff": torch.randn(3, 4)}, [3, 4])},
+                    [],
+                ),
+            },
+            [],
+        ).expand(10)
+        rb.extend(td)
+        td = rb.sample(2)
+        assert "observation_out" in td.keys()
+        assert "observation" not in td.keys()
+        assert ("next", "observation") not in td.keys(True)
+
+    def test_transform_inverse(self):
+        td_orig = TensorDict(
+            {
+                "stacked": torch.rand(1, 2, 3),
+                "key3": torch.rand(1, 3),
+            },
+            [1],
+        )
+        td = td_orig.clone()
+        t = Stack(
+            in_keys=[("key1",), ("key2",)],
+            out_key=("stacked",),
+            in_key_inv=("stacked",),
+            out_keys_inv=[("key1",), ("key2",)],
+            dim=1,
+            allow_positive_dim=True,
+        )
+
+        td = t.inv(td)
+
+        assert ("key1",) in td.keys()
+        assert ("key2",) in td.keys()
+        assert ("key3",) in td.keys()
+        assert ("stacked",) not in td.keys()
+        assert (td["key1"] == td_orig["stacked"][:, 0]).all()
+        assert (td["key2"] == td_orig["stacked"][:, 1]).all()
+
+        td = t(td)
+        assert (td == td_orig).all()
+
+        # Check that if `out_key` is not in the tensordict,
+        # then the inverse transform does nothing.
+        t = Stack(
+            in_keys=[("key1",), ("key2",)],
+            out_key=("sacked",),
+            dim=1,
+            allow_positive_dim=True,
+        )
+        td = t.inv(td)
+        assert (td == td_orig).all()
 
 
 class TestCatTensors(TransformBase):
