@@ -15,47 +15,43 @@ Exporting TorchRL modules
         !pip install torchrl
         !pip install "gymnasium[atari,accept-rom-license]"<1.0.0
 
+Introduction
+------------
+
+Learning a policy has little value if that policy cannot be deployed in real-world settings.
+As shown in other tutorials, TorchRL has a strong focus on modularity and composability: thanks to ``tensordict``,
+the components of the library can be written in the most generic way there is by abstracting their signature to a
+mere set of operations on an input ``TensorDict``.
+This may give the impression that the library is bound to be used only for training, as typical low-level execution
+hardwares (edge devices, robots, arduino, Raspberry Pi) do not execute python code, let alone with pytorch, tensordict
+or torchrl installed.
+
+Fortunately, PyTorch provides a full ecosystem of solutions to export code and trained models to devices and
+hardwares, and TorchRL is fully equipped to interact with it.
+It is possible to choose from a varied set of backends, including ONNX or AOTInductor examplified in this tutorial.
+This tutorial gives a quick overview of how a trained model can be isolated and shipped as a standalone executable
+to be exported on hardware.
+
+Key learnings:
+
+- Export any TorchRL module after training;
+- Using various backends;
+- Testing your exported model.
+
+Fast recap: a simple TorchRL training loop
+------------------------------------------
+
+In this section, we reproduce the training loop from the last Getting Started tutorial, slightly adapted to be used
+with Atari games as they are rendered by the gymnasium library.
+We will stick to the DQN example, and show how a policy that outputs a distribution over values can be used instead
+later.
+
 """
-import tempfile
 import time
 from pathlib import Path
 
 import numpy as np
 import tensordict.utils
-
-################################
-# Introduction
-# ------------
-#
-# Learning a policy has little value if that policy cannot be deployed in real-world settings.
-# As shown in other tutorials, TorchRL has a strong focus on modularity and composability: thanks to ``tensordict``,
-# the components of the library can be written in the most generic way there is by abstracting their signature to a
-# mere set of operations on an input ``TensorDict``.
-# This may give the impression that the library is bound to be used only for training, as typical low-level execution
-# hardwares (edge devices, robots, arduino, Raspberry Pi) do not execute python code, let alone with pytorch, tensordict
-# or torchrl installed.
-#
-# Fortunately, PyTorch provides a full ecosystem of solutions to export code and trained models to devices and
-# hardwares, and TorchRL is fully equipped to interact with it.
-# It is possible to choose from a varied set of backends, including ONNX, TODO X and Y
-# This tutorial gives a quick overview of how a trained model can be isolated and shipped as a standalone executable
-# to be exported on hardware.
-#
-# Key learnings:
-#
-#   - Export any TorchRL module after training;
-#   - Using various backends;
-#   - Testing your exported model.
-#
-# Fast recap: a simple TorchRL training loop
-# ------------------------------------------
-#
-# In this section, we reproduce the training loop from the last Getting Started tutorial, slightly adapted to be used
-# with Atari games as they are rendered by the gymnasium library.
-# We will stick to the DQN example, and show how a policy that outputs a distribution over values can be used instead
-# later.
-#
-
 
 import torch
 
@@ -175,11 +171,15 @@ policy_transform = TensorDictSequential(
 # We create a fake input, and pass it to :func:`~torch.export.export` with the policy. This will give a "raw" python
 # function that will read our input tensor and output an action without any reference to TorchRL or tensordict modules.
 #
+# A good practice is to call :meth:`~tensordict.nn.TensorDictSequential.select_out_keys` to let the model know that
+# we only want a certain set of outputs (in case the policy returns more than one tensor).
+#
 
 fake_td = env.base_env.fake_tensordict()
 pixels = fake_td["pixels"]
 with set_exploration_type("DETERMINISTIC"):
     exported_policy = torch.export.export(
+        # Select only the "action" output key
         policy_transform.select_out_keys("action"),
         args=(),
         kwargs={"pixels": pixels},
@@ -213,7 +213,8 @@ print("Exported module output", output)
 #    characters such as spaces or commas.
 #
 # ``torch.export`` has many other features that we will explore further below. Before this, let us just do a small
-# digression on exploration and stochastic policies in the context of test-time inference.
+# digression on exploration and stochastic policies in the context of test-time inference, as well as recurrent
+# policies.
 #
 # Working with stochastic policies
 # --------------------------------
@@ -243,8 +244,89 @@ with set_exploration_type("RANDOM"):
 print("Stochastic policy")
 exported_stochastic_policy.graph_module.print_readable()
 
+#####################################
+# Working with recurrent policies
+# -------------------------------
+#
+# Another typical use case is a recurrent policy that will output an action as well as a one or more recurrent state.
+# LSTM and GRU are CuDNN-based modules, which means that they will behave differently than regular
+# :class:`~torch.nn.Module` instances (export utils may not trace them well). Fortunately, TorchRL provides a python
+# implementation of these modules that can be swapped with the CuDNN version when desired.
+#
+# To show this, let us write a prototypical policy that relies on an RNN:
+#
+from tensordict.nn import TensorDictModule
+from torchrl.envs import BatchSizeTransform
+from torchrl.modules import LSTMModule, MLP
 
-from tempfile import TemporaryDirectory
+lstm = LSTMModule(
+    input_size=32,
+    num_layers=2,
+    hidden_size=256,
+    in_keys=["observation", "hidden0", "hidden1"],
+    out_keys=["intermediate", "hidden0", "hidden1"],
+)
+#####################################
+# We set the recurrent mode to ``False`` to allow the module to read inputs one-by-one and not in batch.
+#
+lstm = lstm.set_recurrent_mode(False)
+
+#####################################
+# If the LSTM module is not python based but CuDNN (:class:`~torch.nn.LSTM`), the :meth:`~torchrl.modules.LSTMModule.make_python_based`
+# method can be used to use the python version.
+#
+lstm = lstm.make_python_based()
+
+#####################################
+# Let's now create the policy. We combine two layers that modify the shape of the input (unsqueeze/squeeze operations)
+# with the LSTM and an MLP.
+#
+
+recurrent_policy = TensorDictSequential(
+    # Unsqueeze the first dim of all tensors to make LSTMCell happy
+    BatchSizeTransform(reshape_fn=lambda x: x.unsqueeze(0)),
+    lstm,
+    TensorDictModule(
+        MLP(in_features=256, out_features=5, num_cells=[64, 64]),
+        in_keys=["intermediate"],
+        out_keys=["action"],
+    ),
+    # Squeeze the first dim of all tensors to get the original shape back
+    BatchSizeTransform(reshape_fn=lambda x: x.squeeze(0)),
+)
+
+#####################################
+# As before, we select the relevant keys:
+#
+
+recurrent_policy.select_out_keys("action", "hidden0", "hidden1")
+print("recurrent policy input keys:", recurrent_policy.in_keys)
+print("recurrent policy output keys:", recurrent_policy.out_keys)
+
+#####################################
+# We are now ready to export. To do this, we build fake inputs and pass them to :func:`~torch.export.export`:
+#
+
+fake_obs = torch.randn(32)
+fake_hidden0 = torch.randn(2, 256)
+fake_hidden1 = torch.randn(2, 256)
+
+# Tensor indicating whether the state is the first of a sequence
+fake_is_init = torch.zeros((), dtype=torch.bool)
+
+exported_recurrent_policy = torch.export.export(
+    recurrent_policy,
+    args=(),
+    kwargs={
+        "observation": fake_obs,
+        "hidden0": fake_hidden0,
+        "hidden1": fake_hidden1,
+        "is_init": fake_is_init,
+    },
+    strict=False,
+)
+print("Recurrent policy graph:")
+exported_recurrent_policy.graph_module.print_readable()
 
 #####################################
 # AOTInductor: Export your policy to pytorch-free C++ binaries
@@ -256,6 +338,8 @@ from tempfile import TemporaryDirectory
 # Here's an example of how you can use AOTInductor to export your policy, inspired by the
 # `AOTI documentation <https://pytorch.org/docs/main/torch.compiler_aot_inductor.html>`_:
 #
+
+from tempfile import TemporaryDirectory
 
 from torch._inductor import aoti_compile_and_package, aoti_load_package
 
@@ -269,10 +353,12 @@ with TemporaryDirectory() as tmpdir:
             # Specify the generated shared library path
             package_path=path,
         )
+    print("pkg_path", pkg_path)
 
-    compiled_module = aoti_load_package(str(Path(tmpdir) / "model.pt2"))
     # Print the structor of our temporary directory, including file size
     tensordict.utils.print_directory_tree(tmpdir)
+
+    compiled_module = aoti_load_package(pkg_path)
 
 print(compiled_module(pixels=pixels))
 
@@ -334,7 +420,7 @@ with set_exploration_type("DETERMINISTIC"):
 
 #####################################
 # We can now save the program on disk and load it:
-with tempfile.TemporaryDirectory() as tmpdir:
+with TemporaryDirectory() as tmpdir:
     onnx_file_path = str(Path(tmpdir) / "policy.onnx")
     onnx_policy_export.save(onnx_file_path)
 
