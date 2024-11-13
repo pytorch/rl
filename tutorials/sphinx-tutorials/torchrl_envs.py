@@ -694,9 +694,11 @@ from torchrl.envs.transforms import TransformedEnv, VecNorm
 
 make_env = EnvCreator(lambda: TransformedEnv(GymEnv("CartPole-v1"), VecNorm(decay=1.0)))
 env = ParallelEnv(3, make_env)
-make_env.state_dict()["_extra_state"]["td"]["observation_count"].fill_(0.0)
-make_env.state_dict()["_extra_state"]["td"]["observation_ssq"].fill_(0.0)
-make_env.state_dict()["_extra_state"]["td"]["observation_sum"].fill_(0.0)
+print("env state dict:")
+sd = TensorDict(make_env.state_dict())
+print(sd)
+# Zeroes all tensors
+sd *= 0
 
 tensordict = env.rollout(max_steps=5)
 
