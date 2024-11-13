@@ -407,6 +407,12 @@ reward = ale.act(action)
 screen_obs = ale.getScreenRGB()
 print("Observation from ALE simulator:", type(screen_obs), screen_obs.shape)
 
+from matplotlib import pyplot as plt
+
+plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+plt.imshow(screen_obs)
+plt.title("Screen rendering of Pong game.")
+
 #####################################
 # Exporting to ONNX is quite similar the Export/AOTI above:
 #

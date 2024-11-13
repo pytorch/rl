@@ -40,7 +40,17 @@ logger.propagate = False
 # Remove all attached handlers
 while logger.hasHandlers():
     logger.removeHandler(logger.handlers[0])
-console_handler = logging.StreamHandler()
+stream_handlers = {
+    "stdout": sys.stdout,
+    "stderr": sys.stderr,
+}
+TORCHRL_CONSOLE_STREAM = os.getenv("TORCHRL_CONSOLE_STREAM")
+if TORCHRL_CONSOLE_STREAM:
+    stream_handler = stream_handlers[TORCHRL_CONSOLE_STREAM]
+else:
+    stream_handler = None
+console_handler = logging.StreamHandler(stream=stream_handler)
+
 console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
 console_handler.setFormatter(formatter)
