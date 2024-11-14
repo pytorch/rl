@@ -12,7 +12,7 @@ from tensordict import TensorDictBase, unravel_key_list
 
 from tensordict.base import NO_DEFAULT
 
-from tensordict.nn import TensorDictModuleBase as ModuleBase
+from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, prod, set_lazy_legacy
 
 from torch import nn, Tensor
@@ -467,6 +467,8 @@ class LSTMModule(ModuleBase):
                 raise ValueError("The input lstm must have batch_first=True.")
             if bidirectional:
                 raise ValueError("The input lstm cannot be bidirectional.")
+            if not hidden_size:
+                raise ValueError("hidden_size must be passed.")
             if python_based:
                 lstm = LSTM(
                     input_size=input_size,
@@ -523,6 +525,58 @@ class LSTMModule(ModuleBase):
         self.in_keys = in_keys
         self.out_keys = out_keys
         self._recurrent_mode = False
+
+    def make_python_based(self) -> LSTMModule:
+        """Transforms the LSTM layer in its python-based version.
+
+        Returns:
+            self
+
+        """
+        if isinstance(self.lstm, LSTM):
+            return self
+        lstm = LSTM(
+            input_size=self.lstm.input_size,
+            hidden_size=self.lstm.hidden_size,
+            num_layers=self.lstm.num_layers,
+            bias=self.lstm.bias,
+            dropout=self.lstm.dropout,
+            proj_size=self.lstm.proj_size,
+            device="meta",
+            batch_first=self.lstm.batch_first,
+            bidirectional=self.lstm.bidirectional,
+        )
+        from tensordict import from_module
+
+        from_module(self.lstm).to_module(lstm)
+        self.lstm = lstm
+        return self
+
+    def make_cudnn_based(self) -> LSTMModule:
+        """Transforms the LSTM layer in its CuDNN-based version.
+
+        Returns:
+            self
+
+        """
+        if isinstance(self.lstm, nn.LSTM):
+            return self
+        lstm = nn.LSTM(
+            input_size=self.lstm.input_size,
+            hidden_size=self.lstm.hidden_size,
+            num_layers=self.lstm.num_layers,
+            bias=self.lstm.bias,
+            dropout=self.lstm.dropout,
+            proj_size=self.lstm.proj_size,
+            device="meta",
+            batch_first=self.lstm.batch_first,
+            bidirectional=self.lstm.bidirectional,
+        )
+        from tensordict import from_module
+
+        from_module(self.lstm).to_module(lstm)
+        self.lstm = lstm
+        return self
 
     def make_tensordict_primer(self):
         """Makes a tensordict primer for the environment.
@@ -644,6 +698,7 @@ class LSTMModule(ModuleBase):
         out._recurrent_mode = mode
         return out
 
+    @dispatch
     def forward(self, tensordict: TensorDictBase):
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None, None]
@@ -1273,6 +1328,56 @@ class GRUModule(ModuleBase):
         self.out_keys = out_keys
         self._recurrent_mode = False
 
+    def make_python_based(self) -> GRUModule:
+        """Transforms the GRU layer in its python-based version.
+
+        Returns:
+            self
+
+        """
+        if isinstance(self.gru, GRU):
+            return self
+        gru = GRU(
+            input_size=self.gru.input_size,
+            hidden_size=self.gru.hidden_size,
+            num_layers=self.gru.num_layers,
+            bias=self.gru.bias,
+            dropout=self.gru.dropout,
+            device="meta",
+            batch_first=self.gru.batch_first,
+            bidirectional=self.gru.bidirectional,
+        )
+        from tensordict import from_module
+
+        from_module(self.gru).to_module(gru)
+        self.gru = gru
+        return self
+
+    def make_cudnn_based(self) -> GRUModule:
+        """Transforms the GRU layer in its CuDNN-based version.
+
+        Returns:
+            self
+
+        """
+        if isinstance(self.gru, nn.GRU):
+            return self
+        gru = nn.GRU(
+            input_size=self.gru.input_size,
+            hidden_size=self.gru.hidden_size,
+            num_layers=self.gru.num_layers,
+            bias=self.gru.bias,
+            dropout=self.gru.dropout,
+            device="meta",
+            batch_first=self.gru.batch_first,
+            bidirectional=self.gru.bidirectional,
+        )
+        from tensordict import from_module
+
+        from_module(self.gru).to_module(gru)
+        self.gru = gru
+        return self
+
     def make_tensordict_primer(self):
         """Makes a tensordict primer for the environment.
 
@@ -1389,6 +1494,7 @@ class GRUModule(ModuleBase):
         out._recurrent_mode = mode
         return out
 
+    @dispatch
     @set_lazy_legacy(False)
     def forward(self, tensordict: TensorDictBase):
         # we want to get an error if the value input is missing, but not the hidden states
