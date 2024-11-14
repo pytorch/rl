@@ -8287,7 +8287,7 @@ class AutoResetTransform(Transform):
             done = tensordict.get("done")
             if done.any():
                 mask = done.squeeze(-1)
-                self._saved_td_autorest = TensorDict({}, [])
+                self._saved_td_autorest = TensorDict()
                 for key in self.parent.full_observation_spec.keys(True, True):
                     val = tensordict.get(key)
                     replace_and_set(
@@ -8309,7 +8309,7 @@ class AutoResetTransform(Transform):
                     mask = done.squeeze(-1)
                     if done.any():
                         if _saved_td_autorest is None:
-                            _saved_td_autorest = TensorDict({}, batch_size=[])
+                            _saved_td_autorest = TensorDict()
                         agent = tensordict.get(agent_key)
                         if isinstance(agent, LazyStackedTensorDict):
                             agents = agent.tensordicts

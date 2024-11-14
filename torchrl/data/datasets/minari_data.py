@@ -245,7 +245,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
             minari.download_dataset(dataset_id=self.dataset_id)
             parent_dir = Path(tmpdir) / self.dataset_id / "data"
 
-            td_data = TensorDict({}, [])
+            td_data = TensorDict()
             total_steps = 0
             torchrl_logger.info("first read through data to create data structure...")
             h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
