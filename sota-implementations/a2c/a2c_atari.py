@@ -144,7 +144,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
             )
 
-        losses = TensorDict({}, batch_size=[num_mini_batches])
+        losses = TensorDict(batch_size=[num_mini_batches])
         training_start = time.time()
 
         # Compute GAE

@@ -1606,7 +1606,7 @@ class RandomPolicy:
         >>> from torchrl.data.tensor_specs import Bounded
         >>> action_spec = Bounded(-torch.ones(3), torch.ones(3))
         >>> actor = RandomPolicy(action_spec=action_spec)
-        >>> td = actor(TensorDict({}, batch_size=[])) # selects a random action in the cube [-1; 1]
+        >>> td = actor(TensorDict()) # selects a random action in the cube [-1; 1]
     """
 
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):

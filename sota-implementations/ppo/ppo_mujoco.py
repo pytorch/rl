@@ -125,7 +125,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg_loss_clip_epsilon = cfg.loss.clip_epsilon
     cfg_logger_test_interval = cfg.logger.test_interval
     cfg_logger_num_test_episodes = cfg.logger.num_test_episodes
-    losses = TensorDict({}, batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
+    losses = TensorDict(batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
 
     for i, data in enumerate(collector):
 

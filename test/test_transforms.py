@@ -3945,7 +3945,7 @@ class TestFrameSkipTransform(TransformBase):
     def test_transform_model(self):
         t = FrameSkipTransform(2)
         t = nn.Sequential(t, nn.Identity())
-        tensordict = TensorDict({}, [])
+        tensordict = TensorDict()
         with pytest.raises(
             RuntimeError,
             match="FrameSkipTransform can only be used when appended to a transformed env",
@@ -4252,7 +4252,7 @@ class TestNoop(TransformBase):
 
     def test_transform_model(self):
         t = nn.Sequential(NoopResetEnv(), nn.Identity())
-        td = TensorDict({}, [])
+        td = TensorDict()
         t(td)
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
@@ -4260,7 +4260,7 @@ class TestNoop(TransformBase):
         t = NoopResetEnv()
         rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
-        td = TensorDict({}, [10])
+        td = TensorDict(batch_size=[10])
         rb.extend(td)
         rb.sample(1)
 
@@ -6917,7 +6917,7 @@ class TestTensorDictPrimer(TransformBase):
     def test_transform_model(self):
         t = TensorDictPrimer(mykey=Unbounded([3]))
         model = nn.Sequential(t, nn.Identity())
-        td = TensorDict({}, [])
+        td = TensorDict()
         model(td)
         assert "mykey" in td.keys()
 
@@ -7507,7 +7507,7 @@ class TestgSDE(TransformBase):
         action_dim = 5
         t = gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=(2,))
         model = nn.Sequential(t, nn.Identity())
-        td = TensorDict({}, [])
+        td = TensorDict()
         model(td)
         assert "_eps_gSDE" in td.keys()
         assert (td["_eps_gSDE"] != 0.0).all()
@@ -9736,7 +9736,7 @@ class TestInitTracker(TransformBase):
         with pytest.raises(
             NotImplementedError, match="InitTracker cannot be executed without a parent"
         ):
-            td = TensorDict({}, [])
+            td = TensorDict()
             chain = nn.Sequential(InitTracker())
             chain(td)
 
@@ -10169,7 +10169,7 @@ class TestActionMask(TransformBase):
     def test_transform_no_env(self):
         t = ActionMask()
         with pytest.raises(RuntimeError, match="parent cannot be None"):
-            t._call(TensorDict({}, []))
+            t._call(TensorDict())
 
     def test_transform_compose(self):
         env = self._env_class()
@@ -10197,7 +10197,7 @@ class TestActionMask(TransformBase):
     def test_transform_model(self):
         t = ActionMask()
         with pytest.raises(RuntimeError, match=FORWARD_NOT_IMPLEMENTED.format(type(t))):
-            t(TensorDict({}, []))
+            t(TensorDict())
 
     def test_transform_rb(self):
         t = ActionMask()
@@ -10526,18 +10526,12 @@ class TestDeviceCastTransformWhole(TransformBase):
 
     def test_transform_no_env(self):
         t = DeviceCastTransform("cpu:1", "cpu:0")
-        assert t._call(TensorDict({}, [], device="cpu:0")).device == torch.device(
-            "cpu:1"
-        )
+        assert t._call(TensorDict(device="cpu:0")).device == torch.device("cpu:1")
 
     def test_transform_compose(self):
         t = Compose(DeviceCastTransform("cpu:1", "cpu:0"))
-        assert t._call(TensorDict({}, [], device="cpu:0")).device == torch.device(
-            "cpu:1"
-        )
-        assert t._inv_call(TensorDict({}, [], device="cpu:1")).device == torch.device(
-            "cpu:0"
-        )
+        assert t._call(TensorDict(device="cpu:0")).device == torch.device("cpu:1")
+        assert t._inv_call(TensorDict(device="cpu:1")).device == torch.device("cpu:0")
 
     def test_transform_env(self):
         env = ContinuousActionVecMockEnv(device="cpu:0")
@@ -10550,7 +10544,7 @@ class TestDeviceCastTransformWhole(TransformBase):
     def test_transform_model(self):
         t = Compose(DeviceCastTransform("cpu:1", "cpu:0"))
         m = nn.Sequential(t)
-        assert t(TensorDict({}, [], device="cpu:0")).device == torch.device("cpu:1")
+        assert t(TensorDict(device="cpu:0")).device == torch.device("cpu:1")
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     @pytest.mark.parametrize("storage", [TensorStorage, LazyTensorStorage])
@@ -10574,9 +10568,7 @@ class TestDeviceCastTransformWhole(TransformBase):
 
     def test_transform_inverse(self):
         t = DeviceCastTransform("cpu:1", "cpu:0")
-        assert t._inv_call(TensorDict({}, [], device="cpu:1")).device == torch.device(
-            "cpu:0"
-        )
+        assert t._inv_call(TensorDict(device="cpu:1")).device == torch.device("cpu:0")
 
 
 class TestPermuteTransform(TransformBase):
@@ -10804,12 +10796,12 @@ class TestEndOfLife(TransformBase):
     def test_transform_no_env(self):
         t = EndOfLifeTransform()
         with pytest.raises(RuntimeError, match=t.NO_PARENT_ERR.format(type(t))):
-            t._step(TensorDict({}, []), TensorDict({}, []))
+            t._step(TensorDict(), TensorDict())
 
     def test_transform_compose(self):
         t = EndOfLifeTransform()
         with pytest.raises(RuntimeError, match=t.NO_PARENT_ERR.format(type(t))):
-            Compose(t)._step(TensorDict({}, []), TensorDict({}, []))
+            Compose(t)._step(TensorDict(), TensorDict())
 
     @pytest.mark.parametrize("eol_key", ["eol_key", ("nested", "eol")])
     @pytest.mark.parametrize("lives_key", ["lives_key", ("nested", "lives")])
@@ -10838,7 +10830,7 @@ class TestEndOfLife(TransformBase):
     def test_transform_model(self):
         t = EndOfLifeTransform()
         with pytest.raises(RuntimeError, match=FORWARD_NOT_IMPLEMENTED.format(type(t))):
-            nn.Sequential(t)(TensorDict({}, []))
+            nn.Sequential(t)(TensorDict())
 
     def test_transform_rb(self):
         pass
@@ -11286,7 +11278,7 @@ class TestRemoveEmptySpecs(TransformBase):
 
         def _step(self, tensordict):
             return (
-                TensorDict({}, batch_size=[])
+                TensorDict()
                 .update(self.observation_spec.rand())
                 .update(self.full_done_spec.zero())
                 .update(self.full_reward_spec.rand())
@@ -11378,7 +11370,7 @@ class TestRemoveEmptySpecs(TransformBase):
         t.inv(td)
         assert len(td.keys()) != 0
         env = TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
-        td2 = env.transform.inv(TensorDict({}, []))
+        td2 = env.transform.inv(TensorDict())
         assert ("state", "sub") in td2.keys(True)
 
 
