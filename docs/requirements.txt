@@ -25,3 +25,6 @@ memory_profiler
 pyrender
 pytest
 vmas
+onnxscript
+onnxruntime
+onnx

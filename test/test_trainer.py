@@ -450,7 +450,7 @@ class TestRB:
             rb_trainer2.register(trainer2)
             if re_init:
                 trainer2._process_batch_hook(td.to_tensordict().zero_())
-            trainer2.load_from_file(file)
+            trainer2.load_from_file(file, weights_only=False)
             assert state_dict_has_been_called[0]
             assert load_state_dict_has_been_called[0]
             assert state_dict_has_been_called_td[0]
