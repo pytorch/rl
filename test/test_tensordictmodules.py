@@ -8,6 +8,8 @@ import os
 
 import pytest
 import torch
+
+import torchrl.modules
 from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from torch import nn
@@ -743,6 +745,41 @@ class TestLSTMModule:
             lstm_module.parameters()
         )
 
+    def test_python_cudnn(self):
+        lstm_module = LSTMModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            dropout=0,
+            num_layers=2,
+            in_keys=["observation", "hidden0", "hidden1"],
+            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+        ).set_recurrent_mode(True)
+        obs = torch.rand(10, 20, 3)
+
+        hidden0 = torch.rand(10, 20, 2, 12)
+        hidden1 = torch.rand(10, 20, 2, 12)
+
+        is_init = torch.zeros(10, 20, dtype=torch.bool)
+        assert isinstance(lstm_module.lstm, nn.LSTM)
+        outs_ref = lstm_module(
+            observation=obs, hidden0=hidden0, hidden1=hidden1, is_init=is_init
+        )
+
+        lstm_module.make_python_based()
+        assert isinstance(lstm_module.lstm, torchrl.modules.LSTM)
+        outs_rl = lstm_module(
+            observation=obs, hidden0=hidden0, hidden1=hidden1, is_init=is_init
+        )
+        torch.testing.assert_close(outs_ref, outs_rl)
+
+        lstm_module.make_cudnn_based()
+        assert isinstance(lstm_module.lstm, nn.LSTM)
+        outs_cudnn = lstm_module(
+            observation=obs, hidden0=hidden0, hidden1=hidden1, is_init=is_init
+        )
+        torch.testing.assert_close(outs_ref, outs_cudnn)
+
     def test_noncontiguous(self):
         lstm_module = LSTMModule(
             input_size=3,
@@ -1087,6 +1124,34 @@ class TestGRUModule:
         assert set(gru_module.set_recurrent_mode(True).parameters()) == set(
             gru_module.parameters()
         )
+
+    def test_python_cudnn(self):
+        gru_module = GRUModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            dropout=0,
+            num_layers=2,
+            in_keys=["observation", "hidden0"],
+            out_keys=["intermediate", ("next", "hidden0")],
+        ).set_recurrent_mode(True)
+        obs = torch.rand(10, 20, 3)
+
+        hidden0 = torch.rand(10, 20, 2, 12)
+
+        is_init = torch.zeros(10, 20, dtype=torch.bool)
+        assert isinstance(gru_module.gru, nn.GRU)
+        outs_ref = gru_module(observation=obs, hidden0=hidden0, is_init=is_init)
+
+        gru_module.make_python_based()
+        assert isinstance(gru_module.gru, torchrl.modules.GRU)
+        outs_rl = gru_module(observation=obs, hidden0=hidden0, is_init=is_init)
+        torch.testing.assert_close(outs_ref, outs_rl)
+
+        gru_module.make_cudnn_based()
+        assert isinstance(gru_module.gru, nn.GRU)
+        outs_cudnn = gru_module(observation=obs, hidden0=hidden0, is_init=is_init)
+        torch.testing.assert_close(outs_ref, outs_cudnn)
 
     def test_noncontiguous(self):
         gru_module = GRUModule(
