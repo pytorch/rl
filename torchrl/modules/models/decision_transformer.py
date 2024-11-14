@@ -90,7 +90,7 @@ class DecisionTransformer(nn.Module):
         state_dim,
         action_dim,
         config: dict | DTConfig = None,
-            device: torch.device | None= None
+        device: torch.device | None = None,
     ):
         if device is not None:
             with torch.device(device):

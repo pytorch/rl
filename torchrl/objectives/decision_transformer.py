@@ -292,6 +292,7 @@ class DTLoss(LossModule):
         *,
         loss_function: str = "l2",
         reduction: str = None,
+        device: torch.device | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None

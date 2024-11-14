@@ -338,14 +338,14 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
 # -----
 
 
-def make_odt_model(cfg):
+def make_odt_model(cfg, device: torch.device | None = None) -> TensorDictModule:
     env_cfg = cfg.env
     proof_environment = make_transformed_env(
         make_base_env(env_cfg), env_cfg, obs_loc=0, obs_std=1
     )
 
-    action_spec = proof_environment.action_spec
-    for key, value in proof_environment.observation_spec.items():
+    action_spec = proof_environment.single_action_spec
+    for key, value in proof_environment.single_observation_spec.items():
         if key == "observation":
             state_dim = value.shape[-1]
     in_keys = [
@@ -358,6 +358,7 @@ def make_odt_model(cfg):
         state_dim=state_dim,
         action_dim=action_spec.shape[-1],
         transformer_config=cfg.transformer,
+        device=device,
     )
 
     actor_module = TensorDictModule(
@@ -369,7 +370,13 @@ def make_odt_model(cfg):
         ],
     )
     dist_class = TanhNormal
-    dist_kwargs = {"low": -1.0, "high": 1.0, "tanh_loc": False, "upscale": 5.0}
+    dist_kwargs = {
+        "low": -1.0,
+        "high": 1.0,
+        "tanh_loc": False,
+        "upscale": 5.0,
+        "safe_tanh": not cfg.loss.compile,
+    }
 
     actor = ProbabilisticActor(
         spec=action_spec,
@@ -391,7 +398,7 @@ def make_odt_model(cfg):
     return actor
 
 
-def make_dt_model(cfg, device: torch.device|None=None):
+def make_dt_model(cfg, device: torch.device | None = None):
     env_cfg = cfg.env
     proof_environment = make_transformed_env(
         make_base_env(env_cfg), env_cfg, obs_loc=0, obs_std=1
@@ -421,6 +428,7 @@ def make_dt_model(cfg, device: torch.device|None=None):
     dist_kwargs = {
         "low": action_spec.space.low,
         "high": action_spec.space.high,
+        "safe": not cfg.loss.compile,
     }
 
     actor = ProbabilisticActor(
@@ -459,7 +467,7 @@ def make_odt_loss(loss_cfg, actor_network):
     return loss
 
 
-def make_dt_loss(loss_cfg, actor_network, device: torch.device|None=None):
+def make_dt_loss(loss_cfg, actor_network, device: torch.device | None = None):
     loss = DTLoss(
         actor_network,
         loss_function=loss_cfg.loss_function,
@@ -472,7 +480,7 @@ def make_dt_loss(loss_cfg, actor_network, device: torch.device|None=None):
 def make_odt_optimizer(optim_cfg, loss_module):
     dt_optimizer = Lamb(
         loss_module.actor_network_params.flatten_keys().values(),
-        lr=optim_cfg.lr,
+        lr=torch.as_tensor(optim_cfg.lr, device=next(loss_module.parameters()).device),
         weight_decay=optim_cfg.weight_decay,
         eps=1.0e-8,
     )
@@ -482,7 +490,7 @@ def make_odt_optimizer(optim_cfg, loss_module):
 
     log_temp_optimizer = torch.optim.Adam(
         [loss_module.log_alpha],
-        lr=1e-4,
+        lr=torch.as_tensor(1e-4, device=next(loss_module.parameters()).device),
         betas=[0.9, 0.999],
     )
 
@@ -495,7 +503,6 @@ def make_dt_optimizer(optim_cfg, loss_module):
         lr=torch.as_tensor(optim_cfg.lr),
         weight_decay=optim_cfg.weight_decay,
         eps=1.0e-8,
-        capturable=True,
     )
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         dt_optimizer, lambda steps: min((steps + 1) / optim_cfg.warmup_steps, 1)

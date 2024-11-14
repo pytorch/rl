@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import tqdm
 from tensordict import TensorDict
+from tensordict.nn import CudaGraphModule
 
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.libs.gym import set_gym_backend
@@ -112,6 +113,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             else:
                 compile_mode = "reduce-overhead"
         update = torch.compile(update, mode=compile_mode)
+    if cfg.loss.cudagraphs:
+        update = CudaGraphModule(update, warmup=50)
 
     eval_steps = cfg.logger.eval_steps
     pretrain_log_interval = cfg.logger.pretrain_log_interval
@@ -145,7 +148,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             to_log["eval/reward"] = (
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )
-        if i % 100 == 0:
+        if i % 200 == 0:
             to_log.update(timeit.todict(prefix="time"))
             timeit.print()
             timeit.erase()
