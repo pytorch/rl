@@ -439,7 +439,7 @@ def make_dt_model(cfg, device: torch.device|None=None):
         td = proof_environment.fake_tensordict()
         td = td.expand((100, *td.shape))
         td["action"] = td["next", "action"]
-        actor(td)
+        actor(td.to(device))
 
     return actor
 

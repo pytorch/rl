@@ -40,7 +40,17 @@ logger.propagate = False
 # Remove all attached handlers
 while logger.hasHandlers():
     logger.removeHandler(logger.handlers[0])
-console_handler = logging.StreamHandler()
+stream_handlers = {
+    "stdout": sys.stdout,
+    "stderr": sys.stderr,
+}
+TORCHRL_CONSOLE_STREAM = os.getenv("TORCHRL_CONSOLE_STREAM")
+if TORCHRL_CONSOLE_STREAM:
+    stream_handler = stream_handlers[TORCHRL_CONSOLE_STREAM]
+else:
+    stream_handler = None
+console_handler = logging.StreamHandler(stream=stream_handler)
+
 console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
 console_handler.setFormatter(formatter)
@@ -86,9 +96,15 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix=None):  # noqa: T202
+    def print(prefix=None) -> str:  # noqa: T202
+        """Prints the state of the timer.
+
+        Returns:
+            the string printed using the logger.
+        """
         keys = list(timeit._REG)
         keys.sort()
+        string = []
         for name in keys:
             strings = []
             if prefix:
@@ -96,7 +112,9 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            logger.info(" -- ".join(strings))
+            string.append(" -- ".join(strings))
+            logger.info(string[-1])
+        return "\n".join(string)
 
     @classmethod
     def todict(cls, percall=True, prefix=None):
