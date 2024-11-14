@@ -51,7 +51,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-import tensordict.utils
 
 import torch
 
@@ -360,6 +359,31 @@ with TemporaryDirectory() as tmpdir:
 print(compiled_module(pixels=pixels))
 
 #####################################
+# An extra feature of AOTInductor is its capacity of dealing with dynamic shapes. This can be useful if you don't know
+# the shape of your input data ahead of time. For instance, we may want to run our policy for one, two or more
+# observations at a time. For this, let us re-export our policy, marking a new unsqueezed batch dimension as dynamic:
+
+batch_dim = torch.export.Dim("batch", min=1, max=32)
+pixels_unsqueeze = pixels.unsqueeze(0)
+exported_dynamic_policy = torch.export.export(
+    policy_transform,
+    args=(),
+    kwargs={"pixels": pixels_unsqueeze},
+    strict=False,
+    dynamic_shapes={"pixels": {0: batch_dim}},
+)
+# Then recompile and export
+pkg_path = aoti_compile_and_package(
+    exported_dynamic_policy,
+    args=(),
+    kwargs={"pixels": pixels_unsqueeze},
+    package_path=path,
+)
+
+#####################################
+# More information about this can be found in the
+# `AOTInductor tutorial <https://pytorch.org/tutorials/recipes/torch_export_aoti_python.html>`_.
+#
 # Exporting TorchRL models with ONNX
 # ----------------------------------
 #
