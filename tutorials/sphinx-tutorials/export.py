@@ -338,25 +338,25 @@ exported_recurrent_policy.graph_module.print_readable()
 # `AOTI documentation <https://pytorch.org/docs/main/torch.compiler_aot_inductor.html>`_:
 #
 
-# from tempfile import TemporaryDirectory
-#
-# from torch._inductor import aoti_compile_and_package, aoti_load_package
-#
-# with TemporaryDirectory() as tmpdir:
-#     path = str(Path(tmpdir) / "model.pt2")
-#     with torch.no_grad():
-#         pkg_path = aoti_compile_and_package(
-#             exported_policy,
-#             args=(),
-#             kwargs={"pixels": pixels},
-#             # Specify the generated shared library path
-#             package_path=path,
-#         )
-#     print("pkg_path", pkg_path)
-#
-#     compiled_module = aoti_load_package(pkg_path)
-#
-# print(compiled_module(pixels=pixels))
+from tempfile import TemporaryDirectory
+
+from torch._inductor import aoti_compile_and_package, aoti_load_package
+
+with TemporaryDirectory() as tmpdir:
+    path = str(Path(tmpdir) / "model.pt2")
+    with torch.no_grad():
+        pkg_path = aoti_compile_and_package(
+            exported_policy,
+            args=(),
+            kwargs={"pixels": pixels},
+            # Specify the generated shared library path
+            package_path=path,
+        )
+    print("pkg_path", pkg_path)
+
+    compiled_module = aoti_load_package(pkg_path)
+
+print(compiled_module(pixels=pixels))
 
 #####################################
 #
