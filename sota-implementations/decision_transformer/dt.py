@@ -7,13 +7,14 @@ This is a self-contained example of an offline Decision Transformer training scr
 The helper functions are coded in the utils.py associated with this script.
 """
 
+import warnings
+
 import hydra
 import numpy as np
 import torch
 import tqdm
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.libs.gym import set_gym_backend
 
@@ -114,6 +115,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 compile_mode = "reduce-overhead"
         update = torch.compile(update, mode=compile_mode)
     if cfg.loss.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
         update = CudaGraphModule(update, warmup=50)
 
     eval_steps = cfg.logger.eval_steps
