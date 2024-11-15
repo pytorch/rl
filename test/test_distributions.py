@@ -754,7 +754,7 @@ class TestOneHotOrdinal:
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("logit_shape", [(10,), (10, 10), (5, 10, 20)])
     def test_correct_sampling_shape(
-        self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
+        self, logit_shape: Tuple[int, ...], dtype: torch.dtype, device: str
     ) -> None:
         logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
 

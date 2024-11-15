@@ -193,14 +193,14 @@ def _slice_indexing(shape: list[int], idx: slice) -> List[int]:
 
 
 def _shape_indexing(
-    shape: Union[list[int], torch.Size, tuple[int]], idx: SHAPE_INDEX_TYPING
+    shape: Union[list[int], torch.Size, Tuple[int]], idx: SHAPE_INDEX_TYPING
 ) -> List[int]:
     """Given an input shape and an index, returns the size of the resulting indexed spec.
 
     This function includes indexing checks and may raise IndexErrors.
 
     Args:
-        shape (list[int], torch.Size, tuple[int): Input shape
+        shape (list[int], torch.Size, Tuple[int): Input shape
         idx (SHAPE_INDEX_TYPING): Index
     Returns:
         Shape of the resulting spec
@@ -1020,7 +1020,7 @@ T = TypeVar("T")
 
 
 class _LazyStackedMixin(Generic[T]):
-    def __init__(self, *specs: tuple[T, ...], dim: int) -> None:
+    def __init__(self, *specs: Tuple[T, ...], dim: int) -> None:
         self._specs = list(specs)
         self.dim = dim
         if self.dim < 0:
