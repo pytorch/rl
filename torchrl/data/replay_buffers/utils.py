@@ -551,7 +551,7 @@ class Flat2TED:
         next_idx = root_idx + 1
 
         if out is None:
-            out = TensorDict({}, [nsteps])
+            out = TensorDict(batch_size=[nsteps])
 
         def maybe_roll(entry, out=None):
             if is_full and shift is not None:
@@ -655,7 +655,7 @@ class TED2Nested(TED2Flat):
         keys_to_expand = [key for key in keys_to_expand if key is not None]
         keys_to_keep = [key for key in keys_to_keep if key is not None]
 
-        out = TensorDict({}, batch_size=[ntraj])
+        out = TensorDict(batch_size=[ntraj])
         out.update(dict(data.non_tensor_items()))
 
         out.memmap_(path)

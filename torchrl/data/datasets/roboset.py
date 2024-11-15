@@ -246,7 +246,7 @@ class RobosetExperienceReplay(BaseDatasetExperienceReplay):
             return self._preproc_h5(h5_data_files)
 
     def _preproc_h5(self, h5_data_files):
-        td_data = TensorDict({}, [])
+        td_data = TensorDict()
         total_steps = 0
         torchrl_logger.info(
             f"first read through data files {h5_data_files} to create data structure..."
