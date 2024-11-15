@@ -193,9 +193,9 @@ print(
 #
 # Finally, note that the ``env.reset`` method also accepts a tensordict to update:
 
-tensordict = TensorDict({}, [])
-assert env.reset(tensordict) is tensordict
-tensordict
+data = TensorDict()
+assert env.reset(data) is data
+data
 
 ###############################################################################
 # Rollouts
@@ -243,17 +243,17 @@ env = GymEnv("Pendulum-v1", from_pixels=True)
 
 ###############################################################################
 
-tensordict = env.reset()
+data = env.reset()
 env.close()
 
 ###############################################################################
 
-plt.imshow(tensordict.get("pixels").numpy())
+plt.imshow(data.get("pixels").numpy())
 
 ###############################################################################
 # Let's have a look at what the tensordict contains:
 
-tensordict
+data
 
 ###############################################################################
 # We still have a ``"state"`` that describes what ``"observation"`` used to
@@ -274,7 +274,7 @@ env.close()
 
 env = GymEnv("ALE/Pong-v5")
 print("from pixels: ", env.from_pixels)
-print("tensordict: ", env.reset())
+print("data: ", env.reset())
 env.close()
 
 ###############################################################################
@@ -297,17 +297,17 @@ DMControlEnv.available_envs
 ###############################################################################
 
 env = DMControlEnv("acrobot", "swingup")
-tensordict = env.reset()
-print("result of reset: ", tensordict)
+data = env.reset()
+print("result of reset: ", data)
 env.close()
 
 ###############################################################################
 # Of course we can also use pixel-based environments:
 
 env = DMControlEnv("acrobot", "swingup", from_pixels=True, pixels_only=True)
-tensordict = env.reset()
-print("result of reset: ", tensordict)
-plt.imshow(tensordict.get("pixels").numpy())
+data = env.reset()
+print("result of reset: ", data)
+plt.imshow(data.get("pixels").numpy())
 env.close()
 
 ###############################################################################
@@ -593,13 +593,13 @@ parallel_env = ParallelEnv(
     [env_make, env_make],
     create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
 )
-tensordict = parallel_env.reset()
+data = parallel_env.reset()
 
 plt.figure()
 plt.subplot(121)
-plt.imshow(tensordict[0].get("pixels").permute(1, 2, 0).numpy())
+plt.imshow(data[0].get("pixels").permute(1, 2, 0).numpy())
 plt.subplot(122)
-plt.imshow(tensordict[1].get("pixels").permute(1, 2, 0).numpy())
+plt.imshow(data[1].get("pixels").permute(1, 2, 0).numpy())
 parallel_env.close()
 del parallel_env
 
@@ -638,14 +638,14 @@ parallel_env = ParallelEnv(
     create_env_kwargs=[{"env_name": "ALE/AirRaid-v5"}, {"env_name": "ALE/Pong-v5"}],
 )
 parallel_env = TransformedEnv(parallel_env, GrayScale())  # transforms on main process
-tensordict = parallel_env.reset()
+data = parallel_env.reset()
 
-print("grayscale tensordict: ", tensordict)
+print("grayscale data: ", data)
 plt.figure()
 plt.subplot(121)
-plt.imshow(tensordict[0].get("pixels").permute(1, 2, 0).numpy())
+plt.imshow(data[0].get("pixels").permute(1, 2, 0).numpy())
 plt.subplot(122)
-plt.imshow(tensordict[1].get("pixels").permute(1, 2, 0).numpy())
+plt.imshow(data[1].get("pixels").permute(1, 2, 0).numpy())
 parallel_env.close()
 del parallel_env
 
@@ -675,17 +675,17 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 
 env = TransformedEnv(GymEnv("Pendulum-v1"), VecNorm())
-tensordict = env.rollout(max_steps=100)
+data = env.rollout(max_steps=100)
 
-print("mean: :", tensordict.get("observation").mean(0))  # Approx 0
-print("std: :", tensordict.get("observation").std(0))  # Approx 1
+print("mean: :", data.get("observation").mean(0))  # Approx 0
+print("std: :", data.get("observation").std(0))  # Approx 1
 
 ###############################################################################
 # In **parallel envs** things are slightly more complicated, as we need to
 # share the running statistics amongst the processes. We created a class
 # ``EnvCreator`` that is responsible for looking at an environment creation
 # method, retrieving tensordicts to share amongst processes in the environment
-# class, and pointing each process to the right common, shared tensordict
+# class, and pointing each process to the right common, shared data
 # once created:
 
 from torchrl.envs import EnvCreator, ParallelEnv
@@ -700,11 +700,11 @@ print(sd)
 # Zeroes all tensors
 sd *= 0
 
-tensordict = env.rollout(max_steps=5)
+data = env.rollout(max_steps=5)
 
-print("tensordict: ", tensordict)
-print("mean: :", tensordict.get("observation").view(-1, 3).mean(0))  # Approx 0
-print("std: :", tensordict.get("observation").view(-1, 3).std(0))  # Approx 1
+print("data: ", data)
+print("mean: :", data.get("observation").view(-1, 3).mean(0))  # Approx 0
+print("std: :", data.get("observation").view(-1, 3).std(0))  # Approx 1
 
 ###############################################################################
 # The count is slightly higher than the number of steps (since we
@@ -715,7 +715,7 @@ print("std: :", tensordict.get("observation").view(-1, 3).std(0))  # Approx 1
 
 print(
     "update counts: ",
-    make_env.state_dict()["_extra_state"]["td"]["observation_count"],
+    make_env.state_dict()["_extra_state"]["observation_count"],
 )
 
 env.close()

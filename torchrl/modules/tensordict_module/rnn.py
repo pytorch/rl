@@ -684,7 +684,7 @@ class LSTMModule(ModuleBase):
             >>> traj_td = env.rollout(3) # some random temporal data
             >>> traj_td = policy_training(traj_td)
             >>> # let's check that both return the same results
-            >>> td_inf = TensorDict({}, traj_td.shape[:-1])
+            >>> td_inf = TensorDict(batch_size=traj_td.shape[:-1])
             >>> for td in traj_td.unbind(-1):
             ...     td_inf = td_inf.update(td.select("is_init", "observation", ("next", "observation")))
             ...     td_inf = policy_inference(td_inf)
@@ -1480,7 +1480,7 @@ class GRUModule(ModuleBase):
             >>> traj_td = env.rollout(3) # some random temporal data
             >>> traj_td = policy_training(traj_td)
             >>> # let's check that both return the same results
-            >>> td_inf = TensorDict({}, traj_td.shape[:-1])
+            >>> td_inf = TensorDict(batch_size=traj_td.shape[:-1])
             >>> for td in traj_td.unbind(-1):
             ...     td_inf = td_inf.update(td.select("is_init", "observation", ("next", "observation")))
             ...     td_inf = policy_inference(td_inf)
