@@ -50,13 +50,7 @@ from tensordict.utils import (
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import (
-    _append_last,
-    _ends_with,
-    _make_ordinal_device,
-    _replace_last,
-    implement_for,
-)
+from torchrl._utils import _append_last, _ends_with, _make_ordinal_device, _replace_last
 
 from torchrl.data.tensor_specs import (
     Binary,

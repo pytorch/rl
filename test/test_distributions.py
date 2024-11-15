@@ -6,7 +6,6 @@
 import argparse
 import importlib.util
 import os
-from typing import Tuple
 
 import pytest
 import torch
