@@ -42,7 +42,7 @@ from tensordict import (
 )
 from tensordict.base import NO_DEFAULT
 from tensordict.utils import _getitem_batch_size, NestedKey
-from torchrl._utils import _make_ordinal_device, get_binary_env_var
+from torchrl._utils import _make_ordinal_device, get_binary_env_var, implement_for
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
@@ -193,14 +193,14 @@ def _slice_indexing(shape: list[int], idx: slice) -> List[int]:
 
 
 def _shape_indexing(
-    shape: Union[list[int], torch.Size, tuple[int]], idx: SHAPE_INDEX_TYPING
+    shape: Union[list[int], torch.Size, Tuple[int]], idx: SHAPE_INDEX_TYPING
 ) -> List[int]:
     """Given an input shape and an index, returns the size of the resulting indexed spec.
 
     This function includes indexing checks and may raise IndexErrors.
 
     Args:
-        shape (list[int], torch.Size, tuple[int): Input shape
+        shape (list[int], torch.Size, Tuple[int): Input shape
         idx (SHAPE_INDEX_TYPING): Index
     Returns:
         Shape of the resulting spec
@@ -1010,7 +1010,7 @@ T = TypeVar("T")
 
 
 class _LazyStackedMixin(Generic[T]):
-    def __init__(self, *specs: tuple[T, ...], dim: int) -> None:
+    def __init__(self, *specs: Tuple[T, ...], dim: int) -> None:
         self._specs = list(specs)
         self.dim = dim
         if self.dim < 0:
@@ -1667,7 +1667,31 @@ class OneHot(TensorSpec):
             for i in range(self.shape[dim])
         )
 
+    @implement_for("torch", None, "2.1")
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
+        if shape is None:
+            shape = self.shape[:-1]
+        else:
+            shape = _size([*shape, *self.shape[:-1]])
+        mask = self.mask
+        n = int(self.space.n)
+        if mask is None:
+            m = torch.randint(n, shape, device=self.device)
+        else:
+            mask = mask.expand(_remove_neg_shapes(*shape, mask.shape[-1]))
+            if mask.ndim > 2:
+                mask_flat = torch.flatten(mask, 0, -2)
+            else:
+                mask_flat = mask
+            shape_out = mask.shape[:-1]
+            m = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
+        out = torch.nn.functional.one_hot(m, n).to(self.dtype)
+        # torch.zeros((*shape, self.space.n), device=self.device, dtype=self.dtype)
+        # out.scatter_(-1, m, 1)
+        return out
+
+    @implement_for("torch", "2.1")
+    def rand(self, shape: torch.Size = None) -> torch.Tensor:  # noqa: F811
         if shape is None:
             shape = self.shape[:-1]
         else:
