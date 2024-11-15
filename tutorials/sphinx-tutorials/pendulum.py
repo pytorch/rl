@@ -765,7 +765,7 @@ check_env_specs(env)
 
 def simple_rollout(steps=100):
     # preallocate:
-    data = TensorDict({}, [steps])
+    data = TensorDict(batch_size=[steps])
     # reset
     _data = env.reset()
     for i in range(steps):
