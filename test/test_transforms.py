@@ -2089,10 +2089,17 @@ class TestTrajCounter(TransformBase):
             total_frames=99,
             frames_per_batch=8,
         )
-        for d in collector:
-            # The env has one more traj because the collector calls reset during init
-            assert d["collector", "traj_ids"].max() == d["next", "traj_count"].max() - 1
-            assert d["traj_count"].max() > 0
+
+        try:
+            traj_ids_collector = []
+            traj_ids_env = []
+            for d in collector:
+                traj_ids_collector.extend(d["collector", "traj_ids"].view(-1).tolist())
+                traj_ids_env.extend(d["next", "traj_count"].view(-1).tolist())
+            assert len(set(traj_ids_env)) == len(set(traj_ids_collector))
+        finally:
+            collector.shutdown()
+            del collector
 
     def test_transform_compose(self):
         t = TrajCounter()
