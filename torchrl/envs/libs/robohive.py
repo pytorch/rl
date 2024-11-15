@@ -222,7 +222,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         out = super()._make_specs(env=env, batch_size=batch_size)
         self.env.reset()
         *_, info = self.env.step(self.env.action_space.sample())
-        info = self.read_info(info, TensorDict({}, []))
+        info = self.read_info(info, TensorDict())
         info = info.get("info")
         self.observation_spec["info"] = make_composite_from_td(info)
         return out
