@@ -127,7 +127,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # optimization steps
         training_start = time.time()
         if collected_frames >= init_random_frames:
-            log_loss_td = TensorDict({}, [num_updates])
+            log_loss_td = TensorDict(batch_size=[num_updates])
             for j in range(num_updates):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample()

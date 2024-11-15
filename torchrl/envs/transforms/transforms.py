@@ -52,7 +52,13 @@ from tensordict.utils import (
 from torch import nn, Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import _append_last, _ends_with, _make_ordinal_device, _replace_last
+from torchrl._utils import (
+    _append_last,
+    _ends_with,
+    _make_ordinal_device,
+    _replace_last,
+    implement_for,
+)
 
 from torchrl.data.tensor_specs import (
     Binary,
@@ -8291,7 +8297,7 @@ class AutoResetTransform(Transform):
             done = tensordict.get("done")
             if done.any():
                 mask = done.squeeze(-1)
-                self._saved_td_autorest = TensorDict({}, [])
+                self._saved_td_autorest = TensorDict()
                 for key in self.parent.full_observation_spec.keys(True, True):
                     val = tensordict.get(key)
                     replace_and_set(
@@ -8313,7 +8319,7 @@ class AutoResetTransform(Transform):
                     mask = done.squeeze(-1)
                     if done.any():
                         if _saved_td_autorest is None:
-                            _saved_td_autorest = TensorDict({}, batch_size=[])
+                            _saved_td_autorest = TensorDict()
                         agent = tensordict.get(agent_key)
                         if isinstance(agent, LazyStackedTensorDict):
                             agents = agent.tensordicts
@@ -8772,7 +8778,14 @@ class TrajCounter(Transform):
     def _make_shared_value(self):
         self._traj_count = mp.Value("i", 0)
 
+    @implement_for("torch", None, "2.1")
     def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_traj_count"] = None
+        return state
+
+    @implement_for("torch", "2.1")
+    def __getstate__(self):  # noqa: F811
         state = super().__getstate__()
         state["_traj_count"] = None
         return state
