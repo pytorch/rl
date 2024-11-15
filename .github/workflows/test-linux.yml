@@ -128,13 +128,11 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      # gpu-arch-type: cuda
-      # gpu-arch-version: "11.7"
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
+        export PYTHON_VERSION="3.8"
         export CU_VERSION="cu116"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then

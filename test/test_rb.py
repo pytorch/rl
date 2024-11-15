@@ -3317,7 +3317,7 @@ class TestEnsemble:
             return LazyMemmapStorage(max_size=100)
         if storage_type is TensorStorage:
             if data_type is TensorDict:
-                return TensorStorage(TensorDict({}, [100]))
+                return TensorStorage(TensorDict(batch_size=[100]))
             elif data_type is torch.Tensor:
                 return TensorStorage(torch.zeros(100))
             else:

@@ -492,7 +492,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         self.counter += 1
         state = torch.zeros(self.size) + self.counter
         if tensordict is None:
-            tensordict = TensorDict({}, self.batch_size, device=self.device)
+            tensordict = TensorDict(batch_size=self.batch_size, device=self.device)
         tensordict = tensordict.empty().set(self.out_key, self._get_out_obs(state))
         tensordict = tensordict.set(self._out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
@@ -595,7 +595,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         self.step_count = 0
         # state = torch.zeros(self.size) + self.counter
         if tensordict is None:
-            tensordict = TensorDict({}, self.batch_size, device=self.device)
+            tensordict = TensorDict(batch_size=self.batch_size, device=self.device)
 
         tensordict = tensordict.empty()
         tensordict.update(self.observation_spec.rand())
