@@ -184,7 +184,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     logger.log_scalar(key, value, collected_frames)
             continue
 
-        losses = TensorDict({}, batch_size=[sgd_updates])
+        losses = TensorDict(batch_size=[sgd_updates])
         training_start = time.time()
         for j in range(sgd_updates):
 

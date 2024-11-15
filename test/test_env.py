@@ -1420,7 +1420,7 @@ class TestStepMdp:
             tds[1]["but", "not", "this", "one"] = torch.ones(2)
             tds[0]["next", "this", "one"] = torch.ones(2) * 2
             tensordict = LazyStackedTensorDict.lazy_stack(tds, 0)
-        next_tensordict = TensorDict({}, [4]) if has_out else None
+        next_tensordict = TensorDict(batch_size=[4]) if has_out else None
         if has_out and lazy_stack:
             next_tensordict = LazyStackedTensorDict.lazy_stack(
                 next_tensordict.unbind(0), 0
@@ -1550,9 +1550,9 @@ class TestStepMdp:
         nested_key = ("data",)
         td = TensorDict(
             {
-                nested_key: TensorDict({}, nested_batch_size),
+                nested_key: TensorDict(batch_size=nested_batch_size),
                 "next": {
-                    nested_key: TensorDict({}, nested_batch_size),
+                    nested_key: TensorDict(batch_size=nested_batch_size),
                 },
             },
             td_batch_size,
@@ -1670,7 +1670,7 @@ class TestStepMdp:
         # Nested only in root
         td = TensorDict(
             {
-                nested_key: TensorDict({}, nested_batch_size),
+                nested_key: TensorDict(batch_size=nested_batch_size),
                 "next": {},
             },
             td_batch_size,
@@ -1711,7 +1711,7 @@ class TestStepMdp:
         # Nested only in next
         td = TensorDict(
             {
-                "next": {nested_key: TensorDict({}, nested_batch_size)},
+                "next": {nested_key: TensorDict(batch_size=nested_batch_size)},
             },
             td_batch_size,
         )

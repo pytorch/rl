@@ -85,7 +85,7 @@ class TestPromptLogger:
 
 class TrainLogger:
     def __init__(self, size: int, log_interval: int, logger: Logger):
-        self.data = TensorDict({}, [size])
+        self.data = TensorDict(batch_size=[size])
         self.counter = 0
         self.log_interval = log_interval
         self.logger = logger
