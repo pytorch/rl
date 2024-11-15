@@ -25,7 +25,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
