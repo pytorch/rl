@@ -375,7 +375,7 @@ class TestPlanner:
             num_candidates=100,
             top_k=2,
         )
-        td = env.reset(TensorDict({}, batch_size=batch_size).to(device))
+        td = env.reset(TensorDict(batch_size=batch_size).to(device))
         td_copy = td.clone()
         td = planner(td)
         assert (
@@ -408,7 +408,7 @@ class TestPlanner:
             num_candidates=100,
             top_k=2,
         )
-        td = env.reset(TensorDict({}, batch_size=batch_size).to(device))
+        td = env.reset(TensorDict(batch_size=batch_size).to(device))
         td_copy = td.clone()
         td = planner(td)
         assert (
