@@ -2173,7 +2173,7 @@ class SamplerEnsemble(Sampler):
             [
                 TensorDict.from_dict(info, batch_dims=samples.ndim - 1)
                 if info
-                else TensorDict({}, [])
+                else TensorDict()
                 for info in infos
             ]
         )
