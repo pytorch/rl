@@ -375,6 +375,7 @@ class CQLLoss(LossModule):
             )
         self._make_vmap()
         self.reduction = reduction
+        _ = self.target_entropy
 
     def _make_vmap(self):
         self._vmap_qvalue_networkN0 = _vmap_func(
