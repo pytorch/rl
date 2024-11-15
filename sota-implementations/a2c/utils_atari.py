@@ -7,7 +7,6 @@ import numpy as np
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
-from torchrl.data import Composite
 from torchrl.data.tensor_specs import CategoricalBox
 from torchrl.envs import (
     CatFrames,
@@ -86,22 +85,22 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
 # --------------------------------------------------------------------
 
 
-def make_ppo_modules_pixels(proof_environment):
+def make_ppo_modules_pixels(proof_environment, device):
 
     # Define input shape
     input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs
-    if isinstance(proof_environment.action_spec.space, CategoricalBox):
-        num_outputs = proof_environment.action_spec.space.n
+    if isinstance(proof_environment.single_action_spec.space, CategoricalBox):
+        num_outputs = proof_environment.single_action_spec.space.n
         distribution_class = OneHotCategorical
         distribution_kwargs = {}
     else:  # is ContinuousBox
-        num_outputs = proof_environment.action_spec.shape
+        num_outputs = proof_environment.single_action_spec.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "low": proof_environment.action_spec.space.low,
-            "high": proof_environment.action_spec.space.high,
+            "low": proof_environment.single_action_spec.space.low.to(device),
+            "high": proof_environment.single_action_spec.space.high.to(device),
         }
 
     # Define input keys
@@ -113,14 +112,16 @@ def make_ppo_modules_pixels(proof_environment):
         num_cells=[32, 64, 64],
         kernel_sizes=[8, 4, 3],
         strides=[4, 2, 1],
+        device=device,
     )
-    common_cnn_output = common_cnn(torch.ones(input_shape))
+    common_cnn_output = common_cnn(torch.ones(input_shape, device=device))
     common_mlp = MLP(
         in_features=common_cnn_output.shape[-1],
         activation_class=torch.nn.ReLU,
         activate_last_layer=True,
         out_features=512,
         num_cells=[],
+        device=device,
     )
     common_mlp_output = common_mlp(common_cnn_output)
 
@@ -137,6 +138,7 @@ def make_ppo_modules_pixels(proof_environment):
         out_features=num_outputs,
         activation_class=torch.nn.ReLU,
         num_cells=[],
+        device=device,
     )
     policy_module = TensorDictModule(
         module=policy_net,
@@ -148,7 +150,7 @@ def make_ppo_modules_pixels(proof_environment):
     policy_module = ProbabilisticActor(
         policy_module,
         in_keys=["logits"],
-        spec=Composite(action=proof_environment.action_spec),
+        spec=proof_environment.single_full_action_spec.to(device),
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
@@ -161,6 +163,7 @@ def make_ppo_modules_pixels(proof_environment):
         in_features=common_mlp_output.shape[-1],
         out_features=1,
         num_cells=[],
+        device=device,
     )
     value_module = ValueOperator(
         value_net,
@@ -170,11 +173,11 @@ def make_ppo_modules_pixels(proof_environment):
     return common_module, policy_module, value_module
 
 
-def make_ppo_models(env_name):
+def make_ppo_models(env_name, device):
 
     proof_environment = make_parallel_env(env_name, 1, device="cpu")
     common_module, policy_module, value_module = make_ppo_modules_pixels(
-        proof_environment
+        proof_environment, device=device
     )
 
     # Wrap modules in a single ActorCritic operator
@@ -185,8 +188,8 @@ def make_ppo_models(env_name):
     )
 
     with torch.no_grad():
-        td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
-        td = actor_critic(td)
+        td = proof_environment.fake_tensordict().expand(1)
+        td = actor_critic(td.to(device))
         del td
 
     actor = actor_critic.get_policy_operator()

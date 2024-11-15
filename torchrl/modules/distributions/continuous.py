@@ -393,7 +393,6 @@ class TanhNormal(FasterTransformedDistribution):
         event_dims: int | None = None,
         tanh_loc: bool = False,
         safe_tanh: bool = True,
-        **kwargs,
     ):
         if not isinstance(loc, torch.Tensor):
             loc = torch.as_tensor(loc, dtype=torch.get_default_dtype())
@@ -403,15 +402,16 @@ class TanhNormal(FasterTransformedDistribution):
             event_dims = min(1, loc.ndim)
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
-        if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
-            if not (high > low).all():
-                raise RuntimeError(err_msg)
-        elif isinstance(high, Number) and isinstance(low, Number):
-            if not high > low:
-                raise RuntimeError(err_msg)
-        else:
-            if not all(high > low):
-                raise RuntimeError(err_msg)
+        if not is_dynamo_compiling():
+            if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
+                if not (high > low).all():
+                    raise RuntimeError(err_msg)
+            elif isinstance(high, Number) and isinstance(low, Number):
+                if not high > low:
+                    raise RuntimeError(err_msg)
+            else:
+                if not all(high > low):
+                    raise RuntimeError(err_msg)
 
         high = torch.as_tensor(high, device=loc.device)
         low = torch.as_tensor(low, device=loc.device)
@@ -678,6 +678,7 @@ class TanhDelta(FasterTransformedDistribution):
         event_dims: int = 1,
         atol: float = 1e-6,
         rtol: float = 1e-6,
+        safe: bool = True,
     ):
         minmax_msg = "high value has been found to be equal or less than low value"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
@@ -690,12 +691,19 @@ class TanhDelta(FasterTransformedDistribution):
             if not all(high > low):
                 raise ValueError(minmax_msg)
 
-        t = SafeTanhTransform()
-        non_trivial_min = (isinstance(low, torch.Tensor) and (low != -1.0).any()) or (
-            not isinstance(low, torch.Tensor) and low != -1.0
+        if safe:
+            if is_dynamo_compiling():
+                _err_compile_safetanh()
+            t = SafeTanhTransform()
+        else:
+            t = torch.distributions.TanhTransform()
+        non_trivial_min = is_dynamo_compiling or (
+            (isinstance(low, torch.Tensor) and (low != -1.0).any())
+            or (not isinstance(low, torch.Tensor) and low != -1.0)
         )
-        non_trivial_max = (isinstance(high, torch.Tensor) and (high != 1.0).any()) or (
-            not isinstance(high, torch.Tensor) and high != 1.0
+        non_trivial_max = is_dynamo_compiling or (
+            (isinstance(high, torch.Tensor) and (high != 1.0).any())
+            or (not isinstance(high, torch.Tensor) and high != 1.0)
         )
         self.non_trivial = non_trivial_min or non_trivial_max
 
@@ -772,7 +780,7 @@ uniform_sample_delta = _uniform_sample_delta
 
 def _err_compile_safetanh():
     raise RuntimeError(
-        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass"
+        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass "
         "safe_tanh=False. "
         "If you are using a ProbabilisticTensorDictModule, this can be done via "
         "`distribution_kwargs={'safe_tanh': False}`. "
