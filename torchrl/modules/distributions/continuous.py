@@ -11,12 +11,8 @@ from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
+from packaging import version
 from torch import distributions as D, nn
-
-try:
-    from torch.compiler import assume_constant_result
-except ImportError:
-    from torch._dynamo import assume_constant_result
 
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
@@ -37,9 +33,17 @@ from torchrl.modules.utils import mappings
 D.Distribution.set_default_validate_args(False)
 
 try:
+    from torch.compiler import assume_constant_result
+except ImportError:
+    from torch._dynamo import assume_constant_result
+
+try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+TORCH_VERSION = version.parse(torch.__version__).base_version
+TORCH_VERSION_PRE_2_6 = version.parse(TORCH_VERSION) < version.parse("2.6.0")
 
 
 class IndependentNormal(D.Independent):
@@ -403,15 +407,16 @@ class TanhNormal(FasterTransformedDistribution):
             event_dims = min(1, loc.ndim)
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
-        if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
-            if not (high > low).all():
-                raise RuntimeError(err_msg)
-        elif isinstance(high, Number) and isinstance(low, Number):
-            if not high > low:
-                raise RuntimeError(err_msg)
-        else:
-            if not all(high > low):
-                raise RuntimeError(err_msg)
+        if not is_dynamo_compiling():
+            if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
+                if not (high > low).all():
+                    raise RuntimeError(err_msg)
+            elif isinstance(high, Number) and isinstance(low, Number):
+                if not high > low:
+                    raise RuntimeError(err_msg)
+            else:
+                if not all(high > low):
+                    raise RuntimeError(err_msg)
 
         high = torch.as_tensor(high, device=loc.device)
         low = torch.as_tensor(low, device=loc.device)
@@ -437,7 +442,7 @@ class TanhNormal(FasterTransformedDistribution):
         self.high = high
 
         if safe_tanh:
-            if is_dynamo_compiling():
+            if is_dynamo_compiling() and TORCH_VERSION_PRE_2_6:
                 _err_compile_safetanh()
             t = SafeTanhTransform()
         else:
@@ -772,8 +777,8 @@ uniform_sample_delta = _uniform_sample_delta
 
 def _err_compile_safetanh():
     raise RuntimeError(
-        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass"
-        "safe_tanh=False. "
+        "safe_tanh=True in TanhNormal is not compatible with torch.compile with torch pre 2.6.0. "
+        "To deactivate it, pass safe_tanh=False. "
         "If you are using a ProbabilisticTensorDictModule, this can be done via "
         "`distribution_kwargs={'safe_tanh': False}`. "
         "See https://github.com/pytorch/pytorch/issues/133529 for more details."

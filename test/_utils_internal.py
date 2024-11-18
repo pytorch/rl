@@ -11,6 +11,7 @@ import os
 import os.path
 import time
 import unittest
+import warnings
 from functools import wraps
 
 # Get relative file path
@@ -20,9 +21,15 @@ import pytest
 import torch
 import torch.cuda
 
-from tensordict import tensorclass, TensorDict
-from torch import nn
-from torchrl._utils import implement_for, logger as torchrl_logger, seed_generator
+from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModuleBase
+from torch import nn, vmap
+from torchrl._utils import (
+    implement_for,
+    logger as torchrl_logger,
+    RL_WARNINGS,
+    seed_generator,
+)
 from torchrl.data.utils import CloudpickleWrapper
 
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
@@ -35,6 +42,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
+from torchrl.objectives.value.advantages import _vmap_func
 
 # Specified for test_utils.py
 __version__ = "0.3"
@@ -713,3 +721,89 @@ class LSTMNet(nn.Module):
     ):
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)
+
+
+def _call_value_nets(
+    value_net: TensorDictModuleBase,
+    data: TensorDictBase,
+    params: TensorDictBase,
+    next_params: TensorDictBase,
+    single_call: bool,
+    value_key: NestedKey,
+    detach_next: bool,
+    vmap_randomness: str = "error",
+):
+    in_keys = value_net.in_keys
+    if single_call:
+        for i, name in enumerate(data.names):
+            if name == "time":
+                ndim = i + 1
+                break
+        else:
+            ndim = None
+        if ndim is not None:
+            # get data at t and last of t+1
+            idx0 = (slice(None),) * (ndim - 1) + (slice(-1, None),)
+            idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
+            idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
+            data_in = torch.cat(
+                [
+                    data.select(*in_keys, value_key, strict=False),
+                    data.get("next").select(*in_keys, value_key, strict=False)[idx0],
+                ],
+                ndim - 1,
+            )
+        else:
+            if RL_WARNINGS:
+                warnings.warn(
+                    "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
+                    "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
+                )
+            ndim = data.ndim
+            idx = (slice(None),) * (ndim - 1) + (slice(None, data.shape[ndim - 1]),)
+            idx_ = (slice(None),) * (ndim - 1) + (slice(data.shape[ndim - 1], None),)
+            data_in = torch.cat(
+                [
+                    data.select(*in_keys, value_key, strict=False),
+                    data.get("next").select(*in_keys, value_key, strict=False),
+                ],
+                ndim - 1,
+            )
+
+        # next_params should be None or be identical to params
+        if next_params is not None and next_params is not params:
+            raise ValueError(
+                "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
+            )
+        if params is not None:
+            with params.to_module(value_net):
+                value_est = value_net(data_in).get(value_key)
+        else:
+            value_est = value_net(data_in).get(value_key)
+        value, value_ = value_est[idx], value_est[idx_]
+    else:
+        data_in = torch.stack(
+            [
+                data.select(*in_keys, value_key, strict=False),
+                data.get("next").select(*in_keys, value_key, strict=False),
+            ],
+            0,
+        )
+        if (params is not None) ^ (next_params is not None):
+            raise ValueError(
+                "params and next_params must be either both provided or not."
+            )
+        elif params is not None:
+            params_stack = torch.stack([params, next_params], 0).contiguous()
+            data_out = _vmap_func(value_net, (0, 0), randomness=vmap_randomness)(
+                data_in, params_stack
+            )
+        else:
+            data_out = vmap(value_net, (0,), randomness=vmap_randomness)(data_in)
+        value_est = data_out.get(value_key)
+        value, value_ = value_est[0], value_est[1]
+    data.set(value_key, value)
+    data.set(("next", value_key), value_)
+    if detach_next:
+        value_ = value_.detach()
+    return value, value_
