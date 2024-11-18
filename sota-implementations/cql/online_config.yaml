@@ -66,6 +66,8 @@ loss:
   num_random: 10
   with_lagrange: True
   lagrange_thresh: 10.0
+
+compile:
   compile: False
   compile_mode:
   cudagraphs: False
