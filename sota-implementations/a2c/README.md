@@ -33,7 +33,7 @@ python a2c_mujoco.py compile.compile=1 compile.cudagraphs=1
 
 Runtimes when executed on H100:
 
-| Environment | Eager   | Compile | Compile+cudagraphs |
-|-------------|---------|---------|--------------------|
-| MUJOCO      |         |         |                    |
-| ATARI       | 80 mins | 60 mins | 43 mins            |
+| Environment | Eager     | Compile   | Compile+cudagraphs |
+|-------------|-----------|-----------|--------------------|
+| MUJOCO      | < 25 mins | < 23 mins | < 20 mins          |
+| ATARI       | < 85 mins | < 60 mins | < 45 mins          |
