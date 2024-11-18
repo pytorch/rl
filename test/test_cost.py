@@ -106,7 +106,6 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value.advantages import (
-    _call_value_nets,
     GAE,
     TD1Estimator,
     TDLambdaEstimator,
@@ -135,6 +134,7 @@ from torchrl.objectives.value.utils import (
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (  # noqa
+        _call_value_nets,
         dtype_fixture,
         get_available_devices,
         get_default_devices,
@@ -142,6 +142,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test.mocking_classes import ContinuousActionConvMockEnv
 else:
     from _utils_internal import (  # noqa
+        _call_value_nets,
         dtype_fixture,
         get_available_devices,
         get_default_devices,
