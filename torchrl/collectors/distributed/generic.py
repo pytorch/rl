@@ -448,6 +448,7 @@ class DistributedDataCollector(DataCollectorBase):
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
+        self.requested_frames_per_batch = frames_per_batch
 
         self.device = device
         self.storing_device = storing_device
