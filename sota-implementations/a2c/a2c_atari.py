@@ -7,24 +7,24 @@ import torch
 
 torch.set_float32_matmul_precision("high")
 
+
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import time
-    from tensordict.nn import CudaGraphModule
-    from torchrl._utils import logger as torchrl_logger
-    from torchrl.record import VideoRecorder
 
     import torch.optim
     import tqdm
+    from tensordict.nn import CudaGraphModule
 
-    from torchrl._utils import timeit
+    from torchrl._utils import logger as torchrl_logger, timeit
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
     from torchrl.objectives import A2CLoss
     from torchrl.objectives.value.advantages import GAE
+    from torchrl.record import VideoRecorder
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils_atari import eval_model, make_parallel_env, make_ppo_models
 
