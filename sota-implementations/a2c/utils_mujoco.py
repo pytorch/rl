@@ -59,7 +59,7 @@ def make_ppo_models_state(proof_environment, device, *, compile: bool = False):
         "low": proof_environment.single_action_spec.space.low.to(device),
         "high": proof_environment.single_action_spec.space.high.to(device),
         "tanh_loc": False,
-        "safe_tanh": not compile,
+        "safe_tanh": True,
     }
 
     # Define policy architecture
