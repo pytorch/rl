@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 from enum import Enum
 from functools import wraps
 from typing import Any, Optional, Sequence, Union
@@ -10,6 +9,9 @@ from typing import Any, Optional, Sequence, Union
 import torch
 import torch.distributions as D
 import torch.nn.functional as F
+
+from torch.distributions.utils import lazy_property, logits_to_probs, probs_to_logits
+
 
 __all__ = ["OneHotCategorical", "MaskedCategorical", "Ordinal", "OneHotOrdinal"]
 
@@ -79,6 +81,17 @@ class OneHotCategorical(D.Categorical):
 
     """
 
+    num_params: int = 1
+
+    # This is to make the compiler happy, see https://github.com/pytorch/pytorch/issues/140266
+    @lazy_property
+    def logits(self):
+        return probs_to_logits(self.probs)
+
+    @lazy_property
+    def probs(self):
+        return logits_to_probs(self.logits)
+
     def __init__(
         self,
         logits: Optional[torch.Tensor] = None,
@@ -105,6 +118,12 @@ class OneHotCategorical(D.Categorical):
     @property
     def deterministic_sample(self):
         return self.mode
+
+    def entropy(self):
+        min_real = torch.finfo(self.logits.dtype).min
+        logits = torch.clamp(self.logits, min=min_real)
+        p_log_p = logits * self.probs
+        return -p_log_p.sum(-1)
 
     @_one_hot_wrapper(D.Categorical)
     def sample(
@@ -187,6 +206,14 @@ class MaskedCategorical(D.Categorical):
         tensor([   -inf, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972,
                 -2.1972, -2.1972])
     """
+
+    @lazy_property
+    def logits(self):
+        return probs_to_logits(self.probs)
+
+    @lazy_property
+    def probs(self):
+        return logits_to_probs(self.logits)
 
     def __init__(
         self,
@@ -359,6 +386,14 @@ class MaskedOneHotCategorical(MaskedCategorical):
         tensor([   -inf, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972,
                 -2.1972, -2.1972])
     """
+
+    @lazy_property
+    def logits(self):
+        return probs_to_logits(self.probs)
+
+    @lazy_property
+    def probs(self):
+        return logits_to_probs(self.logits)
 
     def __init__(
         self,
