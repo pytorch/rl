@@ -63,8 +63,8 @@ class A2CLoss(LossModule):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (float): the weight of the entropy loss. Defaults to `0.01``.
-        critic_coef (float): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic
+        entropy_coef (:obj:`float`): the weight of the entropy loss. Defaults to `0.01``.
+        critic_coef (:obj:`float`): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic
             loss won't be included and the in-keys will miss the critic inputs.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
@@ -84,7 +84,7 @@ class A2CLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        clip_value (float, optional): If provided, it will be used to compute a clipped version of the value
+        clip_value (:obj:`float`, optional): If provided, it will be used to compute a clipped version of the value
             prediction with respect to the input value estimate and use it to calculate the value loss.
             The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
             and preventing large updates. However, it will have no impact if the value estimate was done by the current

@@ -757,8 +757,8 @@ from torchrl.envs.libs.gym import GymEnv
 # We use a :class:`~torchrl.envs.SerialEnv` for simplicity (single worker), but for larger jobs a
 # :class:`~torchrl.envs.ParallelEnv` (multi-workers) would be better suited.
 #
-# .. note::
-#   Multiprocessed envs and multiprocessed collectors can be combined!
+# .. note:: Multiprocessed envs and multiprocessed collectors can be combined!
+#
 
 parallel_env = SerialEnv(
     3,
@@ -771,7 +771,7 @@ actor = TensorDictModule(actor_module, in_keys=["observation"], out_keys=["actio
 
 ###############################################################################
 # Sync multiprocessed data collector
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 
 devices = ["cpu", "cpu"]
