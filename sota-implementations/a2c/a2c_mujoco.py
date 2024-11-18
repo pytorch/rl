@@ -47,7 +47,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create models (check utils_mujoco.py)
     actor, critic = make_ppo_models(
-        cfg.env.env_name, device=device, compile=cfg.loss.compile
+        cfg.env.env_name, device=device, compile=cfg.compile.compile
     )
 
     # Create data buffer
@@ -64,7 +64,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         lmbda=cfg.loss.gae_lambda,
         value_network=critic,
         average_gae=False,
-        vectorized=not cfg.loss.compile,
+        vectorized=not cfg.compile.compile,
     )
     loss_module = A2CLoss(
         actor_network=actor,
@@ -130,10 +130,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         return loss.select("loss_critic", "loss_objective").detach()  # , "loss_entropy"
 
     compile_mode = None
-    if cfg.loss.compile:
-        compile_mode = cfg.loss.compile_mode
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
         if compile_mode in ("", None):
-            if cfg.loss.cudagraphs:
+            if cfg.compile.cudagraphs:
                 compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
@@ -141,7 +141,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         update = torch.compile(update, mode=compile_mode)
         adv_module = torch.compile(adv_module, mode=compile_mode)
 
-    if cfg.loss.cudagraphs:
+    if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
@@ -159,8 +159,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         storing_device=device,
         max_frames_per_traj=-1,
         trust_policy=True,
-        compile_policy={"mode": compile_mode} if cfg.loss.compile else False,
-        cudagraph_policy=cfg.loss.cudagraphs,
+        compile_policy={"mode": compile_mode} if cfg.compile.compile else False,
+        cudagraph_policy=cfg.compile.cudagraphs,
     )
 
     test_env.eval()
