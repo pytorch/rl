@@ -20,12 +20,14 @@ from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDic
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
+from torchrl.modules.distributions import HAS_ENTROPY
 from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
     _cache_values,
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _get_default_device,
     _reduce,
     default_value_kwargs,
     distance_loss,
@@ -61,8 +63,8 @@ class A2CLoss(LossModule):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (float): the weight of the entropy loss. Defaults to `0.01``.
-        critic_coef (float): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic
+        entropy_coef (:obj:`float`): the weight of the entropy loss. Defaults to `0.01``.
+        critic_coef (:obj:`float`): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic
             loss won't be included and the in-keys will miss the critic inputs.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
@@ -82,7 +84,7 @@ class A2CLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        clip_value (float, optional): If provided, it will be used to compute a clipped version of the value
+        clip_value (:obj:`float`, optional): If provided, it will be used to compute a clipped version of the value
             prediction with respect to the input value estimate and use it to calculate the value loss.
             The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
@@ -316,10 +318,7 @@ class A2CLoss(LossModule):
         self.entropy_bonus = entropy_bonus and entropy_coef
         self.reduction = reduction
 
-        try:
-            device = next(self.parameters()).device
-        except AttributeError:
-            device = torch.device("cpu")
+        device = _get_default_device(self)
 
         self.register_buffer(
             "entropy_coef", torch.as_tensor(entropy_coef, device=device)
@@ -347,7 +346,11 @@ class A2CLoss(LossModule):
                 raise ValueError(
                     f"clip_value must be a float or a scalar tensor, got {clip_value}."
                 )
-        self.register_buffer("clip_value", clip_value)
+            self.register_buffer(
+                "clip_value", torch.as_tensor(clip_value, device=device)
+            )
+        else:
+            self.clip_value = None
 
     @property
     def functional(self):
@@ -398,9 +401,9 @@ class A2CLoss(LossModule):
         pass
 
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
-        try:
+        if HAS_ENTROPY.get(type(dist), False):
             entropy = dist.entropy()
-        except NotImplementedError:
+        else:
             x = dist.rsample((self.samples_mc_entropy,))
             log_prob = dist.log_prob(x)
             if is_tensor_collection(log_prob):
@@ -456,7 +459,7 @@ class A2CLoss(LossModule):
             old_state_value = old_state_value.clone()
 
         # TODO: if the advantage is gathered by forward, this introduces an
-        # overhead that we could easily reduce.
+        #  overhead that we could easily reduce.
         target_return = tensordict.get(
             self.tensor_keys.value_target, None
         )  # TODO: None soon to be removed
@@ -487,7 +490,7 @@ class A2CLoss(LossModule):
             loss_value, clip_fraction = _clip_value_loss(
                 old_state_value,
                 state_value,
-                self.clip_value.to(state_value.device),
+                self.clip_value,
                 target_return,
                 loss_value,
                 self.loss_critic_type,
@@ -540,6 +543,9 @@ class A2CLoss(LossModule):
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
+
+        device = _get_default_device(self)
+        hp["device"] = device
 
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma

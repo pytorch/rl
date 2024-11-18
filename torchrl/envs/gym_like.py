@@ -309,7 +309,6 @@ class GymLikeEnv(_EnvWrapper):
 
             if _reward is not None:
                 reward = reward + _reward
-
             terminated, truncated, done, do_break = self.read_done(
                 terminated=terminated, truncated=truncated, done=done
             )
@@ -323,7 +322,7 @@ class GymLikeEnv(_EnvWrapper):
         # if truncated/terminated is not in the keys, we just don't pass it even if it
         # is defined.
         if terminated is None:
-            terminated = done
+            terminated = done.clone()
         if truncated is not None:
             obs_dict["truncated"] = truncated
         obs_dict["done"] = done

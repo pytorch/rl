@@ -48,7 +48,7 @@ class Tree(TensorClass["nocast"]):
             If there are multiple actions taken at this node, subtrees are stored in the corresponding
             entry. Rollouts can be reconstructed using the :meth:`~.rollout_from_path` method.
         node (TensorDict): Data defining this node (e.g., observations) before the next branching.
-            Entries usually matches the ``in_keys`` in ``MCTSForeset.node_map``.
+            Entries usually matches the ``in_keys`` in ``MCTSForest.node_map``.
         subtree (Tree): A stack of subtrees produced when actions are taken.
         num_children (int): The number of child nodes (read-only).
         is_terminal (bool): whether the tree has children nodes (read-only).

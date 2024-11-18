@@ -59,11 +59,11 @@ class CQLLoss(LossModule):
     Keyword args:
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
-        alpha_init (float, optional): initial entropy multiplier.
+        alpha_init (:obj:`float`, optional): initial entropy multiplier.
             Default is 1.0.
-        min_alpha (float, optional): min value of alpha.
+        min_alpha (:obj:`float`, optional): min value of alpha.
             Default is None (no minimum value).
-        max_alpha (float, optional): max value of alpha.
+        max_alpha (:obj:`float`, optional): max value of alpha.
             Default is None (no maximum value).
         action_spec (TensorSpec, optional): the action tensor spec. If not provided
             and the target entropy is ``"auto"``, it will be retrieved from
@@ -81,9 +81,9 @@ class CQLLoss(LossModule):
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
             Default is ``True``.
-        gamma (float, optional): Discount factor. Default is ``None``.
-        temperature (float, optional): CQL temperature. Default is 1.0.
-        min_q_weight (float, optional): Minimum Q weight. Default is 1.0.
+        gamma (:obj:`float`, optional): Discount factor. Default is ``None``.
+        temperature (:obj:`float`, optional): CQL temperature. Default is 1.0.
+        min_q_weight (:obj:`float`, optional): Minimum Q weight. Default is 1.0.
         max_q_backup (bool, optional): Whether to use the max-min Q backup.
             Default is ``False``.
         deterministic_backup (bool, optional): Whether to use the deterministic. Default is ``True``.
@@ -91,7 +91,7 @@ class CQLLoss(LossModule):
             Default is 10.
         with_lagrange (bool, optional): Whether to use the Lagrange multiplier.
             Default is ``False``.
-        lagrange_thresh (float, optional): Lagrange threshold. Default is 0.0.
+        lagrange_thresh (:obj:`float`, optional): Lagrange threshold. Default is 0.0.
         reduction (str, optional): Specifies the reduction to apply to the output:
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
@@ -375,6 +375,7 @@ class CQLLoss(LossModule):
             )
         self._make_vmap()
         self.reduction = reduction
+        _ = self.target_entropy
 
     def _make_vmap(self):
         self._vmap_qvalue_networkN0 = _vmap_func(
@@ -915,7 +916,7 @@ class DiscreteCQLLoss(LossModule):
         delay_value (bool): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
             Default is ``True``.
-        gamma (float, optional): Discount factor. Default is ``None``.
+        gamma (:obj:`float`, optional): Discount factor. Default is ``None``.
         action_space: The action space of the environment. If None, it is inferred from the value network.
             Defaults to None.
         reduction (str, optional): Specifies the reduction to apply to the output:

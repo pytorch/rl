@@ -25,12 +25,14 @@ Getting started with model optimization
 #
 # The typical training loop therefore looks like this:
 #
-#   >>> for i in range(n_collections):
-#   ...     data = get_next_batch(env, policy)
-#   ...     for j in range(n_optim):
-#   ...         loss = loss_fn(data)
-#   ...         loss.backward()
-#   ...         optim.step()
+#   ..code - block::Python
+#
+#     >>> for i in range(n_collections):
+#     ...     data = get_next_batch(env, policy)
+#     ...     for j in range(n_optim):
+#     ...         loss = loss_fn(data)
+#     ...         loss.backward()
+#     ...         optim.step()
 #
 # In this concise tutorial, you will receive a brief overview of the loss modules. Due to the typically
 # straightforward nature of the API for basic usage, this tutorial will be kept brief.

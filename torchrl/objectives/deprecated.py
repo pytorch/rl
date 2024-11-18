@@ -58,11 +58,11 @@ class REDQLoss_deprecated(LossModule):
         loss_function (str, optional): loss function to be used for the Q-value.
             Can be one of  ``"smooth_l1"``, ``"l2"``,
             ``"l1"``, Default is ``"smooth_l1"``.
-        alpha_init (float, optional): initial entropy multiplier.
+        alpha_init (:obj:`float`, optional): initial entropy multiplier.
             Default is ``1.0``.
-        min_alpha (float, optional): min value of alpha.
+        min_alpha (:obj:`float`, optional): min value of alpha.
             Default is ``0.1``.
-        max_alpha (float, optional): max value of alpha.
+        max_alpha (:obj:`float`, optional): max value of alpha.
             Default is ``10.0``.
         action_spec (TensorSpec, optional): the action tensor spec. If not provided
             and the target entropy is ``"auto"``, it will be retrieved from
