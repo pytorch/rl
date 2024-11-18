@@ -57,6 +57,8 @@ loss:
   loss_function: l2
   gamma: 0.99
   tau: 0.005
+
+compile:
   compile: False
   compile_mode:
   cudagraphs: False
