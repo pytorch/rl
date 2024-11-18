@@ -64,10 +64,12 @@ def make_base_env(
 def make_parallel_env(env_name, num_envs, device, is_test=False):
     env = ParallelEnv(
         num_envs,
-        EnvCreator(lambda: make_base_env(env_name, device=device)),
+        EnvCreator(lambda: make_base_env(env_name)),
         serial_for_single=True,
+        device=device,
     )
     env = TransformedEnv(env)
+    env.append_transform(DoubleToFloat())
     env.append_transform(ToTensorImage())
     env.append_transform(GrayScale())
     env.append_transform(Resize(84, 84))
@@ -76,7 +78,6 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
     env.append_transform(StepCounter(max_steps=4500))
     if not is_test:
         env.append_transform(SignTransform(in_keys=["reward"]))
-    env.append_transform(DoubleToFloat())
     env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
