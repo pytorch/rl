@@ -274,6 +274,9 @@ QMixer
 
 Returns
 -------
+
+.. _ref_returns:
+
 .. currentmodule:: torchrl.objectives.value
 
 .. autosummary::

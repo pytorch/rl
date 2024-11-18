@@ -39,9 +39,9 @@ class DreamerModelLoss(LossModule):
 
     Args:
         world_model (TensorDictModule): the world model.
-        lambda_kl (float, optional): the weight of the kl divergence loss. Default: 1.0.
-        lambda_reco (float, optional): the weight of the reconstruction loss. Default: 1.0.
-        lambda_reward (float, optional): the weight of the reward loss. Default: 1.0.
+        lambda_kl (:obj:`float`, optional): the weight of the kl divergence loss. Default: 1.0.
+        lambda_reco (:obj:`float`, optional): the weight of the reconstruction loss. Default: 1.0.
+        lambda_reward (:obj:`float`, optional): the weight of the reward loss. Default: 1.0.
         reco_loss (str, optional): the reconstruction loss. Default: "l2".
         reward_loss (str, optional): the reward loss. Default: "l2".
         free_nats (int, optional): the free nats. Default: 3.
@@ -374,7 +374,7 @@ class DreamerValueLoss(LossModule):
             Default: ``"l2"``.
         discount_loss (bool, optional): if ``True``, the loss is discounted with a
             gamma discount factor. Default: False.
-        gamma (float, optional): the gamma discount factor. Default: ``0.99``.
+        gamma (:obj:`float`, optional): the gamma discount factor. Default: ``0.99``.
 
     """
 

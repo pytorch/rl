@@ -1384,11 +1384,13 @@ class _MultiDataCollector(DataCollectorBase):
             instances) it will be wrapped in a `nn.Module` first.
             Then, the collector will try to assess if these
             modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+
             - If the policy forward signature matches any of ``forward(self, tensordict)``,
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
-            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
+            - In all other cases an attempt to wrap it will be undergone as such:
+              ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the
@@ -1476,7 +1478,7 @@ class _MultiDataCollector(DataCollectorBase):
         update_at_each_batch (boolm optional): if ``True``, :meth:`~.update_policy_weight_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
-        preemptive_threshold (float, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
+        preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
             that will be allowed to finished collecting their rollout before the rest are forced to end early.
         num_threads (int, optional): number of threads for this process.
             Defaults to the number of workers.
@@ -2093,11 +2095,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
     trajectory and the start of the next collection.
     This class can be safely used with online RL sota-implementations.
 
-    .. note:: Python requires multiprocessed code to be instantiated within a main guard:
+    .. note::
+        Python requires multiprocessed code to be instantiated within a main guard:
 
             >>> from torchrl.collectors import MultiSyncDataCollector
             >>> if __name__ == "__main__":
             ...     # Create your collector here
+            ...     collector = MultiSyncDataCollector(...)
 
         See https://docs.python.org/3/library/multiprocessing.html for more info.
 
@@ -2125,8 +2129,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
         ...         if i == 2:
         ...             print(data)
         ...             break
-        ... collector.shutdown()
-        ... del collector
+        >>> collector>shutdown()
+        >>> del collector
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -2753,7 +2757,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         update_at_each_batch (boolm optional): if ``True``, :meth:`~.update_policy_weight_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
-        preemptive_threshold (float, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
+        preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
             that will be allowed to finished collecting their rollout before the rest are forced to end early.
         num_threads (int, optional): number of threads for this process.
             Defaults to the number of workers.
