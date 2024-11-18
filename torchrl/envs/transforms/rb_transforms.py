@@ -36,7 +36,7 @@ class MultiStepTransform(Transform):
         n_steps (int): Number of steps in multi-step. The number of steps can be
             dynamically changed by changing the ``n_steps`` attribute of this
             transform.
-        gamma (float): Discount factor.
+        gamma (:obj:`float`): Discount factor.
 
     Keyword Args:
         reward_keys (list of NestedKey, optional): the reward keys in the input tensordict.

@@ -15,15 +15,15 @@ class Lamb(Optimizer):
     LAMB was proposed in `Large Batch Optimization for Deep Learning: Training BERT in 76 minutes`_.
     Arguments:
         params (iterable): iterable of parameters to optimize or dicts defining parameter groups.
-        lr (float, optional): learning rate. (default: 1e-3)
+        lr (:obj:`float`, optional): learning rate. (default: 1e-3)
         betas (Tuple[float, float], optional): coefficients used for computing
             running averages of gradient and its norm. (default: (0.9, 0.999))
-        eps (float, optional): term added to the denominator to improve
+        eps (:obj:`float`, optional): term added to the denominator to improve
             numerical stability. (default: 1e-8)
-        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+        weight_decay (:obj:`float`, optional): weight decay (L2 penalty) (default: 0)
         grad_averaging (bool, optional): whether apply (1-beta2) to grad when
             calculating running averages of gradient. (default: True)
-        max_grad_norm (float, optional): value used to clip global grad norm (default: 1.0)
+        max_grad_norm (:obj:`float`, optional): value used to clip global grad norm (default: 1.0)
         trust_clip (bool): enable LAMBC trust ratio clipping (default: False)
         always_adapt (boolean, optional): Apply adaptive learning rate to 0.0
             weight decay parameter (default: False)
