@@ -11,12 +11,8 @@ from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
+from packaging import version
 from torch import distributions as D, nn
-
-try:
-    from torch.compiler import assume_constant_result
-except ImportError:
-    from torch._dynamo import assume_constant_result
 
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
@@ -37,9 +33,18 @@ from torchrl.modules.utils import mappings
 D.Distribution.set_default_validate_args(False)
 
 try:
+    from torch.compiler import assume_constant_result
+except ImportError:
+    from torch._dynamo import assume_constant_result
+
+try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+TORCH_VERSION_PRE_2_6 = version.parse(torch.__version__).base_version < version.parse(
+    "2.6.0"
+)
 
 
 class IndependentNormal(D.Independent):
@@ -437,7 +442,7 @@ class TanhNormal(FasterTransformedDistribution):
         self.high = high
 
         if safe_tanh:
-            if is_dynamo_compiling():
+            if is_dynamo_compiling() and TORCH_VERSION_PRE_2_6:
                 _err_compile_safetanh()
             t = SafeTanhTransform()
         else:
@@ -780,8 +785,8 @@ uniform_sample_delta = _uniform_sample_delta
 
 def _err_compile_safetanh():
     raise RuntimeError(
-        "safe_tanh=True in TanhNormal is not compatible with torch.compile. To deactivate it, pass "
-        "safe_tanh=False. "
+        "safe_tanh=True in TanhNormal is not compatible with torch.compile with torch pre 2.6.0. "
+        " To deactivate it, pass safe_tanh=False. "
         "If you are using a ProbabilisticTensorDictModule, this can be done via "
         "`distribution_kwargs={'safe_tanh': False}`. "
         "See https://github.com/pytorch/pytorch/issues/133529 for more details."

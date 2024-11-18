@@ -199,7 +199,7 @@ class VideoRecorder(ObservationTransform):
             if self.center_crop:
                 if not _has_tv:
                     raise ImportError(
-                        "Could not import torchvision, `center_crop` not available."
+                        "Could not import torchvision, `center_crop` not available. "
                         "Make sure torchvision is installed in your environment."
                     )
                 from torchvision.transforms.functional import (
@@ -212,7 +212,7 @@ class VideoRecorder(ObservationTransform):
             if self.make_grid and observation_trsf.ndimension() >= 4:
                 if not _has_tv:
                     raise ImportError(
-                        "Could not import torchvision, `make_grid` not available."
+                        "Could not import torchvision, `make_grid` not available. "
                         "Make sure torchvision is installed in your environment."
                     )
                 from torchvision.utils import make_grid
