@@ -764,8 +764,8 @@ class DiscreteIQLLoss(IQLLoss):
         )
         if action_space is None:
             warnings.warn(
-                "action_space was not specified. DiscreteIQLLoss will default to 'one-hot'."
-                "This behavior will be deprecated soon and a space will have to be passed."
+                "action_space was not specified. DiscreteIQLLoss will default to 'one-hot'. "
+                "This behavior will be deprecated soon and a space will have to be passed. "
                 "Check the DiscreteIQLLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"

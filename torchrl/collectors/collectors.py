@@ -726,7 +726,7 @@ class SyncDataCollector(DataCollectorBase):
             warnings.warn(
                 f"frames_per_batch ({frames_per_batch}) is not exactly divisible by the number of batched environments ({self.n_env}), "
                 f" this results in more frames_per_batch per iteration that requested"
-                f" ({-(-frames_per_batch // self.n_env) * self.n_env})."
+                f" ({-(-frames_per_batch // self.n_env) * self.n_env}). "
                 "To silence this message, set the environment variable RL_WARNINGS to False."
             )
         self.requested_frames_per_batch = int(frames_per_batch)
@@ -1645,8 +1645,8 @@ class _MultiDataCollector(DataCollectorBase):
             remainder = total_frames % frames_per_batch
             if remainder != 0 and RL_WARNINGS:
                 warnings.warn(
-                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch})."
-                    f"This means {frames_per_batch - remainder} additional frames will be collected."
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch}). "
+                    f"This means {frames_per_batch - remainder} additional frames will be collected. "
                     "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
         self.total_frames = (
