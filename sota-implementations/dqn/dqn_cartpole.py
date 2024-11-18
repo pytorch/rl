@@ -108,15 +108,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         return q_loss.detach()
 
     compile_mode = None
-    if cfg.loss.compile:
-        compile_mode = cfg.loss.compile_mode
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
         if compile_mode in ("", None):
-            if cfg.loss.cudagraphs:
+            if cfg.compile.cudagraphs:
                 compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
         update = torch.compile(update, mode=compile_mode)
-    if cfg.loss.cudagraphs:
+    if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
@@ -134,7 +134,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         max_frames_per_traj=-1,
         init_random_frames=cfg.collector.init_random_frames,
         compile_policy={"mode": compile_mode} if compile_mode is not None else False,
-        cudagraph_policy=cfg.loss.cudagraphs,
+        cudagraph_policy=cfg.compile.cudagraphs,
     )
 
     # Main loop
