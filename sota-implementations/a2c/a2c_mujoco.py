@@ -11,20 +11,21 @@ torch.set_float32_matmul_precision("high")
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    import time
+    from copy import deepcopy
 
     import torch.optim
     import tqdm
 
+    from tensordict import from_module
     from tensordict.nn import CudaGraphModule
 
-    from torchrl._utils import logger as torchrl_logger, timeit
+    from torchrl._utils import timeit
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
-    from torchrl.objectives import A2CLoss
-    from torchrl.objectives.value.advantages import GAE
+    from torchrl.objectives import A2CLoss, group_optimizers
+    from torchrl.objectives.value import GAE
     from torchrl.record import VideoRecorder
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils_mujoco import eval_model, make_env, make_ppo_models
@@ -46,6 +47,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor, critic = make_ppo_models(
         cfg.env.env_name, device=device, compile=cfg.compile.compile
     )
+    with from_module(actor).data.to("meta").to_module(actor):
+        actor_eval = deepcopy(actor)
+        actor_eval.eval()
+    from_module(actor).data.to_module(actor_eval)
 
     # Create data buffer
     sampler = SamplerWithoutReplacement()
@@ -165,17 +170,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Main loop
     collected_frames = 0
     num_network_updates = 0
-    start_time = time.time()
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
-    sampling_start = time.time()
     c_iter = iter(collector)
     for i in range(len(collector)):
         with timeit("collecting"):
             data = next(c_iter)
 
         log_info = {}
-        sampling_time = time.time() - sampling_start
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
@@ -193,10 +195,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
 
         losses = []
-        training_start = time.time()
 
         # Compute GAE
         with torch.no_grad(), timeit("advantage"):
+            torch.compiler.cudagraph_mark_step_begin()
             data = adv_module(data)
         data_reshape = data.reshape(-1)
 
@@ -223,21 +225,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 losses.append(loss)
 
         # Get training losses
-        training_time = time.time() - training_start
         losses = torch.stack(losses).float().mean()
         for key, value in losses.items():
             log_info.update({f"train/{key}": value.item()})
         log_info.update(
             {
                 "train/lr": alpha * cfg.optim.lr,
-                "train/sampling_time": sampling_time,
-                "train/training_time": training_time,
-                **timeit.todict(prefix="time"),
             }
         )
-        if i % 200 == 0:
-            timeit.print()
-            timeit.erase()
 
         # Get test rewards
         with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
@@ -246,32 +241,30 @@ def main(cfg: "DictConfig"):  # noqa: F821
             final = collected_frames >= collector.total_frames
             if prev_test_frame < cur_test_frame or final:
                 actor.eval()
-                eval_start = time.time()
                 test_rewards = eval_model(
                     actor, test_env, num_episodes=cfg.logger.num_test_episodes
                 )
-                eval_time = time.time() - eval_start
                 log_info.update(
                     {
                         "test/reward": test_rewards.mean(),
-                        "test/eval_time": eval_time,
                     }
                 )
                 actor.train()
+
+        if i % 200 == 0:
+            log_info.update(timeit.todict(prefix="time"))
+            timeit.print()
+            timeit.erase()
 
         if logger:
             for key, value in log_info.items():
                 logger.log_scalar(key, value, collected_frames)
 
-        sampling_start = time.time()
         torch.compiler.cudagraph_mark_step_begin()
 
     collector.shutdown()
     if not test_env.is_closed:
         test_env.close()
-    end_time = time.time()
-    execution_time = end_time - start_time
-    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":
