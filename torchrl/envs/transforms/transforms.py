@@ -6154,6 +6154,7 @@ class SelectTransform(Transform):
         keep_dones (bool, optional): if ``False``, the done keys must be provided
             if they should be kept. Defaults to ``True``.
 
+    Examples:
         >>> import gymnasium
         >>> from torchrl.envs import GymWrapper
         >>> env = TransformedEnv(

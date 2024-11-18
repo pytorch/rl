@@ -855,51 +855,51 @@ class DiscreteSACLoss(LossModule):
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
 
     Examples:
-    >>> import torch
-    >>> from torch import nn
-    >>> from torchrl.data.tensor_specs import OneHot
-    >>> from torchrl.modules.distributions import NormalParamExtractor, OneHotCategorical
-    >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
-    >>> from torchrl.modules.tensordict_module.common import SafeModule
-    >>> from torchrl.objectives.sac import DiscreteSACLoss
-    >>> from tensordict import TensorDict
-    >>> from tensordict.nn import TensorDictModule
-    >>> n_act, n_obs = 4, 3
-    >>> spec = OneHot(n_act)
-    >>> module = TensorDictModule(nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["logits"])
-    >>> actor = ProbabilisticActor(
-    ...     module=module,
-    ...     in_keys=["logits"],
-    ...     out_keys=["action"],
-    ...     spec=spec,
-    ...     distribution_class=OneHotCategorical)
-    >>> qvalue = TensorDictModule(
-    ...     nn.Linear(n_obs, n_act),
-    ...     in_keys=["observation"],
-    ...     out_keys=["action_value"],
-    ... )
-    >>> loss = DiscreteSACLoss(actor, qvalue, action_space=spec, num_actions=spec.space.n)
-    >>> batch = [2,]
-    >>> action = spec.rand(batch)
-    >>> data = TensorDict({
-    ...     "observation": torch.randn(*batch, n_obs),
-    ...     "action": action,
-    ...     ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
-    ...     ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
-    ...     ("next", "reward"): torch.randn(*batch, 1),
-    ...     ("next", "observation"): torch.randn(*batch, n_obs),
-    ...     }, batch)
-    >>> loss(data)
-    TensorDict(
-    fields={
-        alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-        entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-        loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-        loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-        loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-    batch_size=torch.Size([]),
-    device=None,
-    is_shared=False)
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data.tensor_specs import OneHot
+        >>> from torchrl.modules.distributions import NormalParamExtractor, OneHotCategorical
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.sac import DiscreteSACLoss
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> n_act, n_obs = 4, 3
+        >>> spec = OneHot(n_act)
+        >>> module = TensorDictModule(nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["logits"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["logits"],
+        ...     out_keys=["action"],
+        ...     spec=spec,
+        ...     distribution_class=OneHotCategorical)
+        >>> qvalue = TensorDictModule(
+        ...     nn.Linear(n_obs, n_act),
+        ...     in_keys=["observation"],
+        ...     out_keys=["action_value"],
+        ... )
+        >>> loss = DiscreteSACLoss(actor, qvalue, action_space=spec, num_actions=spec.space.n)
+        >>> batch = [2,]
+        >>> action = spec.rand(batch)
+        >>> data = TensorDict({
+        ...     "observation": torch.randn(*batch, n_obs),
+        ...     "action": action,
+        ...     ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     ("next", "reward"): torch.randn(*batch, 1),
+        ...     ("next", "observation"): torch.randn(*batch, n_obs),
+        ...     }, batch)
+        >>> loss(data)
+        TensorDict(
+        fields={
+            alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
 
 
     This class is compatible with non-tensordict based modules too and can be

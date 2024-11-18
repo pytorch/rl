@@ -472,26 +472,30 @@ def td1_return_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -569,26 +573,30 @@ def td1_advantage_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -640,27 +648,31 @@ def vec_td1_return_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of the gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
-        time_dim (int): dimension where the time is unrolled. Defaults to -2.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
+        time_dim (int): dimension where the time is unrolled. Defaults to ``-2``.
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
@@ -699,26 +711,30 @@ def vec_td1_advantage_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -777,26 +793,30 @@ def td_lambda_return_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -883,26 +903,30 @@ def td_lambda_advantage_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -1019,26 +1043,30 @@ def vec_td_lambda_return_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -1169,26 +1197,30 @@ def vec_td_lambda_advantage_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape

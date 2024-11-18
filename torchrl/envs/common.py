@@ -840,15 +840,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ...     break
             >>> env = BraxEnv(envname)
             >>> env.full_action_spec
-        Composite(
-            action: BoundedContinuous(
-                shape=torch.Size([8]),
-                space=ContinuousBox(
-                    low=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True),
-                    high=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True)),
-                device=cpu,
-                dtype=torch.float32,
-                domain=continuous), device=cpu, shape=torch.Size([]))
+            Composite(
+                action: BoundedContinuous(
+                    shape=torch.Size([8]),
+                    space=ContinuousBox(
+                        low=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    device=cpu,
+                    dtype=torch.float32,
+                    domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
         full_action_spec = self.input_spec.get("full_action_spec", None)

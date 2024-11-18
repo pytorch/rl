@@ -324,6 +324,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
             ``ReparamGradientStrategy.RelaxedOneHot`` will use
             :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.
 
+    Examples:
         >>> torch.manual_seed(0)
         >>> logits = torch.randn(4) / 100  # almost equal probabilities
         >>> mask = torch.tensor([True, False, True, True])

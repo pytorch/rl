@@ -897,10 +897,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
     All arguments are keyword-only arguments.
 
-    Presented in
-        "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.
-        Prioritized experience replay."
-        (https://arxiv.org/abs/1511.05952)
+    Presented in "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.
+    Prioritized experience replay." (https://arxiv.org/abs/1511.05952)
 
     Args:
         alpha (float): exponent α determines how much prioritization is used,

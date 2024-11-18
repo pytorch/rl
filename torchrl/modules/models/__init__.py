@@ -10,6 +10,7 @@ from .batchrenorm import BatchRenorm1d
 
 from .decision_transformer import DecisionTransformer
 from .exploration import (
+    ConsistentDropout,
     ConsistentDropoutModule,
     NoisyLazyLinear,
     NoisyLinear,
