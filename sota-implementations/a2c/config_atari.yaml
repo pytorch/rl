@@ -1,11 +1,11 @@
 # Environment
 env:
   env_name: PongNoFrameskip-v4
-  num_envs: 1
+  num_envs: 16
 
 # collector
 collector:
-  frames_per_batch: 80
+  frames_per_batch: 800
   total_frames: 40_000_000
 
 # logger
@@ -34,3 +34,9 @@ loss:
   critic_coef: 0.25
   entropy_coef: 0.01
   loss_critic_type: l2
+  device:
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
