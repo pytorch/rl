@@ -840,15 +840,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ...     break
             >>> env = BraxEnv(envname)
             >>> env.full_action_spec
-        Composite(
-            action: BoundedContinuous(
-                shape=torch.Size([8]),
-                space=ContinuousBox(
-                    low=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True),
-                    high=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True)),
-                device=cpu,
-                dtype=torch.float32,
-                domain=continuous), device=cpu, shape=torch.Size([]))
+            Composite(
+                action: BoundedContinuous(
+                    shape=torch.Size([8]),
+                    space=ContinuousBox(
+                        low=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    device=cpu,
+                    dtype=torch.float32,
+                    domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
         full_action_spec = self.input_spec.get("full_action_spec", None)
@@ -1791,7 +1791,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 (results are tensors).
                 This arg can be passed during a call to :func:`~gym.make` (see
                 example below).
-            reward_threshold (float, optional): [Gym kwarg] The reward threshold
+            reward_threshold (:obj:`float`, optional): [Gym kwarg] The reward threshold
                 considered to have learnt an environment.
             nondeterministic (bool, optional): [Gym kwarg If the environment is nondeterministic
                 (even with knowledge of the initial seed and all actions). Defaults to
