@@ -151,8 +151,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
         )
-        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=10)
-        adv_module = CudaGraphModule(adv_module)
+        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=20)
+        adv_module = CudaGraphModule(adv_module, warmup=20)
 
     # Create collector
     collector = SyncDataCollector(
@@ -164,7 +164,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         storing_device=device,
         max_frames_per_traj=-1,
         trust_policy=True,
-        compile_policy={"mode": compile_mode} if cfg.compile.compile else False,
+        compile_policy={"mode": compile_mode} if compile_mode is not None else False,
         cudagraph_policy=cfg.compile.cudagraphs,
     )
 
