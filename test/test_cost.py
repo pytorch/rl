@@ -195,6 +195,12 @@ def get_devices():
 
 
 class LossModuleTestBase:
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        assert hasattr(
+            cls, "test_reset_parameters_recursive"
+        ), "Please add a test_reset_parameters_recursive test for this class"
+
     def _flatten_in_keys(self, in_keys):
         return [
             in_key if isinstance(in_key, str) else "_".join(list(unravel_keys(in_key)))
@@ -251,6 +257,42 @@ class LossModuleTestBase:
             assert (
                 getattr(test_fn.value_estimator.tensor_keys, advantage_key) == new_key
             )
+
+    @classmethod
+    def reset_parameters_recursive_test(cls, loss_fn):
+        def get_params(loss_fn):
+            for key, item in loss_fn.__dict__.items():
+                if isinstance(item, nn.Module):
+                    module_name = key
+                    params_name = f"{module_name}_params"
+                    target_name = f"target_{module_name}_params"
+                    params = loss_fn._modules.get(params_name, None)
+                    target = loss_fn._modules.get(target_name, None)
+
+                    if params is not None:
+                        yield params_name, params._param_td
+
+                    else:
+                        for subparam_name, subparam in loss_fn.named_parameters():
+                            if module_name in subparam_name:
+                                yield subparam_name, subparam
+
+                    if target is not None:
+                        yield target_name, target
+
+        old_params = {}
+
+        for param_name, param in get_params(loss_fn):
+            with torch.no_grad():
+                # Change the parameter to ensure that reset will change it again
+                param += 1000
+            old_params[param_name] = param.clone()
+
+        loss_fn.reset_parameters_recursive()
+
+        for param_name, param in get_params(loss_fn):
+            old_param = old_params[param_name]
+            assert (param != old_param).any()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -493,6 +535,11 @@ class TestDQN(LossModuleTestBase):
             names=[None, "time"],
         )
         return td
+
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor(action_spec_type="one_hot")
+        loss_fn = DQNLoss(actor)
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.parametrize(
         "delay_value,double_dqn", ([False, False], [True, False], [True, True])
@@ -1066,6 +1113,12 @@ class TestQMixer(LossModuleTestBase):
             td.refine_names(None, "time")
         return td
 
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor(action_spec_type="one_hot")
+        mixer = self._create_mock_mixer()
+        loss_fn = QMixerLoss(actor, mixer)
+        self.reset_parameters_recursive_test(loss_fn)
+
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
@@ -1569,6 +1622,12 @@ class TestDDPG(LossModuleTestBase):
             device=device,
         )
         return td
+
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = DDPGLoss(actor, value)
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
@@ -2209,6 +2268,16 @@ class TestTD3(LossModuleTestBase):
             device=device,
         )
         return td
+
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = TD3Loss(
+            actor,
+            value,
+            bounds=(-1, 1),
+        )
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
@@ -2915,6 +2984,16 @@ class TestTD3BC(LossModuleTestBase):
             device=device,
         )
         return td
+
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = TD3BCLoss(
+            actor,
+            value,
+            bounds=(-1, 1),
+        )
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
@@ -3719,6 +3798,20 @@ class TestSAC(LossModuleTestBase):
             device=device,
         )
         return td
+
+    def test_reset_parameters_recursive(self, version):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        if version == 1:
+            value = self._create_mock_value()
+        else:
+            value = None
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+        )
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -4591,6 +4684,17 @@ class TestDiscreteSAC(LossModuleTestBase):
         )
         return td
 
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        loss_fn = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
+            action_space="one-hot",
+        )
+        self.reset_parameters_recursive_test(loss_fn)
+
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -5226,6 +5330,15 @@ class TestCrossQ(LossModuleTestBase):
             device=device,
         )
         return td
+
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        loss_fn = CrossQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -5961,6 +6074,15 @@ class TestREDQ(LossModuleTestBase):
             device=device,
         )
         return td
+
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        loss_fn = REDQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
@@ -6792,6 +6914,15 @@ class TestCQL(LossModuleTestBase):
         )
         return td
 
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        loss_fn = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+        self.reset_parameters_recursive_test(loss_fn)
+
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, True))
     @pytest.mark.parametrize("max_q_backup", [True, False])
@@ -7367,6 +7498,13 @@ class TestDiscreteCQL(LossModuleTestBase):
         )
         return td
 
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor(
+            action_spec_type="one_hot",
+        )
+        loss_fn = DiscreteCQLLoss(actor)
+        self.reset_parameters_recursive_test(loss_fn)
+
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
@@ -7937,6 +8075,13 @@ class TestPPO(LossModuleTestBase):
             td["scale"] = scale
 
         return td
+
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    def test_reset_parameters_recursive(self, loss_class):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = loss_class(actor, value)
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
@@ -9016,6 +9161,12 @@ class TestA2C(LossModuleTestBase):
             td["scale"] = scale
         return td
 
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = A2CLoss(actor, value)
+        self.reset_parameters_recursive_test(loss_fn)
+
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
@@ -9623,6 +9774,27 @@ class TestA2C(LossModuleTestBase):
 
 class TestReinforce(LossModuleTestBase):
     seed = 0
+
+    def test_reset_parameters_recursive(self):
+        n_obs = 3
+        n_act = 5
+        value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
+        net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor_net = ProbabilisticActor(
+            module,
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            in_keys=["loc", "scale"],
+            spec=Unbounded(n_act),
+        )
+        loss_fn = ReinforceLoss(
+            actor_net,
+            critic_network=value_net,
+        )
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.parametrize("gradient_mode", [True, False])
     @pytest.mark.parametrize("advantage", ["gae", "td", "td_lambda", None])
@@ -10323,6 +10495,11 @@ class TestDreamer(LossModuleTestBase):
             value_model(td)
         return value_model
 
+    def test_reset_parameters_recursive(self, device):
+        world_model = self._create_world_model_model(10, 5).to(device)
+        loss_fn = DreamerModelLoss(world_model)
+        self.reset_parameters_recursive_test(loss_fn)
+
     @pytest.mark.parametrize("lambda_kl", [0, 1.0])
     @pytest.mark.parametrize("lambda_reco", [0, 1.0])
     @pytest.mark.parametrize("lambda_reward", [0, 1.0])
@@ -10604,6 +10781,11 @@ class TestOnlineDT(LossModuleTestBase):
         )
         return td
 
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        loss_fn = OnlineDTLoss(actor)
+        self.reset_parameters_recursive_test(loss_fn)
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_odt(self, device):
         torch.manual_seed(self.seed)
@@ -10831,6 +11013,11 @@ class TestDT(LossModuleTestBase):
         )
         return td
 
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        loss_fn = DTLoss(actor)
+        self.reset_parameters_recursive_test(loss_fn)
+
     def test_dt_tensordict_keys(self):
         actor = self._create_mock_actor()
         loss_fn = DTLoss(actor)
@@ -11033,6 +11220,11 @@ class TestGAIL(LossModuleTestBase):
             device=device,
         )
         return td
+
+    def test_reset_parameters_recursive(self):
+        discriminator = self._create_mock_discriminator()
+        loss_fn = GAILLoss(discriminator)
+        self.reset_parameters_recursive_test(loss_fn)
 
     def test_gail_tensordict_keys(self):
         discriminator = self._create_mock_discriminator()
@@ -11405,6 +11597,17 @@ class TestIQL(LossModuleTestBase):
             device=device,
         )
         return td
+
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value()
+        loss_fn = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+        )
+        self.reset_parameters_recursive_test(loss_fn)
 
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -12214,6 +12417,18 @@ class TestDiscreteIQL(LossModuleTestBase):
         )
         return td
 
+    def test_reset_parameters_recursive(self):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value()
+        loss_fn = DiscreteIQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            action_space="one-hot",
+        )
+        self.reset_parameters_recursive_test(loss_fn)
+
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
@@ -12841,6 +13056,8 @@ def test_param_buffer_types(create_target_params, cast):
         out_keys=["action"],
     )
     loss = MyLoss(actor_module)
+
+    LossModuleTestBase.reset_parameters_recursive_test(loss)
 
     if create_target_params:
         SoftUpdate(loss, eps=0.5)

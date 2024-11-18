@@ -516,7 +516,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self,
         transform: "Transform"  # noqa: F821
         | Callable[[TensorDictBase], TensorDictBase],
-    ) -> None:
+    ) -> EnvBase:
         """Returns a transformed environment where the callable/transform passed is applied.
 
         Args:
@@ -1480,6 +1480,78 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def full_state_spec(self, spec: Composite) -> None:
         self.state_spec = spec
 
+    # Single-env specs can be used to remove the batch size from the spec
+    @property
+    def batch_dims(self) -> int:
+        """Number of batch dimensions of the env."""
+        return len(self.batch_size)
+
+    def _make_single_env_spec(self, spec: TensorSpec) -> TensorSpec:
+        if not self.batch_dims:
+            return spec
+        idx = tuple(0 for _ in range(self.batch_dims))
+        return spec[idx]
+
+    @property
+    def single_full_action_spec(self) -> Composite:
+        """Returns the action spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_action_spec)
+
+    @property
+    def single_action_spec(self) -> TensorSpec:
+        """Returns the action spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.action_spec)
+
+    @property
+    def single_full_observation_spec(self) -> Composite:
+        """Returns the observation spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_action_spec)
+
+    @property
+    def single_observation_spec(self) -> Composite:
+        """Returns the observation spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.observation_spec)
+
+    @property
+    def single_full_reward_spec(self) -> Composite:
+        """Returns the reward spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_action_spec)
+
+    @property
+    def single_reward_spec(self) -> TensorSpec:
+        """Returns the reward spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.reward_spec)
+
+    @property
+    def single_full_done_spec(self) -> Composite:
+        """Returns the done spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_action_spec)
+
+    @property
+    def single_done_spec(self) -> TensorSpec:
+        """Returns the done spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.done_spec)
+
+    @property
+    def single_output_spec(self) -> Composite:
+        """Returns the output spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.output_spec)
+
+    @property
+    def single_input_spec(self) -> Composite:
+        """Returns the input spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.input_spec)
+
+    @property
+    def single_full_state_spec(self) -> Composite:
+        """Returns the state spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.full_state_spec)
+
+    @property
+    def single_state_spec(self) -> TensorSpec:
+        """Returns the state spec of the env as if it had no batch dimensions."""
+        return self._make_single_env_spec(self.state_spec)
+
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -1500,6 +1572,21 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         # sanity check
         self._assert_tensordict_shape(tensordict)
+        partial_steps = None
+
+        if not self.batch_locked:
+            # Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here
+            partial_steps = tensordict.get("_step", None)
+            if partial_steps is not None:
+                if partial_steps.all():
+                    partial_steps = None
+                else:
+                    tensordict_batch_size = tensordict.batch_size
+                    partial_steps = partial_steps.view(tensordict_batch_size)
+                    tensordict = tensordict[partial_steps]
+        else:
+            tensordict_batch_size = self.batch_size
+
         next_preset = tensordict.get("next", None)
 
         next_tensordict = self._step(tensordict)
@@ -1512,6 +1599,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 next_preset.exclude(*next_tensordict.keys(True, True))
             )
         tensordict.set("next", next_tensordict)
+        if partial_steps is not None:
+            result = tensordict.new_zeros(tensordict_batch_size)
+            result[partial_steps] = tensordict
+            return result
         return tensordict
 
     @classmethod
@@ -2354,11 +2445,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         set_truncated: bool = False,
         out=None,
         trust_policy: bool = False,
-    ):
+    ) -> TensorDictBase:
         """Executes a rollout in the environment.
 
-        The function will stop as soon as one of the contained environments
-        returns done=True.
+        The function will return as soon as any of the contained environments
+        reaches any of the done states.
 
         Args:
             max_steps (int): maximum number of steps to be executed. The actual number of steps can be smaller if
@@ -2374,14 +2465,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 the call to ``rollout``.
 
         Keyword Args:
-            auto_reset (bool, optional): if ``True``, resets automatically the environment
-                if it is in a done state when the rollout is initiated.
-                Default is ``True``.
+            auto_reset (bool, optional): if ``True``, the contained environments will be reset before starting the
+                rollout. If ``False``, then the rollout will continue from a previous state, which requires the
+                ``tensordict`` argument to be passed with the previous rollout. Default is ``True``.
             auto_cast_to_device (bool, optional): if ``True``, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is ``False``.
-            break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is
-                called on the sub-envs that are done. Default is True.
-            break_when_all_done (bool): TODO
+            break_when_any_done (bool): if ``True``, break when any of the contained environments reaches any of the
+                done states. If ``False``, then the done environments are reset automatically. Default is ``True``.
+            break_when_all_done (bool, optional): if ``True``, break if all of the contained environments reach any
+                of the done states. If ``False``, break if at least one environment reaches any of the done states.
+                Default is ``False``.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if ``auto_reset`` is False, an initial
                 tensordict must be provided. Rollout will check if this tensordict has done flags and reset the
@@ -2731,7 +2824,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if break_when_all_done:
                 if partial_steps is not True:
                     # At least one partial step has been done
-                    del td_append["_partial_steps"]
+                    del td_append["_step"]
                     td_append = torch.where(
                         partial_steps.view(td_append.shape), td_append, tensordicts[-1]
                     )
@@ -2757,17 +2850,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 _terminated_or_truncated(
                     tensordict,
                     full_done_spec=self.output_spec["full_done_spec"],
-                    key="_partial_steps",
+                    key="_step",
                     write_full_false=False,
                 )
-                partial_step_curr = tensordict.get("_partial_steps", None)
+                partial_step_curr = tensordict.get("_step", None)
                 if partial_step_curr is not None:
                     partial_step_curr = ~partial_step_curr
                     partial_steps = partial_steps & partial_step_curr
                 if partial_steps is not True:
                     if not partial_steps.any():
                         break
-                    tensordict.set("_partial_steps", partial_steps)
+                    tensordict.set("_step", partial_steps)
 
             if callback is not None:
                 callback(self, tensordict)

@@ -24,7 +24,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.1"]
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       upload-artifact: docs
@@ -93,7 +93,7 @@ jobs:
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build
         cd ..
 
         cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
@@ -108,7 +108,7 @@ jobs:
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       download-artifact: docs

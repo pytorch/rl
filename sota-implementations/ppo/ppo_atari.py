@@ -5,7 +5,7 @@
 
 """
 This script reproduces the Proximal Policy Optimization (PPO) Algorithm
-results from Schulman et al. 2017 for the on Atari Environments.
+results from Schulman et al. 2017 for the Atari Environments.
 """
 import hydra
 from torchrl._utils import logger as torchrl_logger
@@ -138,7 +138,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg_logger_num_test_episodes = cfg.logger.num_test_episodes
     cfg_optim_max_grad_norm = cfg.optim.max_grad_norm
     cfg.loss.clip_epsilon = cfg_loss_clip_epsilon
-    losses = TensorDict({}, batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
+    losses = TensorDict(batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
 
     for i, data in enumerate(collector):
 

@@ -598,7 +598,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
     @classmethod
     def _preproc_run(cls, path, gz_files, run):
         files = gz_files[run]
-        td = TensorDict({}, [])
+        td = TensorDict()
         path = Path(path)
         for file in files:
             name = str(Path(file).parts[-1]).split(".")[0]

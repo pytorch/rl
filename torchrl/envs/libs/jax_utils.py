@@ -102,19 +102,21 @@ def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
     return None
 
 
-def _tensordict_to_object(tensordict: TensorDictBase, object_example):
+def _tensordict_to_object(tensordict: TensorDictBase, object_example, batch_size=None):
     """Converts a TensorDict to a namedtuple or a dataclass."""
     from jax import dlpack as jax_dlpack, numpy as jnp
 
+    if batch_size is None:
+        batch_size = []
     t = {}
     _fields = _get_object_fields(object_example)
     for name, example in _fields.items():
         value = tensordict.get(name, None)
         if isinstance(value, TensorDictBase):
-            t[name] = _tensordict_to_object(value, example)
+            t[name] = _tensordict_to_object(value, example, batch_size=batch_size)
         elif value is None:
             if isinstance(example, dict):
-                t[name] = _tensordict_to_object({}, example)
+                t[name] = _tensordict_to_object({}, example, batch_size=batch_size)
             else:
                 t[name] = None
         else:
@@ -140,7 +142,9 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
                     t[name] = value
             else:
                 value = jnp.reshape(value, tuple(shape))
-                t[name] = value.view(example.dtype).reshape(example.shape)
+                t[name] = value.view(example.dtype).reshape(
+                    (*batch_size, *example.shape)
+                )
     return type(object_example)(**t)
 
 
