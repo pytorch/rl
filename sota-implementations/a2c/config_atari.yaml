@@ -1,11 +1,11 @@
 # Environment
 env:
   env_name: PongNoFrameskip-v4
-  num_envs: 1
+  num_envs: 16
 
 # collector
 collector:
-  frames_per_batch: 80
+  frames_per_batch: 8000
   total_frames: 40_000_000
 
 # logger
