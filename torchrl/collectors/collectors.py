@@ -73,6 +73,15 @@ except ImportError:
         """Placeholder when cudagraph_mark_step_begin is missing."""
         ...
 
+try:
+    from torchrl.compiler import cudagraph_mark_step_begin
+except ImportError:
+
+    def cudagraph_mark_step_begin():
+        """Placeholder for missing cudagraph_mark_step_begin method."""
+        ...
+
+
 _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
