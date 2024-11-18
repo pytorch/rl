@@ -18,11 +18,12 @@ from gail_utils import log_metrics, make_gail_discriminator, make_offline_replay
 from ppo_utils import eval_model, make_env, make_ppo_models
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+from tensordict.nn import CudaGraphModule
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 
 from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.objectives import ClipPPOLoss, GAILLoss
+from torchrl.objectives import ClipPPOLoss, GAILLoss, group_optimizers
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -69,19 +70,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     np.random.seed(cfg.env.seed)
 
     # Create models (check utils_mujoco.py)
-    actor, critic = make_ppo_models(cfg.env.env_name)
+    actor, critic = make_ppo_models(cfg.env.env_name, compile=cfg.compile.compile)
     actor, critic = actor.to(device), critic.to(device)
-
-    # Create collector
-    collector = SyncDataCollector(
-        create_env_fn=make_env(cfg.env.env_name, device),
-        policy=actor,
-        frames_per_batch=cfg.ppo.collector.frames_per_batch,
-        total_frames=cfg.ppo.collector.total_frames,
-        device=device,
-        storing_device=device,
-        max_frames_per_traj=-1,
-    )
 
     # Create data buffer
     data_buffer = TensorDictReplayBuffer(
@@ -111,6 +101,30 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create optimizers
     actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.ppo.optim.lr, eps=1e-5)
     critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.ppo.optim.lr, eps=1e-5)
+    optim = group_optimizers(actor_optim, critic_optim)
+    del actor_optim, critic_optim
+
+    compile_mode = None
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
+        if compile_mode in ("", None):
+            if cfg.compile.cudagraphs:
+                compile_mode = "default"
+            else:
+                compile_mode = "reduce-overhead"
+
+    # Create collector
+    collector = SyncDataCollector(
+        create_env_fn=make_env(cfg.env.env_name, device),
+        policy=actor,
+        frames_per_batch=cfg.ppo.collector.frames_per_batch,
+        total_frames=cfg.ppo.collector.total_frames,
+        device=device,
+        storing_device=device,
+        max_frames_per_traj=-1,
+        compile_policy={"mode": compile_mode} if compile_mode is not None else False,
+        cudagraph_policy=cfg.compile.cudagraphs,
+    )
 
     # Create replay buffer
     replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
@@ -138,10 +152,82 @@ def main(cfg: "DictConfig"):  # noqa: F821
             VideoRecorder(logger, tag="rendering/test", in_keys=["pixels"])
         )
     test_env.eval()
+    num_network_updates = torch.zeros((), dtype=torch.int64, device=device)
+
+    def update(data, expert_data, num_network_updates=num_network_updates):
+        # Add collector data to expert data
+        expert_data.set(
+            discriminator_loss.tensor_keys.collector_action,
+            data["action"][: expert_data.batch_size[0]],
+        )
+        expert_data.set(
+            discriminator_loss.tensor_keys.collector_observation,
+            data["observation"][: expert_data.batch_size[0]],
+        )
+        d_loss = discriminator_loss(expert_data)
+
+        # Backward pass
+        d_loss.get("loss").backward()
+        discriminator_optim.step()
+        discriminator_optim.zero_grad(set_to_none=True)
+
+        # Compute discriminator reward
+        with torch.no_grad():
+            data = discriminator(data)
+        d_rewards = -torch.log(1 - data["d_logits"] + 1e-8)
+
+        # Set discriminator rewards to tensordict
+        data.set(("next", "reward"), d_rewards)
+
+        # Update PPO
+        for _ in range(cfg_loss_ppo_epochs):
+            # Compute GAE
+            with torch.no_grad():
+                data = adv_module(data)
+            data_reshape = data.reshape(-1)
+
+            # Update the data buffer
+            data_buffer.empty()
+            data_buffer.extend(data_reshape)
+
+            for batch in data_buffer:
+                optim.zero_grad(set_to_none=True)
+
+                # Linearly decrease the learning rate and clip epsilon
+                alpha = 1.0
+                if cfg_optim_anneal_lr:
+                    alpha = 1 - (num_network_updates / total_network_updates)
+                    for group in actor_optim.param_groups:
+                        group["lr"] = cfg_optim_lr * alpha
+                    for group in critic_optim.param_groups:
+                        group["lr"] = cfg_optim_lr * alpha
+                if cfg_loss_anneal_clip_eps:
+                    loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
+                num_network_updates += 1
+
+                # Forward pass PPO loss
+                loss = loss_module(batch)
+                critic_loss = loss["loss_critic"]
+                actor_loss = loss["loss_objective"] + loss["loss_entropy"]
+
+                # Backward pass
+                (actor_loss + critic_loss).backward()
+
+                # Update the networks
+                optim.step()
+        return d_loss.detach()
+
+    if cfg.compile.compile:
+        update = torch.compile(update, mode=compile_mode)
+    if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
+        update = CudaGraphModule(update, warmup=50)
 
     # Training loop
     collected_frames = 0
-    num_network_updates = 0
     pbar = tqdm.tqdm(total=cfg.ppo.collector.total_frames)
 
     # extract cfg variables
@@ -164,89 +250,27 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Get expert data
         expert_data = replay_buffer.sample()
         expert_data = expert_data.to(device)
-        # Add collector data to expert data
-        expert_data.set(
-            discriminator_loss.tensor_keys.collector_action,
-            data["action"][: expert_data.batch_size[0]],
-        )
-        expert_data.set(
-            discriminator_loss.tensor_keys.collector_observation,
-            data["observation"][: expert_data.batch_size[0]],
-        )
-        d_loss = discriminator_loss(expert_data)
 
-        # Backward pass
-        discriminator_optim.zero_grad()
-        d_loss.get("loss").backward()
-        discriminator_optim.step()
-
-        # Compute discriminator reward
-        with torch.no_grad():
-            data = discriminator(data)
-        d_rewards = -torch.log(1 - data["d_logits"] + 1e-8)
-
-        # Set discriminator rewards to tensordict
-        data.set(("next", "reward"), d_rewards)
+        d_loss = update(data, expert_data)
 
         # Get training rewards and episode lengths
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
+
             log_info.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
-                    / len(episode_length),
+                                            / len(episode_length),
                 }
             )
-        # Update PPO
-        for _ in range(cfg_loss_ppo_epochs):
-
-            # Compute GAE
-            with torch.no_grad():
-                data = adv_module(data)
-            data_reshape = data.reshape(-1)
-
-            # Update the data buffer
-            data_buffer.extend(data_reshape)
-
-            for _, batch in enumerate(data_buffer):
-
-                # Get a data batch
-                batch = batch.to(device)
-
-                # Linearly decrease the learning rate and clip epsilon
-                alpha = 1.0
-                if cfg_optim_anneal_lr:
-                    alpha = 1 - (num_network_updates / total_network_updates)
-                    for group in actor_optim.param_groups:
-                        group["lr"] = cfg_optim_lr * alpha
-                    for group in critic_optim.param_groups:
-                        group["lr"] = cfg_optim_lr * alpha
-                if cfg_loss_anneal_clip_eps:
-                    loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
-                num_network_updates += 1
-
-                # Forward pass PPO loss
-                loss = loss_module(batch)
-                critic_loss = loss["loss_critic"]
-                actor_loss = loss["loss_objective"] + loss["loss_entropy"]
-
-                # Backward pass
-                actor_loss.backward()
-                critic_loss.backward()
-
-                # Update the networks
-                actor_optim.step()
-                critic_optim.step()
-                actor_optim.zero_grad()
-                critic_optim.zero_grad()
 
         log_info.update(
             {
-                "train/actor_loss": actor_loss.item(),
-                "train/critic_loss": critic_loss.item(),
-                "train/discriminator_loss": d_loss["loss"].item(),
+                # "train/actor_loss": actor_loss.item(),
+                # "train/critic_loss": critic_loss.item(),
+                "train/discriminator_loss": d_loss["loss"],
                 "train/lr": alpha * cfg_optim_lr,
                 "train/clip_epsilon": (
                     alpha * cfg_loss_clip_epsilon
