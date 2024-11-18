@@ -298,10 +298,10 @@ class PrioritizedSampler(Sampler):
 
     Args:
         max_capacity (int): maximum capacity of the buffer.
-        alpha (float): exponent α determines how much prioritization is used,
+        alpha (:obj:`float`): exponent α determines how much prioritization is used,
             with α = 0 corresponding to the uniform case.
-        beta (float): importance sampling negative exponent.
-        eps (float, optional): delta added to the priorities to ensure that the buffer
+        beta (:obj:`float`): importance sampling negative exponent.
+        eps (:obj:`float`, optional): delta added to the priorities to ensure that the buffer
             does not contain null priorities. Defaults to 1e-8.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectory). Can be one of "max", "min",
@@ -1652,10 +1652,10 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         :meth:`~.update_priority`.
 
     Args:
-        alpha (float): exponent α determines how much prioritization is used,
+        alpha (:obj:`float`): exponent α determines how much prioritization is used,
             with α = 0 corresponding to the uniform case.
-        beta (float): importance sampling negative exponent.
-        eps (float, optional): delta added to the priorities to ensure that the buffer
+        beta (:obj:`float`): importance sampling negative exponent.
+        eps (:obj:`float`, optional): delta added to the priorities to ensure that the buffer
             does not contain null priorities. Defaults to 1e-8.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (i.e., stored trajectory). Can be one of "max", "min",
