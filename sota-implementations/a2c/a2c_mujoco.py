@@ -59,6 +59,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_network=critic,
         average_gae=False,
         vectorized=not cfg.compile.compile,
+        device=device,
     )
     loss_module = A2CLoss(
         actor_network=actor,
