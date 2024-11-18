@@ -67,6 +67,15 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 
+try:
+    from torch.compiler import cudagraph_mark_step_begin
+except ImportError:
+
+    def cudagraph_mark_step_begin():
+        """Placeholder for missing cudagraph_mark_step_begin method."""
+        raise NotImplementedError("cudagraph_mark_step_begin not implemented.")
+
+
 _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -833,6 +842,8 @@ class SyncDataCollector(DataCollectorBase):
                 policy_input_clone = (
                     policy_input.clone()
                 )  # to test if values have changed in-place
+                if self.compiled_policy:
+                    cudagraph_mark_step_begin()
                 policy_output = self.policy(policy_input)
 
                 # check that we don't have exclusive keys, because they don't appear in keys
@@ -1146,7 +1157,11 @@ class SyncDataCollector(DataCollectorBase):
                     else:
                         policy_input = self._shuttle
                     # we still do the assignment for security
+                    if self.compiled_policy:
+                        cudagraph_mark_step_begin()
                     policy_output = self.policy(policy_input)
+                    if self.compiled_policy:
+                        policy_output = policy_output.clone()
                     if self._shuttle is not policy_output:
                         # ad-hoc update shuttle
                         self._shuttle.update(

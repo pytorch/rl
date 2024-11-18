@@ -42,9 +42,8 @@ try:
 except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
-TORCH_VERSION_PRE_2_6 = version.parse(torch.__version__).base_version < version.parse(
-    "2.6.0"
-)
+TORCH_VERSION = version.parse(torch.__version__).base_version
+TORCH_VERSION_PRE_2_6 = version.parse(TORCH_VERSION) < version.parse("2.6.0")
 
 
 class IndependentNormal(D.Independent):
@@ -408,15 +407,16 @@ class TanhNormal(FasterTransformedDistribution):
             event_dims = min(1, loc.ndim)
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
-        if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
-            if not (high > low).all():
-                raise RuntimeError(err_msg)
-        elif isinstance(high, Number) and isinstance(low, Number):
-            if not high > low:
-                raise RuntimeError(err_msg)
-        else:
-            if not all(high > low):
-                raise RuntimeError(err_msg)
+        if not is_dynamo_compiling():
+            if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
+                if not (high > low).all():
+                    raise RuntimeError(err_msg)
+            elif isinstance(high, Number) and isinstance(low, Number):
+                if not high > low:
+                    raise RuntimeError(err_msg)
+            else:
+                if not all(high > low):
+                    raise RuntimeError(err_msg)
 
         high = torch.as_tensor(high, device=loc.device)
         low = torch.as_tensor(low, device=loc.device)
