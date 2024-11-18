@@ -98,8 +98,10 @@ print(data["collector", "traj_ids"])
 # the environment (the ``total_frames`` argument in the collector).
 # For this reason, most training loops in our examples look like this:
 #
-#   >>> for data in collector:
-#   ...     # your algorithm here
+#   ..code - block::Python
+#
+#     >>> for data in collector:
+#     ...     # your algorithm here
 #
 #
 # Replay Buffers
@@ -111,6 +113,8 @@ print(data["collector", "traj_ids"])
 # store it. In RL, the typical setting is that the data is collected, stored
 # temporarily and cleared after a little while given some heuristic:
 # first-in first-out or other. A typical pseudo-code would look like this:
+#
+# ..code - block::Python
 #
 #   >>> for data in collector:
 #   ...     storage.store(data)

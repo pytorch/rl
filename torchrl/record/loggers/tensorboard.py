@@ -54,7 +54,7 @@ class TensorboardLogger(Logger):
 
         Args:
             name (str): The name of the scalar.
-            value (float): The value of the scalar.
+            value (:obj:`float`): The value of the scalar.
             step (int, optional): The step at which the scalar is logged. Defaults to None.
 
         """
@@ -122,7 +122,7 @@ class TensorboardLogger(Logger):
         Keyword Args:
             step (int): Global step value to record
             bins (str): One of {‘tensorflow’,’auto’, ‘fd’, …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
-            walltime (float): Optional override default walltime (time.time()) seconds after epoch of event
+            walltime (:obj:`float`): Optional override default walltime (time.time()) seconds after epoch of event
 
         """
         global_step = kwargs.pop("step", None)

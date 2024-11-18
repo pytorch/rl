@@ -463,7 +463,7 @@ def next_state_value(
             key-value in the input tensordict when called. It does not need to be provided if pred_next_val is given.
         next_val_key (str, optional): key where the next value will be written.
             Default: 'state_action_value'
-        gamma (float, optional): return discount rate.
+        gamma (:obj:`float`, optional): return discount rate.
             default: 0.99
         pred_next_val (Tensor, optional): the next state value can be provided if it is not computed with the operator.
 
