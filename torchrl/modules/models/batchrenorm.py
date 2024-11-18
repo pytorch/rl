@@ -22,13 +22,13 @@ class BatchRenorm1d(nn.Module):
         num_features (int): Number of features in the input tensor.
 
     Keyword Args:
-        momentum (float, optional): Momentum factor for computing the running mean and variance.
+        momentum (:obj:`float`, optional): Momentum factor for computing the running mean and variance.
             Defaults to ``0.01``.
-        eps (float, optional): Small value added to the variance to avoid division by zero.
+        eps (:obj:`float`, optional): Small value added to the variance to avoid division by zero.
             Defaults to ``1e-5``.
-        max_r (float, optional): Maximum value for the scaling factor r.
+        max_r (:obj:`float`, optional): Maximum value for the scaling factor r.
             Defaults to ``3.0``.
-        max_d (float, optional): Maximum value for the bias factor d.
+        max_d (:obj:`float`, optional): Maximum value for the bias factor d.
             Defaults to ``5.0``.
         warmup_steps (int, optional): Number of warm-up steps for the running mean and variance.
             Defaults to ``10000``.
