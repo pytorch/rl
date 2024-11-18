@@ -296,12 +296,17 @@ class Trainer:
         if _save and self.save_trainer_file:
             self._save_trainer()
 
-    def load_from_file(self, file: Union[str, pathlib.Path]) -> Trainer:
+    def load_from_file(self, file: Union[str, pathlib.Path], **kwargs) -> Trainer:
+        """Loads a file and its state-dict in the trainer.
+
+        Keyword arguments are passed to the :func:`~torch.load` function.
+
+        """
         if _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
-            loaded_dict: OrderedDict = torch.load(file)
+            loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
         return self
 

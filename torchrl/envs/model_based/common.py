@@ -41,7 +41,7 @@ class ModelBasedEnvBase(EnvBase):
         ...         self.reward_spec = Unbounded((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
-        ...         tensordict = TensorDict({},
+        ...         tensordict = TensorDict(
         ...             batch_size=self.batch_size,
         ...             device=self.device,
         ...         )

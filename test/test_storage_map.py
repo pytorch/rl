@@ -381,7 +381,9 @@ class TestMCTSForest:
         r0, *_ = self.dummy_rollouts()
         forest = self._make_forest()
         tree = forest.get_tree(r0[0])
-        tree.plot(make_labels=self.make_labels)
+        for leaf in tree.vertices().values():
+            assert leaf in tree
+        # tree.plot(make_labels=self.make_labels)
 
     def test_forest_vertices(self):
         r0, *_ = self.dummy_rollouts()

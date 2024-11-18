@@ -1420,7 +1420,7 @@ class TestStepMdp:
             tds[1]["but", "not", "this", "one"] = torch.ones(2)
             tds[0]["next", "this", "one"] = torch.ones(2) * 2
             tensordict = LazyStackedTensorDict.lazy_stack(tds, 0)
-        next_tensordict = TensorDict({}, [4]) if has_out else None
+        next_tensordict = TensorDict(batch_size=[4]) if has_out else None
         if has_out and lazy_stack:
             next_tensordict = LazyStackedTensorDict.lazy_stack(
                 next_tensordict.unbind(0), 0
@@ -1550,9 +1550,9 @@ class TestStepMdp:
         nested_key = ("data",)
         td = TensorDict(
             {
-                nested_key: TensorDict({}, nested_batch_size),
+                nested_key: TensorDict(batch_size=nested_batch_size),
                 "next": {
-                    nested_key: TensorDict({}, nested_batch_size),
+                    nested_key: TensorDict(batch_size=nested_batch_size),
                 },
             },
             td_batch_size,
@@ -1670,7 +1670,7 @@ class TestStepMdp:
         # Nested only in root
         td = TensorDict(
             {
-                nested_key: TensorDict({}, nested_batch_size),
+                nested_key: TensorDict(batch_size=nested_batch_size),
                 "next": {},
             },
             td_batch_size,
@@ -1711,7 +1711,7 @@ class TestStepMdp:
         # Nested only in next
         td = TensorDict(
             {
-                "next": {nested_key: TensorDict({}, nested_batch_size)},
+                "next": {nested_key: TensorDict(batch_size=nested_batch_size)},
             },
             td_batch_size,
         )
@@ -3508,6 +3508,22 @@ class TestPartialSteps:
             assert (td[1].get("next") != 0).any()
             assert (td[2].get("next") == 0).all()
             assert (td[3].get("next") != 0).any()
+
+
+def test_single_env_spec():
+    env = NestedCountingEnv(batch_size=[3, 1, 7])
+    assert not env.single_full_action_spec.shape
+    assert not env.single_full_done_spec.shape
+    assert not env.single_input_spec.shape
+    assert not env.single_full_observation_spec.shape
+    assert not env.single_output_spec.shape
+    assert not env.single_full_reward_spec.shape
+
+    assert env.single_action_spec.shape
+    assert env.single_reward_spec.shape
+
+    assert env.output_spec.is_in(env.single_output_spec.zeros(env.shape))
+    assert env.input_spec.is_in(env.single_input_spec.zeros(env.shape))
 
 
 if __name__ == "__main__":
