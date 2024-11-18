@@ -177,7 +177,7 @@ def make_crossQ_agent(cfg, train_env, device):
         "low": torch.as_tensor(action_spec.space.low, device=device),
         "high": torch.as_tensor(action_spec.space.high, device=device),
         "tanh_loc": False,
-        "safe_tanh": not cfg.network.compile,
+        "safe_tanh": not cfg.compile.compile,
     }
 
     actor_extractor = NormalParamExtractor(
