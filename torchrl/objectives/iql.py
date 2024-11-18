@@ -52,11 +52,11 @@ class IQLLoss(LossModule):
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
-        temperature (float, optional):  Inverse temperature (beta).
+        temperature (:obj:`float`, optional):  Inverse temperature (beta).
             For smaller hyperparameter values, the objective behaves similarly to
             behavioral cloning, while for larger values, it attempts to recover the
             maximum of the Q-function.
-        expectile (float, optional): expectile :math:`\tau`. A larger value of :math:`\tau` is crucial
+        expectile (:obj:`float`, optional): expectile :math:`\tau`. A larger value of :math:`\tau` is crucial
             for antmaze tasks that require dynamical programming ("stichting").
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             tensordict key where to write the priority (for prioritized replay
@@ -539,11 +539,11 @@ class DiscreteIQLLoss(IQLLoss):
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
-        temperature (float, optional):  Inverse temperature (beta).
+        temperature (:obj:`float`, optional):  Inverse temperature (beta).
             For smaller hyperparameter values, the objective behaves similarly to
             behavioral cloning, while for larger values, it attempts to recover the
             maximum of the Q-function.
-        expectile (float, optional): expectile :math:`\tau`. A larger value of :math:`\tau` is crucial
+        expectile (:obj:`float`, optional): expectile :math:`\tau`. A larger value of :math:`\tau` is crucial
             for antmaze tasks that require dynamical programming ("stichting").
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             tensordict key where to write the priority (for prioritized replay
