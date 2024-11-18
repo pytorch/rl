@@ -301,13 +301,13 @@ def _split_and_pad_sequence(
             device=tensor.device,
         )
         mask_expand = expand_right(mask, (*mask.shape, *tensor.shape[1:]))
-        # return torch.where(mask_expand, tensor, 0.0)
-        # return torch.masked_scatter(empty_tensor, mask_expand, tensor.reshape(-1))
-        empty_tensor[mask_expand] = tensor.reshape(-1)
-        return empty_tensor
+        # We need to use masked-scatter to accommodate vmap
+        return torch.masked_scatter(empty_tensor, mask_expand, tensor.reshape(-1))
+        # empty_tensor[mask_expand] = tensor.reshape(-1)
+        # return empty_tensor
 
     if isinstance(tensor, TensorDictBase):
-        tensor = tensor.apply(_fill_tensor, batch_size=[*shape])
+        tensor = tensor.apply(_fill_tensor, batch_size=list(shape))
     else:
         tensor = _fill_tensor(tensor)
     if return_mask:
