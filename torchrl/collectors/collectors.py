@@ -74,7 +74,7 @@ except ImportError:
         ...
 
 try:
-    from torchrl.compiler import cudagraph_mark_step_begin
+    from torch.compiler import cudagraph_mark_step_begin
 except ImportError:
 
     def cudagraph_mark_step_begin():
