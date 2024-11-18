@@ -223,7 +223,7 @@ def _fast_vec_gae(
         terminated (torch.Tensor): a [B, T] boolean tensor containing the terminated states.
         gamma (scalar): the gamma decay (trajectory discount)
         lmbda (scalar): the lambda decay (exponential mean discount)
-        thr (float): threshold for the filter. Below this limit, components will ignored.
+        thr (:obj:`float`): threshold for the filter. Below this limit, components will ignored.
             Defaults to 1e-7.
 
     All tensors (values, reward and done) must have shape
@@ -980,7 +980,7 @@ def _fast_td_lambda_return_estimate(
         reward (torch.Tensor): a [*B, T, F] tensor containing rewards
         done (Tensor): boolean flag for end of trajectory.
         terminated (Tensor): boolean flag for end of episode.
-        thr (float): threshold for the filter. Below this limit, components will ignored.
+        thr (:obj:`float`): threshold for the filter. Below this limit, components will ignored.
             Defaults to 1e-7.
 
     All tensors (values, reward and done) must have shape
@@ -1360,7 +1360,7 @@ def reward2go(
             received at each time step over multiple trajectories.
         done (Tensor): boolean flag for end of episode. Differs from
             truncated, where the episode did not end but was interrupted.
-        gamma (float, optional): The discount factor to use for computing the
+        gamma (:obj:`float`, optional): The discount factor to use for computing the
             discounted cumulative sum of rewards. Defaults to 1.0.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 

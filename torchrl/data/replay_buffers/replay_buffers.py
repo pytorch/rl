@@ -901,10 +901,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     Prioritized experience replay." (https://arxiv.org/abs/1511.05952)
 
     Args:
-        alpha (float): exponent α determines how much prioritization is used,
+        alpha (:obj:`float`): exponent α determines how much prioritization is used,
             with α = 0 corresponding to the uniform case.
-        beta (float): importance sampling negative exponent.
-        eps (float): delta added to the priorities to ensure that the buffer
+        beta (:obj:`float`): importance sampling negative exponent.
+        eps (:obj:`float`): delta added to the priorities to ensure that the buffer
             does not contain null priorities.
         storage (Storage, optional): the storage to be used. If none is provided
             a default :class:`~torchrl.data.replay_buffers.ListStorage` with
@@ -1364,10 +1364,10 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
     tensordict to be passed to it with its new priority value.
 
     Keyword Args:
-        alpha (float): exponent α determines how much prioritization is used,
+        alpha (:obj:`float`): exponent α determines how much prioritization is used,
             with α = 0 corresponding to the uniform case.
-        beta (float): importance sampling negative exponent.
-        eps (float): delta added to the priorities to ensure that the buffer
+        beta (:obj:`float`): importance sampling negative exponent.
+        eps (:obj:`float`): delta added to the priorities to ensure that the buffer
             does not contain null priorities.
         storage (Storage, optional): the storage to be used. If none is provided
             a default :class:`~torchrl.data.replay_buffers.ListStorage` with

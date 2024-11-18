@@ -1791,7 +1791,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 (results are tensors).
                 This arg can be passed during a call to :func:`~gym.make` (see
                 example below).
-            reward_threshold (float, optional): [Gym kwarg] The reward threshold
+            reward_threshold (:obj:`float`, optional): [Gym kwarg] The reward threshold
                 considered to have learnt an environment.
             nondeterministic (bool, optional): [Gym kwarg If the environment is nondeterministic
                 (even with knowledge of the initial seed and all actions). Defaults to

@@ -90,11 +90,11 @@ class SACLoss(LossModule):
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
-        alpha_init (float, optional): initial entropy multiplier.
+        alpha_init (:obj:`float`, optional): initial entropy multiplier.
             Default is 1.0.
-        min_alpha (float, optional): min value of alpha.
+        min_alpha (:obj:`float`, optional): min value of alpha.
             Default is None (no minimum value).
-        max_alpha (float, optional): max value of alpha.
+        max_alpha (:obj:`float`, optional): max value of alpha.
             Default is None (no maximum value).
         action_spec (TensorSpec, optional): the action tensor spec. If not provided
             and the target entropy is ``"auto"``, it will be retrieved from
@@ -831,14 +831,14 @@ class DiscreteSACLoss(LossModule):
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 2.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
-        alpha_init (float, optional): initial entropy multiplier.
+        alpha_init (:obj:`float`, optional): initial entropy multiplier.
             Default is 1.0.
-        min_alpha (float, optional): min value of alpha.
+        min_alpha (:obj:`float`, optional): min value of alpha.
             Default is None (no minimum value).
-        max_alpha (float, optional): max value of alpha.
+        max_alpha (:obj:`float`, optional): max value of alpha.
             Default is None (no maximum value).
         fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is ``False``.
-        target_entropy_weight (float, optional): weight for the target entropy term.
+        target_entropy_weight (:obj:`float`, optional): weight for the target entropy term.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
             for data collection. Default is ``False``.
