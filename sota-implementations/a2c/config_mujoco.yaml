@@ -31,7 +31,9 @@ loss:
   critic_coef: 0.25
   entropy_coef: 0.0
   loss_critic_type: l2
+  device:
+
+compile:
   compile: False
   compile_mode: default
   cudagraphs: False
-  device:
