@@ -172,7 +172,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     c_iter = iter(collector)
     for i in range(len(collector)):
         with timeit("collecting"):
-            torch.compiler.cudagraph_mark_step_begin()
             data = next(c_iter)
 
         log_info = {}
@@ -222,7 +221,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 num_network_updates += 1
                 with timeit("optim - update"):
                     torch.compiler.cudagraph_mark_step_begin()
-                    loss = update(batch)
+                    loss = update(batch).clone()
                 losses.append(loss)
 
         # Get training losses
