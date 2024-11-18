@@ -25,7 +25,7 @@ class KLRewardTransform(Transform):
             have the following features: it must have a set of input (``in_keys``)
             and output keys (``out_keys``). It must have a ``get_dist`` method
             that outputs the distribution of the action.
-        coef (float): the coefficient of the KL term. Defaults to ``1.0``.
+        coef (:obj:`float`): the coefficient of the KL term. Defaults to ``1.0``.
         in_keys (str or list of str/tuples of str): the input key where the
             reward should be fetched. Defaults to ``"reward"``.
         out_keys (str or list of str/tuples of str): the output key where the

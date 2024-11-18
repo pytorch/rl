@@ -23,6 +23,7 @@ from .distributions import (
 )
 from .models import (
     BatchRenorm1d,
+    ConsistentDropout,
     ConsistentDropoutModule,
     Conv3dNet,
     ConvNet,

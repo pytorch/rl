@@ -41,7 +41,7 @@ class ConstantKLController(KLControllerBase):
     with.
 
     Keyword Arguments:
-        kl_coef (float): The coefficient to multiply KL with when calculating the
+        kl_coef (:obj:`float`): The coefficient to multiply KL with when calculating the
             reward.
         model (nn.Module, optional): wrapped model that needs to be controlled.
             Must have an attribute ``"kl_coef"``. If provided, the ``"kl_coef"`` will
@@ -73,8 +73,8 @@ class AdaptiveKLController(KLControllerBase):
     """Adaptive KL Controller as described in Ziegler et al. "Fine-Tuning Language Models from Human Preferences".
 
     Keyword Arguments:
-        init_kl_coef (float): The starting value of the coefficient.
-        target (float): The target KL value. When the observed KL is smaller, the
+        init_kl_coef (:obj:`float`): The starting value of the coefficient.
+        target (:obj:`float`): The target KL value. When the observed KL is smaller, the
             coefficient is decreased, thereby relaxing the KL penalty in the training
             objective and allowing the model to stray further from the reference model.
             When the observed KL is greater than the target, the KL coefficient is
@@ -146,10 +146,10 @@ class RolloutFromModel:
         reward_model: (nn.Module, tensordict.nn.TensorDictModule): a model which, given
             ``input_ids`` and ``attention_mask``, calculates rewards for each token and
             end_scores (the reward for the final token in each sequence).
-        kl_coef: (float, optional): initial kl coefficient.
+        kl_coef: (:obj:`float`, optional): initial kl coefficient.
         max_new_tokens (int, optional): the maximum length of the sequence.
             Defaults to 50.
-        score_clip (float, optional): Scores from the reward model are clipped to the
+        score_clip (:obj:`float`, optional): Scores from the reward model are clipped to the
             range ``(-score_clip, score_clip)``. Defaults to 10.
         kl_scheduler (KLControllerBase, optional): the KL coefficient scheduler.
         num_steps (int, optional): number of steps between two optimization.

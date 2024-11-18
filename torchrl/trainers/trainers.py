@@ -874,11 +874,11 @@ class RewardNormalizer(TrainerHookBase):
     """Reward normalizer hook.
 
     Args:
-        decay (float, optional): exponential moving average decay parameter.
+        decay (:obj:`float`, optional): exponential moving average decay parameter.
             Default is 0.999
-        scale (float, optional): the scale used to multiply the reward once
+        scale (:obj:`float`, optional): the scale used to multiply the reward once
             normalized. Defaults to 1.0.
-        eps (float, optional): the epsilon jitter used to prevent numerical
+        eps (:obj:`float`, optional): the epsilon jitter used to prevent numerical
             underflow. Defaults to ``torch.finfo(DEFAULT_DTYPE).eps``
             where ``DEFAULT_DTYPE=torch.get_default_dtype()``.
         reward_key (str or tuple, optional): the key where to find the reward
