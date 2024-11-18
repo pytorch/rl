@@ -133,11 +133,14 @@ class EGreedyModule(TensorDictModuleBase):
 
         """
         for _ in range(frames):
-            self.eps.data[0] = max(
-                self.eps_end.item(),
-                (
-                    self.eps - (self.eps_init - self.eps_end) / self.annealing_num_steps
-                ).item(),
+            self.eps.data.copy_(
+                torch.maximum(
+                    self.eps_end,
+                    (
+                        self.eps
+                        - (self.eps_init - self.eps_end) / self.annealing_num_steps
+                    ),
+                )
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -307,19 +310,20 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
         """
         for _ in range(frames):
-            self.sigma.data[0] = max(
-                self.sigma_end.item(),
-                (
-                    self.sigma
-                    - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
-                ).item(),
+            self.sigma.data.copy_(
+                torch.maximum(
+                    self.sigma_end(
+                        self.sigma
+                        - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
+                    ),
+                )
             )
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
-        sigma = self.sigma.item()
+        sigma = self.sigma
         noise = torch.normal(
-            mean=torch.ones(action.shape) * self.mean.item(),
-            std=torch.ones(action.shape) * self.std.item(),
+            mean=torch.ones(action.shape) * self.mean,
+            std=torch.ones(action.shape) * self.std,
         ).to(action.device)
         action = action + noise * sigma
         spec = self.spec
@@ -365,6 +369,9 @@ class AdditiveGaussianModule(TensorDictModuleBase):
             its output spec will be of type Composite. One needs to know where to
             find the action spec.
             default: "action"
+        safe (bool): if ``True``, actions that are out of bounds given the action specs will be projected in the space
+            given the :obj:`TensorSpec.project` heuristic.
+            default: True
 
     .. note::
         It is
@@ -386,6 +393,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         std: float = 1.0,
         *,
         action_key: Optional[NestedKey] = "action",
+        safe: bool = True,
     ):
         if not isinstance(sigma_init, float):
             warnings.warn("eps_init should be a float.")
@@ -410,7 +418,9 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         else:
             raise RuntimeError("spec cannot be None.")
         self._spec = spec
-        self.register_forward_hook(_forward_hook_safe_action)
+        self.safe = safe
+        if self.safe:
+            self.register_forward_hook(_forward_hook_safe_action)
 
     @property
     def spec(self):
@@ -426,19 +436,21 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
         """
         for _ in range(frames):
-            self.sigma.data[0] = max(
-                self.sigma_end.item(),
-                (
-                    self.sigma
-                    - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
-                ).item(),
+            self.sigma.data.copy_(
+                torch.maximum(
+                    self.sigma_end,
+                    (
+                        self.sigma
+                        - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
+                    ),
+                )
             )
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
-        sigma = self.sigma.item()
+        sigma = self.sigma
         noise = torch.normal(
-            mean=torch.ones(action.shape) * self.mean.item(),
-            std=torch.ones(action.shape) * self.std.item(),
+            mean=torch.ones(action.shape) * self.mean,
+            std=torch.ones(action.shape) * self.std,
         ).to(action.device)
         action = action + noise * sigma
         spec = self.spec[self.action_key]
@@ -636,12 +648,14 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         """
         for _ in range(frames):
             if self.annealing_num_steps > 0:
-                self.eps.data[0] = max(
-                    self.eps_end.item(),
-                    (
-                        self.eps
-                        - (self.eps_init - self.eps_end) / self.annealing_num_steps
-                    ).item(),
+                self.eps.data.copy_(
+                    torch.maximum(
+                        self.eps_end,
+                        (
+                            self.eps
+                            - (self.eps_init - self.eps_end) / self.annealing_num_steps
+                        ),
+                    )
                 )
             else:
                 raise ValueError(
@@ -664,9 +678,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                     f"To create a '{self.is_init_key}' entry, simply append an torchrl.envs.InitTracker "
                     f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
                 )
-            tensordict = self.ou.add_sample(
-                tensordict, self.eps.item(), is_init=is_init
-            )
+            tensordict = self.ou.add_sample(tensordict, self.eps, is_init=is_init)
         return tensordict
 
 
@@ -730,6 +742,10 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
             default: "action"
         is_init_key (NestedKey, optional): key where to find the is_init flag used to reset the noise steps.
             default: "is_init"
+        safe (boolean, optional): if False, the TensorSpec can be None. If it
+            is set to False but the spec is passed, the projection will still
+            happen.
+            Default is True.
 
     Examples:
         >>> import torch
@@ -772,6 +788,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         *,
         action_key: Optional[NestedKey] = "action",
         is_init_key: Optional[NestedKey] = "is_init",
+        safe: bool = True,
     ):
         super().__init__()
 
@@ -815,7 +832,9 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         self._spec.update(ou_specs)
         if len(set(self.out_keys)) != len(self.out_keys):
             raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
-        self.register_forward_hook(_forward_hook_safe_action)
+        self.safe = safe
+        if self.safe:
+            self.register_forward_hook(_forward_hook_safe_action)
 
     @property
     def spec(self):
@@ -830,12 +849,14 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         """
         for _ in range(frames):
             if self.annealing_num_steps > 0:
-                self.eps.data[0] = max(
-                    self.eps_end.item(),
-                    (
-                        self.eps
-                        - (self.eps_init - self.eps_end) / self.annealing_num_steps
-                    ).item(),
+                self.eps.data.copy_(
+                    torch.maximum(
+                        self.eps_end,
+                        (
+                            self.eps
+                            - (self.eps_init - self.eps_end) / self.annealing_num_steps
+                        ),
+                    )
                 )
             else:
                 raise ValueError(
@@ -857,9 +878,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
                     f"To create a '{self.is_init_key}' entry, simply append an torchrl.envs.InitTracker "
                     f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
                 )
-            tensordict = self.ou.add_sample(
-                tensordict, self.eps.item(), is_init=is_init
-            )
+            tensordict = self.ou.add_sample(tensordict, self.eps, is_init=is_init)
         return tensordict
 
 
@@ -923,11 +942,12 @@ class _OrnsteinUhlenbeckProcess:
             tensordict.set(self.noise_key, noise)
             tensordict.set(self.steps_key, steps)
         else:
-            noise = tensordict.get(self.noise_key)
-            steps = tensordict.get(self.steps_key)
+            # We must clone for cudagraph, otherwise the same tensor may re-enter the compiled region
+            noise = tensordict.get(self.noise_key).clone()
+            steps = tensordict.get(self.steps_key).clone()
         if is_init is not None:
-            noise[is_init] = 0
-            steps[is_init] = 0
+            noise = torch.masked_fill(noise, is_init, 0)
+            steps = torch.masked_fill(steps, is_init, 0)
         return noise, steps
 
     def add_sample(
@@ -977,9 +997,9 @@ class _OrnsteinUhlenbeckProcess:
             * np.sqrt(self.dt)
             * torch.randn_like(prev_noise)
         )
-        tensordict.set_(self.noise_key, noise - self.x0)
-        tensordict.set_(self.key, tensordict.get(self.key) + eps * noise)
-        tensordict.set_(self.steps_key, n_steps + 1)
+        tensordict.set(self.noise_key, noise - self.x0)
+        tensordict.set(self.key, tensordict.get(self.key) + eps * noise)
+        tensordict.set(self.steps_key, n_steps + 1)
         return tensordict
 
     def current_sigma(self, n_steps: torch.Tensor) -> torch.Tensor:
