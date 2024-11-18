@@ -590,3 +590,21 @@ def _clip_value_loss(
     # Chose the most pessimistic value prediction between clipped and non-clipped
     loss_value = torch.max(loss_value, loss_value_clipped)
     return loss_value, clip_fraction
+
+
+def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimizer:
+    """Groups multiple optimizers into a single one.
+
+    All optimizers are expected to have the same type.
+    """
+    cls = None
+    params = []
+    for optimizer in optimizers:
+        if optimizer is None:
+            continue
+        if cls is None:
+            cls = type(optimizer)
+        if cls is not type(optimizer):
+            raise ValueError("Cannot group optimizers of different type.")
+        params.extend(optimizer.param_groups)
+    return cls(params)
