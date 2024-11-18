@@ -905,7 +905,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 )
                 if isinstance(env, PixelObservationWrapper):
                     raise TypeError(
-                        "PixelObservationWrapper cannot be used to wrap an environment"
+                        "PixelObservationWrapper cannot be used to wrap an environment "
                         "that is already a PixelObservationWrapper instance."
                     )
             except ModuleNotFoundError:

@@ -3202,7 +3202,7 @@ class _EnvWrapper(EnvBase):
         )
         if len(args):
             raise ValueError(
-                "`_EnvWrapper.__init__` received a non-empty args list of arguments."
+                "`_EnvWrapper.__init__` received a non-empty args list of arguments. "
                 "Make sure only keywords arguments are used when calling `super().__init__`."
             )
 
