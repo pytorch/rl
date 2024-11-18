@@ -142,13 +142,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 compile_mode = "reduce-overhead"
 
         update = torch.compile(update, mode=compile_mode)
-        actor = torch.compile(actor, mode=compile_mode)
         adv_module = torch.compile(adv_module, mode=compile_mode)
 
     if cfg.compile.cudagraphs:
-        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=10)
-        actor = CudaGraphModule(actor, warmup=10)
-        adv_module = CudaGraphModule(adv_module)
+        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=20)
+        adv_module = CudaGraphModule(adv_module, warmup=20)
 
     # Create collector
     collector = SyncDataCollector(
@@ -160,7 +158,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         storing_device=device,
         max_frames_per_traj=-1,
         trust_policy=True,
-        compile_policy={"mode": compile_mode} if cfg.compile.compile else False,
+        compile_policy={"mode": compile_mode} if compile_mode is not None else False,
         cudagraph_policy=cfg.compile.cudagraphs,
     )
 
