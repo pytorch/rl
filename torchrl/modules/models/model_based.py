@@ -41,9 +41,9 @@ class DreamerActor(nn.Module):
             Defaults to 200.
         activation_class (nn.Module, optional): Activation class.
             Defaults to nn.ELU.
-        std_bias (float, optional): Bias of the softplus transform.
+        std_bias (:obj:`float`, optional): Bias of the softplus transform.
             Defaults to 5.0.
-        std_min_val (float, optional): Minimum value of the standard deviation.
+        std_min_val (:obj:`float`, optional): Minimum value of the standard deviation.
             Defaults to 1e-4.
     """
 
@@ -282,7 +282,7 @@ class RSSMPrior(nn.Module):
             Defaults to 200.
         state_dim (int, optional): Size of the state.
             Defaults to 30.
-        scale_lb (float, optional): Lower bound of the scale of the state distribution.
+        scale_lb (:obj:`float`, optional): Lower bound of the scale of the state distribution.
             Defaults to 0.1.
 
 
@@ -346,7 +346,7 @@ class RSSMPosterior(nn.Module):
             Defaults to 200.
         state_dim (int, optional): Size of the state.
             Defaults to 30.
-        scale_lb (float, optional): Lower bound of the scale of the state distribution.
+        scale_lb (:obj:`float`, optional): Lower bound of the scale of the state distribution.
             Defaults to 0.1.
 
     """
