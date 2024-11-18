@@ -56,7 +56,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         lmbda=cfg.loss.gae_lambda,
         value_network=critic,
         average_gae=True,
-        vectorized=not cfg.loss.compile,
+        vectorized=not cfg.compile.compile,
     )
     loss_module = A2CLoss(
         actor_network=actor,
@@ -130,17 +130,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     compile_mode = None
-    if cfg.loss.compile:
-        compile_mode = cfg.loss.compile_mode
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
         if compile_mode in ("", None):
-            if cfg.loss.cudagraphs:
+            if cfg.compile.cudagraphs:
                 compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
         update = torch.compile(update, mode=compile_mode)
         adv_module = torch.compile(adv_module, mode=compile_mode)
 
-    if cfg.loss.cudagraphs:
+    if cfg.compile.cudagraphs:
         update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
         adv_module = CudaGraphModule(adv_module)
 
@@ -153,8 +153,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         storing_device=device,
         policy_device=device,
-        compile_policy={"mode": compile_mode} if cfg.loss.compile else False,
-        cudagraph_policy=cfg.loss.cudagraphs,
+        compile_policy={"mode": compile_mode} if cfg.compile.compile else False,
+        cudagraph_policy=cfg.compile.cudagraphs,
     )
 
     # Main loop
