@@ -674,6 +674,7 @@ class TD0Estimator(ValueEstimatorBase):
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
+
         if self.gamma.device != device:
             self.gamma = self.gamma.to(device)
         gamma = self.gamma
@@ -1121,6 +1122,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
+
         if self.gamma.device != device:
             self.gamma = self.gamma.to(device)
         gamma = self.gamma
@@ -1722,6 +1724,7 @@ class VTrace(ValueEstimatorBase):
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
+
         if self.gamma.device != device:
             self.gamma = self.gamma.to(device)
         gamma = self.gamma
