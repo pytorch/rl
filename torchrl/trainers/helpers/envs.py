@@ -116,7 +116,7 @@ def make_env_transforms(
     if from_pixels:
         if not cfg.catframes:
             raise RuntimeError(
-                "this env builder currently only accepts positive catframes values"
+                "this env builder currently only accepts positive catframes values "
                 "when pixels are being used."
             )
         env.append_transform(ToTensorImage())
