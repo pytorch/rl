@@ -88,10 +88,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model = make_cql_model(cfg, train_env, eval_env, device)
 
     compile_mode = None
-    if cfg.loss.compile:
-        if cfg.loss.compile_mode not in (None, ""):
-            compile_mode = cfg.loss.compile_mode
-        elif cfg.loss.cudagraphs:
+    if cfg.compile.compile:
+        if cfg.compile.compile_mode not in (None, ""):
+            compile_mode = cfg.compile.compile_mode
+        elif cfg.compile.cudagraphs:
             compile_mode = "default"
         else:
             compile_mode = "reduce-overhead"
@@ -101,9 +101,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg,
         train_env,
         actor_model_explore=model[0],
-        compile=cfg.loss.compile,
+        compile=cfg.compile.compile,
         compile_mode=compile_mode,
-        cudagraph=cfg.loss.cudagraphs,
+        cudagraph=cfg.compile.cudagraphs,
     )
 
     # Create loss
@@ -145,7 +145,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     if compile_mode:
         update = torch.compile(update, mode=compile_mode)
-    if cfg.loss.cudagraphs:
+    if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,

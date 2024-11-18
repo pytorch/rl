@@ -43,6 +43,8 @@ network:
   hidden_sizes: [256, 256]
   activation: relu
   device: null
+
+compile:
   compile: False
   compile_mode:
   cudagraphs: False
