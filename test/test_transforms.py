@@ -7164,13 +7164,14 @@ class TestTensorDictPrimer(TransformBase):
             rollout_td.get(("next", "mykey2")) == torch.tensor(1, dtype=torch.int64)
         ).all
 
+    @pytest.mark.skipif(not _has_gym, reason="GYM not found")
     def test_spec_shape_inplace_correction(self):
         hidden_size = input_size = num_layers = 2
         model = GRUModule(
             input_size, hidden_size, num_layers, in_key="observation", out_key="action"
         )
         env = TransformedEnv(
-            SerialEnv(2, lambda: GymEnv("Pendulum-v1")),
+            SerialEnv(2, lambda: GymEnv(PENDULUM_VERSIONED())),
         )
         # These primers do not have the leading batch dimension
         # since model is agnostic to batch dimension that will be used.
