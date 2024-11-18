@@ -1131,7 +1131,7 @@ class QValueActor(SafeSequential):
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError(
-                "Using specs in action_space is deprecated."
+                "Using specs in action_space is deprecated. "
                 "Please use the 'spec' argument if you want to provide an action spec"
             )
         action_space, spec = _process_action_space_spec(action_space, spec)
