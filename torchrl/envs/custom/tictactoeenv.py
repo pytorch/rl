@@ -34,6 +34,7 @@ class TicTacToeEnv(EnvBase):
     output entry).
 
     Specs:
+        >>> print(env.specs)
         Composite(
             output_spec: Composite(
                 full_observation_spec: Composite(

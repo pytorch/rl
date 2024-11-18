@@ -463,7 +463,7 @@ def next_state_value(
             key-value in the input tensordict when called. It does not need to be provided if pred_next_val is given.
         next_val_key (str, optional): key where the next value will be written.
             Default: 'state_action_value'
-        gamma (float, optional): return discount rate.
+        gamma (:obj:`float`, optional): return discount rate.
             default: 0.99
         pred_next_val (Tensor, optional): the next state value can be provided if it is not computed with the operator.
 
@@ -597,3 +597,21 @@ def _get_default_device(net):
         return p.device
     else:
         return torch.get_default_device()
+
+
+def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimizer:
+    """Groups multiple optimizers into a single one.
+
+    All optimizers are expected to have the same type.
+    """
+    cls = None
+    params = []
+    for optimizer in optimizers:
+        if optimizer is None:
+            continue
+        if cls is None:
+            cls = type(optimizer)
+        if cls is not type(optimizer):
+            raise ValueError("Cannot group optimizers of different type.")
+        params.extend(optimizer.param_groups)
+    return cls(params)

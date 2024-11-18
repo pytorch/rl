@@ -27,7 +27,7 @@ class GAILLoss(LossModule):
 
     Keyword Args:
         use_grad_penalty (bool, optional): Whether to use gradient penalty. Default: ``False``.
-        gp_lambda (float, optional): Gradient penalty lambda. Default: ``10``.
+        gp_lambda (:obj:`float`, optional): Gradient penalty lambda. Default: ``10``.
         reduction (str, optional): Specifies the reduction to apply to the output:
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of

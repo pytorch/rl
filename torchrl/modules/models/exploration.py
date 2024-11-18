@@ -262,11 +262,11 @@ class gSDEModule(nn.Module):
             outputs a distribution average.
         action_dim (int): the dimension of the action.
         state_dim (int): the state dimension.
-        sigma_init (float, optional): the initial value of the standard deviation. The
+        sigma_init (:obj:`float`, optional): the initial value of the standard deviation. The
             softplus non-linearity is used to map the log_sigma parameter to a
             positive value. Defaults to ``1.0``.
-        scale_min (float, optional): min value of the scale. Defaults to ``0.01``.
-        scale_max (float, optional): max value of the scale. Defaults to ``10.0``.
+        scale_min (:obj:`float`, optional): min value of the scale. Defaults to ``0.01``.
+        scale_max (:obj:`float`, optional): max value of the scale. Defaults to ``10.0``.
         learn_sigma (bool, optional): if ``True``, the value of the ``sigma``
             variable will be included in the module parameters, making it learnable.
             Defaults to ``True``.
@@ -432,11 +432,11 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
     (or 1 if no ``sigma_init`` value is provided).
 
     Args:
-        sigma_init (float, optional): the initial value of the standard deviation. The
+        sigma_init (:obj:`float`, optional): the initial value of the standard deviation. The
             softplus non-linearity is used to map the log_sigma parameter to a
             positive value. Defaults to ``None`` (learned).
-        scale_min (float, optional): min value of the scale. Defaults to ``0.01``.
-        scale_max (float, optional): max value of the scale. Defaults to ``10.0``.
+        scale_min (:obj:`float`, optional): min value of the scale. Defaults to ``0.01``.
+        scale_max (:obj:`float`, optional): max value of the scale. Defaults to ``10.0``.
         learn_sigma (bool, optional): if ``True``, the value of the ``sigma``
             variable will be included in the module parameters, making it learnable.
             Defaults to ``True``.
@@ -557,7 +557,7 @@ class ConsistentDropout(_DropoutNd):
       this module.
 
     Args:
-       p (float, optional): Dropout probability. Defaults to ``0.5``.
+       p (:obj:`float`, optional): Dropout probability. Defaults to ``0.5``.
 
     .. seealso::
 
@@ -609,7 +609,7 @@ class ConsistentDropoutModule(TensorDictModuleBase):
     """A TensorDictModule wrapper for :class:`~ConsistentDropout`.
 
     Args:
-        p (float, optional): Dropout probability. Default: ``0.5``.
+        p (:obj:`float`, optional): Dropout probability. Default: ``0.5``.
         in_keys (NestedKey or list of NestedKeys): keys to be read
             from input tensordict and passed to this module.
         out_keys (NestedKey or iterable of NestedKeys): keys to be written to the input tensordict.
