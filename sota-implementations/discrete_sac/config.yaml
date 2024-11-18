@@ -43,6 +43,9 @@ network:
   hidden_sizes: [256, 256]
   activation: relu
   device: null
+  compile: False
+  compile_mode:
+  cudagraphs: False
 
 # logging
 logger:

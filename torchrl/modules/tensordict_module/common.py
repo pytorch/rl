@@ -69,7 +69,8 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
             keys = [out_key]
             values = [spec]
         else:
-            keys = list(spec.keys(True, True))
+            # Make dynamo happy with the list creation
+            keys = [key for key in spec.keys(True, True)]  # noqa: C416
             values = [spec[key] for key in keys]
         for _spec, _key in zip(values, keys):
             if _spec is None:

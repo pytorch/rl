@@ -23,6 +23,7 @@ from .td3_bc import TD3BCLoss
 from .utils import (
     default_value_kwargs,
     distance_loss,
+    group_optimizers,
     HardUpdate,
     hold_out_net,
     hold_out_params,
