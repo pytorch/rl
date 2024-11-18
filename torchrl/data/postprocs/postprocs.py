@@ -90,7 +90,7 @@ class MultiStep(nn.Module):
     It is an identity transform whenever :attr:`n_steps` is 0.
 
     Args:
-        gamma (float): Discount factor for return computation
+        gamma (:obj:`float`): Discount factor for return computation
         n_steps (integer): maximum look-ahead steps.
 
     .. note:: This class is meant to be used within a ``DataCollector``.

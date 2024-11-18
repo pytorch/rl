@@ -1534,7 +1534,7 @@ class TargetReturn(Transform):
     reward achieved at each step or remains constant.
 
     Args:
-        target_return (float): target return to be achieved by the agent.
+        target_return (:obj:`float`): target return to be achieved by the agent.
         mode (str): mode to be used to update the target return. Can be either "reduce" or "constant". Default: "reduce".
         in_keys (sequence of NestedKey, optional): keys pointing to the reward
             entries. Defaults to the reward keys of the parent env.
@@ -2552,7 +2552,7 @@ class ObservationNorm(ObservationTransform):
 
             as it is done for standardization. Default is `False`.
 
-        eps (float, optional): epsilon increment for the scale in the ``standard_normal`` case.
+        eps (:obj:`float`, optional): epsilon increment for the scale in the ``standard_normal`` case.
             Defaults to ``1e-6`` if not recoverable directly from the scale dtype.
 
     Examples:
@@ -2845,7 +2845,7 @@ class CatFrames(ObservationTransform):
             has to be written. Defaults to the value of `in_keys`.
         padding (str, optional): the padding method. One of ``"same"`` or ``"constant"``.
             Defaults to ``"same"``, ie. the first value is used for padding.
-        padding_value (float, optional): the value to use for padding if ``padding="constant"``.
+        padding_value (:obj:`float`, optional): the value to use for padding if ``padding="constant"``.
             Defaults to 0.
         as_inverse (bool, optional): if ``True``, the transform is applied as an inverse transform. Defaults to ``False``.
         reset_key (NestedKey, optional): the reset key to be used as partial
@@ -6194,6 +6194,7 @@ class SelectTransform(Transform):
         keep_dones (bool, optional): if ``False``, the done keys must be provided
             if they should be kept. Defaults to ``True``.
 
+    Examples:
         >>> import gymnasium
         >>> from torchrl.envs import GymWrapper
         >>> env = TransformedEnv(

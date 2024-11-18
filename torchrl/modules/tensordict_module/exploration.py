@@ -188,56 +188,7 @@ class EGreedyModule(TensorDictModuleBase):
 
 
 class EGreedyWrapper(TensorDictModuleWrapper):
-    """[Deprecated] Epsilon-Greedy PO wrapper.
-
-    Args:
-        policy (TensorDictModule): a deterministic policy.
-
-    Keyword Args:
-        eps_init (scalar, optional): initial epsilon value.
-            default: 1.0
-        eps_end (scalar, optional): final epsilon value.
-            default: 0.1
-        annealing_num_steps (int, optional): number of steps it will take for epsilon to reach the eps_end value
-        action_key (NestedKey, optional): the key where the action can be found in the input tensordict.
-            Default is ``"action"``.
-        action_mask_key (NestedKey, optional): the key where the action mask can be found in the input tensordict.
-            Default is ``None`` (corresponding to no mask).
-        spec (TensorSpec, optional): if provided, the sampled action will be
-            taken from this action space. If not provided,
-            the exploration wrapper will attempt to recover it from the policy.
-
-    .. note::
-        Once a module has been wrapped in :class:`EGreedyWrapper`, it is
-        crucial to incorporate a call to :meth:`~.step` in the training loop
-        to update the exploration factor.
-        Since it is not easy to capture this omission no warning or exception
-        will be raised if this is ommitted!
-
-    Examples:
-        >>> import torch
-        >>> from tensordict import TensorDict
-        >>> from torchrl.modules import EGreedyWrapper, Actor
-        >>> from torchrl.data import Bounded
-        >>> torch.manual_seed(0)
-        >>> spec = Bounded(-1, 1, torch.Size([4]))
-        >>> module = torch.nn.Linear(4, 4, bias=False)
-        >>> policy = Actor(spec=spec, module=module)
-        >>> explorative_policy = EGreedyWrapper(policy, eps_init=0.2)
-        >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
-        >>> print(explorative_policy(td).get("action"))
-        tensor([[ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.9055, -0.9277, -0.6295, -0.2532],
-                [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.0000,  0.0000,  0.0000,  0.0000],
-                [ 0.0000,  0.0000,  0.0000,  0.0000]], grad_fn=<AddBackward0>)
-
-    """
+    """[Deprecated] Epsilon-Greedy PO wrapper."""
 
     def __init__(
         self,
@@ -268,8 +219,8 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             default: 0.1
         annealing_num_steps (int, optional): number of steps it will take for
             sigma to reach the :obj:`sigma_end` value.
-        mean (float, optional): mean of each output element’s normal distribution.
-        std (float, optional): standard deviation of each output element’s normal distribution.
+        mean (:obj:`float`, optional): mean of each output element’s normal distribution.
+        std (:obj:`float`, optional): standard deviation of each output element’s normal distribution.
         action_key (NestedKey, optional): if the policy module has more than one output key,
             its output spec will be of type Composite. One needs to know where to
             find the action spec.
@@ -408,9 +359,9 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         annealing_num_steps (int, optional): number of steps it will take for
             sigma to reach the :obj:`sigma_end` value.
             default: 1000
-        mean (float, optional): mean of each output element’s normal distribution.
+        mean (:obj:`float`, optional): mean of each output element’s normal distribution.
             default: 0.0
-        std (float, optional): standard deviation of each output element’s normal distribution.
+        std (:obj:`float`, optional): standard deviation of each output element’s normal distribution.
             default: 1.0
 
     Keyword Args:
