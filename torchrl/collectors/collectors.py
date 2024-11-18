@@ -67,6 +67,15 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 
+try:
+    from torch.compiler import cudagraph_mark_step_begin
+except ImportError:
+
+    def cudagraph_mark_step_begin():
+        """Placeholder for missing cudagraph_mark_step_begin method."""
+        raise NotImplementedError("cudagraph_mark_step_begin not implemented.")
+
+
 _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -138,7 +147,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     _iterator = None
     total_frames: int
     frames_per_batch: int
-    requested_frames_per_batch: int
     trust_policy: bool
     compiled_policy: bool
     cudagraphed_policy: bool
@@ -297,7 +305,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     def __len__(self) -> int:
         if self.total_frames > 0:
-            return -(self.total_frames // -self.requested_frames_per_batch)
+            return -(self.total_frames // -self.frames_per_batch)
         raise RuntimeError("Non-terminating collectors do not have a length")
 
 
@@ -692,7 +700,7 @@ class SyncDataCollector(DataCollectorBase):
             remainder = total_frames % frames_per_batch
             if remainder != 0 and RL_WARNINGS:
                 warnings.warn(
-                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch}). "
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch})."
                     f"This means {frames_per_batch - remainder} additional frames will be collected."
                     "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
@@ -833,6 +841,8 @@ class SyncDataCollector(DataCollectorBase):
                 policy_input_clone = (
                     policy_input.clone()
                 )  # to test if values have changed in-place
+                if self.compiled_policy:
+                    cudagraph_mark_step_begin()
                 policy_output = self.policy(policy_input)
 
                 # check that we don't have exclusive keys, because they don't appear in keys
@@ -1146,7 +1156,11 @@ class SyncDataCollector(DataCollectorBase):
                     else:
                         policy_input = self._shuttle
                     # we still do the assignment for security
+                    if self.compiled_policy:
+                        cudagraph_mark_step_begin()
                     policy_output = self.policy(policy_input)
+                    if self.compiled_policy:
+                        policy_output = policy_output.clone()
                     if self._shuttle is not policy_output:
                         # ad-hoc update shuttle
                         self._shuttle.update(

@@ -340,6 +340,8 @@ class CrossQLoss(LossModule):
         self._action_spec = action_spec
         self._make_vmap()
         self.reduction = reduction
+        # init target entropy
+        _ = self.target_entropy
 
     def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
@@ -513,15 +515,7 @@ class CrossQLoss(LossModule):
             **metadata_actor,
             **value_metadata,
         }
-        td_out = TensorDict(out, [])
-        # td_out = td_out.named_apply(
-        #     lambda name, value: (
-        #         _reduce(value, reduction=self.reduction)
-        #         if name.startswith("loss_")
-        #         else value
-        #     ),
-        #     batch_size=[],
-        # )
+        td_out = TensorDict(out)
         return td_out
 
     @property
@@ -543,6 +537,7 @@ class CrossQLoss(LossModule):
 
         Returns: a differentiable tensor with the alpha loss along with a metadata dictionary containing the detached `"log_prob"` of the sampled action.
         """
+        tensordict = tensordict.copy()
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
@@ -584,6 +579,7 @@ class CrossQLoss(LossModule):
         Returns: a differentiable tensor with the qvalue loss along with a metadata dictionary containing
             the detached `"td_error"` to be used for prioritized sampling.
         """
+        tensordict = tensordict.copy()
         # # compute next action
         with torch.no_grad():
             with set_exploration_type(

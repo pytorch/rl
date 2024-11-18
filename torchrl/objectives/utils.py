@@ -592,6 +592,13 @@ def _clip_value_loss(
     return loss_value, clip_fraction
 
 
+def _get_default_device(net):
+    for p in net.parameters():
+        return p.device
+    else:
+        return torch.get_default_device()
+
+
 def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimizer:
     """Groups multiple optimizers into a single one.
 
