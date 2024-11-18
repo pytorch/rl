@@ -67,7 +67,7 @@ class MLP(nn.Sequential):
         norm_kwargs (dict or list of dicts, optional): kwargs to be used with
             the normalization layers. Aslo accepts a list of kwargs of length
             ``depth + int(activate_last_layer)``.
-        dropout (float, optional): dropout probability. Defaults to ``None`` (no
+        dropout (:obj:`float`, optional): dropout probability. Defaults to ``None`` (no
             dropout);
         bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
             default: True;
@@ -1059,7 +1059,7 @@ def ddpg_init_last_layer(
 
     Args:
         module (nn.Module): an actor or critic to be initialized.
-        scale (float, optional): the noise scale. Defaults to ``6e-4``.
+        scale (:obj:`float`, optional): the noise scale. Defaults to ``6e-4``.
         device (torch.device, optional): the device where the noise should be
             created. Defaults to the device of the last layer's weight
             parameter.

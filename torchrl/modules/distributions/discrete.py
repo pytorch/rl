@@ -161,7 +161,7 @@ class MaskedCategorical(D.Categorical):
             in the distribution. Exclusive with ``indices``.
         indices (torch.Tensor): A dense index tensor representing which actions
             must be taken into account. Exclusive with ``mask``.
-        neg_inf (float, optional): The log-probability value allocated to
+        neg_inf (:obj:`float`, optional): The log-probability value allocated to
             invalid (out-of-mask) indices. Defaults to -inf.
         padding_value: The padding value in the mask tensor. When
             sparse_mask == True, the padding_value will be ignored.
@@ -312,7 +312,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
             in the distribution. Exclusive with ``indices``.
         indices (torch.Tensor): A dense index tensor representing which actions
             must be taken into account. Exclusive with ``mask``.
-        neg_inf (float, optional): The log-probability value allocated to
+        neg_inf (:obj:`float`, optional): The log-probability value allocated to
             invalid (out-of-mask) indices. Defaults to -inf.
         padding_value: The padding value in then mask tensor when
             sparse_mask == True, the padding_value will be ignored.
@@ -324,6 +324,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
             ``ReparamGradientStrategy.RelaxedOneHot`` will use
             :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.
 
+    Examples:
         >>> torch.manual_seed(0)
         >>> logits = torch.randn(4) / 100  # almost equal probabilities
         >>> mask = torch.tensor([True, False, True, True])
