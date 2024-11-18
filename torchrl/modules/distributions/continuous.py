@@ -42,9 +42,8 @@ try:
 except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
-TORCH_VERSION_PRE_2_6 = version.parse(torch.__version__).base_version < version.parse(
-    "2.6.0"
-)
+TORCH_VERSION = version.parse(torch.__version__).base_version
+TORCH_VERSION_PRE_2_6 = version.parse(TORCH_VERSION) < version.parse("2.6.0")
 
 
 class IndependentNormal(D.Independent):
