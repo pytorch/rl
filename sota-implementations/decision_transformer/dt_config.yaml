@@ -55,6 +55,8 @@ optim:
 # loss
 loss: 
   loss_function: "l2"
+
+compile:
   compile: False
   compile_mode:
   cudagraphs: False
