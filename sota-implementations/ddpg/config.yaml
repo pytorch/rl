@@ -39,6 +39,8 @@ network:
   hidden_sizes: [256, 256]
   activation: relu
   noise_type: "ou" # ou or gaussian
+
+compile:
   compile: False
   compile_mode:
   cudagraphs: False
