@@ -19,11 +19,21 @@ Please note that each example is independent of each other for the sake of simpl
 You can execute the A2C algorithm on Atari environments by running the following command:
 
 ```bash
-python a2c_atari.py
+python a2c_atari.py compile.compile=1 compile.cudagraphs=1
 ```
+
 
 You can execute the A2C algorithm on MuJoCo environments by running the following command:
 
 ```bash
-python a2c_mujoco.py
+python a2c_mujoco.py compile.compile=1 compile.cudagraphs=1
 ``` 
+
+## Runtimes
+
+Runtimes when executed on H100:
+
+| Environment | Eager     | Compile   | Compile+cudagraphs |
+|-------------|-----------|-----------|--------------------|
+| MUJOCO      | < 25 mins | < 23 mins | < 20 mins          |
+| ATARI       | < 85 mins | < 60 mins | < 45 mins          |
