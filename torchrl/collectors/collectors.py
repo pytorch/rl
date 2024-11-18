@@ -67,6 +67,15 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 
+try:
+    from torchrl.compiler import cudagraph_mark_step_begin
+except ImportError:
+
+    def cudagraph_mark_step_begin():
+        """Placeholder for missing cudagraph_mark_step_begin method."""
+        ...
+
+
 _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -1145,6 +1154,8 @@ class SyncDataCollector(DataCollectorBase):
                     else:
                         policy_input = self._shuttle
                     # we still do the assignment for security
+                    if self.compiled_policy:
+                        cudagraph_mark_step_begin()
                     policy_output = self.policy(policy_input)
                     if self._shuttle is not policy_output:
                         # ad-hoc update shuttle
