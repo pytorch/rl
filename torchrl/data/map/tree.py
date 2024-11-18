@@ -163,9 +163,6 @@ class Tree(TensorClass["nocast"]):
             if h in memo and not use_path:
                 continue
             memo.add(h)
-            r = tree.rollout
-            if r is not None:
-                r = r["next", "observation"]
             if use_path:
                 result[cur_path] = tree
             elif use_id:
