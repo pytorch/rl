@@ -61,11 +61,11 @@ class TD3BCLoss(LossModule):
             Exclusive with ``bounds``. Either this or ``bounds`` must be provided.
         num_qvalue_nets (int, optional): Number of Q-value networks to be
             trained. Default is ``2``.
-        policy_noise (float, optional): Standard deviation for the target
+        policy_noise (:obj:`float`, optional): Standard deviation for the target
             policy action noise. Default is ``0.2``.
-        noise_clip (float, optional): Clipping range value for the sampled
+        noise_clip (:obj:`float`, optional): Clipping range value for the sampled
             target policy action noise. Default is ``0.5``.
-        alpha (float, optional): Weight for the behavioral cloning loss.
+        alpha (:obj:`float`, optional): Weight for the behavioral cloning loss.
             Defaults to ``2.5``.
         priority_key (str, optional): Key where to write the priority value
             for prioritized replay buffers. Default is
