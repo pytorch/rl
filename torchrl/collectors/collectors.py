@@ -79,7 +79,7 @@ except ImportError:
 
     def cudagraph_mark_step_begin():
         """Placeholder for missing cudagraph_mark_step_begin method."""
-        ...
+        raise NotImplementedError("cudagraph_mark_step_begin not implemented.")
 
 
 _TIMEOUT = 1.0
@@ -847,7 +847,8 @@ class SyncDataCollector(DataCollectorBase):
                 policy_input_clone = (
                     policy_input.clone()
                 )  # to test if values have changed in-place
-                cudagraph_mark_step_begin()
+                if self.compiled_policy:
+                    cudagraph_mark_step_begin()
                 policy_output = self.policy(policy_input)
 
                 # check that we don't have exclusive keys, because they don't appear in keys
