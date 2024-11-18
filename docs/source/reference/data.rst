@@ -944,7 +944,7 @@ not predictable.
     MultiCategorical
     MultiOneHot
     NonTensor
-    OneHotDiscrete
+    OneHot
     Stacked
     StackedComposite
     Unbounded
@@ -1050,7 +1050,7 @@ and the tree can be expanded for each of these. The following figure shows how t
 
     BinaryToDecimal
     HashToInt
-    MCTSForeset
+    MCTSForest
     QueryModule
     RandomProjectionHash
     SipHash

@@ -4,7 +4,7 @@ env:
 
 # collector
 collector:
-  frames_per_batch: 64
+  frames_per_batch: 640
   total_frames: 1_000_000
 
 # logger
@@ -31,3 +31,9 @@ loss:
   critic_coef: 0.25
   entropy_coef: 0.0
   loss_critic_type: l2
+  device:
+
+compile:
+  compile: False
+  compile_mode: default
+  cudagraphs: False

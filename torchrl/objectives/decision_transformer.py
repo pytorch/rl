@@ -29,11 +29,11 @@ class OnlineDTLoss(LossModule):
         actor_network (ProbabilisticActor): stochastic actor
 
     Keyword Args:
-        alpha_init (float, optional): initial entropy multiplier.
+        alpha_init (:obj:`float`, optional): initial entropy multiplier.
             Default is 1.0.
-        min_alpha (float, optional): min value of alpha.
+        min_alpha (:obj:`float`, optional): min value of alpha.
             Default is None (no minimum value).
-        max_alpha (float, optional): max value of alpha.
+        max_alpha (:obj:`float`, optional): max value of alpha.
             Default is None (no maximum value).
         fixed_alpha (bool, optional): if ``True``, alpha will be fixed to its
             initial value. Otherwise, alpha will be optimized to
@@ -292,6 +292,7 @@ class DTLoss(LossModule):
         *,
         loss_function: str = "l2",
         reduction: str = None,
+        device: torch.device | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -343,7 +344,7 @@ class DTLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
-        tensordict = tensordict.clone(False)
+        tensordict = tensordict.copy()
         target_actions = tensordict.get(self.tensor_keys.action_target).detach()
 
         with self.actor_network_params.to_module(self.actor_network):
@@ -356,8 +357,5 @@ class DTLoss(LossModule):
             loss_function=self.loss_function,
         )
         loss = _reduce(loss, reduction=self.reduction)
-        out = {
-            "loss": loss,
-        }
-        td_out = TensorDict(out, [])
+        td_out = TensorDict(loss=loss)
         return td_out

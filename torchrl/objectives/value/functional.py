@@ -12,6 +12,10 @@ from typing import Optional, Tuple, Union
 
 import torch
 
+try:
+    from torch.compiler import is_dynamo_compiling
+except ImportError:
+    from torch._dynamo import is_compiling as is_dynamo_compiling
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -147,7 +151,7 @@ def generalized_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -181,19 +185,25 @@ def generalized_advantage_estimate(
 def _geom_series_like(t, r, thr):
     """Creates a geometric series of the form [1, gammalmbda, gammalmbda**2] with the shape of `t`.
 
-    Drops all elements which are smaller than `thr`.
+    Drops all elements which are smaller than `thr` (unless in compile mode).
     """
-    if isinstance(r, torch.Tensor):
-        r = r.item()
-
-    if r == 0.0:
-        return torch.zeros_like(t)
-    elif r >= 1.0:
-        lim = t.numel()
+    if is_dynamo_compiling():
+        if isinstance(r, torch.Tensor):
+            rs = r.expand_as(t)
+        else:
+            rs = torch.full_like(t, r)
     else:
-        lim = int(math.log(thr) / math.log(r))
+        if isinstance(r, torch.Tensor):
+            r = r.item()
 
-    rs = torch.full_like(t[:lim], r)
+        if r == 0.0:
+            return torch.zeros_like(t)
+        elif r >= 1.0:
+            lim = t.numel()
+        else:
+            lim = int(math.log(thr) / math.log(r))
+
+        rs = torch.full_like(t[:lim], r)
     rs[0] = 1.0
     rs = rs.cumprod(0)
     rs = rs.unsqueeze(-1)
@@ -223,7 +233,7 @@ def _fast_vec_gae(
         terminated (torch.Tensor): a [B, T] boolean tensor containing the terminated states.
         gamma (scalar): the gamma decay (trajectory discount)
         lmbda (scalar): the lambda decay (exponential mean discount)
-        thr (float): threshold for the filter. Below this limit, components will ignored.
+        thr (:obj:`float`): threshold for the filter. Below this limit, components will ignored.
             Defaults to 1e-7.
 
     All tensors (values, reward and done) must have shape
@@ -292,7 +302,7 @@ def vec_generalized_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -391,7 +401,7 @@ def td0_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -435,7 +445,7 @@ def td0_return_estimate(
 
     """
     if done is not None and terminated is None:
-        terminated = done
+        terminated = done.clone()
         warnings.warn(
             "done for td0_return_estimate is deprecated. Pass ``terminated`` instead."
         )
@@ -472,26 +482,30 @@ def td1_return_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -499,7 +513,7 @@ def td1_return_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     not_done = (~done).int()
@@ -569,26 +583,30 @@ def td1_advantage_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -596,7 +614,7 @@ def td1_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -640,27 +658,31 @@ def vec_td1_return_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of the gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
-        time_dim (int): dimension where the time is unrolled. Defaults to -2.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
+        time_dim (int): dimension where the time is unrolled. Defaults to ``-2``.
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
@@ -699,26 +721,30 @@ def vec_td1_advantage_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -726,7 +752,7 @@ def vec_td1_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -777,26 +803,30 @@ def td_lambda_return_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -804,7 +834,7 @@ def td_lambda_return_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
 
@@ -883,26 +913,30 @@ def td_lambda_advantage_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -910,7 +944,7 @@ def td_lambda_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -956,7 +990,7 @@ def _fast_td_lambda_return_estimate(
         reward (torch.Tensor): a [*B, T, F] tensor containing rewards
         done (Tensor): boolean flag for end of trajectory.
         terminated (Tensor): boolean flag for end of episode.
-        thr (float): threshold for the filter. Below this limit, components will ignored.
+        thr (:obj:`float`): threshold for the filter. Below this limit, components will ignored.
             Defaults to 1e-7.
 
     All tensors (values, reward and done) must have shape
@@ -1019,26 +1053,30 @@ def vec_td_lambda_return_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -1046,7 +1084,7 @@ def vec_td_lambda_return_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
 
@@ -1169,26 +1207,30 @@ def vec_td_lambda_advantage_estimate(
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
-            if a gamma tensor is tied to a single event:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
-                v2 + g2 v3 + g2 g3 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            if False, it is assumed that each gamma is tied to the upcoming
+            of a gamma tensor is tied to a single event:
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+              ...   v2 + g2 v3 + g2 g3 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            if ``False``, it is assumed that each gamma is tied to the upcoming
             trajectory:
-              gamma = [g1, g2, g3, g4]
-              value = [v1, v2, v3, v4]
-              return = [
-                v1 + g1 v2 + g1**2 v3 + g**3 v4,
-                v2 + g2 v3 + g2**2 v4,
-                v3 + g3 v4,
-                v4,
-              ]
-            Default is True.
+
+              >>> gamma = [g1, g2, g3, g4]
+              >>> value = [v1, v2, v3, v4]
+              >>> return = [
+              ...   v1 + g1 v2 + g1**2 v3 + g**3 v4,
+              ...   v2 + g2 v3 + g2**2 v4,
+              ...   v3 + g3 v4,
+              ...   v4,
+              ... ]
+
+            Default is ``True``.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -1196,7 +1238,7 @@ def vec_td_lambda_advantage_estimate(
 
     """
     if terminated is None:
-        terminated = done
+        terminated = done.clone()
     if not (
         next_state_value.shape
         == state_value.shape
@@ -1328,7 +1370,7 @@ def reward2go(
             received at each time step over multiple trajectories.
         done (Tensor): boolean flag for end of episode. Differs from
             truncated, where the episode did not end but was interrupted.
-        gamma (float, optional): The discount factor to use for computing the
+        gamma (:obj:`float`, optional): The discount factor to use for computing the
             discounted cumulative sum of rewards. Defaults to 1.0.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
