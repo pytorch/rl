@@ -312,11 +312,10 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         for _ in range(frames):
             self.sigma.data.copy_(
                 torch.maximum(
-                    self.sigma_end(
-                        self.sigma
-                        - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
-                    ),
-                )
+                    self.sigma_end,
+                    self.sigma
+                    - (self.sigma_init - self.sigma_end) / self.annealing_num_steps,
+                ),
             )
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
@@ -946,8 +945,8 @@ class _OrnsteinUhlenbeckProcess:
             noise = tensordict.get(self.noise_key).clone()
             steps = tensordict.get(self.steps_key).clone()
         if is_init is not None:
-            noise = torch.masked_fill(noise, is_init, 0)
-            steps = torch.masked_fill(steps, is_init, 0)
+            noise = torch.masked_fill(noise, expand_right(is_init, noise.shape), 0)
+            steps = torch.masked_fill(steps, expand_right(is_init, steps.shape), 0)
         return noise, steps
 
     def add_sample(
