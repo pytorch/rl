@@ -112,15 +112,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         return loss_out.detach()
 
     compile_mode = None
-    if cfg.network.compile:
-        compile_mode = cfg.network.compile_mode
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
         if compile_mode in ("", None):
-            if cfg.network.cudagraphs:
+            if cfg.compile.cudagraphs:
                 compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
         update = torch.compile(update, mode=compile_mode)
-    if cfg.network.cudagraphs:
+    if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
@@ -134,7 +134,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         model[0],
         compile=compile_mode is not None,
         compile_mode=compile_mode,
-        cudagraphs=cfg.network.cudagraphs,
+        cudagraphs=cfg.compile.cudagraphs,
     )
 
     # Main loop

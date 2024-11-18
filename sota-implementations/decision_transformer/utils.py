@@ -375,7 +375,7 @@ def make_odt_model(cfg, device: torch.device | None = None) -> TensorDictModule:
         "high": 1.0,
         "tanh_loc": False,
         "upscale": 5.0,
-        "safe_tanh": not cfg.loss.compile,
+        "safe_tanh": not cfg.compile.compile,
     }
 
     actor = ProbabilisticActor(
@@ -428,7 +428,7 @@ def make_dt_model(cfg, device: torch.device | None = None):
     dist_kwargs = {
         "low": action_spec.space.low,
         "high": action_spec.space.high,
-        "safe": not cfg.loss.compile,
+        "safe": not cfg.compile.compile,
     }
 
     actor = ProbabilisticActor(

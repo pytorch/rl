@@ -78,10 +78,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module = make_loss_module(cfg, model, device=device)
 
     compile_mode = None
-    if cfg.network.compile:
-        if cfg.network.compile_mode not in (None, ""):
-            compile_mode = cfg.network.compile_mode
-        elif cfg.network.cudagraphs:
+    if cfg.compile.compile:
+        if cfg.compile.compile_mode not in (None, ""):
+            compile_mode = cfg.compile.compile_mode
+        elif cfg.compile.cudagraphs:
             compile_mode = "default"
         else:
             compile_mode = "reduce-overhead"
@@ -92,9 +92,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         train_env,
         exploration_policy.eval(),
         device=device,
-        compile=cfg.network.compile,
+        compile=cfg.compile.compile,
         compile_mode=compile_mode,
-        cudagraph=cfg.network.cudagraphs,
+        cudagraph=cfg.compile.cudagraphs,
     )
 
     # Create replay buffer
@@ -162,7 +162,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if compile_mode:
         update_all = torch.compile(update_all, mode=compile_mode)
         update_qloss = torch.compile(update_qloss, mode=compile_mode)
-    if cfg.network.cudagraphs:
+    if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
