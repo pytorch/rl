@@ -83,6 +83,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         lr=torch.tensor(cfg.optim.lr, device=device),
         capturable=device.type == "cuda",
     )
+    optim = group_optimizers(actor_optim, critic_optim)
+    del actor_optim, critic_optim
 
     # Create logger
     logger = None
@@ -120,11 +122,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         (actor_loss + critic_loss).backward()
 
         # Update the networks
-        actor_optim.step()
-        critic_optim.step()
+        optim.step()
 
-        actor_optim.zero_grad(set_to_none=True)
-        critic_optim.zero_grad(set_to_none=True)
+        optim.zero_grad(set_to_none=True)
         return loss.select("loss_critic", "loss_objective").detach()  # , "loss_entropy"
 
     compile_mode = None
@@ -214,9 +214,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     alpha = 1.0
                     if cfg.optim.anneal_lr:
                         alpha = 1 - (num_network_updates / total_network_updates)
-                        for group in actor_optim.param_groups:
-                            group["lr"].copy_(lr * alpha)
-                        for group in critic_optim.param_groups:
+                        for group in optim.param_groups:
                             group["lr"].copy_(lr * alpha)
                 num_network_updates += 1
                 with timeit("optim - update"):
