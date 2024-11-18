@@ -125,15 +125,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         return loss.detach(), loss_vals.detach()
 
     compile_mode = None
-    if cfg.loss.compile:
-        if cfg.loss.compile_mode not in (None, ""):
-            compile_mode = cfg.loss.compile_mode
-        elif cfg.loss.cudagraphs:
+    if cfg.compile.compile:
+        if cfg.compile.compile_mode not in (None, ""):
+            compile_mode = cfg.compile.compile_mode
+        elif cfg.compile.cudagraphs:
             compile_mode = "default"
         else:
             compile_mode = "reduce-overhead"
         update = torch.compile(update, mode=compile_mode)
-    if cfg.loss.cudagraphs:
+    if cfg.compile.cudagraphs:
         update = CudaGraphModule(update, warmup=50)
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
