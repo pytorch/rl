@@ -1,80 +1,41 @@
-#!/usr/bin/env bash
-
-# Leave blank as code needs to start on line 29 for run_local.sh
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
-#
-#
-#
-#
-#
-#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+import os
+import subprocess
+from pathlib import Path
 
-#set -e
-set -v
+import pytest
 
-# Initialize an error flag
-error_occurred=0
-# Function to handle errors
-error_handler() {
-    echo "Error on line $1"
-    error_occurred=1
-}
-# Trap ERR to call the error_handler function with the failing line number
-trap 'error_handler $LINENO' ERR
-
-export PYTORCH_TEST_WITH_SLOW='1'
-python -m torch.utils.collect_env
-# Avoid error: "fatal: unsafe repository"
-git config --global --add safe.directory '*'
-
-root_dir="$(git rev-parse --show-toplevel)"
-env_dir="${root_dir}/env"
-lib_dir="${env_dir}/lib"
-
-# solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
-export MKL_THREADING_LAYER=GNU
-export CUDA_LAUNCH_BLOCKING=1
-
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
-#python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200
-
-# ==================================================================================== #
-# ================================ gym 0.23 ========================================== #
-
-# With batched environments
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/decision_transformer/dt.py \
+commands = {
+    "dt": """python sota-implementations/decision_transformer/dt.py \
   optim.pretrain_gradient_steps=55 \
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \
   logger.backend= \
   env.backend=gymnasium \
   env.name=HalfCheetah-v4
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/decision_transformer/online_dt.py \
+""",
+    "online_dt": """python sota-implementations/decision_transformer/online_dt.py \
   optim.pretrain_gradient_steps=55 \
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \
   env.backend=gymnasium \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iql/iql_offline.py \
+""",
+    "td3_bc": """python sota-implementations/td3_bc/td3_bc.py \
   optim.gradient_steps=55 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/cql_offline.py \
-  optim.gradient_steps=55 \
-  logger.backend=
-# ==================================================================================== #
-# ================================ Gymnasium ========================================= #
-
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3_bc/td3_bc.py \
-  optim.gradient_steps=55 \
-  logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/impala/impala_single_node.py \
+""",
+    "impala_single_node": """python sota-implementations/impala/impala_single_node.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   collector.num_workers=1 \
   logger.backend= \
   logger.test_interval=10
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ppo/ppo_mujoco.py \
+""",
+    "ppo_mujoco": """python sota-implementations/ppo/ppo_mujoco.py \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
   collector.frames_per_batch=20 \
@@ -82,14 +43,16 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/pp
   loss.ppo_epochs=2 \
   logger.backend= \
   logger.test_interval=10
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ppo/ppo_atari.py \
+""",
+    "ppo_atari": """python sota-implementations/ppo/ppo_atari.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \
   loss.ppo_epochs=2 \
   logger.backend= \
   logger.test_interval=10
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ddpg/ddpg.py \
+""",
+    "ddpg": """python sota-implementations/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
@@ -99,20 +62,23 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dd
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/a2c/a2c_mujoco.py \
+""",
+    "a2c_mujoco": """python sota-implementations/a2c/a2c_mujoco.py \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=10 \
   logger.backend= \
   logger.test_interval=40
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/a2c/a2c_atari.py \
+""",
+    "a2c_atari": """python sota-implementations/a2c/a2c_atari.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \
   logger.backend= \
   logger.test_interval=40
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dqn/dqn_atari.py \
+""",
+    "dqn_atari": """python sota-implementations/dqn/dqn_atari.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -120,7 +86,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dq
   loss.num_updates=1 \
   logger.backend= \
   buffer.buffer_size=120
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/discrete_cql_online.py \
+""",
+    "discrete_cql_online": """python sota-implementations/cql/discrete_cql_online.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
@@ -128,7 +95,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cq
   collector.env_per_collector=2 \
   replay_buffer.size=120 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/redq/redq.py \
+""",
+    "redq": """python sota-implementations/redq/redq.py \
   num_workers=4 \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -140,7 +108,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/re
   logger.record_frames=4 \
   buffer.size=120 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/sac/sac.py \
+""",
+    "sac": """python sota-implementations/sac/sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -150,7 +119,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/sa
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/discrete_sac/discrete_sac.py \
+""",
+    "discrete_sac": """python sota-implementations/discrete_sac/discrete_sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -162,7 +132,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/di
   replay_buffer.size=120 \
   env.name=CartPole-v1 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/crossq/crossq.py \
+""",
+    "crossq": """python sota-implementations/crossq/crossq.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -174,7 +145,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cr
   env.name=Pendulum-v1 \
   network.device= \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3/td3.py \
+""",
+    "td3": """python sota-implementations/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
@@ -184,37 +156,40 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td
   logger.mode=offline \
   env.name=Pendulum-v1 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iql/iql_online.py \
+""",
+    "iql_online": """python sota-implementations/iql/iql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   env.train_num_envs=2 \
   logger.mode=offline \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iql/discrete_iql.py \
+""",
+    "discrete_iql": """python sota-implementations/iql/discrete_iql.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   env.train_num_envs=2 \
   logger.mode=offline \
   logger.backend=
-  python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/cql_online.py \
+""",
+    "cql_online": """python sota-implementations/cql/cql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   env.train_num_envs=2 \
   logger.mode=offline \
   logger.backend=
-  python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/gail/gail.py \
+""",
+    "gail": """python sota-implementations/gail/gail.py \
   ppo.collector.total_frames=48 \
   replay_buffer.batch_size=16 \
   ppo.loss.mini_batch_size=10 \
   ppo.collector.frames_per_batch=16 \
   logger.mode=offline \
   logger.backend=
-
-# With single envs
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dreamer/dreamer.py \
+""",
+    "dreamer": """python sota-implementations/dreamer/dreamer.py \
   collector.total_frames=200 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=200 \
@@ -226,7 +201,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dr
   replay_buffer.batch_size=24 \
   replay_buffer.batch_length=12 \
   networks.rssm_hidden_dim=17
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/ddpg/ddpg.py \
+""",
+    "ddpg-single": """python sota-implementations/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
@@ -236,15 +212,8 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dd
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/dqn/dqn_atari.py \
-  collector.total_frames=48 \
-  collector.init_random_frames=10 \
-  collector.frames_per_batch=16 \
-  buffer.batch_size=10 \
-  loss.num_updates=1 \
-  logger.backend= \
-  buffer.buffer_size=120
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/redq/redq.py \
+""",
+    "redq-single": """python sota-implementations/redq/redq.py \
   num_workers=2 \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -256,21 +225,24 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/re
   logger.record_frames=4 \
   buffer.size=120 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/iql/iql_online.py \
+""",
+    "iql_online-single": """python sota-implementations/iql/iql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   env.train_num_envs=1 \
   logger.mode=offline \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/cql/cql_online.py \
+""",
+    "cql_online-single": """python sota-implementations/cql/cql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
   collector.env_per_collector=1 \
   logger.mode=offline \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td3/td3.py \
+""",
+    "td3-single": """python sota-implementations/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -280,49 +252,72 @@ python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/td
   optim.batch_size=10 \
   env.name=Pendulum-v1 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/multiagent/mappo_ippo.py \
+""",
+    "mappo_ippo": """python sota-implementations/multiagent/mappo_ippo.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/multiagent/maddpg_iddpg.py \
+""",
+    "maddpg_iddpg": """python sota-implementations/multiagent/maddpg_iddpg.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/multiagent/iql.py \
+""",
+    "iql_marl": """python sota-implementations/multiagent/iql.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/multiagent/qmix_vdn.py \
+""",
+    "qmix_vdn": """python sota-implementations/multiagent/qmix_vdn.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/multiagent/sac.py \
+""",
+    "marl_sac": """python sota-implementations/multiagent/sac.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=
+""",
+    "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100
+""",
+}
 
-python .github/unittest/helpers/coverage_run_parallel.py sota-implementations/bandits/dqn.py --n_steps=100
 
-## RLHF
-# RLHF tests are executed in the dedicated workflow
+def run_command(command):
+    # Get the current coverage settings
+    cov_settings = os.environ.get("COVERAGE_PROCESS_START")
+    if cov_settings:
+        # If coverage is enabled, run the command with coverage
+        command = f"coverage run --parallel-mode {command}"
+    process = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=Path(__file__).parent.parent.parent.parent.parent,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+    )
+    while True:
+        output = process.stdout.readline()
+        if output == "" and process.poll() is not None:
+            break
+        if output:
+            print(output.strip())  # noqa: T201
+    return_code = process.wait()
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, command)
 
-coverage combine
-coverage xml -i
 
-# Check if any errors occurred during the script execution
-if [ "$error_occurred" -ne 0 ]; then
-    echo "Errors occurred during script execution"
-    exit 1
-else
-    echo "Script executed successfully"
-fi
+@pytest.mark.parametrize("algo", list(commands))
+def test_commands(algo):
+    run_command(commands[algo])
