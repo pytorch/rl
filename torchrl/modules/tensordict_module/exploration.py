@@ -960,6 +960,13 @@ class _OrnsteinUhlenbeckProcess(nn.Module):
         self._noise_key = "_ou_prev_noise"
         self._steps_key = "_ou_steps"
         self.out_keys = [self.noise_key, self.steps_key]
+        self._auto_buffer()
+
+    def _auto_buffer(self):
+        for key, item in list(self.__dict__.items()):
+            if isinstance(item, torch.Tensor):
+                delattr(self, key)
+                self.register_buffer(key, item)
 
     @property
     def noise_key(self):
