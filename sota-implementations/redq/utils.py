@@ -610,7 +610,9 @@ def transformed_env_constructor(
         categorical_action_encoding = cfg.env.categorical_action_encoding
 
         if custom_env is None and custom_env_maker is None:
-            if isinstance(cfg.collector.device, str):
+            if cfg.collector.device in ("", None):
+                device = "cpu" if not torch.cuda.is_available() else "cuda:0"
+            elif isinstance(cfg.collector.device, str):
                 device = cfg.collector.device
             elif isinstance(cfg.collector.device, Sequence):
                 device = cfg.collector.device[0]
@@ -1005,9 +1007,7 @@ def make_collector_offpolicy(
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
     if cfg.collector.device in ("", None):
-        cfg.collector.device = torch.device(
-            "cpu" if not torch.cuda.is_available() else "cuda:0"
-        )
+        cfg.collector.device = "cpu" if not torch.cuda.is_available() else "cuda:0"
     else:
         cfg.collector.device = (
             cfg.collector.device
