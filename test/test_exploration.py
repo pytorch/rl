@@ -240,10 +240,9 @@ class TestOrnsteinUhlenbeckProcess:
     def test_ou(
         self, device, interface, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
     ):
+        print(device)
         torch.manual_seed(seed)
-        net = nn.Sequential(nn.Linear(d_obs, 2 * d_act), NormalParamExtractor()).to(
-            device
-        )
+        net = nn.Sequential(nn.Linear(d_obs, 2 * d_act, device=device), NormalParamExtractor())
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         action_spec = Bounded(-torch.ones(d_act), torch.ones(d_act), (d_act,))
         policy = ProbabilisticActor(
@@ -252,13 +251,13 @@ class TestOrnsteinUhlenbeckProcess:
             in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             default_interaction_type=InteractionType.RANDOM,
-        ).to(device)
+        )
 
         if interface == "module":
-            ou = OrnsteinUhlenbeckProcessModule(spec=action_spec).to(device)
+            ou = OrnsteinUhlenbeckProcessModule(spec=action_spec, device=device)
             exploratory_policy = TensorDictSequential(policy, ou)
         else:
-            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy)
+            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy, device=device)
             ou = exploratory_policy
 
         tensordict = TensorDict(
@@ -338,10 +337,10 @@ class TestOrnsteinUhlenbeckProcess:
 
         if interface == "module":
             exploratory_policy = TensorDictSequential(
-                policy, OrnsteinUhlenbeckProcessModule(spec=action_spec).to(device)
+                policy, OrnsteinUhlenbeckProcessModule(spec=action_spec, device=device)
             )
         else:
-            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy)
+            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy, device=device)
         exploratory_policy(env.reset())
         collector = SyncDataCollector(
             create_env_fn=env,
@@ -456,11 +455,9 @@ class TestAdditiveGaussian:
             device=device,
         )
         if interface == "module":
-            exploratory_policy = AdditiveGaussianModule(action_spec).to(device)
+            exploratory_policy = AdditiveGaussianModule(action_spec, device=device)
         else:
-            net = nn.Sequential(nn.Linear(d_obs, 2 * d_act), NormalParamExtractor()).to(
-                device
-            )
+            net = nn.Sequential(nn.Linear(d_obs, 2 * d_act, device=device), NormalParamExtractor())
             module = SafeModule(
                 net,
                 in_keys=["observation"],
@@ -473,11 +470,9 @@ class TestAdditiveGaussian:
                 in_keys=["loc", "scale"],
                 distribution_class=TanhNormal,
                 default_interaction_type=InteractionType.RANDOM,
-            ).to(device)
-            given_spec = action_spec if spec_origin == "spec" else None
-            exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec).to(
-                device
             )
+            given_spec = action_spec if spec_origin == "spec" else None
+            exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec, device=device)
         if spec_origin is not None:
             sigma_init = (
                 action_spec.project(
@@ -728,8 +723,7 @@ def test_gsde(
 @pytest.mark.parametrize("sigma_init", [None, 1.5, 3])
 @pytest.mark.parametrize("learn_sigma", [False, True])
 @pytest.mark.parametrize(
-    "device",
-    [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
+    "device", get_default_devices()
 )
 def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_sigma):
     torch.manual_seed(0)
