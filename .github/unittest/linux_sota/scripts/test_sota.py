@@ -295,7 +295,7 @@ commands = {
 
 def run_command(command):
     # Get the current coverage settings
-    cov_settings = os.environ.get('COVERAGE_PROCESS_START')
+    cov_settings = os.environ.get("COVERAGE_PROCESS_START")
 
     if cov_settings:
         # If coverage is enabled, run the command with coverage
