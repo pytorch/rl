@@ -740,8 +740,8 @@ class SyncDataCollector(DataCollectorBase):
                 f" ({-(-frames_per_batch // self.n_env) * self.n_env}). "
                 "To silence this message, set the environment variable RL_WARNINGS to False."
             )
-        self.requested_frames_per_batch = int(frames_per_batch)
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
+        self.requested_frames_per_batch = self.frames_per_batch * self.n_env
         self.exploration_type = (
             exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
         )
@@ -1656,6 +1656,7 @@ class _MultiDataCollector(DataCollectorBase):
             self._get_weights_fn_dict[policy_device] = get_weights_fn
         self.policy = policy
 
+        remainder = 0
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
