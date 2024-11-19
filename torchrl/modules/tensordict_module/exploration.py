@@ -17,6 +17,7 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
 )
 from tensordict.utils import expand_as_right, expand_right, NestedKey
+from torch import nn
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
@@ -625,6 +626,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             sigma_min=sigma_min,
             n_steps_annealing=n_steps_annealing,
             key=action_key,
+            device=device,
         )
         self.register_buffer("eps_init", torch.tensor([eps_init], device=device))
         self.register_buffer("eps_end", torch.tensor([eps_end], device=device))
@@ -835,6 +837,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
             sigma_min=sigma_min,
             n_steps_annealing=n_steps_annealing,
             key=action_key,
+            device=device,
         )
 
         self.register_buffer("eps_init", torch.tensor([eps_init], device=device))
@@ -919,7 +922,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
 
 
 # Based on http://math.stackexchange.com/questions/1287634/implementing-ornstein-uhlenbeck-in-matlab
-class _OrnsteinUhlenbeckProcess:
+class _OrnsteinUhlenbeckProcess(nn.Module):
     def __init__(
         self,
         theta: float,
@@ -931,7 +934,11 @@ class _OrnsteinUhlenbeckProcess:
         n_steps_annealing: int = 1000,
         key: Optional[NestedKey] = "action",
         is_init_key: Optional[NestedKey] = "is_init",
+        device: torch.device | None = None,
     ):
+        super().__init__()
+        self.register_buffer("_empty_tensor_device", torch.zeros(0, device=device))
+
         self.mu = mu
         self.sigma = sigma
 
@@ -968,12 +975,14 @@ class _OrnsteinUhlenbeckProcess:
         tensordict: TensorDictBase,
         is_init: torch.Tensor,
     ):
+        device = tensordict.device
+        if device is None:
+            device = self._empty_tensor_device.device
+
         if self.steps_key not in tensordict.keys():
-            noise = torch.zeros(
-                tensordict.get(self.key).shape, device=tensordict.device
-            )
+            noise = torch.zeros(tensordict.get(self.key).shape, device=device)
             steps = torch.zeros(
-                action_tensordict.batch_size, dtype=torch.long, device=tensordict.device
+                action_tensordict.batch_size, dtype=torch.long, device=device
             )
             tensordict.set(self.noise_key, noise)
             tensordict.set(self.steps_key, steps)
