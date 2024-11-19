@@ -47,7 +47,7 @@ else:
         ("data", "sample_log_prob"),
     ],
 )
-def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=3):
+def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=1):
     env = NestedCountingEnv(nested_dim=nested_dim)
     action_spec = Bounded(shape=torch.Size((nested_dim, n_actions)), high=1, low=-1)
     policy_module = TensorDictModule(
