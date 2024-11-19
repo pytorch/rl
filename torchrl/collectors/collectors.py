@@ -162,6 +162,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
+        We want to copy the policy and then move the data there, not call policy.to(device).
+
         Args:
             policy (TensorDictModule, optional): a policy to be used
             observation_spec (TensorSpec, optional): spec of the observations
@@ -219,7 +221,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             weight = weight.data
             if weight.device != policy_device:
                 weight = weight.to(policy_device)
-            elif weight.device.type in ("cpu", "mps"):
+            elif weight.device.type in ("cpu",):
                 weight = weight.share_memory_()
             if is_param:
                 weight = Parameter(weight, requires_grad=False)
@@ -233,7 +235,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             policy = deepcopy(policy)
 
         param_and_buf.apply(
-            functools.partial(map_weight),
+            map_weight,
             filter_empty=False,
         ).to_module(policy)
         return policy, get_original_weights
