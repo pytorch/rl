@@ -2,8 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-
+import os
 import subprocess
 from pathlib import Path
 
@@ -296,6 +295,13 @@ commands = {
 
 def run_command(command):
     try:
+        # Get the current coverage settings
+        cov_settings = os.environ.get('COVERAGE_PROCESS_START')
+
+        if cov_settings:
+            # If coverage is enabled, run the command with coverage
+            command = f"coverage run --parallel-mode {command}"
+
         subprocess.check_call(
             command, shell=True, cwd=Path(__file__).parent.parent.parent.parent.parent
         )
