@@ -307,11 +307,5 @@ def run_command(command):
 
 
 @pytest.mark.parametrize("algo", list(commands))
-def test_multiagent_commands(algo):
+def test_commands(algo):
     run_command(commands[algo])
-
-
-# Test bandits separately
-def test_bandits():
-    command = ""
-    run_command(command)
