@@ -341,7 +341,7 @@ class CrossQLoss(LossModule):
         self._make_vmap()
         self.reduction = reduction
         # init target entropy
-        _ = self.target_entropy
+        self.maybe_init_target_entropy()
 
     def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
@@ -356,22 +356,23 @@ class CrossQLoss(LossModule):
         """
         return self.target_entropy
 
-    @property
-    def target_entropy(self):
-        target_entropy = self._buffers.get("_target_entropy", None)
-        if target_entropy is not None:
-            return target_entropy
+    def maybe_init_target_entropy(self, fault_tolerant=True):
+        """Initialize the target entropy.
+
+        Args:
+            fault_tolerant (bool, optional): if ``True``, returns None if the target entropy
+                cannot be determined. Raises an exception otherwise. Defaults to ``True``.
+
+        """
+        if "_target_entropy" in self._buffers:
+            return
         target_entropy = self._target_entropy
-        action_spec = self._action_spec
-        actor_network = self.actor_network
-        device = next(self.parameters()).device
         if target_entropy == "auto":
-            action_spec = (
-                action_spec
-                if action_spec is not None
-                else getattr(actor_network, "spec", None)
-            )
+            device = next(self.parameters()).device
+            action_spec = self.get_action_spec()
             if action_spec is None:
+                if fault_tolerant:
+                    return
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
                     "the target entropy explicitely or provide the spec of the "
@@ -379,6 +380,8 @@ class CrossQLoss(LossModule):
                 )
             if not isinstance(action_spec, Composite):
                 action_spec = Composite({self.tensor_keys.action: action_spec})
+            elif fault_tolerant and self.tensor_keys.action not in action_spec:
+                return
             if (
                 isinstance(self.tensor_keys.action, tuple)
                 and len(self.tensor_keys.action) > 1
@@ -396,6 +399,28 @@ class CrossQLoss(LossModule):
             "_target_entropy", torch.tensor(target_entropy, device=device)
         )
         return self._target_entropy
+
+    def get_action_spec(self):
+        action_spec = self._action_spec
+        actor_network = self.actor_network
+        action_spec = (
+            action_spec
+            if action_spec is not None
+            else getattr(actor_network, "spec", None)
+        )
+        return action_spec
+
+    @property
+    def target_entropy(self):
+        target_entropy = self._buffers.get("_target_entropy")
+        if target_entropy is not None:
+            return target_entropy
+        return self.maybe_init_target_entropy(fault_tolerant=False)
+
+    def set_keys(self, **kwargs) -> None:
+        out = super().set_keys(**kwargs)
+        self.maybe_init_target_entropy()
+        return out
 
     state_dict = _delezify(LossModule.state_dict)
     load_state_dict = _delezify(LossModule.load_state_dict)
