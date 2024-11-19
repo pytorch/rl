@@ -52,7 +52,7 @@ FULLGRAPH = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.par
 
 @pytest.fixture(scope="module", autouse=True)
 def set_default_device():
-    cur_device = torch.get_default_device()
+    cur_device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     torch.set_default_device(device)
     yield
