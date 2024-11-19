@@ -108,7 +108,7 @@ jobs:
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
       download-artifact: docs
@@ -119,6 +119,8 @@ jobs:
 
         REF_TYPE=${{ github.ref_type }}
         REF_NAME=${{ github.ref_name }}
+        apt-get update
+        apt-get install rsync -y
 
         if [[ "${REF_TYPE}" == branch ]]; then
           if [[ "${REF_NAME}" == main ]]; then
