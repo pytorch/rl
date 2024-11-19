@@ -52,4 +52,4 @@ jobs:
         export TD_GET_DEFAULTS_TO_NONE=1
 
         ## setup_env.sh
-        bash .github/unittest/linux_examples/scripts/run_all.sh
+        bash .github/unittest/linux_sota/scripts/run_all.sh
