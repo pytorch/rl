@@ -146,6 +146,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     _iterator = None
     total_frames: int
+    requested_frames_per_batch: int
     frames_per_batch: int
     trust_policy: bool
     compiled_policy: bool
@@ -305,7 +306,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     def __len__(self) -> int:
         if self.total_frames > 0:
-            return -(self.total_frames // -self.frames_per_batch)
+            return -(self.total_frames // -self.requested_frames_per_batch)
         raise RuntimeError("Non-terminating collectors do not have a length")
 
 
@@ -700,7 +701,7 @@ class SyncDataCollector(DataCollectorBase):
             remainder = total_frames % frames_per_batch
             if remainder != 0 and RL_WARNINGS:
                 warnings.warn(
-                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch})."
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch}). "
                     f"This means {frames_per_batch - remainder} additional frames will be collected."
                     "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
