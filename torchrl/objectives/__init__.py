@@ -29,5 +29,6 @@ from .utils import (
     hold_out_params,
     next_state_value,
     SoftUpdate,
+    TargetNetUpdater,
     ValueEstimators,
 )
