@@ -296,14 +296,26 @@ commands = {
 def run_command(command):
     # Get the current coverage settings
     cov_settings = os.environ.get("COVERAGE_PROCESS_START")
-
     if cov_settings:
         # If coverage is enabled, run the command with coverage
         command = f"coverage run --parallel-mode {command}"
-
-    subprocess.check_call(
-        command, shell=True, cwd=Path(__file__).parent.parent.parent.parent.parent
+    process = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=Path(__file__).parent.parent.parent.parent.parent,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
     )
+    while True:
+        output = process.stdout.readline()
+        if output == "" and process.poll() is not None:
+            break
+        if output:
+            print(output.strip())
+    return_code = process.wait()
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, command)
 
 
 @pytest.mark.parametrize("algo", list(commands))
