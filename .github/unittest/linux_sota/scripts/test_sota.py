@@ -312,7 +312,7 @@ def run_command(command):
         if output == "" and process.poll() is not None:
             break
         if output:
-            print(output.strip())
+            print(output.strip())  # noqa: T201
     return_code = process.wait()
     if return_code != 0:
         raise subprocess.CalledProcessError(return_code, command)
