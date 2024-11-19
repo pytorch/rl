@@ -265,10 +265,6 @@ lstm = LSTMModule(
     in_keys=["observation", "hidden0", "hidden1"],
     out_keys=["intermediate", "hidden0", "hidden1"],
 )
-#####################################
-# We set the recurrent mode to ``False`` to allow the module to read inputs one-by-one and not in batch.
-#
-lstm = lstm.set_recurrent_mode(False)
 
 #####################################
 # If the LSTM module is not python based but CuDNN (:class:`~torch.nn.LSTM`), the :meth:`~torchrl.modules.LSTMModule.make_python_based`
