@@ -3172,6 +3172,29 @@ def test_no_deepcopy_policy(collector_type):
         )
 
 
+@pytest.mark.parametrize(
+    "ctype", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+)
+def test_no_stopiteration(ctype):
+    # Tests that there is no StopIteration raised and that the length of the collector is properly set
+    if ctype is SyncDataCollector:
+        envs = SerialEnv(16, CountingEnv)
+    else:
+        envs = [SerialEnv(8, CountingEnv), SerialEnv(8, CountingEnv)]
+
+    collector = ctype(create_env_fn=envs, frames_per_batch=173, total_frames=300)
+    try:
+        c_iter = iter(collector)
+        assert len(collector) == 2
+        for i in range(len(collector)):  # noqa: B007
+            c = next(c_iter)
+            assert c is not None
+        assert i == 1
+    finally:
+        collector.shutdown()
+        del collector
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

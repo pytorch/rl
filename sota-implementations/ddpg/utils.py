@@ -234,7 +234,8 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
             OrnsteinUhlenbeckProcessModule(
                 spec=action_spec,
                 annealing_num_steps=1_000_000,
-            ).to(device),
+                device=device,
+            ),
         )
     elif cfg.network.noise_type == "gaussian":
         actor_model_explore = TensorDictSequential(
@@ -245,7 +246,8 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
                 sigma_init=1.0,
                 mean=0.0,
                 std=0.1,
-            ).to(device),
+                device=device,
+            ),
         )
     else:
         raise NotImplementedError
