@@ -220,7 +220,7 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
             "low": torch.as_tensor(action_spec.space.low, device=device),
             "high": torch.as_tensor(action_spec.space.high, device=device),
             "tanh_loc": False,
-            "safe_tanh": not cfg.loss.compile,
+            "safe_tanh": not cfg.compile.compile,
         },
         default_interaction_type=ExplorationType.RANDOM,
     )

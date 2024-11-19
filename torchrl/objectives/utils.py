@@ -596,7 +596,7 @@ def _get_default_device(net):
     for p in net.parameters():
         return p.device
     else:
-        return torch.get_default_device()
+        return getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
 
 
 def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimizer:
