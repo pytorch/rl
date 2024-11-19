@@ -611,6 +611,15 @@ class Delta(D.Distribution):
             event_shape = param.shape[-1:]
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
 
+    def expand(self, batch_shape: torch.Size, _instance=None):
+        if self.batch_shape != tuple(batch_shape):
+            return type(self)(
+                self.param.expand((*batch_shape, *self.event_shape)),
+                atol=self.atol,
+                rtol=self.rtol,
+            )
+        return self
+
     def update(self, param):
         self.param = param
 

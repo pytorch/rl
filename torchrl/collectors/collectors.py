@@ -152,6 +152,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     _iterator = None
     total_frames: int
+    requested_frames_per_batch: int
     frames_per_batch: int
     trust_policy: bool
     compiled_policy: bool
@@ -166,6 +167,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         env_maker_kwargs: dict | None = None,
     ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
+
+        We want to copy the policy and then move the data there, not call policy.to(device).
 
         Args:
             policy (TensorDictModule, optional): a policy to be used
@@ -224,7 +227,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             weight = weight.data
             if weight.device != policy_device:
                 weight = weight.to(policy_device)
-            elif weight.device.type in ("cpu", "mps"):
+            elif weight.device.type in ("cpu",):
                 weight = weight.share_memory_()
             if is_param:
                 weight = Parameter(weight, requires_grad=False)
@@ -238,7 +241,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             policy = deepcopy(policy)
 
         param_and_buf.apply(
-            functools.partial(map_weight),
+            map_weight,
             filter_empty=False,
         ).to_module(policy)
         return policy, get_original_weights
@@ -311,7 +314,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     def __len__(self) -> int:
         if self.total_frames > 0:
-            return -(self.total_frames // -self.frames_per_batch)
+            return -(self.total_frames // -self.requested_frames_per_batch)
         raise RuntimeError("Non-terminating collectors do not have a length")
 
 
@@ -706,7 +709,7 @@ class SyncDataCollector(DataCollectorBase):
             remainder = total_frames % frames_per_batch
             if remainder != 0 and RL_WARNINGS:
                 warnings.warn(
-                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch})."
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch}). "
                     f"This means {frames_per_batch - remainder} additional frames will be collected."
                     "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
@@ -743,8 +746,8 @@ class SyncDataCollector(DataCollectorBase):
                 f" ({-(-frames_per_batch // self.n_env) * self.n_env}). "
                 "To silence this message, set the environment variable RL_WARNINGS to False."
             )
-        self.requested_frames_per_batch = int(frames_per_batch)
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
+        self.requested_frames_per_batch = self.frames_per_batch * self.n_env
         self.exploration_type = (
             exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
         )
@@ -1659,6 +1662,7 @@ class _MultiDataCollector(DataCollectorBase):
             self._get_weights_fn_dict[policy_device] = get_weights_fn
         self.policy = policy
 
+        remainder = 0
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:

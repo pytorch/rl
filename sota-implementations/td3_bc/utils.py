@@ -183,7 +183,8 @@ def make_td3_agent(cfg, train_env, device):
             mean=0,
             std=0.1,
             spec=action_spec,
-        ).to(device),
+            device=device,
+        ),
     )
     return model, actor_model_explore
 
