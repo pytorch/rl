@@ -219,7 +219,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
     ):
         super().__init__()
         if device is None:
-            device = torch.get_default_device()
+            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
         # this is saved for tracking only and should not be used to cast anything else than buffers during
         # init.
         self._device = device
