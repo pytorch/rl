@@ -1024,7 +1024,7 @@ class _OrnsteinUhlenbeckProcess(nn.Module):
                 is_init = is_init.squeeze(-1)  # Squeeze dangling dim
             if (
                 action_tensordict.ndim >= is_init.ndim
-            ):  # if is_init has less dimensions than action_tensordict we expand it
+            ):  # if is_init has fewer dimensions than action_tensordict we expand it
                 is_init = expand_right(is_init, action_tensordict.shape)
             else:
                 is_init = is_init.sum(
