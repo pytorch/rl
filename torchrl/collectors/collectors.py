@@ -221,7 +221,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             weight = weight.data
             if weight.device != policy_device:
                 weight = weight.to(policy_device)
-            elif weight.device.mode in ("cpu",):
+            elif weight.device.type in ("cpu",):
                 weight = weight.share_memory_()
             if is_param:
                 weight = Parameter(weight, requires_grad=False)
@@ -582,14 +582,14 @@ class SyncDataCollector(DataCollectorBase):
         )
 
         self.storing_device = storing_device
-        if self.storing_device is not None and self.storing_device.mode != "cuda":
+        if self.storing_device is not None and self.storing_device.type != "cuda":
             # Cuda handles sync
             if torch.cuda.is_available():
                 self._sync_storage = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 # Will break for older PT versions which don't have torch.mps
                 self._sync_storage = torch.mps.synchronize
-            elif self.storing_device.mode == "cpu":
+            elif self.storing_device.type == "cpu":
                 self._sync_storage = _do_nothing
             else:
                 raise RuntimeError("Non supported device")
@@ -597,26 +597,26 @@ class SyncDataCollector(DataCollectorBase):
             self._sync_storage = _do_nothing
 
         self.env_device = env_device
-        if self.env_device is not None and self.env_device.mode != "cuda":
+        if self.env_device is not None and self.env_device.type != "cuda":
             # Cuda handles sync
             if torch.cuda.is_available():
                 self._sync_env = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_env = torch.mps.synchronize
-            elif self.env_device.mode == "cpu":
+            elif self.env_device.type == "cpu":
                 self._sync_env = _do_nothing
             else:
                 raise RuntimeError("Non supported device")
         else:
             self._sync_env = _do_nothing
         self.policy_device = policy_device
-        if self.policy_device is not None and self.policy_device.mode != "cuda":
+        if self.policy_device is not None and self.policy_device.type != "cuda":
             # Cuda handles sync
             if torch.cuda.is_available():
                 self._sync_policy = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_policy = torch.mps.synchronize
-            elif self.policy_device.mode == "cpu":
+            elif self.policy_device.type == "cpu":
                 self._sync_policy = _do_nothing
             else:
                 raise RuntimeError("Non supported device")
@@ -1006,7 +1006,7 @@ class SyncDataCollector(DataCollectorBase):
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
-        if self.storing_device and self.storing_device.mode == "cuda":
+        if self.storing_device and self.storing_device.type == "cuda":
             stream = torch.cuda.Stream(self.storing_device, priority=-1)
             event = stream.record_event()
             streams = [stream]
@@ -1025,7 +1025,7 @@ class SyncDataCollector(DataCollectorBase):
                 # This may be a bit dangerous as `torch.device("cuda")` may not have a precise
                 # device associated, whereas `tensor.device` always has
                 for spec in self.env.specs.values(True, True):
-                    if spec.device.mode == "cuda":
+                    if spec.device.type == "cuda":
                         if ":" not in str(spec.device):
                             raise RuntimeError(
                                 "A cuda spec did not have a device associated. Make sure to "
@@ -3038,9 +3038,9 @@ def _main_async_collector(
                     else:
                         # make sure each cpu tensor is shared - assuming non-cpu devices are shared
                         def cast_tensor(x, MPS_ERROR=MPS_ERROR):
-                            if x.device.mode in ("cpu",):
+                            if x.device.type in ("cpu",):
                                 x.share_memory_()
-                            if x.device.mode in ("mps",):
+                            if x.device.type in ("mps",):
                                 RuntimeError(MPS_ERROR)
 
                         collected_tensordict.apply(cast_tensor, filter_empty=True)

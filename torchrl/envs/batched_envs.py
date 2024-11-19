@@ -426,13 +426,13 @@ class BatchedEnvBase(EnvBase):
                 if torch.cuda.is_available():
                     worker_device = (
                         torch.device("cuda")
-                        if self_device.mode != "cuda"
+                        if self_device.type != "cuda"
                         else torch.device("cpu")
                     )
                 elif torch.backends.mps.is_available():
                     worker_device = (
                         torch.device("mps")
-                        if self_device.mode != "mps"
+                        if self_device.type != "mps"
                         else torch.device("cpu")
                     )
                 else:
@@ -444,7 +444,7 @@ class BatchedEnvBase(EnvBase):
             worker_device is not None
             and worker_device.type == "cuda"
             and self_device is not None
-            and self_device.mode == "cpu"
+            and self_device.type == "cpu"
         ):
             return _do_nothing, _cuda_sync(worker_device)
         if (
@@ -2354,12 +2354,12 @@ def _run_worker_pipe_direct(
         env = env_fun
     del env_fun
     for spec in env.output_spec.values(True, True):
-        if spec.device is not None and spec.device.mode == "cuda":
+        if spec.device is not None and spec.device.type == "cuda":
             has_cuda = True
             break
     else:
         for spec in env.input_spec.values(True, True):
-            if spec.device is not None and spec.device.mode == "cuda":
+            if spec.device is not None and spec.device.type == "cuda":
                 has_cuda = True
                 break
         else:
@@ -2417,7 +2417,7 @@ def _run_worker_pipe_direct(
             data, reset_kwargs = data
             if data is not None:
                 data._fast_apply(
-                    lambda x: x.clone() if x.device.mode == "cuda" else x, out=data
+                    lambda x: x.clone() if x.device.type == "cuda" else x, out=data
                 )
             cur_td = env.reset(
                 tensordict=data,
@@ -2455,7 +2455,7 @@ def _run_worker_pipe_direct(
             # data, idx = data
             # data = data[idx]
             data._fast_apply(
-                lambda x: x.clone() if x.device.mode == "cuda" else x, out=data
+                lambda x: x.clone() if x.device.type == "cuda" else x, out=data
             )
             td, root_next_td = env.step_and_maybe_reset(data)
 

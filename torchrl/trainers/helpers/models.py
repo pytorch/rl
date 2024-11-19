@@ -83,7 +83,7 @@ def make_dqn_actor(
         >>> proof_environment = TransformedEnv(GymEnv("ALE/Pong-v5",
         ...    pixels_only=True), ToTensorImage())
         >>> device = torch.device("cpu")
-        >>> config_fields = [(config_field.name, config_field.mode, config_field) for config_cls in
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
         ...                    (DiscreteModelConfig, EnvConfig)
         ...                   for config_field in dataclasses.fields(config_cls)]
         >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)

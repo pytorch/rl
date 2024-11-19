@@ -37,7 +37,8 @@ from torch import multiprocessing as mp
 try:
     from torch.compiler import is_compiling
 except ImportError:
-    from torch._dynamo import is_dynamo_supported as is_compiling
+    from torch._dynamo import is_compiling
+
 LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
 logger.setLevel(getattr(logging, LOGGING_LEVEL))

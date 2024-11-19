@@ -3958,12 +3958,12 @@ class DeviceCastTransform(Transform):
         self._rename_keys = self.in_keys != self.out_keys
         self._rename_keys_inv = self.in_keys_inv != self.out_keys_inv
 
-        if device.mode != "cuda":
+        if device.type != "cuda":
             if torch.cuda.is_available():
                 self._sync_device = torch.cuda.synchronize
             elif torch.backends.mps.is_available():
                 self._sync_device = torch.mps.synchronize
-            elif device.mode == "cpu":
+            elif device.type == "cpu":
                 self._sync_device = _do_nothing
         else:
             self._sync_device = _do_nothing

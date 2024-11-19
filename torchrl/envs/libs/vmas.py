@@ -803,7 +803,9 @@ class VmasEnv(VmasWrapper):
                 num_envs=num_envs,
                 device=self.device
                 if self.device is not None
-                else torch.get_default_device(),
+                else getattr(
+                    torch, "get_default_device", lambda: torch.device("cpu")
+                )(),
                 continuous_actions=continuous_actions,
                 max_steps=max_steps,
                 seed=seed,
