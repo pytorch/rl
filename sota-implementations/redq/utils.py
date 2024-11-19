@@ -1004,11 +1004,16 @@ def make_collector_offpolicy(
         env_kwargs.update(make_env_kwargs)
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
-    cfg.collector.device = (
-        cfg.collector.device
-        if len(cfg.collector.device) > 1
-        else cfg.collector.device[0]
-    )
+    if cfg.collector.device in ("", None):
+        cfg.collector.device = torch.device(
+            "cpu" if not torch.cuda.is_available() else "cuda:0"
+        )
+    else:
+        cfg.collector.device = (
+            cfg.collector.device
+            if len(cfg.collector.device) > 1
+            else cfg.collector.device[0]
+        )
     collector_helper_kwargs = {
         "env_fns": make_env,
         "env_kwargs": env_kwargs,
@@ -1021,7 +1026,6 @@ def make_collector_offpolicy(
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.collector.env_per_collector,
         "device": cfg.collector.device,
-        "storing_device": cfg.collector.device,
         "init_random_frames": cfg.collector.init_random_frames,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
