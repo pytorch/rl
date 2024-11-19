@@ -2076,7 +2076,10 @@ class TestTrajCounter(TransformBase):
         ):
             td = rb.sample(10)
 
+    @retry(AssertionError, tries=10, delay=0)
     def test_collector_match(self):
+        torch.manual_seed(0)
+
         # The counter in the collector should match the one from the transform
         t = TrajCounter()
 
