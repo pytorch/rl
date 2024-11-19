@@ -1,4 +1,4 @@
-name: Examples Tests on Linux
+name: SOTA Tests on Linux
 
 on:
   pull_request:
