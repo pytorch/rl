@@ -108,6 +108,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
             spec=env.unbatched_action_spec,
             annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
             action_key=env.action_key,
+            device=cfg.train.device,
         ),
     )
 

@@ -331,10 +331,15 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
         sigma = self.sigma
-        noise = torch.normal(
-            mean=self.mean.expand(action.shape),
-            std=self.std.expand(action.shape),
-        ).to(action.device)
+        mean = self.mean.expand(action.shape)
+        std = self.std.expand(action.shape)
+        if not mean.dtype.is_floating_point:
+            mean = mean.to(torch.get_default_dtype())
+        if not std.dtype.is_floating_point:
+            std = std.to(torch.get_default_dtype())
+        noise = torch.normal(mean=mean, std=std)
+        if noise.device != action.device:
+            noise = noise.to(action.device)
         action = action + noise * sigma
         spec = self.spec
         spec = spec[self.action_key]
@@ -462,10 +467,15 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
         sigma = self.sigma
-        noise = torch.normal(
-            mean=self.mean.expand(action.shape),
-            std=self.std.expand(action.shape),
-        ).to(action.device)
+        mean = self.mean.expand(action.shape)
+        std = self.std.expand(action.shape)
+        if not mean.dtype.is_floating_point:
+            mean = mean.to(torch.get_default_dtype())
+        if not std.dtype.is_floating_point:
+            std = std.to(torch.get_default_dtype())
+        noise = torch.normal(mean=mean, std=std)
+        if noise.device != action.device:
+            noise = noise.to(action.device)
         action = action + noise * sigma
         spec = self.spec[self.action_key]
         action = spec.project(action)
