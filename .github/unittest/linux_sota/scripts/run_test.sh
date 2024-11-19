@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
 
-# Leave blank as code needs to start on line 29 for run_local.sh
-#
-#
-#
-#
-#
-#
-#
-
-#set -e
+set -e
 set -v
 
 # Initialize an error flag
@@ -38,7 +29,7 @@ export CUDA_LAUNCH_BLOCKING=1
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
 
-coverage run -m pytest .github/unittest/linux_sota/scripts/run_tests.py --instafail --durations 200 -vvv --capture no
+coverage run -m pytest .github/unittest/linux_sota/scripts/test_sota.py --instafail --durations 200 -vvv --capture no
 
 coverage combine
 coverage xml -i
