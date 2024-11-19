@@ -220,7 +220,7 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
             "low": action_spec.space.low,
             "high": action_spec.space.high,
             "tanh_loc": False,
-            "safe_tanh": not cfg.loss.compile,
+            "safe_tanh": not cfg.compile.compile,
         },
         default_interaction_type=ExplorationType.RANDOM,
     )
