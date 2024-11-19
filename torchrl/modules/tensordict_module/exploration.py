@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import warnings
 from typing import Optional, Union
 
@@ -15,6 +17,7 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
 )
 from tensordict.utils import expand_as_right, expand_right, NestedKey
+from torch import nn
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
@@ -232,6 +235,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             is set to False but the spec is passed, the projection will still
             happen.
             Default is True.
+        device (torch.device, optional): the device where the buffers have to be stored.
 
     .. note::
         Once an environment has been wrapped in :class:`AdditiveGaussianWrapper`, it is
@@ -255,6 +259,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         action_key: Optional[NestedKey] = "action",
         spec: Optional[TensorSpec] = None,
         safe: Optional[bool] = True,
+        device: torch.device | None = None,
     ):
         warnings.warn(
             "AdditiveGaussianWrapper is deprecated and will be removed "
@@ -262,15 +267,22 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             "instead.",
             category=DeprecationWarning,
         )
+        if device is None and hasattr(policy, "parameters"):
+            for p in policy.parameters():
+                device = p.device
+                break
+
         super().__init__(policy)
         if sigma_end > sigma_init:
             raise RuntimeError("sigma should decrease over time or be constant")
-        self.register_buffer("sigma_init", torch.tensor([sigma_init]))
-        self.register_buffer("sigma_end", torch.tensor([sigma_end]))
+        self.register_buffer("sigma_init", torch.tensor([sigma_init], device=device))
+        self.register_buffer("sigma_end", torch.tensor([sigma_end], device=device))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("mean", torch.tensor([mean]))
-        self.register_buffer("std", torch.tensor([std]))
-        self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32))
+        self.register_buffer("mean", torch.tensor([mean], device=device))
+        self.register_buffer("std", torch.tensor([std], device=device))
+        self.register_buffer(
+            "sigma", torch.tensor([sigma_init], dtype=torch.float32, device=device)
+        )
         self.action_key = action_key
         self.out_keys = list(self.td_module.out_keys)
         if action_key not in self.out_keys:
@@ -312,19 +324,23 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         for _ in range(frames):
             self.sigma.data.copy_(
                 torch.maximum(
-                    self.sigma_end(
-                        self.sigma
-                        - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
-                    ),
-                )
+                    self.sigma_end,
+                    self.sigma
+                    - (self.sigma_init - self.sigma_end) / self.annealing_num_steps,
+                ),
             )
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
         sigma = self.sigma
-        noise = torch.normal(
-            mean=torch.ones(action.shape) * self.mean,
-            std=torch.ones(action.shape) * self.std,
-        ).to(action.device)
+        mean = self.mean.expand(action.shape)
+        std = self.std.expand(action.shape)
+        if not mean.dtype.is_floating_point:
+            mean = mean.to(torch.get_default_dtype())
+        if not std.dtype.is_floating_point:
+            std = std.to(torch.get_default_dtype())
+        noise = torch.normal(mean=mean, std=std)
+        if noise.device != action.device:
+            noise = noise.to(action.device)
         action = action + noise * sigma
         spec = self.spec
         spec = spec[self.action_key]
@@ -372,6 +388,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         safe (bool): if ``True``, actions that are out of bounds given the action specs will be projected in the space
             given the :obj:`TensorSpec.project` heuristic.
             default: True
+        device (torch.device, optional): the device where the buffers have to be stored.
 
     .. note::
         It is
@@ -394,6 +411,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         *,
         action_key: Optional[NestedKey] = "action",
         safe: bool = True,
+        device: torch.device | None = None,
     ):
         if not isinstance(sigma_init, float):
             warnings.warn("eps_init should be a float.")
@@ -405,12 +423,14 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
         super().__init__()
 
-        self.register_buffer("sigma_init", torch.tensor([sigma_init]))
-        self.register_buffer("sigma_end", torch.tensor([sigma_end]))
+        self.register_buffer("sigma_init", torch.tensor([sigma_init], device=device))
+        self.register_buffer("sigma_end", torch.tensor([sigma_end], device=device))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("mean", torch.tensor([mean]))
-        self.register_buffer("std", torch.tensor([std]))
-        self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32))
+        self.register_buffer("mean", torch.tensor([mean], device=device))
+        self.register_buffer("std", torch.tensor([std], device=device))
+        self.register_buffer(
+            "sigma", torch.tensor([sigma_init], dtype=torch.float32, device=device)
+        )
 
         if spec is not None:
             if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
@@ -448,10 +468,15 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
         sigma = self.sigma
-        noise = torch.normal(
-            mean=torch.ones(action.shape) * self.mean,
-            std=torch.ones(action.shape) * self.std,
-        ).to(action.device)
+        mean = self.mean.expand(action.shape)
+        std = self.std.expand(action.shape)
+        if not mean.dtype.is_floating_point:
+            mean = mean.to(torch.get_default_dtype())
+        if not std.dtype.is_floating_point:
+            std = std.to(torch.get_default_dtype())
+        noise = torch.normal(mean=mean, std=std)
+        if noise.device != action.device:
+            noise = noise.to(action.device)
         action = action + noise * sigma
         spec = self.spec[self.action_key]
         action = spec.project(action)
@@ -530,6 +555,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         safe (bool): if ``True``, actions that are out of bounds given the action specs will be projected in the space
             given the :obj:`TensorSpec.project` heuristic.
             default: True
+        device (torch.device, optional): the device where the buffers have to be stored.
 
     Examples:
         >>> import torch
@@ -573,6 +599,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         spec: TensorSpec = None,
         safe: bool = True,
         key: Optional[NestedKey] = None,
+        device: torch.device | None = None,
     ):
         warnings.warn(
             "OrnsteinUhlenbeckProcessWrapper is deprecated and will be removed "
@@ -580,6 +607,10 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             "instead.",
             category=DeprecationWarning,
         )
+        if device is None and hasattr(policy, "parameters"):
+            for p in policy.parameters():
+                device = p.device
+                break
         if key is not None:
             action_key = key
             warnings.warn(
@@ -595,16 +626,19 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             sigma_min=sigma_min,
             n_steps_annealing=n_steps_annealing,
             key=action_key,
+            device=device,
         )
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
+        self.register_buffer("eps_init", torch.tensor([eps_init], device=device))
+        self.register_buffer("eps_end", torch.tensor([eps_end], device=device))
         if self.eps_end > self.eps_init:
             raise ValueError(
                 "eps should decrease over time or be constant, "
                 f"got eps_init={eps_init} and eps_end={eps_end}"
             )
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
+        self.register_buffer(
+            "eps", torch.tensor([eps_init], dtype=torch.float32, device=device)
+        )
         self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
         self.is_init_key = is_init_key
         noise_key = self.ou.noise_key
@@ -746,6 +780,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
             is set to False but the spec is passed, the projection will still
             happen.
             Default is True.
+        device (torch.device, optional): the device where the buffers have to be stored.
 
     Examples:
         >>> import torch
@@ -782,13 +817,14 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         mu: float = 0.0,
         sigma: float = 0.2,
         dt: float = 1e-2,
-        x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[float] = None,
+        x0: torch.Tensor | np.ndarray | None = None,
+        sigma_min: float | None = None,
         n_steps_annealing: int = 1000,
         *,
-        action_key: Optional[NestedKey] = "action",
-        is_init_key: Optional[NestedKey] = "is_init",
+        action_key: NestedKey = "action",
+        is_init_key: NestedKey = "is_init",
         safe: bool = True,
+        device: torch.device | None = None,
     ):
         super().__init__()
 
@@ -801,17 +837,20 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
             sigma_min=sigma_min,
             n_steps_annealing=n_steps_annealing,
             key=action_key,
+            device=device,
         )
 
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
+        self.register_buffer("eps_init", torch.tensor([eps_init], device=device))
+        self.register_buffer("eps_end", torch.tensor([eps_end], device=device))
         if self.eps_end > self.eps_init:
             raise ValueError(
                 "eps should decrease over time or be constant, "
                 f"got eps_init={eps_init} and eps_end={eps_end}"
             )
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
+        self.register_buffer(
+            "eps", torch.tensor([eps_init], dtype=torch.float32, device=device)
+        )
 
         self.in_keys = [self.ou.key]
         self.out_keys = [self.ou.key] + self.ou.out_keys
@@ -883,7 +922,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
 
 
 # Based on http://math.stackexchange.com/questions/1287634/implementing-ornstein-uhlenbeck-in-matlab
-class _OrnsteinUhlenbeckProcess:
+class _OrnsteinUhlenbeckProcess(nn.Module):
     def __init__(
         self,
         theta: float,
@@ -895,7 +934,11 @@ class _OrnsteinUhlenbeckProcess:
         n_steps_annealing: int = 1000,
         key: Optional[NestedKey] = "action",
         is_init_key: Optional[NestedKey] = "is_init",
+        device: torch.device | None = None,
     ):
+        super().__init__()
+        self.register_buffer("_empty_tensor_device", torch.zeros(0, device=device))
+
         self.mu = mu
         self.sigma = sigma
 
@@ -917,6 +960,13 @@ class _OrnsteinUhlenbeckProcess:
         self._noise_key = "_ou_prev_noise"
         self._steps_key = "_ou_steps"
         self.out_keys = [self.noise_key, self.steps_key]
+        self._auto_buffer()
+
+    def _auto_buffer(self):
+        for key, item in list(self.__dict__.items()):
+            if isinstance(item, torch.Tensor):
+                delattr(self, key)
+                self.register_buffer(key, item)
 
     @property
     def noise_key(self):
@@ -932,12 +982,14 @@ class _OrnsteinUhlenbeckProcess:
         tensordict: TensorDictBase,
         is_init: torch.Tensor,
     ):
+        device = tensordict.device
+        if device is None:
+            device = self._empty_tensor_device.device
+
         if self.steps_key not in tensordict.keys():
-            noise = torch.zeros(
-                tensordict.get(self.key).shape, device=tensordict.device
-            )
+            noise = torch.zeros(tensordict.get(self.key).shape, device=device)
             steps = torch.zeros(
-                action_tensordict.batch_size, dtype=torch.long, device=tensordict.device
+                action_tensordict.batch_size, dtype=torch.long, device=device
             )
             tensordict.set(self.noise_key, noise)
             tensordict.set(self.steps_key, steps)
@@ -946,8 +998,8 @@ class _OrnsteinUhlenbeckProcess:
             noise = tensordict.get(self.noise_key).clone()
             steps = tensordict.get(self.steps_key).clone()
         if is_init is not None:
-            noise = torch.masked_fill(noise, is_init, 0)
-            steps = torch.masked_fill(steps, is_init, 0)
+            noise = torch.masked_fill(noise, expand_right(is_init, noise.shape), 0)
+            steps = torch.masked_fill(steps, expand_right(is_init, steps.shape), 0)
         return noise, steps
 
     def add_sample(
@@ -972,7 +1024,7 @@ class _OrnsteinUhlenbeckProcess:
                 is_init = is_init.squeeze(-1)  # Squeeze dangling dim
             if (
                 action_tensordict.ndim >= is_init.ndim
-            ):  # if is_init has less dimensions than action_tensordict we expand it
+            ):  # if is_init has fewer dimensions than action_tensordict we expand it
                 is_init = expand_right(is_init, action_tensordict.shape)
             else:
                 is_init = is_init.sum(

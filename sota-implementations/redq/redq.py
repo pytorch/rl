@@ -119,7 +119,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 annealing_num_steps=cfg.exploration.annealing_frames,
                 sigma=cfg.exploration.ou_sigma,
                 theta=cfg.exploration.ou_theta,
-            ).to(device),
+                device=device,
+            ),
         )
     if device == torch.device("cpu"):
         # mostly for debugging

@@ -275,6 +275,7 @@ def make_dreamer(
             annealing_num_steps=1,
             mean=0.0,
             std=cfg.networks.exploration_noise,
+            device=device,
         ),
     )
 
