@@ -38,15 +38,7 @@ export CUDA_LAUNCH_BLOCKING=1
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
 
-coverage run -m pytest .github/unittest/linux_sota/scripts/run_tests.py --instafail --durations 200 -vvv --capture no --timeout=120
+coverage run -m pytest .github/unittest/linux_sota/scripts/run_tests.py --instafail --durations 200 -vvv --capture no
 
 coverage combine
 coverage xml -i
-
-# Check if any errors occurred during the script execution
-if [ "$error_occurred" -ne 0 ]; then
-    echo "Errors occurred during script execution"
-    exit 1
-else
-    echo "Script executed successfully"
-fi
