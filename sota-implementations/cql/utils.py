@@ -6,6 +6,7 @@ import functools
 
 import torch.nn
 import torch.optim
+from tensordict import TensorDict, TensorDictParams
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.distributions import NormalParamExtractor
 
@@ -216,12 +217,19 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         in_keys=["loc", "scale"],
         spec=action_spec,
         distribution_class=TanhNormal,
-        distribution_kwargs={
-            "low": action_spec.space.low,
-            "high": action_spec.space.high,
-            "tanh_loc": False,
-            "safe_tanh": not cfg.compile.compile,
-        },
+        # Wrapping the kwargs in a TensorDictParams such that these items are
+        #  send to device when necessary
+        distribution_kwargs=TensorDictParams(
+            TensorDict(
+                {
+                    "low": action_spec.space.low,
+                    "high": action_spec.space.high,
+                    "tanh_loc": False,
+                    "safe_tanh": not cfg.compile.compile,
+                }
+            ),
+            no_convert=True,
+        ),
         default_interaction_type=ExplorationType.RANDOM,
     )
 
