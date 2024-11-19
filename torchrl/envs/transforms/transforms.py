@@ -3958,12 +3958,12 @@ class DeviceCastTransform(Transform):
         self._rename_keys = self.in_keys != self.out_keys
         self._rename_keys_inv = self.in_keys_inv != self.out_keys_inv
 
-        if device.type != "cuda":
+        if device.mode != "cuda":
             if torch.cuda.is_available():
                 self._sync_device = torch.cuda.synchronize
             elif torch.backends.mps.is_available():
                 self._sync_device = torch.mps.synchronize
-            elif device.type == "cpu":
+            elif device.mode == "cpu":
                 self._sync_device = _do_nothing
         else:
             self._sync_device = _do_nothing
@@ -7411,7 +7411,8 @@ class BurnInTransform(Transform):
         ...     hidden_size=10,
         ...     in_keys=["observation", "hidden"],
         ...     out_keys=["intermediate", ("next", "hidden")],
-        ... ).set_recurrent_mode(True)
+        ...     default_recurrent_mode=True,
+        ... )
         >>> burn_in_transform = BurnInTransform(
         ...     modules=[gru_module],
         ...     burn_in=5,

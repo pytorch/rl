@@ -615,7 +615,7 @@ class TensorStorage(Storage):
             # If it's memmaped no worry in this case either.
             # Only if the device is not "cpu" or "cuda" we may have a problem.
             def assert_is_sharable(tensor):
-                if tensor.device is None or tensor.device.type in (
+                if tensor.device is None or tensor.device.mode in (
                     "cuda",
                     "cpu",
                     "meta",

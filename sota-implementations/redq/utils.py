@@ -922,7 +922,7 @@ def make_redq_loss(
     """Builds the REDQ loss module."""
     loss_kwargs = {}
     loss_kwargs.update({"loss_function": cfg.loss.loss_function})
-    loss_kwargs.update({"delay_qvalue": cfg.loss.type == "double"})
+    loss_kwargs.update({"delay_qvalue": cfg.loss.mode == "double"})
     loss_class = REDQLoss_deprecated
     if isinstance(model, ActorValueOperator):
         actor_model = model.get_policy_operator()
@@ -953,7 +953,7 @@ def make_target_updater(
     cfg: "DictConfig", loss_module: LossModule  # noqa: F821
 ) -> TargetNetUpdater | None:
     """Builds a target network weight update object."""
-    if cfg.loss.type == "double":
+    if cfg.loss.mode == "double":
         if not cfg.loss.hard_update:
             target_net_updater = SoftUpdate(
                 loss_module, eps=1 - 1 / cfg.loss.value_network_update_interval

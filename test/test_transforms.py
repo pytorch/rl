@@ -9009,7 +9009,7 @@ class TestTransforms:
         td = TensorDict(
             {key: torch.randn(3) for key in ["a", "b", "c"]}, [], device=device
         )
-        if device.type == "cuda":
+        if device.mode == "cuda":
             with pytest.raises(RuntimeError, match="cannot pin"):
                 pin_mem(td)
             with pytest.raises(RuntimeError, match="cannot pin"):
@@ -10885,7 +10885,8 @@ class TestBurnInTransform(TransformBase):
             in_keys=["observation", "rhs", "is_init"],
             out_keys=["output", ("next", "rhs")],
             device=device,
-        ).set_recurrent_mode(True)
+            default_recurrent_mode=True,
+        )
 
     def _make_lstm_module(self, input_size=4, hidden_size=4, device="cpu"):
         return LSTMModule(
@@ -10895,7 +10896,8 @@ class TestBurnInTransform(TransformBase):
             in_keys=["observation", "rhs_h", "rhs_c", "is_init"],
             out_keys=["output", ("next", "rhs_h"), ("next", "rhs_c")],
             device=device,
-        ).set_recurrent_mode(True)
+            default_recurrent_mode=True,
+        )
 
     def _make_batch(self, batch_size: int = 2, sequence_length: int = 5):
         observation = torch.randn(batch_size, sequence_length + 1, 4)

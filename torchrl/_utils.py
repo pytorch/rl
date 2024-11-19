@@ -15,9 +15,11 @@ import math
 import os
 import pickle
 import sys
+import threading
 import time
 import traceback
 import warnings
+from contextlib import nullcontext
 from copy import copy
 from distutils.util import strtobool
 from functools import wraps
@@ -32,6 +34,10 @@ from tensordict import unravel_key
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_dynamo_supported as is_compiling
 LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
 logger.setLevel(getattr(logging, LOGGING_LEVEL))
@@ -827,3 +833,19 @@ def _make_ordinal_device(device: torch.device):
     if device.type == "mps" and device.index is None:
         return torch.device("mps", index=0)
     return device
+
+
+class _ContextManager:
+    def __init__(self):
+        self._mode: Any | None = None
+        self._lock = threading.Lock()
+
+    def get_mode(self) -> Any | None:
+        cm = self._lock if not is_compiling() else nullcontext()
+        with cm:
+            return self._mode
+
+    def set_mode(self, type: Any | None) -> None:
+        cm = self._lock if not is_compiling() else nullcontext()
+        with cm:
+            self._mode = type

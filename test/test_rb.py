@@ -767,9 +767,9 @@ class TestStorages:
         storage = storage_type(max_size=10, device=device_storage)
         storage.set(0, data)
         if device_storage != "auto":
-            assert storage.get(0).device.type == device_storage.type
+            assert storage.get(0).device.mode == device_storage.type
         else:
-            assert storage.get(0).device.type == storage.device.type
+            assert storage.get(0).device.mode == storage.device.type
 
     @pytest.mark.parametrize("storage_in", ["tensor", "memmap"])
     @pytest.mark.parametrize("storage_out", ["tensor", "memmap"])

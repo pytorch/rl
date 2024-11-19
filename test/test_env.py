@@ -590,7 +590,7 @@ class TestParallel:
             )
         if parallel:
             assert (
-                env.shared_tensordict_parent.device.type == torch.device(edevice).type
+                env.shared_tensordict_parent.device.mode == torch.device(edevice).type
             )
 
     @pytest.mark.parametrize("start_method", [None, mp_ctx])

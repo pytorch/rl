@@ -119,7 +119,7 @@ class HabitatEnv(GymEnv):
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:
         device = _make_ordinal_device(torch.device(device))
-        if device.type != "cuda":
+        if device.mode != "cuda":
             raise ValueError("The device must be of type cuda for Habitat.")
         device_num = device.index
         kwargs = {"override_options": []}
