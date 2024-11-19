@@ -21,55 +21,59 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
 
-from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
-from torchrl.data.postprocs import MultiStep
-from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data import (
+    LazyMemmapStorage,
+    MultiStep,
+    PrioritizedSampler,
+    RandomSampler,
+    ReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import ParallelEnv
-from torchrl.envs.common import EnvBase
-from torchrl.envs.env_creator import env_creator, EnvCreator
-from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import (
+from torchrl.envs import (
     CatFrames,
     CatTensors,
     CenterCrop,
     Compose,
+    DMControlEnv,
     DoubleToFloat,
+    env_creator,
+    EnvBase,
+    EnvCreator,
+    FlattenObservation,
     GrayScale,
+    gSDENoise,
+    GymEnv,
+    InitTracker,
     NoopResetEnv,
     ObservationNorm,
+    ParallelEnv,
     Resize,
     RewardScaling,
+    StepCounter,
     ToTensorImage,
     TransformedEnv,
     VecNorm,
-)
-from torchrl.envs.transforms.transforms import (
-    FlattenObservation,
-    gSDENoise,
-    InitTracker,
-    StepCounter,
 )
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     ActorCriticOperator,
     ActorValueOperator,
+    DdpgCnnActor,
+    DdpgCnnQNet,
+    MLP,
     NoisyLinear,
     NormalParamExtractor,
+    ProbabilisticActor,
     SafeModule,
     SafeSequential,
+    TanhNormal,
+    ValueOperator,
 )
-from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
-from torchrl.modules.models.models import DdpgCnnActor, DdpgCnnQNet, MLP
-from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
-from torchrl.objectives import HardUpdate, SoftUpdate
-from torchrl.objectives.common import LossModule
+from torchrl.objectives import HardUpdate, LossModule, SoftUpdate, TargetNetUpdater
 from torchrl.objectives.deprecated import REDQLoss_deprecated
-from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
 from torchrl.trainers.helpers import sync_async_collector, sync_sync_collector
@@ -518,7 +522,7 @@ def make_redq_model(
         actor_module = SafeSequential(
             actor_module,
             SafeModule(
-                LazygSDEModule(transform=transform),
+                LazygSDEModule(transform=transform, device=device),
                 in_keys=["action", gSDE_state_key, "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],
             ),
@@ -606,7 +610,9 @@ def transformed_env_constructor(
         categorical_action_encoding = cfg.env.categorical_action_encoding
 
         if custom_env is None and custom_env_maker is None:
-            if isinstance(cfg.collector.device, str):
+            if cfg.collector.device in ("", None):
+                device = "cpu" if not torch.cuda.is_available() else "cuda:0"
+            elif isinstance(cfg.collector.device, str):
                 device = cfg.collector.device
             elif isinstance(cfg.collector.device, Sequence):
                 device = cfg.collector.device[0]
@@ -1000,11 +1006,14 @@ def make_collector_offpolicy(
         env_kwargs.update(make_env_kwargs)
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
-    cfg.collector.device = (
-        cfg.collector.device
-        if len(cfg.collector.device) > 1
-        else cfg.collector.device[0]
-    )
+    if cfg.collector.device in ("", None):
+        cfg.collector.device = "cpu" if not torch.cuda.is_available() else "cuda:0"
+    else:
+        cfg.collector.device = (
+            cfg.collector.device
+            if len(cfg.collector.device) > 1
+            else cfg.collector.device[0]
+        )
     collector_helper_kwargs = {
         "env_fns": make_env,
         "env_kwargs": env_kwargs,
@@ -1017,7 +1026,6 @@ def make_collector_offpolicy(
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.collector.env_per_collector,
         "device": cfg.collector.device,
-        "storing_device": cfg.collector.device,
         "init_random_frames": cfg.collector.init_random_frames,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
