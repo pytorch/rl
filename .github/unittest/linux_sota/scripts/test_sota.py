@@ -17,7 +17,7 @@ commands = {
   env.backend=gymnasium \
   env.name=HalfCheetah-v4
 """,
-    "online_dt": """"python sota-implementations/decision_transformer/online_dt.py \
+    "online_dt": """python sota-implementations/decision_transformer/online_dt.py \
   optim.pretrain_gradient_steps=55 \
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \
@@ -28,14 +28,14 @@ commands = {
   optim.gradient_steps=55 \
   logger.backend=
 """,
-    "impala_single_node": """"python sota-implementations/impala/impala_single_node.py \
+    "impala_single_node": """python sota-implementations/impala/impala_single_node.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   collector.num_workers=1 \
   logger.backend= \
   logger.test_interval=10
 """,
-    "ppo_mujoco": """"python sota-implementations/ppo/ppo_mujoco.py \
+    "ppo_mujoco": """python sota-implementations/ppo/ppo_mujoco.py \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
   collector.frames_per_batch=20 \
@@ -44,7 +44,7 @@ commands = {
   logger.backend= \
   logger.test_interval=10
 """,
-    "ppo_atari": """"python sota-implementations/ppo/ppo_atari.py \
+    "ppo_atari": """python sota-implementations/ppo/ppo_atari.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \
@@ -52,7 +52,7 @@ commands = {
   logger.backend= \
   logger.test_interval=10
 """,
-    "ddpg": """"python sota-implementations/ddpg/ddpg.py \
+    "ddpg": """python sota-implementations/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
@@ -63,7 +63,7 @@ commands = {
   env.name=Pendulum-v1 \
   logger.backend=
 """,
-    "a2c_mujoco": """"python sota-implementations/a2c/a2c_mujoco.py \
+    "a2c_mujoco": """python sota-implementations/a2c/a2c_mujoco.py \
   env.env_name=HalfCheetah-v4 \
   collector.total_frames=40 \
   collector.frames_per_batch=20 \
@@ -71,14 +71,14 @@ commands = {
   logger.backend= \
   logger.test_interval=40
 """,
-    "a2c_atari": """"python sota-implementations/a2c/a2c_atari.py \
+    "a2c_atari": """python sota-implementations/a2c/a2c_atari.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \
   logger.backend= \
   logger.test_interval=40
 """,
-    "dqn_atari": """"python sota-implementations/dqn/dqn_atari.py \
+    "dqn_atari": """python sota-implementations/dqn/dqn_atari.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -87,7 +87,7 @@ commands = {
   logger.backend= \
   buffer.buffer_size=120
 """,
-    "discrete_cql_online": """"python sota-implementations/cql/discrete_cql_online.py \
+    "discrete_cql_online": """python sota-implementations/cql/discrete_cql_online.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
@@ -96,7 +96,7 @@ commands = {
   replay_buffer.size=120 \
   logger.backend=
 """,
-    "redq": """"python sota-implementations/redq/redq.py \
+    "redq": """python sota-implementations/redq/redq.py \
   num_workers=4 \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -109,7 +109,7 @@ commands = {
   buffer.size=120 \
   logger.backend=
 """,
-    "sac": """"python sota-implementations/sac/sac.py \
+    "sac": """python sota-implementations/sac/sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -120,7 +120,7 @@ commands = {
   env.name=Pendulum-v1 \
   logger.backend=
 """,
-    "discrete_sac": """"python sota-implementations/discrete_sac/discrete_sac.py \
+    "discrete_sac": """python sota-implementations/discrete_sac/discrete_sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -133,7 +133,7 @@ commands = {
   env.name=CartPole-v1 \
   logger.backend=
 """,
-    "crossq": """"python sota-implementations/crossq/crossq.py \
+    "crossq": """python sota-implementations/crossq/crossq.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -146,7 +146,7 @@ commands = {
   network.device= \
   logger.backend=
 """,
-    "td3": """"python sota-implementations/td3/td3.py \
+    "td3": """python sota-implementations/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
@@ -157,7 +157,7 @@ commands = {
   env.name=Pendulum-v1 \
   logger.backend=
 """,
-    "iql_online": """"python sota-implementations/iql/iql_online.py \
+    "iql_online": """python sota-implementations/iql/iql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
@@ -165,7 +165,7 @@ commands = {
   logger.mode=offline \
   logger.backend=
 """,
-    "discrete_iql": """"python sota-implementations/iql/discrete_iql.py \
+    "discrete_iql": """python sota-implementations/iql/discrete_iql.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
@@ -173,7 +173,7 @@ commands = {
   logger.mode=offline \
   logger.backend=
 """,
-    "cql_online": """"python sota-implementations/cql/cql_online.py \
+    "cql_online": """python sota-implementations/cql/cql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
@@ -181,7 +181,7 @@ commands = {
   logger.mode=offline \
   logger.backend=
 """,
-    "gail": """"python sota-implementations/gail/gail.py \
+    "gail": """python sota-implementations/gail/gail.py \
   ppo.collector.total_frames=48 \
   replay_buffer.batch_size=16 \
   ppo.loss.mini_batch_size=10 \
@@ -189,7 +189,7 @@ commands = {
   logger.mode=offline \
   logger.backend=
 """,
-    "dreamer": """"python sota-implementations/dreamer/dreamer.py \
+    "dreamer": """python sota-implementations/dreamer/dreamer.py \
   collector.total_frames=200 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=200 \
@@ -202,7 +202,7 @@ commands = {
   replay_buffer.batch_length=12 \
   networks.rssm_hidden_dim=17
 """,
-    "ddpg-single": """"python sota-implementations/ddpg/ddpg.py \
+    "ddpg-single": """python sota-implementations/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   optim.batch_size=10 \
@@ -213,7 +213,7 @@ commands = {
   env.name=Pendulum-v1 \
   logger.backend=
 """,
-    "redq-single": """"python sota-implementations/redq/redq.py \
+    "redq-single": """python sota-implementations/redq/redq.py \
   num_workers=2 \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -226,7 +226,7 @@ commands = {
   buffer.size=120 \
   logger.backend=
 """,
-    "iql_online-single": """"python sota-implementations/iql/iql_online.py \
+    "iql_online-single": """python sota-implementations/iql/iql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
@@ -234,7 +234,7 @@ commands = {
   logger.mode=offline \
   logger.backend=
 """,
-    "cql_online-single": """"python sota-implementations/cql/cql_online.py \
+    "cql_online-single": """python sota-implementations/cql/cql_online.py \
   collector.total_frames=48 \
   optim.batch_size=10 \
   collector.frames_per_batch=16 \
@@ -242,7 +242,7 @@ commands = {
   logger.mode=offline \
   logger.backend=
 """,
-    "td3-single": """"python sota-implementations/td3/td3.py \
+    "td3-single": """python sota-implementations/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
@@ -253,21 +253,21 @@ commands = {
   env.name=Pendulum-v1 \
   logger.backend=
 """,
-    "mappo_ippo": """"python sota-implementations/multiagent/mappo_ippo.py \
+    "mappo_ippo": """python sota-implementations/multiagent/mappo_ippo.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=
 """,
-    "maddpg_iddpg": """"python sota-implementations/multiagent/maddpg_iddpg.py \
+    "maddpg_iddpg": """python sota-implementations/multiagent/maddpg_iddpg.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=
 """,
-    "iql_marl": """"python sota-implementations/multiagent/iql.py \
+    "iql_marl": """python sota-implementations/multiagent/iql.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
@@ -281,32 +281,29 @@ commands = {
   train.minibatch_size=100 \
   logger.backend=
 """,
-    "marl_sac": """"python sota-implementations/multiagent/sac.py \
+    "marl_sac": """python sota-implementations/multiagent/sac.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=
 """,
-    "bandits": """"python sota-implementations/bandits/dqn.py --n_steps=100
+    "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100
 """,
 }
 
 
 def run_command(command):
-    try:
-        # Get the current coverage settings
-        cov_settings = os.environ.get('COVERAGE_PROCESS_START')
+    # Get the current coverage settings
+    cov_settings = os.environ.get('COVERAGE_PROCESS_START')
 
-        if cov_settings:
-            # If coverage is enabled, run the command with coverage
-            command = f"coverage run --parallel-mode {command}"
+    if cov_settings:
+        # If coverage is enabled, run the command with coverage
+        command = f"coverage run --parallel-mode {command}"
 
-        subprocess.check_call(
-            command, shell=True, cwd=Path(__file__).parent.parent.parent.parent.parent
-        )
-    except subprocess.CalledProcessError as e:
-        raise AssertionError(f"Command failed with return code {e.returncode}")
+    subprocess.check_call(
+        command, shell=True, cwd=Path(__file__).parent.parent.parent.parent.parent
+    )
 
 
 @pytest.mark.parametrize("algo", list(commands))
