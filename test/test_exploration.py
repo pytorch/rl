@@ -240,9 +240,10 @@ class TestOrnsteinUhlenbeckProcess:
     def test_ou(
         self, device, interface, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
     ):
-        print(device)
         torch.manual_seed(seed)
-        net = nn.Sequential(nn.Linear(d_obs, 2 * d_act, device=device), NormalParamExtractor())
+        net = nn.Sequential(
+            nn.Linear(d_obs, 2 * d_act, device=device), NormalParamExtractor()
+        )
         module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         action_spec = Bounded(-torch.ones(d_act), torch.ones(d_act), (d_act,))
         policy = ProbabilisticActor(
@@ -457,7 +458,9 @@ class TestAdditiveGaussian:
         if interface == "module":
             exploratory_policy = AdditiveGaussianModule(action_spec, device=device)
         else:
-            net = nn.Sequential(nn.Linear(d_obs, 2 * d_act, device=device), NormalParamExtractor())
+            net = nn.Sequential(
+                nn.Linear(d_obs, 2 * d_act, device=device), NormalParamExtractor()
+            )
             module = SafeModule(
                 net,
                 in_keys=["observation"],
@@ -472,7 +475,9 @@ class TestAdditiveGaussian:
                 default_interaction_type=InteractionType.RANDOM,
             )
             given_spec = action_spec if spec_origin == "spec" else None
-            exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec, device=device)
+            exploratory_policy = AdditiveGaussianWrapper(
+                policy, spec=given_spec, device=device
+            )
         if spec_origin is not None:
             sigma_init = (
                 action_spec.project(
@@ -722,9 +727,7 @@ def test_gsde(
 @pytest.mark.parametrize("std", [1, 2])
 @pytest.mark.parametrize("sigma_init", [None, 1.5, 3])
 @pytest.mark.parametrize("learn_sigma", [False, True])
-@pytest.mark.parametrize(
-    "device", get_default_devices()
-)
+@pytest.mark.parametrize("device", get_default_devices())
 def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_sigma):
     torch.manual_seed(0)
     state = torch.randn(10000, *state_dim, device=device) * std + mean

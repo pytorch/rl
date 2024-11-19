@@ -256,7 +256,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         action_key: Optional[NestedKey] = "action",
         spec: Optional[TensorSpec] = None,
         safe: Optional[bool] = True,
-        device: torch.device | None=None,
+        device: torch.device | None = None,
     ):
         warnings.warn(
             "AdditiveGaussianWrapper is deprecated and will be removed "
@@ -277,7 +277,9 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("mean", torch.tensor([mean], device=device))
         self.register_buffer("std", torch.tensor([std], device=device))
-        self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32, device=device))
+        self.register_buffer(
+            "sigma", torch.tensor([sigma_init], dtype=torch.float32, device=device)
+        )
         self.action_key = action_key
         self.out_keys = list(self.td_module.out_keys)
         if action_key not in self.out_keys:
@@ -401,7 +403,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         *,
         action_key: Optional[NestedKey] = "action",
         safe: bool = True,
-            device : torch.device | None = None,
+        device: torch.device | None = None,
     ):
         if not isinstance(sigma_init, float):
             warnings.warn("eps_init should be a float.")
@@ -418,7 +420,9 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("mean", torch.tensor([mean], device=device))
         self.register_buffer("std", torch.tensor([std], device=device))
-        self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32, device=device))
+        self.register_buffer(
+            "sigma", torch.tensor([sigma_init], dtype=torch.float32, device=device)
+        )
 
         if spec is not None:
             if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
@@ -582,7 +586,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         spec: TensorSpec = None,
         safe: bool = True,
         key: Optional[NestedKey] = None,
-            device: torch.device | None = None,
+        device: torch.device | None = None,
     ):
         warnings.warn(
             "OrnsteinUhlenbeckProcessWrapper is deprecated and will be removed "
@@ -618,7 +622,9 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                 f"got eps_init={eps_init} and eps_end={eps_end}"
             )
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32, device=device))
+        self.register_buffer(
+            "eps", torch.tensor([eps_init], dtype=torch.float32, device=device)
+        )
         self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
         self.is_init_key = is_init_key
         noise_key = self.ou.noise_key
@@ -827,7 +833,9 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
                 f"got eps_init={eps_init} and eps_end={eps_end}"
             )
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32, device=device))
+        self.register_buffer(
+            "eps", torch.tensor([eps_init], dtype=torch.float32, device=device)
+        )
 
         self.in_keys = [self.ou.key]
         self.out_keys = [self.ou.key] + self.ou.out_keys
