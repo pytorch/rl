@@ -85,8 +85,8 @@ if __name__ == "__main__":
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "low": env.action_spec.space.low,
-            "high": env.action_spec.space.high,
+            "low": env.single_action_spec.space.low,
+            "high": env.single_action_spec.space.high,
         },
         return_log_prob=True,
     )

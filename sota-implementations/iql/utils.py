@@ -195,9 +195,7 @@ def make_iql_model(cfg, train_env, eval_env, device="cpu"):
     model_cfg = cfg.model
 
     in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    if train_env.batch_size:
-        action_spec = action_spec[(0,) * len(train_env.batch_size)]
+    action_spec = train_env.single_action_spec
     actor_net, q_net, value_net = make_iql_modules_state(model_cfg, eval_env)
 
     out_keys = ["loc", "scale"]

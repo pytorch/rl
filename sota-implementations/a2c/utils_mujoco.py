@@ -57,8 +57,8 @@ def make_ppo_models_state(proof_environment, device, *, compile: bool = False):
     num_outputs = proof_environment.action_spec.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
-        "low": proof_environment.action_spec.space.low.to(device),
-        "high": proof_environment.action_spec.space.high.to(device),
+        "low": proof_environment.single_action_spec.space.low.to(device),
+        "high": proof_environment.single_action_spec.space.high.to(device),
         "tanh_loc": False,
         "safe_tanh": True,
     }

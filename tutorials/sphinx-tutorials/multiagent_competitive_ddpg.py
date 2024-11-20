@@ -486,8 +486,8 @@ for group, _agents in env.group_map.items():
         out_keys=[(group, "action")],
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "low": env.full_action_spec[group, "action"].space.low,
-            "high": env.full_action_spec[group, "action"].space.high,
+            "low": env.single_full_action_spec[group, "action"].space.low,
+            "high": env.single_full_action_spec[group, "action"].space.high,
         },
         return_log_prob=False,
     )

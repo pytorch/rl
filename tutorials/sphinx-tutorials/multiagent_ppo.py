@@ -445,13 +445,13 @@ policy_module = TensorDictModule(
 
 policy = ProbabilisticActor(
     module=policy_module,
-    spec=env.unbatched_action_spec,
+    spec=env.single_action_spec,
     in_keys=[("agents", "loc"), ("agents", "scale")],
     out_keys=[env.action_key],
     distribution_class=TanhNormal,
     distribution_kwargs={
-        "low": env.unbatched_action_spec[env.action_key].space.low,
-        "high": env.unbatched_action_spec[env.action_key].space.high,
+        "low": env.single_action_spec[env.action_key].space.low,
+        "high": env.single_action_spec[env.action_key].space.high,
     },
     return_log_prob=True,
     log_prob_key=("agents", "sample_log_prob"),

@@ -161,9 +161,7 @@ def make_sac_agent(cfg, train_env, eval_env, device):
     """Make SAC agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    if train_env.batch_size:
-        action_spec = action_spec[(0,) * len(train_env.batch_size)]
+    action_spec = train_env.single_action_spec
     actor_net_kwargs = {
         "num_cells": cfg.network.hidden_sizes,
         "out_features": 2 * action_spec.shape[-1],

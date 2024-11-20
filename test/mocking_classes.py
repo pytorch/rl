@@ -1394,7 +1394,7 @@ class HeterogeneousCountingEnv(EnvBase):
             device=self.device,
         )
 
-        self.unbatched_action_spec = Composite(
+        self.single_action_spec = Composite(
             lazy=action_specs,
             device=self.device,
         )
@@ -1423,8 +1423,8 @@ class HeterogeneousCountingEnv(EnvBase):
             device=self.device,
         )
 
-        self.action_spec = self.unbatched_action_spec.expand(
-            *self.batch_size, *self.unbatched_action_spec.shape
+        self.action_spec = self.single_action_spec.expand(
+            *self.batch_size, *self.single_action_spec.shape
         )
         self.observation_spec = self.unbatched_observation_spec.expand(
             *self.batch_size, *self.unbatched_observation_spec.shape
@@ -1610,8 +1610,8 @@ class MultiKeyCountingEnv(EnvBase):
 
         self.make_specs()
 
-        self.action_spec = self.unbatched_action_spec.expand(
-            *self.batch_size, *self.unbatched_action_spec.shape
+        self.action_spec = self.single_action_spec.expand(
+            *self.batch_size, *self.single_action_spec.shape
         )
         self.observation_spec = self.unbatched_observation_spec.expand(
             *self.batch_size, *self.unbatched_observation_spec.shape
@@ -1642,7 +1642,7 @@ class MultiKeyCountingEnv(EnvBase):
             ),
         )
 
-        self.unbatched_action_spec = Composite(
+        self.single_action_spec = Composite(
             nested_1=Composite(
                 action=Categorical(n=2, shape=(self.nested_dim_1,)),
                 shape=(self.nested_dim_1,),

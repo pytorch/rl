@@ -91,13 +91,13 @@ def train(cfg: "DictConfig"):  # noqa: F821
     )
     policy = ProbabilisticActor(
         module=policy_module,
-        spec=env.unbatched_action_spec,
+        spec=env.single_action_spec,
         in_keys=[("agents", "param")],
         out_keys=[env.action_key],
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "low": env.unbatched_action_spec[("agents", "action")].space.low,
-            "high": env.unbatched_action_spec[("agents", "action")].space.high,
+            "low": env.single_action_spec[("agents", "action")].space.low,
+            "high": env.single_action_spec[("agents", "action")].space.high,
         },
         return_log_prob=False,
     )
@@ -105,7 +105,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     policy_explore = TensorDictSequential(
         policy,
         AdditiveGaussianModule(
-            spec=env.unbatched_action_spec,
+            spec=env.single_action_spec,
             annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
             action_key=env.action_key,
             device=cfg.train.device,

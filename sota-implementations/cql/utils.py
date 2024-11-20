@@ -191,7 +191,7 @@ def make_offline_replay_buffer(rb_cfg):
 def make_cql_model(cfg, train_env, eval_env, device="cpu"):
     model_cfg = cfg.model
 
-    action_spec = train_env.action_spec
+    action_spec = train_env.single_action_spec
 
     actor_net, q_net = make_cql_modules_state(model_cfg, eval_env)
     in_keys = ["observation"]

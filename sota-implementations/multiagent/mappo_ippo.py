@@ -92,13 +92,13 @@ def train(cfg: "DictConfig"):  # noqa: F821
     )
     policy = ProbabilisticActor(
         module=policy_module,
-        spec=env.unbatched_action_spec,
+        spec=env.single_action_spec,
         in_keys=[("agents", "loc"), ("agents", "scale")],
         out_keys=[env.action_key],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "low": env.unbatched_action_spec[("agents", "action")].space.low,
-            "high": env.unbatched_action_spec[("agents", "action")].space.high,
+            "low": env.single_action_spec[("agents", "action")].space.low,
+            "high": env.single_action_spec[("agents", "action")].space.high,
         },
         return_log_prob=True,
     )

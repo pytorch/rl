@@ -101,8 +101,8 @@ def make_ppo_modules_pixels(proof_environment, device):
         num_outputs = proof_environment.action_spec.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "low": proof_environment.action_spec.space.low.to(device),
-            "high": proof_environment.action_spec.space.high.to(device),
+            "low": proof_environment.single_action_spec.space.low.to(device),
+            "high": proof_environment.single_action_spec.space.high.to(device),
         }
 
     # Define input keys
