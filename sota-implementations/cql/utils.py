@@ -226,7 +226,6 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
                     "low": action_spec.space.low,
                     "high": action_spec.space.high,
                     "tanh_loc": NonTensorData(False),
-                    "safe_tanh": NonTensorData(not cfg.compile.compile),
                 }
             ),
             no_convert=True,
