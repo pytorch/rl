@@ -226,7 +226,6 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
                     "low": torch.as_tensor(action_spec.space.low, device=device),
                     "high": torch.as_tensor(action_spec.space.high, device=device),
                     "tanh_loc": NonTensorData(False),
-                    "safe_tanh": NonTensorData(not cfg.compile.compile),
                 }
             ),
             no_convert=True,
