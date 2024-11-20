@@ -147,9 +147,7 @@ def make_crossQ_agent(cfg, train_env, device):
     """Make CrossQ agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    if train_env.batch_size:
-        action_spec = action_spec[(0,) * len(train_env.batch_size)]
+    action_spec = train_env.action_spec_unbatched
     actor_net_kwargs = {
         "num_cells": cfg.network.actor_hidden_sizes,
         "out_features": 2 * action_spec.shape[-1],
