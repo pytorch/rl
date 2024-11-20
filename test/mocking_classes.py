@@ -1040,7 +1040,9 @@ class CountingEnv(EnvBase):
         action = tensordict.get(self.action_key)
         self.count += action.to(
             dtype=torch.int,
-            device=self.action_spec.device if self.device is None else self.device,
+            device=self.full_action_spec[self.action_key].device
+            if self.device is None
+            else self.device,
         )
         tensordict = TensorDict(
             source={

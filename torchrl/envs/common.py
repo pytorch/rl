@@ -172,10 +172,11 @@ class _EnvPostInit(abc.ABCMeta):
         # we create the done spec by adding a done/terminated entry if one is missing
         instance._create_done_specs()
         # we access lazy attributed to make sure they're built properly.
-        # This isn't done in `__init__` because we don't know if supre().__init__
+        # This isn't done in `__init__` because we don't know if super().__init__
         # will be called before or after the specs, batch size etc are set.
         _ = instance.done_spec
-        _ = instance.reward_spec
+        _ = instance.reward_keys
+        _ = instance.action_keys
         _ = instance.state_spec
         if auto_reset:
             from torchrl.envs.transforms.transforms import (
