@@ -9,6 +9,7 @@ import torch.optim
 from tensordict import TensorDict, TensorDictParams
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.distributions import NormalParamExtractor
+from tensordict.tensorclass import NonTensorData
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
@@ -224,8 +225,8 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
                 {
                     "low": torch.as_tensor(action_spec.space.low, device=device),
                     "high": torch.as_tensor(action_spec.space.high, device=device),
-                    "tanh_loc": False,
-                    "safe_tanh": not cfg.compile.compile,
+                    "tanh_loc": NonTensorData(False),
+                    "safe_tanh": NonTensorData(not cfg.compile.compile),
                 }
             ),
             no_convert=True,
