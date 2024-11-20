@@ -364,7 +364,7 @@ class VmasWrapper(_EnvWrapper):
             },
         )
 
-        self.full_reward_spec_unbatched = full_action_spec_unbatched
+        self.full_action_spec_unbatched = full_action_spec_unbatched
         self.full_observation_spec_unbatched = full_observation_spec_unbatched
         self.full_reward_spec_unbatched = full_reward_spec_unbatched
         self.full_done_spec_unbatched = full_done_spec_unbatched
