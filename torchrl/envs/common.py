@@ -775,7 +775,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         except (KeyError, AttributeError):
             raise KeyError("Failed to find the action_spec.")
 
-        if len(self.action_keys) > 1:
+        if len(self.action_keys) > 1 or self.action_keys[0] != "action":
             out = action_spec
         else:
             try:
@@ -807,7 +807,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size}). "
+                    "Please use `env.action_spec_unbatched = value` to set unbatched versions instead."
                 )
 
             if isinstance(value, Composite):
@@ -981,7 +982,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             reward_spec = self.output_spec["full_reward_spec"]
 
         reward_keys = self.reward_keys
-        if len(reward_keys) > 1 or not len(reward_keys):
+        if (
+            len(reward_keys) > 1
+            or (len(reward_keys) == 1 and reward_keys[0] != "reward")
+            or not len(reward_keys)
+        ):
             return reward_spec
         else:
             return reward_spec[self.reward_keys[0]]
@@ -1002,7 +1007,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size}). "
+                    "Please use `env.reward_spec_unbatched = value` to set unbatched versions instead."
                 )
             if isinstance(value, Composite):
                 for _ in value.values(True, True):  # noqa: B007
