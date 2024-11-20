@@ -72,7 +72,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     # Policy
     net = MultiAgentMLP(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-        n_agent_outputs=env.action_spec.space.n,
+        n_agent_outputs=env.full_action_spec["agents", "action"].space.n,
         n_agents=env.n_agents,
         centralised=False,
         share_params=cfg.model.shared_parameters,
