@@ -775,7 +775,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         except (KeyError, AttributeError):
             raise KeyError("Failed to find the action_spec.")
 
-        if len(self.action_keys) > 1:
+        if len(self.action_keys) > 1 or self.action_keys[0] != "action":
             out = action_spec
         else:
             try:
@@ -807,7 +807,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size}). "
+                    "Please use `env.action_spec_unbatched = value` to set unbatched versions instead."
                 )
 
             if isinstance(value, Composite):
@@ -981,7 +982,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             reward_spec = self.output_spec["full_reward_spec"]
 
         reward_keys = self.reward_keys
-        if len(reward_keys) > 1 or not len(reward_keys):
+        if (
+            len(reward_keys) > 1
+            or (len(reward_keys) == 1 and reward_keys[0] != "reward")
+            or not len(reward_keys)
+        ):
             return reward_spec
         else:
             return reward_spec[self.reward_keys[0]]
@@ -1002,7 +1007,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size}). "
+                    "Please use `env.reward_spec_unbatched = value` to set unbatched versions instead."
                 )
             if isinstance(value, Composite):
                 for _ in value.values(True, True):  # noqa: B007
@@ -1493,64 +1499,124 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return spec[idx]
 
     @property
-    def single_full_action_spec(self) -> Composite:
+    def full_action_spec_unbatched(self) -> Composite:
         """Returns the action spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.full_action_spec)
 
+    @full_action_spec_unbatched.setter
+    def full_action_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.full_action_spec = spec
+
     @property
-    def single_action_spec(self) -> TensorSpec:
+    def action_spec_unbatched(self) -> TensorSpec:
         """Returns the action spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.action_spec)
 
+    @action_spec_unbatched.setter
+    def action_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.action_spec = spec
+
     @property
-    def single_full_observation_spec(self) -> Composite:
+    def full_observation_spec_unbatched(self) -> Composite:
         """Returns the observation spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.full_action_spec)
 
+    @full_observation_spec_unbatched.setter
+    def full_observation_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.full_observation_spec = spec
+
     @property
-    def single_observation_spec(self) -> Composite:
+    def observation_spec_unbatched(self) -> Composite:
         """Returns the observation spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.observation_spec)
 
+    @observation_spec_unbatched.setter
+    def observation_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.observation_spec = spec
+
     @property
-    def single_full_reward_spec(self) -> Composite:
+    def full_reward_spec_unbatched(self) -> Composite:
         """Returns the reward spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.full_action_spec)
 
+    @full_reward_spec_unbatched.setter
+    def full_reward_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.full_reward_spec = spec
+
     @property
-    def single_reward_spec(self) -> TensorSpec:
+    def reward_spec_unbatched(self) -> TensorSpec:
         """Returns the reward spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.reward_spec)
 
+    @reward_spec_unbatched.setter
+    def reward_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.reward_spec = spec
+
     @property
-    def single_full_done_spec(self) -> Composite:
+    def full_done_spec_unbatched(self) -> Composite:
         """Returns the done spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.full_action_spec)
 
+    @full_done_spec_unbatched.setter
+    def full_done_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.full_done_spec = spec
+
     @property
-    def single_done_spec(self) -> TensorSpec:
+    def done_spec_unbatched(self) -> TensorSpec:
         """Returns the done spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.done_spec)
 
+    @done_spec_unbatched.setter
+    def done_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.done_spec = spec
+
     @property
-    def single_output_spec(self) -> Composite:
+    def output_spec_unbatched(self) -> Composite:
         """Returns the output spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.output_spec)
 
+    @output_spec_unbatched.setter
+    def output_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.output_spec = spec
+
     @property
-    def single_input_spec(self) -> Composite:
+    def input_spec_unbatched(self) -> Composite:
         """Returns the input spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.input_spec)
 
+    @input_spec_unbatched.setter
+    def input_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.input_spec = spec
+
     @property
-    def single_full_state_spec(self) -> Composite:
+    def full_state_spec_unbatched(self) -> Composite:
         """Returns the state spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.full_state_spec)
 
+    @full_state_spec_unbatched.setter
+    def full_state_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.full_state_spec = spec
+
     @property
-    def single_state_spec(self) -> TensorSpec:
+    def state_spec_unbatched(self) -> TensorSpec:
         """Returns the state spec of the env as if it had no batch dimensions."""
         return self._make_single_env_spec(self.state_spec)
+
+    @state_spec_unbatched.setter
+    def state_spec_unbatched(self, spec: Composite):
+        spec = spec.expand(self.batch_size + spec.shape)
+        self.state_spec = spec
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
