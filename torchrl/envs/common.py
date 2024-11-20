@@ -176,7 +176,7 @@ class _EnvPostInit(abc.ABCMeta):
         # will be called before or after the specs, batch size etc are set.
         _ = instance.done_spec
         _ = instance.reward_keys
-        _ = instance.action_keys
+        # _ = instance.action_keys
         _ = instance.state_spec
         if auto_reset:
             from torchrl.envs.transforms.transforms import (
@@ -659,7 +659,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         action_keys = self.__dict__.get("_action_keys")
         if action_keys is not None:
             return action_keys
-        keys = self.input_spec["full_action_spec"].keys(True, True)
+        keys = self.full_action_spec.keys(True, True)
         if not len(keys):
             raise AttributeError("Could not find action spec")
         keys = sorted(keys, key=_repr_by_depth)
@@ -1072,7 +1072,18 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         domain=continuous), device=None, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
 
         """
-        return self.output_spec["full_reward_spec"]
+        try:
+            return self.output_spec["full_reward_spec"]
+        except KeyError:
+            # populate the "reward" entry
+            # this will be raised if there is not full_reward_spec (unlikely) or no reward_key
+            # Since output_spec is lazily populated with an empty composite spec for
+            # reward_spec, the second case is much more likely to occur.
+            self.reward_spec = Unbounded(
+                shape=(*self.batch_size, 1),
+                device=self.device,
+            )
+            return self.output_spec["full_reward_spec"]
 
     @full_reward_spec.setter
     def full_reward_spec(self, spec: Composite) -> None:
