@@ -110,7 +110,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     if cfg.loss.mixer_type == "qmix":
         mixer = TensorDictModule(
             module=QMixer(
-                state_shape=env.unbatched_observation_spec[
+                state_shape=env.observation_spec_unbatched[
                     "agents", "observation"
                 ].shape,
                 mixing_embed_dim=32,
