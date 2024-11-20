@@ -96,13 +96,13 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
         policy = ProbabilisticActor(
             module=policy_module,
-            spec=env.single_action_spec,
+            spec=env.action_spec_unbatched,
             in_keys=[("agents", "loc"), ("agents", "scale")],
             out_keys=[env.action_key],
             distribution_class=TanhNormal,
             distribution_kwargs={
-                "low": env.single_action_spec[("agents", "action")].space.low,
-                "high": env.single_action_spec[("agents", "action")].space.high,
+                "low": env.action_spec_unbatched[("agents", "action")].space.low,
+                "high": env.action_spec_unbatched[("agents", "action")].space.high,
             },
             return_log_prob=True,
         )
@@ -146,7 +146,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         )
         policy = ProbabilisticActor(
             module=policy_module,
-            spec=env.single_action_spec,
+            spec=env.action_spec_unbatched,
             in_keys=[("agents", "logits")],
             out_keys=[env.action_key],
             distribution_class=OneHotCategorical
@@ -194,7 +194,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
             actor_network=policy,
             qvalue_network=value_module,
             delay_qvalue=True,
-            action_spec=env.single_action_spec,
+            action_spec=env.action_spec_unbatched,
         )
         loss_module.set_keys(
             state_action_value=("agents", "state_action_value"),
@@ -209,7 +209,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
             qvalue_network=value_module,
             delay_qvalue=True,
             num_actions=env.action_spec.space.n,
-            action_space=env.single_action_spec,
+            action_space=env.action_spec_unbatched,
         )
         loss_module.set_keys(
             action_value=("agents", "action_value"),

@@ -2253,7 +2253,9 @@ class TestVmas:
             max_steps=n_rollout_samples,
             return_contiguous=False if env.het_specs else True,
         )
-        assert env.single_full_action_spec.shape == env.unbatched_action_spec.shape, (
+        assert (
+            env.full_action_spec_unbatched.shape == env.unbatched_action_spec.shape
+        ), (
             env.action_spec,
             env.batch_size,
         )

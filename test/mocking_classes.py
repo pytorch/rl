@@ -1388,17 +1388,17 @@ class HeterogeneousCountingEnv(EnvBase):
         obs_spec_unlazy = consolidate_spec(obs_specs)
         action_specs = torch.stack(action_specs, dim=0)
 
-        self.unbatched_observation_spec = Composite(
+        self.observation_spec_unbatched = Composite(
             lazy=obs_spec_unlazy,
             state=Unbounded(shape=(64, 64, 3)),
             device=self.device,
         )
 
-        self.single_action_spec = Composite(
+        self.action_spec_unbatched = Composite(
             lazy=action_specs,
             device=self.device,
         )
-        self.unbatched_reward_spec = Composite(
+        self.reward_spec_unbatched = Composite(
             {
                 "lazy": Composite(
                     {"reward": Unbounded(shape=(self.n_nested_dim, 1))},
@@ -1407,7 +1407,7 @@ class HeterogeneousCountingEnv(EnvBase):
             },
             device=self.device,
         )
-        self.unbatched_done_spec = Composite(
+        self.done_spec_unbatched = Composite(
             {
                 "lazy": Composite(
                     {
@@ -1421,19 +1421,6 @@ class HeterogeneousCountingEnv(EnvBase):
                 )
             },
             device=self.device,
-        )
-
-        self.action_spec = self.single_action_spec.expand(
-            *self.batch_size, *self.single_action_spec.shape
-        )
-        self.observation_spec = self.unbatched_observation_spec.expand(
-            *self.batch_size, *self.unbatched_observation_spec.shape
-        )
-        self.reward_spec = self.unbatched_reward_spec.expand(
-            *self.batch_size, *self.unbatched_reward_spec.shape
-        )
-        self.done_spec = self.unbatched_done_spec.expand(
-            *self.batch_size, *self.unbatched_done_spec.shape
         )
 
     def get_agent_obs_spec(self, i):
@@ -1610,21 +1597,8 @@ class MultiKeyCountingEnv(EnvBase):
 
         self.make_specs()
 
-        self.action_spec = self.single_action_spec.expand(
-            *self.batch_size, *self.single_action_spec.shape
-        )
-        self.observation_spec = self.unbatched_observation_spec.expand(
-            *self.batch_size, *self.unbatched_observation_spec.shape
-        )
-        self.reward_spec = self.unbatched_reward_spec.expand(
-            *self.batch_size, *self.unbatched_reward_spec.shape
-        )
-        self.done_spec = self.unbatched_done_spec.expand(
-            *self.batch_size, *self.unbatched_done_spec.shape
-        )
-
     def make_specs(self):
-        self.unbatched_observation_spec = Composite(
+        self.observation_spec_unbatched = Composite(
             nested_1=Composite(
                 observation=Bounded(low=0, high=200, shape=(self.nested_dim_1, 3)),
                 shape=(self.nested_dim_1,),
@@ -1642,7 +1616,7 @@ class MultiKeyCountingEnv(EnvBase):
             ),
         )
 
-        self.single_action_spec = Composite(
+        self.action_spec_unbatched = Composite(
             nested_1=Composite(
                 action=Categorical(n=2, shape=(self.nested_dim_1,)),
                 shape=(self.nested_dim_1,),
@@ -1654,7 +1628,7 @@ class MultiKeyCountingEnv(EnvBase):
             action=OneHot(n=2),
         )
 
-        self.unbatched_reward_spec = Composite(
+        self.reward_spec_unbatched = Composite(
             nested_1=Composite(
                 gift=Unbounded(shape=(self.nested_dim_1, 1)),
                 shape=(self.nested_dim_1,),
@@ -1666,7 +1640,7 @@ class MultiKeyCountingEnv(EnvBase):
             reward=Unbounded(shape=(1,)),
         )
 
-        self.unbatched_done_spec = Composite(
+        self.done_spec_unbatched = Composite(
             nested_1=Composite(
                 done=Categorical(
                     n=2,
