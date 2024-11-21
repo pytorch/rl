@@ -7411,7 +7411,8 @@ class BurnInTransform(Transform):
         ...     hidden_size=10,
         ...     in_keys=["observation", "hidden"],
         ...     out_keys=["intermediate", ("next", "hidden")],
-        ... ).set_recurrent_mode(True)
+        ...     default_recurrent_mode=True,
+        ... )
         >>> burn_in_transform = BurnInTransform(
         ...     modules=[gru_module],
         ...     burn_in=5,

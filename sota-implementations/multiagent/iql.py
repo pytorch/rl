@@ -72,7 +72,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     # Policy
     net = MultiAgentMLP(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-        n_agent_outputs=env.action_spec.space.n,
+        n_agent_outputs=env.full_action_spec["agents", "action"].space.n,
         n_agents=env.n_agents,
         centralised=False,
         share_params=cfg.model.shared_parameters,
@@ -91,7 +91,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
             ("agents", "action_value"),
             ("agents", "chosen_action_value"),
         ],
-        spec=env.unbatched_action_spec,
+        spec=env.full_action_spec_unbatched,
         action_space=None,
     )
     qnet = SafeSequential(module, value_module)
@@ -103,7 +103,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
             eps_end=0,
             annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
             action_key=env.action_key,
-            spec=env.unbatched_action_spec,
+            spec=env.full_action_spec_unbatched,
         ),
     )
 

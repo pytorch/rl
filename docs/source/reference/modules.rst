@@ -373,6 +373,8 @@ algorithms, such as DQN, DDPG or Dreamer.
     OnlineDTActor
     RSSMPosterior
     RSSMPrior
+    set_recurrent_mode
+    recurrent_mode
 
 Multi-agent-specific modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Optional, Tuple
+import typing
+import warnings
+from typing import Any, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -18,6 +20,7 @@ from tensordict.utils import expand_as_right, prod, set_lazy_legacy
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
 
+from torchrl._utils import _ContextManager, _DecoratorContextManager
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.objectives.value.functional import (
     _inv_pad_sequence,
@@ -376,6 +379,9 @@ class LSTMModule(ModuleBase):
         device (torch.device or compatible): the device of the module.
         lstm (torch.nn.LSTM, optional): an LSTM instance to be wrapped.
             Exclusive with other nn.LSTM arguments.
+        default_recurrent_mode (bool, optional): if provided, the recurrent mode if it hasn't been overridden
+            by the :class:`~torchrl.modules.set_recurrent_mode` context manager / decorator.
+            Defaults to ``False``.
 
     Attributes:
         recurrent_mode: Returns the recurrent mode of the module.
@@ -451,6 +457,7 @@ class LSTMModule(ModuleBase):
         out_keys=None,
         device=None,
         lstm=None,
+        default_recurrent_mode: bool | None = None,
     ):
         super().__init__()
         if lstm is not None:
@@ -524,7 +531,7 @@ class LSTMModule(ModuleBase):
             in_keys = in_keys + ["is_init"]
         self.in_keys = in_keys
         self.out_keys = out_keys
-        self._recurrent_mode = False
+        self._recurrent_mode = default_recurrent_mode
 
     def make_python_based(self) -> LSTMModule:
         """Transforms the LSTM layer in its python-based version.
@@ -647,12 +654,15 @@ class LSTMModule(ModuleBase):
 
     @property
     def recurrent_mode(self):
-        return self._recurrent_mode
+        rm = recurrent_mode()
+        if rm is None:
+            return bool(self._recurrent_mode)
+        return rm
 
     @recurrent_mode.setter
     def recurrent_mode(self, value):
         raise RuntimeError(
-            "recurrent_mode cannot be changed in-place. Call `module.set"
+            "recurrent_mode cannot be changed in-place. Please use the set_recurrent_mode context manager."
         )
 
     @property
@@ -662,7 +672,7 @@ class LSTMModule(ModuleBase):
         )
 
     def set_recurrent_mode(self, mode: bool = True):
-        """Returns a new copy of the module that shares the same lstm model but with a different ``recurrent_mode`` attribute (if it differs).
+        """[DEPRECATED - use :class:`torchrl.modules.set_recurrent_mode` context manager instead] Returns a new copy of the module that shares the same lstm model but with a different ``recurrent_mode`` attribute (if it differs).
 
         A copy is created such that the module can be used with divergent behavior
         in various parts of the code (inference vs training):
@@ -692,7 +702,13 @@ class LSTMModule(ModuleBase):
             ...
             >>> torch.testing.assert_close(td_inf["hidden0"], traj_td[..., -1]["next", "hidden0"])
         """
-        if mode is self._recurrent_mode:
+        warnings.warn(
+            "The lstm.set_recurrent_mode() API is deprecated and will be removed in v0.8. "
+            "To set the recurent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or "
+            "the `default_recurrent_mode` keyword argument in the constructor.",
+            category=DeprecationWarning,
+        )
+        if mode is self.recurrent_mode:
             return self
         out = LSTMModule(lstm=self.lstm, in_keys=self.in_keys, out_keys=self.out_keys)
         out._recurrent_mode = mode
@@ -1155,6 +1171,9 @@ class GRUModule(ModuleBase):
         device (torch.device or compatible): the device of the module.
         gru (torch.nn.GRU, optional): a GRU instance to be wrapped.
             Exclusive with other nn.GRU arguments.
+        default_recurrent_mode (bool, optional): if provided, the recurrent mode if it hasn't been overridden
+            by the :class:`~torchrl.modules.set_recurrent_mode` context manager / decorator.
+            Defaults to ``False``.
 
     Attributes:
         recurrent_mode: Returns the recurrent mode of the module.
@@ -1256,6 +1275,7 @@ class GRUModule(ModuleBase):
         out_keys=None,
         device=None,
         gru=None,
+        default_recurrent_mode: bool | None = None,
     ):
         super().__init__()
         if gru is not None:
@@ -1326,7 +1346,7 @@ class GRUModule(ModuleBase):
             in_keys = in_keys + ["is_init"]
         self.in_keys = in_keys
         self.out_keys = out_keys
-        self._recurrent_mode = False
+        self._recurrent_mode = default_recurrent_mode
 
     def make_python_based(self) -> GRUModule:
         """Transforms the GRU layer in its python-based version.
@@ -1444,12 +1464,15 @@ class GRUModule(ModuleBase):
 
     @property
     def recurrent_mode(self):
-        return self._recurrent_mode
+        rm = recurrent_mode()
+        if rm is None:
+            return bool(self._recurrent_mode)
+        return rm
 
     @recurrent_mode.setter
     def recurrent_mode(self, value):
         raise RuntimeError(
-            "recurrent_mode cannot be changed in-place. Call `module.set"
+            "recurrent_mode cannot be changed in-place. Please use the set_recurrent_mode context manager."
         )
 
     @property
@@ -1459,7 +1482,7 @@ class GRUModule(ModuleBase):
         )
 
     def set_recurrent_mode(self, mode: bool = True):
-        """Returns a new copy of the module that shares the same gru model but with a different ``recurrent_mode`` attribute (if it differs).
+        """[DEPRECATED - use :class:`torchrl.modules.set_recurrent_mode` context manager instead] Returns a new copy of the module that shares the same gru model but with a different ``recurrent_mode`` attribute (if it differs).
 
         A copy is created such that the module can be used with divergent behavior
         in various parts of the code (inference vs training):
@@ -1488,7 +1511,13 @@ class GRUModule(ModuleBase):
             ...
             >>> torch.testing.assert_close(td_inf["hidden"], traj_td[..., -1]["next", "hidden"])
         """
-        if mode is self._recurrent_mode:
+        warnings.warn(
+            "The gru.set_recurrent_mode() API is deprecated and will be removed in v0.8. "
+            "To set the recurent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or "
+            "the `default_recurrent_mode` keyword argument in the constructor.",
+            category=DeprecationWarning,
+        )
+        if mode is self.recurrent_mode:
             return self
         out = GRUModule(gru=self.gru, in_keys=self.in_keys, out_keys=self.out_keys)
         out._recurrent_mode = mode
@@ -1598,3 +1627,57 @@ class GRUModule(ModuleBase):
         )
         out = [y, hidden]
         return tuple(out)
+
+
+# Recurrent mode manager
+recurrent_mode_state_manager = _ContextManager()
+
+
+def recurrent_mode() -> bool | None:
+    """Returns the current sampling type."""
+    return recurrent_mode_state_manager.get_mode()
+
+
+class set_recurrent_mode(_DecoratorContextManager):
+    """Context manager for setting RNNs recurrent mode.
+
+    Args:
+        mode (bool, "recurrent" or "stateful"): the recurrent mode to be used within the context manager.
+            `"recurrent"` leads to `mode=True` and `"stateful"` leads to `mode=False`.
+            An RNN executed with recurrent_mode "on" assumes that the data comes in time batches, otherwise
+            it is assumed that each data element in a tensordict is independent of the others.
+            The default value of this context manager is ``True``.
+            The default recurrent mode is ``None``, i.e., the default recurrent mode of the RNN is used
+            (see :class:`~torchrl.modules.LSTMModule` and :class:`~torchrl.modules.GRUModule` constructors).
+
+    .. seealso:: :class:`~torchrl.modules.recurrent_mode``.
+
+    .. note:: All of TorchRL methods are decorated with ``set_recurrent_mode(True)`` by default.
+
+    """
+
+    def __init__(
+        self, mode: bool | typing.Literal["recurrent", "sequential"] | None = True
+    ) -> None:
+        super().__init__()
+        if isinstance(mode, str):
+            if mode.lower() in ("recurrent",):
+                mode = True
+            elif mode.lower() in ("sequential",):
+                mode = False
+            else:
+                raise ValueError(
+                    f"Unsupported recurrent mode. Must be a bool, or one of {('recurrent', 'sequential')}"
+                )
+        self.mode = mode
+
+    def clone(self) -> set_recurrent_mode:
+        # override this method if your children class takes __init__ parameters
+        return type(self)(self.mode)
+
+    def __enter__(self) -> None:
+        self.prev = recurrent_mode_state_manager.get_mode()
+        recurrent_mode_state_manager.set_mode(self.mode)
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        recurrent_mode_state_manager.set_mode(self.prev)
