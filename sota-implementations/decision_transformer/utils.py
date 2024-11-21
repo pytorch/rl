@@ -404,8 +404,10 @@ def make_dt_model(cfg, device: torch.device | None = None):
         make_base_env(env_cfg), env_cfg, obs_loc=0, obs_std=1
     )
 
-    action_spec = proof_environment.single_action_spec
-    obs_spec = proof_environment.single_observation_spec
+    action_spec = proof_environment.action_spec_unbatched
+    for key, value in proof_environment.observation_spec.items():
+        if key == "observation":
+            state_dim = value.shape[-1]
     in_keys = [
         "observation_cat",
         "action_cat",
