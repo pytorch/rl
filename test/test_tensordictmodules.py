@@ -36,6 +36,7 @@ from torchrl.modules import (
     OnlineDTActor,
     ProbabilisticActor,
     SafeModule,
+    set_recurrent_mode,
     TanhDelta,
     TanhNormal,
     ValueOperator,
@@ -729,6 +730,31 @@ class TestLSTMModule:
         with pytest.raises(KeyError, match="is_init"):
             lstm_module(td)
 
+    @pytest.mark.parametrize("default_val", [False, True, None])
+    def test_set_recurrent_mode(self, default_val):
+        lstm_module = LSTMModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden0", "hidden1"],
+            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            default_recurrent_mode=default_val,
+        )
+        assert lstm_module.recurrent_mode is bool(default_val)
+        with set_recurrent_mode(True):
+            assert lstm_module.recurrent_mode
+            with set_recurrent_mode(False):
+                assert not lstm_module.recurrent_mode
+                with set_recurrent_mode("recurrent"):
+                    assert lstm_module.recurrent_mode
+                    with set_recurrent_mode("sequential"):
+                        assert not lstm_module.recurrent_mode
+                    assert lstm_module.recurrent_mode
+                assert not lstm_module.recurrent_mode
+            assert lstm_module.recurrent_mode
+        assert lstm_module.recurrent_mode is bool(default_val)
+
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
     def test_set_temporal_mode(self):
         lstm_module = LSTMModule(
             input_size=3,
@@ -754,7 +780,8 @@ class TestLSTMModule:
             num_layers=2,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
-        ).set_recurrent_mode(True)
+            default_recurrent_mode=True,
+        )
         obs = torch.rand(10, 20, 3)
 
         hidden0 = torch.rand(10, 20, 2, 12)
@@ -1109,6 +1136,31 @@ class TestGRUModule:
         with pytest.raises(KeyError, match="is_init"):
             gru_module(td)
 
+    @pytest.mark.parametrize("default_val", [False, True, None])
+    def test_set_recurrent_mode(self, default_val):
+        gru_module = GRUModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden"],
+            out_keys=["intermediate", ("next", "hidden")],
+            default_recurrent_mode=default_val,
+        )
+        assert gru_module.recurrent_mode is bool(default_val)
+        with set_recurrent_mode(True):
+            assert gru_module.recurrent_mode
+            with set_recurrent_mode(False):
+                assert not gru_module.recurrent_mode
+                with set_recurrent_mode("recurrent"):
+                    assert gru_module.recurrent_mode
+                    with set_recurrent_mode("sequential"):
+                        assert not gru_module.recurrent_mode
+                    assert gru_module.recurrent_mode
+                assert not gru_module.recurrent_mode
+            assert gru_module.recurrent_mode
+        assert gru_module.recurrent_mode is bool(default_val)
+
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
     def test_set_temporal_mode(self):
         gru_module = GRUModule(
             input_size=3,

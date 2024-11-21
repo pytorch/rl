@@ -410,7 +410,7 @@ def make_redq_model(
     default_policy_scale = cfg.network.default_policy_scale
     gSDE = cfg.exploration.gSDE
 
-    action_spec = proof_environment.action_spec
+    action_spec = proof_environment.action_spec_unbatched
 
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
