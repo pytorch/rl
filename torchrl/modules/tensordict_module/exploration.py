@@ -112,10 +112,10 @@ class EGreedyModule(TensorDictModuleBase):
 
         super().__init__()
 
-        self.register_buffer("eps_init", torch.as_tensor([eps_init]))
-        self.register_buffer("eps_end", torch.as_tensor([eps_end]))
+        self.register_buffer("eps_init", torch.as_tensor(eps_init))
+        self.register_buffer("eps_end", torch.as_tensor(eps_end))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.as_tensor([eps_init], dtype=torch.float32))
+        self.register_buffer("eps", torch.as_tensor(eps_init, dtype=torch.float32))
 
         if spec is not None:
             if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
@@ -275,13 +275,13 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         super().__init__(policy)
         if sigma_end > sigma_init:
             raise RuntimeError("sigma should decrease over time or be constant")
-        self.register_buffer("sigma_init", torch.tensor([sigma_init], device=device))
-        self.register_buffer("sigma_end", torch.tensor([sigma_end], device=device))
+        self.register_buffer("sigma_init", torch.tensor(sigma_init, device=device))
+        self.register_buffer("sigma_end", torch.tensor(sigma_end, device=device))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("mean", torch.tensor([mean], device=device))
-        self.register_buffer("std", torch.tensor([std], device=device))
+        self.register_buffer("mean", torch.tensor(mean, device=device))
+        self.register_buffer("std", torch.tensor(std, device=device))
         self.register_buffer(
-            "sigma", torch.tensor([sigma_init], dtype=torch.float32, device=device)
+            "sigma", torch.tensor(sigma_init, dtype=torch.float32, device=device)
         )
         self.action_key = action_key
         self.out_keys = list(self.td_module.out_keys)
@@ -423,13 +423,13 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
         super().__init__()
 
-        self.register_buffer("sigma_init", torch.tensor([sigma_init], device=device))
-        self.register_buffer("sigma_end", torch.tensor([sigma_end], device=device))
+        self.register_buffer("sigma_init", torch.tensor(sigma_init, device=device))
+        self.register_buffer("sigma_end", torch.tensor(sigma_end, device=device))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("mean", torch.tensor([mean], device=device))
-        self.register_buffer("std", torch.tensor([std], device=device))
+        self.register_buffer("mean", torch.tensor(mean, device=device))
+        self.register_buffer("std", torch.tensor(std, device=device))
         self.register_buffer(
-            "sigma", torch.tensor([sigma_init], dtype=torch.float32, device=device)
+            "sigma", torch.tensor(sigma_init, dtype=torch.float32, device=device)
         )
 
         if spec is not None:
@@ -628,8 +628,8 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             key=action_key,
             device=device,
         )
-        self.register_buffer("eps_init", torch.tensor([eps_init], device=device))
-        self.register_buffer("eps_end", torch.tensor([eps_end], device=device))
+        self.register_buffer("eps_init", torch.tensor(eps_init, device=device))
+        self.register_buffer("eps_end", torch.tensor(eps_end, device=device))
         if self.eps_end > self.eps_init:
             raise ValueError(
                 "eps should decrease over time or be constant, "
@@ -637,7 +637,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             )
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer(
-            "eps", torch.tensor([eps_init], dtype=torch.float32, device=device)
+            "eps", torch.tensor(eps_init, dtype=torch.float32, device=device)
         )
         self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
         self.is_init_key = is_init_key
@@ -840,8 +840,8 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
             device=device,
         )
 
-        self.register_buffer("eps_init", torch.tensor([eps_init], device=device))
-        self.register_buffer("eps_end", torch.tensor([eps_end], device=device))
+        self.register_buffer("eps_init", torch.tensor(eps_init, device=device))
+        self.register_buffer("eps_end", torch.tensor(eps_end, device=device))
         if self.eps_end > self.eps_init:
             raise ValueError(
                 "eps should decrease over time or be constant, "
@@ -849,7 +849,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
             )
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer(
-            "eps", torch.tensor([eps_init], dtype=torch.float32, device=device)
+            "eps", torch.tensor(eps_init, dtype=torch.float32, device=device)
         )
 
         self.in_keys = [self.ou.key]
