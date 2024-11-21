@@ -34,6 +34,15 @@ from .probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
 )
-from .rnn import GRU, GRUCell, GRUModule, LSTM, LSTMCell, LSTMModule
+from .rnn import (
+    GRU,
+    GRUCell,
+    GRUModule,
+    LSTM,
+    LSTMCell,
+    LSTMModule,
+    recurrent_mode,
+    set_recurrent_mode,
+)
 from .sequence import SafeSequential
 from .world_models import WorldModelWrapper

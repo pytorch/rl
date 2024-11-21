@@ -9,7 +9,7 @@ dependencies:
     - future
     - cloudpickle
     - pygame
-    - moviepy
+    - moviepy<2.0.0
     - tqdm
     - pytest
     - pytest-cov
