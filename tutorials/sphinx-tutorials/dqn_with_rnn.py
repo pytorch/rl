@@ -317,7 +317,7 @@ qval = QValueModule(action_space=None, spec=env.action_spec)
 #
 # We can now put things together in a :class:`~tensordict.nn.TensorDictSequential`
 #
-stoch_policy = Seq(feature, lstm, mlp, qval)
+policy = Seq(feature, lstm, mlp, qval)
 
 ######################################################################
 # DQN being a deterministic algorithm, exploration is a crucial part of it.
@@ -330,7 +330,7 @@ exploration_module = EGreedyModule(
     annealing_num_steps=1_000_000, spec=env.action_spec, eps_init=0.2
 )
 stoch_policy = TensorDictSequential(
-    stoch_policy,
+    policy,
     exploration_module,
 )
 
@@ -338,20 +338,17 @@ stoch_policy = TensorDictSequential(
 # Using the model for the loss
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# The model as we've built it is well equipped to be used in sequential settings.
+# The model as we've built it is well-equipped to be used in sequential settings.
 # However, the class :class:`torch.nn.LSTM` can use a cuDNN-optimized backend
 # to run the RNN sequence faster on GPU device. We would not want to miss
 # such an opportunity to speed up our training loop!
-# To use it, we just need to tell the LSTM module to run on "recurrent-mode"
-# when used by the loss.
-# As we'll usually want to have two copies of the LSTM module, we do this by
-# calling a :meth:`~torchrl.modules.LSTMModule.set_recurrent_mode` method that
-# will return a new instance of the LSTM (with shared weights) that will
-# assume that the input data is sequential in nature.
 #
-policy = Seq(feature, lstm.set_recurrent_mode(True), mlp, qval)
-
-######################################################################
+# By default, torchrl losses will use this when executing any
+# :class:`~torchrl.modules.LSTMModule` or :class:`~torchrl.modules.GRUModule`
+# forward call. If you need to control this manually, the RNN modules are sensitive
+# to a context manager/decorator, :class:`~torchrl.modules.set_recurrent_mode`,
+# that handles the behaviour of the underlying RNN module.
+#
 # Because we still have a couple of uninitialized parameters we should
 # initialize them before creating an optimizer and such.
 #

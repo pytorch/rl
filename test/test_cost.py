@@ -47,6 +47,7 @@ from torchrl.modules import (
     DistributionalQValueActor,
     OneHotCategorical,
     QValueActor,
+    recurrent_mode,
     SafeSequential,
     WorldModelWrapper,
 )
@@ -15507,6 +15508,29 @@ class TestAdv:
 
 
 class TestBase:
+    def test_decorators(self):
+        class MyLoss(LossModule):
+            def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+                assert recurrent_mode()
+                assert exploration_type() is ExplorationType.DETERMINISTIC
+                return TensorDict()
+
+            def actor_loss(self, tensordict: TensorDictBase) -> TensorDictBase:
+                assert recurrent_mode()
+                assert exploration_type() is ExplorationType.DETERMINISTIC
+                return TensorDict()
+
+            def something_loss(self, tensordict: TensorDictBase) -> TensorDictBase:
+                assert recurrent_mode()
+                assert exploration_type() is ExplorationType.DETERMINISTIC
+                return TensorDict()
+
+        loss = MyLoss()
+        loss.forward(None)
+        loss.actor_loss(None)
+        loss.something_loss(None)
+        assert not recurrent_mode()
+
     @pytest.mark.parametrize("expand_dim", [None, 2])
     @pytest.mark.parametrize("compare_against", [True, False])
     @pytest.mark.skipif(not _has_functorch, reason="functorch is needed for expansion")

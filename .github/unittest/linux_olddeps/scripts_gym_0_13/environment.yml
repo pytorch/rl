@@ -10,7 +10,7 @@ dependencies:
     - cloudpickle
     - gym[atari]==0.13
     - pygame
-    - moviepy
+    - moviepy<2.0.0
     - tqdm
     - pytest
     - pytest-cov

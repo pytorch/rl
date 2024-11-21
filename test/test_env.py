@@ -3512,18 +3512,18 @@ class TestPartialSteps:
 
 def test_single_env_spec():
     env = NestedCountingEnv(batch_size=[3, 1, 7])
-    assert not env.single_full_action_spec.shape
-    assert not env.single_full_done_spec.shape
-    assert not env.single_input_spec.shape
-    assert not env.single_full_observation_spec.shape
-    assert not env.single_output_spec.shape
-    assert not env.single_full_reward_spec.shape
+    assert not env.full_action_spec_unbatched.shape
+    assert not env.full_done_spec_unbatched.shape
+    assert not env.input_spec_unbatched.shape
+    assert not env.full_observation_spec_unbatched.shape
+    assert not env.output_spec_unbatched.shape
+    assert not env.full_reward_spec_unbatched.shape
 
-    assert env.single_action_spec.shape
-    assert env.single_reward_spec.shape
+    assert env.action_spec_unbatched.shape
+    assert env.reward_spec_unbatched.shape
 
-    assert env.output_spec.is_in(env.single_output_spec.zeros(env.shape))
-    assert env.input_spec.is_in(env.single_input_spec.zeros(env.shape))
+    assert env.output_spec.is_in(env.output_spec_unbatched.zeros(env.shape))
+    assert env.input_spec.is_in(env.input_spec_unbatched.zeros(env.shape))
 
 
 if __name__ == "__main__":

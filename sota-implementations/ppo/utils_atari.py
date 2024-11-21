@@ -99,8 +99,8 @@ def make_ppo_modules_pixels(proof_environment):
         num_outputs = proof_environment.single_action_spec.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "low": proof_environment.single_action_spec.space.low,
-            "high": proof_environment.single_action_spec.space.high,
+            "low": proof_environment.action_spec_unbatched.space.low,
+            "high": proof_environment.action_spec_unbatched.space.high,
         }
 
     # Define input keys
