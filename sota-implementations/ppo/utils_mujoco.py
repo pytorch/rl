@@ -52,8 +52,8 @@ def make_ppo_models_state(proof_environment):
     num_outputs = proof_environment.action_spec.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
-        "low": proof_environment.action_spec.space.low,
-        "high": proof_environment.action_spec.space.high,
+        "low": proof_environment.action_spec_unbatched.space.low,
+        "high": proof_environment.action_spec_unbatched.space.high,
         "tanh_loc": False,
     }
 

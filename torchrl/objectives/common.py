@@ -21,6 +21,7 @@ from torch import nn
 from torch.nn import Parameter
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules import set_recurrent_mode
 
 from torchrl.objectives.utils import RANDOM_MODULE_LIST, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
@@ -46,8 +47,15 @@ def _updater_check_forward_prehook(module, *args, **kwargs):
 def _forward_wrapper(func):
     @functools.wraps(func)
     def new_forward(self, *args, **kwargs):
-        with set_exploration_type(self.deterministic_sampling_mode):
+        em = set_exploration_type(self.deterministic_sampling_mode)
+        em.__enter__()
+        rm = set_recurrent_mode(True)
+        rm.__enter__()
+        try:
             return func(self, *args, **kwargs)
+        finally:
+            em.__exit__(None, None, None)
+            rm.__exit__(None, None, None)
 
     return new_forward
 
@@ -56,6 +64,9 @@ class _LossMeta(abc.ABCMeta):
     def __init__(cls, name, bases, attr_dict):
         super().__init__(name, bases, attr_dict)
         cls.forward = _forward_wrapper(cls.forward)
+        for name, value in cls.__dict__.items():
+            if not name.startswith("_") and name.endswith("loss"):
+                setattr(cls, name, _forward_wrapper(value))
 
 
 class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
