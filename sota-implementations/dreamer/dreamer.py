@@ -20,7 +20,7 @@ from dreamer_utils import (
 )
 
 # mixed precision training
-from torch.cuda.amp import GradScaler
+from torch.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -320,6 +320,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         log_metrics(logger, eval_metrics, collected_frames)
 
         t_collect_init = time.time()
+
+    test_env.close()
+    train_env.close()
+    collector.shutdown()
+
+    del test_env
+    del train_env
+    del collector
 
 
 if __name__ == "__main__":
