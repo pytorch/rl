@@ -921,7 +921,7 @@ make of torchrl:
 pip3 install tqdm tensorboard "hydra-core>=1.1" hydra-submitit-launcher
 
 # rendering
-pip3 install moviepy
+pip3 install "moviepy<2.0.0"
 
 # deepmind control suite
 pip3 install dm_control
