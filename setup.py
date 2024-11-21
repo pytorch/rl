@@ -208,7 +208,7 @@ def _main(argv):
         ],
         "dm_control": ["dm_control"],
         "gym_continuous": ["gymnasium<1.0", "mujoco"],
-        "rendering": ["moviepy"],
+        "rendering": ["moviepy<2.0.0"],
         "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
         "utils": [
             "tensorboard",
