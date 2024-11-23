@@ -3526,6 +3526,34 @@ def test_single_env_spec():
     assert env.input_spec.is_in(env.input_spec_unbatched.zeros(env.shape))
 
 
+def test_auto_spec():
+    env = CountingEnv()
+    td = env.reset()
+
+    policy = lambda td, action_spec=env.full_action_spec.clone(): td.update(
+        action_spec.rand()
+    )
+
+    env.full_observation_spec = Composite(
+        shape=env.full_observation_spec.shape, device=env.full_observation_spec.device
+    )
+    env.full_action_spec = Composite(
+        shape=env.full_action_spec.shape, device=env.full_action_spec.device
+    )
+    env.full_reward_spec = Composite(
+        shape=env.full_reward_spec.shape, device=env.full_reward_spec.device
+    )
+    env.full_done_spec = Composite(
+        shape=env.full_done_spec.shape, device=env.full_done_spec.device
+    )
+    env.full_state_spec = Composite(
+        shape=env.full_state_spec.shape, device=env.full_state_spec.device
+    )
+    env._action_keys = ["action"]
+    env.auto_specs_(policy, tensordict=td.copy())
+    env.check_env_specs(tensordict=td.copy())
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
