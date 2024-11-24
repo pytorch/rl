@@ -4278,8 +4278,22 @@ class Composite(TensorSpec):
                     )
         self._shape = _size(value)
 
-    def is_empty(self):
-        """Whether the composite spec contains specs or not."""
+    def is_empty(self, recurse: bool = False):
+        """Whether the composite spec contains specs or not.
+
+        Args:
+            recurse (bool): whether to recursively assess if the spec is empty.
+                If ``True``, will return ``True`` if there are no leaves. If ``False``
+                (default) will return whether there is any spec defined at the root level.
+
+        """
+        if recurse:
+            for spec in self._specs.values():
+                if spec is None:
+                    continue
+                if isinstance(spec, Composite) and spec.is_empty(recurse=True):
+                    continue
+                return False
         return len(self._specs) == 0
 
     @property
