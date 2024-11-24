@@ -4372,11 +4372,20 @@ class Composite(TensorSpec):
         if spec is not None:
             shape = spec.shape
             if shape[: self.ndim] != self.shape:
-                raise ValueError(
-                    "The shape of the spec and the Composite mismatch: the first "
-                    f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
-                    f"Composite.shape={self.shape}."
-                )
+                if (
+                    isinstance(spec, Composite)
+                    and spec.ndim < self.ndim
+                    and self.shape[: spec.ndim] == spec.shape
+                ):
+                    # Try to set the composite shape
+                    spec = spec.clone()
+                    spec.shape = self.shape
+                else:
+                    raise ValueError(
+                        "The shape of the spec and the Composite mismatch: the first "
+                        f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
+                        f"Composite.shape={self.shape}."
+                    )
         self._specs[name] = spec
 
     def __init__(
@@ -4448,6 +4457,8 @@ class Composite(TensorSpec):
         """Clears the device of the Composite."""
         self._device = None
         for spec in self._specs.values():
+            if spec is None:
+                continue
             spec.clear_device_()
         return self
 
@@ -4530,6 +4541,10 @@ class Composite(TensorSpec):
             and value.device != self.device
         ):
             if isinstance(value, Composite) and value.device is None:
+                # We make a clone not to mess up the spec that was provided.
+                # in set() we do the same for shape - these two ops should be grouped.
+                # we don't care about the overhead of cloning twice though because in theory
+                # we don't set specs often.
                 value = value.clone().to(self.device)
             else:
                 raise RuntimeError(

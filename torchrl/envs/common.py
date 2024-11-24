@@ -356,6 +356,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     .. note:: Learn more about dynamic specs and environments :ref:`here <dynamic_envs>`.
     """
 
+    _batch_size: torch.Size | None
+    _device: torch.device | None
+
     def __init__(
         self,
         *,
@@ -364,49 +367,54 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         run_type_checks: bool = False,
         allow_done_after_reset: bool = False,
     ):
-        self.__dict__.setdefault("_batch_size", None)
-        if device is not None:
-            self.__dict__["_device"] = _make_ordinal_device(torch.device(device))
-            output_spec = self.__dict__.get("_output_spec")
-            if output_spec is not None:
-                self.__dict__["_output_spec"] = (
-                    output_spec.to(self.device)
-                    if self.device is not None
-                    else output_spec
-                )
-            input_spec = self.__dict__.get("_input_spec")
-            if input_spec is not None:
-                self.__dict__["_input_spec"] = (
-                    input_spec.to(self.device)
-                    if self.device is not None
-                    else input_spec
-                )
-
         super().__init__()
-        if "is_closed" not in self.__dir__():
-            self.is_closed = True
-        if batch_size is not None:
+
+        self.__dict__.setdefault("_batch_size", None)
+        self.__dict__.setdefault("_device", None)
+
+        if device is not None:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
-            self.batch_size = torch.Size(batch_size)
+            device = self.__dict__["_device"] = _make_ordinal_device(
+                torch.device(device)
+            )
+
+        output_spec = self.__dict__.get("_output_spec")
+        if output_spec is None:
+            output_spec = self.__dict__["_output_spec"] = Composite(
+                shape=batch_size, device=device
+            ).lock_()
+        elif self._output_spec.device != device and device is not None:
+            self.__dict__["_output_spec"] = self.__dict__["_output_spec"].to(
+                self.device
+            )
+        input_spec = self.__dict__.get("_input_spec")
+        if input_spec is None:
+            input_spec = self.__dict__["_input_spec"] = Composite(
+                shape=batch_size, device=device
+            ).lock_()
+        elif self._input_spec.device != device and device is not None:
+            self.__dict__["_input_spec"] = self.__dict__["_input_spec"].to(self.device)
+
+        output_spec.unlock_()
+        input_spec.unlock_()
+        if "full_observation_spec" not in output_spec:
+            output_spec["full_observation_spec"] = Composite()
+        if "full_done_spec" not in output_spec:
+            output_spec["full_done_spec"] = Composite()
+        if "full_reward_spec" not in output_spec:
+            output_spec["full_reward_spec"] = Composite()
+        if "full_state_spec" not in input_spec:
+            input_spec["full_state_spec"] = Composite()
+        if "full_action_spec" not in input_spec:
+            input_spec["full_action_spec"] = Composite()
+        output_spec.lock_()
+        input_spec.lock_()
+
+        if "is_closed" not in self.__dir__():
+            self.is_closed = True
         self._run_type_checks = run_type_checks
         self._allow_done_after_reset = allow_done_after_reset
-        self.output_spec.unlock_()
-        self.input_spec.unlock_()
-        if "full_observation_spec" not in self.output_spec:
-            self.output_spec["full_observation_spec"] = Composite()
-        if "full_done_spec" not in self.output_spec:
-            self.output_spec["full_done_spec"] = Composite()
-        if "full_reward_spec" not in self.output_spec:
-            self.output_spec["full_reward_spec"] = Composite()
-
-        if "full_state_spec" not in self.input_spec:
-            self.input_spec["full_state_spec"] = Composite()
-        if "full_action_spec" not in self.input_spec:
-            self.input_spec["full_action_spec"] = Composite()
-
-        self.output_spec.lock_()
-        self.input_spec.lock_()
 
     def auto_specs_(
         self,
@@ -609,7 +617,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         in parallel).
 
         """
-        _batch_size = self.__dict__["_batch_size"]
+        _batch_size = self.__dict__.get("_batch_size")
         if _batch_size is None:
             _batch_size = self._batch_size = torch.Size([])
         return _batch_size
