@@ -4258,6 +4258,14 @@ class Composite(TensorSpec):
         return super().__new__(cls)
 
     @property
+    def batch_size(self):
+        return self._shape
+
+    @batch_size.setter
+    def batch_size(self, value: torch.Size):
+        self._shape = value
+
+    @property
     def shape(self):
         return self._shape
 
