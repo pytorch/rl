@@ -1550,7 +1550,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @property
     def full_observation_spec_unbatched(self) -> Composite:
         """Returns the observation spec of the env as if it had no batch dimensions."""
-        return self._make_single_env_spec(self.full_action_spec)
+        return self._make_single_env_spec(self.full_observation_spec)
 
     @full_observation_spec_unbatched.setter
     def full_observation_spec_unbatched(self, spec: Composite):
