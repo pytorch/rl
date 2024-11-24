@@ -390,6 +390,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.batch_size = torch.Size(batch_size)
         self._run_type_checks = run_type_checks
         self._allow_done_after_reset = allow_done_after_reset
+
     @wraps(check_env_specs_func)
     def check_env_specs(self, *args, **kwargs):
         return check_env_specs_func(self, *args, **kwargs)
@@ -1550,7 +1551,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @property
     def full_observation_spec_unbatched(self) -> Composite:
         """Returns the observation spec of the env as if it had no batch dimensions."""
-        return self._make_single_env_spec(self.full_action_spec)
+        return self._make_single_env_spec(self.full_observation_spec)
 
     @full_observation_spec_unbatched.setter
     def full_observation_spec_unbatched(self, spec: Composite):
@@ -1570,7 +1571,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @property
     def full_reward_spec_unbatched(self) -> Composite:
         """Returns the reward spec of the env as if it had no batch dimensions."""
-        return self._make_single_env_spec(self.full_action_spec)
+        return self._make_single_env_spec(self.full_reward_spec)
 
     @full_reward_spec_unbatched.setter
     def full_reward_spec_unbatched(self, spec: Composite):
@@ -1590,7 +1591,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @property
     def full_done_spec_unbatched(self) -> Composite:
         """Returns the done spec of the env as if it had no batch dimensions."""
-        return self._make_single_env_spec(self.full_action_spec)
+        return self._make_single_env_spec(self.full_done_spec)
 
     @full_done_spec_unbatched.setter
     def full_done_spec_unbatched(self, spec: Composite):
