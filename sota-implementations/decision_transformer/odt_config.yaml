@@ -56,6 +56,11 @@ loss:
   alpha_init: 0.1
   target_entropy: auto
 
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
+
 # transformer model
 transformer:
   n_embd: 512

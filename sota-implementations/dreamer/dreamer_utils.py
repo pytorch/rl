@@ -473,12 +473,12 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             spec=Composite(
                 **{
                     "loc": Unbounded(
-                        proof_environment.action_spec.shape,
-                        device=proof_environment.action_spec.device,
+                        proof_environment.single_action_spec.shape,
+                        device=proof_environment.single_action_spec.device,
                     ),
                     "scale": Unbounded(
-                        proof_environment.action_spec.shape,
-                        device=proof_environment.action_spec.device,
+                        proof_environment.single_action_spec.shape,
+                        device=proof_environment.single_action_spec.device,
                     ),
                 }
             ),
@@ -489,7 +489,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             default_interaction_type=InteractionType.RANDOM,
             distribution_class=TanhNormal,
             distribution_kwargs={"tanh_loc": True},
-            spec=Composite(**{action_key: proof_environment.action_spec}),
+            spec=Composite(**{action_key: proof_environment.single_action_spec}),
         ),
     )
     return actor_simulator
@@ -530,10 +530,10 @@ def _dreamer_make_actor_real(
                 spec=Composite(
                     **{
                         "loc": Unbounded(
-                            proof_environment.action_spec.shape,
+                            proof_environment.single_action_spec.shape,
                         ),
                         "scale": Unbounded(
-                            proof_environment.action_spec.shape,
+                            proof_environment.single_action_spec.shape,
                         ),
                     }
                 ),
@@ -544,7 +544,7 @@ def _dreamer_make_actor_real(
                 default_interaction_type=InteractionType.DETERMINISTIC,
                 distribution_class=TanhNormal,
                 distribution_kwargs={"tanh_loc": True},
-                spec=Composite(**{action_key: proof_environment.action_spec.to("cpu")}),
+                spec=proof_environment.single_full_action_spec.to("cpu"),
             ),
         ),
         SafeModule(

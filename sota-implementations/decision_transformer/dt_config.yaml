@@ -55,7 +55,12 @@ optim:
 # loss
 loss: 
   loss_function: "l2"
-  
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
+
 # transformer model
 transformer:
   n_embd: 128

@@ -6,7 +6,6 @@
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
-from torchrl.data import Composite
 from torchrl.data.tensor_specs import CategoricalBox
 from torchrl.envs import (
     CatFrames,
@@ -92,12 +91,12 @@ def make_ppo_modules_pixels(proof_environment):
     input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs
-    if isinstance(proof_environment.action_spec.space, CategoricalBox):
-        num_outputs = proof_environment.action_spec.space.n
+    if isinstance(proof_environment.single_action_spec.space, CategoricalBox):
+        num_outputs = proof_environment.single_action_spec.space.n
         distribution_class = OneHotCategorical
         distribution_kwargs = {}
     else:  # is ContinuousBox
-        num_outputs = proof_environment.action_spec.shape
+        num_outputs = proof_environment.single_action_spec.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
             "low": proof_environment.action_spec_unbatched.space.low,
@@ -148,7 +147,7 @@ def make_ppo_modules_pixels(proof_environment):
     policy_module = ProbabilisticActor(
         policy_module,
         in_keys=["logits"],
-        spec=Composite(action=proof_environment.action_spec),
+        spec=proof_environment.single_full_action_spec,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,

@@ -247,7 +247,7 @@ def make_iql_model(cfg, train_env, eval_env, device="cpu"):
 
 
 def make_iql_modules_state(model_cfg, proof_environment):
-    action_spec = proof_environment.action_spec
+    action_spec = proof_environment.single_action_spec
 
     actor_net_kwargs = {
         "num_cells": model_cfg.hidden_sizes,

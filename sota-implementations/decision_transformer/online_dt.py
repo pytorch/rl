@@ -7,14 +7,15 @@ This is a self-contained example of an Online Decision Transformer training scri
 The helper functions are coded in the utils.py associated with this script.
 """
 import time
+import warnings
 
 import hydra
 import numpy as np
 import torch
 import tqdm
-from torchrl._utils import logger as torchrl_logger
+from tensordict.nn import CudaGraphModule
+from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.libs.gym import set_gym_backend
-
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
 from torchrl.record import VideoRecorder
@@ -63,8 +64,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create policy model
-    actor = make_odt_model(cfg)
-    policy = actor.to(model_device)
+    policy = make_odt_model(cfg, device=model_device)
 
     # Create loss
     loss_module = make_odt_loss(cfg.loss, policy)
@@ -78,12 +78,45 @@ def main(cfg: "DictConfig"):  # noqa: F821
     inference_policy = DecisionTransformerInferenceWrapper(
         policy=policy,
         inference_context=cfg.env.inference_context,
-    ).to(model_device)
+        device=model_device,
+    )
     inference_policy.set_tensor_keys(
         observation="observation_cat",
         action="action_cat",
         return_to_go="return_to_go_cat",
     )
+
+    def update(data):
+        transformer_optim.zero_grad(set_to_none=True)
+        temperature_optim.zero_grad(set_to_none=True)
+        # Compute loss
+        loss_vals = loss_module(data.to(model_device))
+        transformer_loss = loss_vals["loss_log_likelihood"] + loss_vals["loss_entropy"]
+        temperature_loss = loss_vals["loss_alpha"]
+
+        (temperature_loss + transformer_loss).backward()
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), clip_grad)
+
+        transformer_optim.step()
+        temperature_optim.step()
+
+        return loss_vals.detach()
+
+    compile_mode = None
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
+        if compile_mode in ("", None):
+            if cfg.compile.cudagraphs:
+                compile_mode = "default"
+            else:
+                compile_mode = "reduce-overhead"
+        update = torch.compile(update, mode=compile_mode)
+    if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
+        update = CudaGraphModule(update, warmup=50)
 
     pbar = tqdm.tqdm(total=cfg.optim.pretrain_gradient_steps)
 
@@ -98,35 +131,28 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = time.time()
     for i in range(pretrain_gradient_steps):
         pbar.update(1)
-        # Sample data
-        data = offline_buffer.sample()
-        # Compute loss
-        loss_vals = loss_module(data.to(model_device))
-        transformer_loss = loss_vals["loss_log_likelihood"] + loss_vals["loss_entropy"]
-        temperature_loss = loss_vals["loss_alpha"]
+        with timeit("sample"):
+            # Sample data
+            data = offline_buffer.sample()
 
-        transformer_optim.zero_grad()
-        torch.nn.utils.clip_grad_norm_(policy.parameters(), clip_grad)
-        transformer_loss.backward()
-        transformer_optim.step()
-
-        temperature_optim.zero_grad()
-        temperature_loss.backward()
-        temperature_optim.step()
+        with timeit("update"):
+            loss_vals = update(data.to(model_device))
 
         scheduler.step()
 
         # Log metrics
         to_log = {
-            "train/loss_log_likelihood": loss_vals["loss_log_likelihood"].item(),
-            "train/loss_entropy": loss_vals["loss_entropy"].item(),
-            "train/loss_alpha": loss_vals["loss_alpha"].item(),
-            "train/alpha": loss_vals["alpha"].item(),
-            "train/entropy": loss_vals["entropy"].item(),
+            "train/loss_log_likelihood": loss_vals["loss_log_likelihood"],
+            "train/loss_entropy": loss_vals["loss_entropy"],
+            "train/loss_alpha": loss_vals["loss_alpha"],
+            "train/alpha": loss_vals["alpha"],
+            "train/entropy": loss_vals["entropy"],
         }
 
         # Evaluation
-        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
+        with torch.no_grad(), set_exploration_type(
+            ExplorationType.DETERMINISTIC
+        ), timeit("eval"):
             inference_policy.eval()
             if i % pretrain_log_interval == 0:
                 eval_td = test_env.rollout(
@@ -140,6 +166,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
             to_log["eval/reward"] = (
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )
+
+        if i % 200 == 0:
+            to_log.update(timeit.todict(prefix="time"))
+            timeit.print()
+            timeit.erase()
 
         if logger is not None:
             log_metrics(logger, to_log, i)
