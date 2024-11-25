@@ -42,7 +42,7 @@ def make_env(env_name="HalfCheetah-v4", device="cpu", from_pixels: bool = False)
 # --------------------------------------------------------------------
 
 
-def make_ppo_models_state(proof_environment):
+def make_ppo_models_state(proof_environment, compile):
 
     # Define input shape
     input_shape = proof_environment.observation_spec["observation"].shape
@@ -54,6 +54,7 @@ def make_ppo_models_state(proof_environment):
         "low": proof_environment.action_spec_unbatched.space.low,
         "high": proof_environment.action_spec_unbatched.space.high,
         "tanh_loc": False,
+        "safe_tanh": not compile,
     }
 
     # Define policy architecture
@@ -116,9 +117,9 @@ def make_ppo_models_state(proof_environment):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name):
+def make_ppo_models(env_name, compile):
     proof_environment = make_env(env_name, device="cpu")
-    actor, critic = make_ppo_models_state(proof_environment)
+    actor, critic = make_ppo_models_state(proof_environment, compile=compile)
     return actor, critic
 
 

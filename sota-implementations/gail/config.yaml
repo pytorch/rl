@@ -41,6 +41,11 @@ gail:
   gp_lambda: 10.0
   device: null
 
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
+
 replay_buffer:
   dataset: halfcheetah-expert-v2
   batch_size: 256
