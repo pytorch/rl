@@ -1277,8 +1277,10 @@ class CountingBatchedEnv(EnvBase):
             max_steps = torch.tensor(5)
         if start_val is None:
             start_val = torch.zeros((), dtype=torch.int32)
-        if not max_steps.shape == self.batch_size:
-            raise RuntimeError("batch_size and max_steps shape must match.")
+        if max_steps.shape != self.batch_size:
+            raise RuntimeError(
+                f"batch_size and max_steps shape must match. Got self.batch_size={self.batch_size} and max_steps.shape={max_steps.shape}."
+            )
 
         self.max_steps = max_steps
 

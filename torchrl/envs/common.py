@@ -372,9 +372,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self.__dict__.setdefault("_batch_size", None)
         self.__dict__.setdefault("_device", None)
 
-        if device is not None:
+        if batch_size is not None:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
+            batch_size = self.batch_size = torch.Size(batch_size)
+        else:
+            batch_size = torch.Size(())
+
+        if device is not None:
             device = self.__dict__["_device"] = _make_ordinal_device(
                 torch.device(device)
             )
