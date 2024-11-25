@@ -1243,7 +1243,7 @@ class DiscreteSACLoss(LossModule):
             # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
             next_state_value = (next_prob * next_state_value).sum(-1).unsqueeze(-1)
             if next_tensordict_select is not next_tensordict:
-                mask = ~done.squeeze(-1)
+                mask = ~done
                 next_state_value = next_state_value.new_zeros(
                     mask.shape
                 ).masked_scatter_(mask, next_state_value)
