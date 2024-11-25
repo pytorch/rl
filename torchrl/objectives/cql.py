@@ -617,8 +617,6 @@ class CQLLoss(LossModule):
             action = dist.rsample()
             tensordict.set(self.tensor_keys.action, action)
             sample_log_prob = dist.log_prob(action)
-            # tensordict.del_("loc")
-            # tensordict.del_("scale")
 
         return (
             tensordict.select(

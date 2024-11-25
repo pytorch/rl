@@ -168,7 +168,7 @@ print(buffer_list.sample(3))
 buffer_lazytensor = ReplayBuffer(storage=LazyTensorStorage(size))
 
 ######################################################################
-# Let us create a batch of data of size ``torch.Size([3])` with 2 tensors
+# Let us create a batch of data of size ``torch.Size([3])`` with 2 tensors
 # stored in it:
 #
 
