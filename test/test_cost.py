@@ -4459,6 +4459,69 @@ class TestSAC(LossModuleTestBase):
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
 
+    @pytest.mark.parametrize("action_key", ["action", "action2"])
+    @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
+    @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
+    @pytest.mark.parametrize("done_key", ["done", "done2"])
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    def test_sac_terminating(
+        self, action_key, observation_key, reward_key, done_key, terminated_key, version
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac(
+            action_key=action_key,
+            observation_key=observation_key,
+            reward_key=reward_key,
+            done_key=done_key,
+            terminated_key=terminated_key,
+        )
+
+        actor = self._create_mock_actor(
+            observation_key=observation_key, action_key=action_key
+        )
+        qvalue = self._create_mock_qvalue(
+            observation_key=observation_key,
+            action_key=action_key,
+            out_keys=["state_action_value"],
+        )
+        if version == 1:
+            value = self._create_mock_value(observation_key=observation_key)
+        else:
+            value = None
+
+        loss = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+        )
+        loss.set_keys(
+            action=action_key,
+            reward=reward_key,
+            done=done_key,
+            terminated=terminated_key,
+        )
+
+        torch.manual_seed(self.seed)
+
+        SoftUpdate(loss, eps=0.5)
+
+        done = td.get(("next", done_key))
+        while not (done.any() and not done.all()):
+            done.bernoulli_(0.1)
+        obs_nan = td.get(("next", terminated_key))
+        obs_nan[done.squeeze(-1)] = float("nan")
+
+        kwargs = {
+            action_key: td.get(action_key),
+            observation_key: td.get(observation_key),
+            f"next_{reward_key}": td.get(("next", reward_key)),
+            f"next_{done_key}": done,
+            f"next_{terminated_key}": obs_nan,
+            f"next_{observation_key}": td.get(("next", observation_key)),
+        }
+        td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
+        assert loss(td).isfinite().all()
+
     def test_state_dict(self, version):
         if version == 1:
             pytest.skip("Test not implemented for version 1.")
@@ -5111,6 +5174,62 @@ class TestDiscreteSAC(LossModuleTestBase):
                 return
             assert loss_actor == loss_val_td["loss_actor"]
             assert loss_alpha == loss_val_td["loss_alpha"]
+
+    @pytest.mark.parametrize("action_key", ["action", "action2"])
+    @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
+    @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
+    @pytest.mark.parametrize("done_key", ["done", "done2"])
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    def test_discrete_sac_terminating(
+        self, action_key, observation_key, reward_key, done_key, terminated_key
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac(
+            action_key=action_key,
+            observation_key=observation_key,
+            reward_key=reward_key,
+            done_key=done_key,
+            terminated_key=terminated_key,
+        )
+
+        actor = self._create_mock_actor(
+            observation_key=observation_key, action_key=action_key
+        )
+        qvalue = self._create_mock_qvalue(
+            observation_key=observation_key,
+        )
+
+        loss = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec[action_key].space.n,
+            action_space="one-hot",
+        )
+        loss.set_keys(
+            action=action_key,
+            reward=reward_key,
+            done=done_key,
+            terminated=terminated_key,
+        )
+
+        SoftUpdate(loss, eps=0.5)
+
+        torch.manual_seed(0)
+        done = td.get(("next", done_key))
+        while not (done.any() and not done.all()):
+            done = done.bernoulli_(0.1)
+        obs_none = td.get(("next", observation_key))
+        obs_none[done.squeeze(-1)] = float("nan")
+        kwargs = {
+            action_key: td.get(action_key),
+            observation_key: td.get(observation_key),
+            f"next_{reward_key}": td.get(("next", reward_key)),
+            f"next_{done_key}": done,
+            f"next_{terminated_key}": td.get(("next", terminated_key)),
+            f"next_{observation_key}": obs_none,
+        }
+        td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
+        assert loss(td).isfinite().all()
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_discrete_sac_reduction(self, reduction):
