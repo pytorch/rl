@@ -6,9 +6,9 @@
 from __future__ import annotations
 
 import abc
-import functools
 import warnings
 from copy import deepcopy
+from functools import partial, wraps
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
@@ -33,6 +33,7 @@ from torchrl.envs.utils import (
     _StepMDP,
     _terminated_or_truncated,
     _update_during_reset,
+    check_env_specs as check_env_specs_func,
     get_available_libraries,
 )
 
@@ -390,6 +391,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.batch_size = torch.Size(batch_size)
         self._run_type_checks = run_type_checks
         self._allow_done_after_reset = allow_done_after_reset
+
+    @wraps(check_env_specs_func)
+    def check_env_specs(self, *args, **kwargs):
+        return check_env_specs_func(self, *args, **kwargs)
+
+    check_env_specs.__doc__ = check_env_specs_func.__doc__
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -1545,7 +1552,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @property
     def full_observation_spec_unbatched(self) -> Composite:
         """Returns the observation spec of the env as if it had no batch dimensions."""
-        return self._make_single_env_spec(self.full_action_spec)
+        return self._make_single_env_spec(self.full_observation_spec)
 
     @full_observation_spec_unbatched.setter
     def full_observation_spec_unbatched(self, spec: Composite):
@@ -1565,7 +1572,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @property
     def full_reward_spec_unbatched(self) -> Composite:
         """Returns the reward spec of the env as if it had no batch dimensions."""
-        return self._make_single_env_spec(self.full_action_spec)
+        return self._make_single_env_spec(self.full_reward_spec)
 
     @full_reward_spec_unbatched.setter
     def full_reward_spec_unbatched(self, spec: Composite):
@@ -1585,7 +1592,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @property
     def full_done_spec_unbatched(self) -> Composite:
         """Returns the done spec of the env as if it had no batch dimensions."""
-        return self._make_single_env_spec(self.full_action_spec)
+        return self._make_single_env_spec(self.full_done_spec)
 
     @full_done_spec_unbatched.setter
     def full_done_spec_unbatched(self, spec: Composite):
@@ -2029,7 +2036,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         if entry_point is None:
             entry_point = cls
-        entry_point = functools.partial(
+        entry_point = partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
             info_keys=info_keys,
@@ -2078,7 +2085,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         if entry_point is None:
             entry_point = cls
-        entry_point = functools.partial(
+        entry_point = partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
             info_keys=info_keys,
@@ -2132,7 +2139,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         if entry_point is None:
             entry_point = cls
-        entry_point = functools.partial(
+        entry_point = partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
             info_keys=info_keys,
@@ -2189,7 +2196,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         if entry_point is None:
             entry_point = cls
-        entry_point = functools.partial(
+        entry_point = partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
             info_keys=info_keys,
@@ -2248,7 +2255,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
         if entry_point is None:
             entry_point = cls
-        entry_point = functools.partial(
+        entry_point = partial(
             _TorchRLGymWrapper,
             entry_point=entry_point,
             info_keys=info_keys,
@@ -2287,7 +2294,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if entry_point is None:
             entry_point = cls
 
-        entry_point = functools.partial(
+        entry_point = partial(
             _TorchRLGymnasiumWrapper,
             entry_point=entry_point,
             info_keys=info_keys,
@@ -3416,11 +3423,11 @@ def _get_sync_func(policy_device, env_device):
         if policy_device is not None and policy_device.type == "cuda":
             if env_device is None or env_device.type == "cuda":
                 return torch.cuda.synchronize
-            return functools.partial(torch.cuda.synchronize, device=policy_device)
+            return partial(torch.cuda.synchronize, device=policy_device)
         if env_device is not None and env_device.type == "cuda":
             if policy_device is None:
                 return torch.cuda.synchronize
-            return functools.partial(torch.cuda.synchronize, device=env_device)
+            return partial(torch.cuda.synchronize, device=env_device)
         return torch.cuda.synchronize
     if torch.backends.mps.is_available():
         return torch.mps.synchronize

@@ -4258,6 +4258,14 @@ class Composite(TensorSpec):
         return super().__new__(cls)
 
     @property
+    def batch_size(self):
+        return self._shape
+
+    @batch_size.setter
+    def batch_size(self, value: torch.Size):
+        self._shape = value
+
+    @property
     def shape(self):
         return self._shape
 
@@ -4278,8 +4286,22 @@ class Composite(TensorSpec):
                     )
         self._shape = _size(value)
 
-    def is_empty(self):
-        """Whether the composite spec contains specs or not."""
+    def is_empty(self, recurse: bool = False):
+        """Whether the composite spec contains specs or not.
+
+        Args:
+            recurse (bool): whether to recursively assess if the spec is empty.
+                If ``True``, will return ``True`` if there are no leaves. If ``False``
+                (default) will return whether there is any spec defined at the root level.
+
+        """
+        if recurse:
+            for spec in self._specs.values():
+                if spec is None:
+                    continue
+                if isinstance(spec, Composite) and spec.is_empty(recurse=True):
+                    continue
+                return False
         return len(self._specs) == 0
 
     @property
@@ -4288,6 +4310,61 @@ class Composite(TensorSpec):
 
     def ndimension(self):
         return len(self.shape)
+
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> Any:
+        """Removes and returns the value associated with the specified key from the composite spec.
+
+        This method searches for the given key in the composite spec, removes it, and returns its associated value.
+        If the key is not found, it returns the provided default value if specified, otherwise raises a `KeyError`.
+
+        Args:
+            key (NestedKey):
+                The key to be removed from the composite spec. It can be a single key or a nested key.
+            default (Any, optional):
+                The value to return if the specified key is not found in the composite spec.
+                If not provided and the key is not found, a `KeyError` is raised.
+
+        Returns:
+            Any: The value associated with the specified key that was removed from the composite spec.
+
+        Raises:
+            KeyError: If the specified key is not found in the composite spec and no default value is provided.
+        """
+        key = unravel_key(key)
+        if key in self.keys(True, True):
+            result = self[key]
+            del self[key]
+            return result
+        elif default is not NO_DEFAULT:
+            return default
+        raise KeyError(f"{key} not found in composite spec.")
+
+    def separates(self, *keys: NestedKey, default: Any = None) -> Composite:
+        """Splits the composite spec by extracting specified keys and their associated values into a new composite spec.
+
+        This method iterates over the provided keys, removes them from the current composite spec, and adds them to a new
+        composite spec. If a key is not found, the specified default value is used. The new composite spec is returned.
+
+        Args:
+            *keys (NestedKey):
+                One or more keys to be extracted from the composite spec. Each key can be a single key or a nested key.
+            default (Any, optional):
+                The value to use if a specified key is not found in the composite spec. Defaults to `None`.
+
+        Returns:
+            Composite: A new composite spec containing the extracted keys and their associated values.
+
+        Note:
+            If none of the specified keys are found, the method returns `None`.
+        """
+        out = None
+        for key in keys:
+            result = self.pop(key, default=default)
+            if result is not None:
+                if out is None:
+                    out = Composite(batch_size=self.batch_size, device=self.device)
+                out[key] = result
+        return out
 
     def set(self, name, spec):
         if self.locked:
