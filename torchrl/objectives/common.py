@@ -47,10 +47,15 @@ def _updater_check_forward_prehook(module, *args, **kwargs):
 def _forward_wrapper(func):
     @functools.wraps(func)
     def new_forward(self, *args, **kwargs):
-        with set_exploration_type(self.deterministic_sampling_mode), set_recurrent_mode(
-            True
-        ):
+        em = set_exploration_type(self.deterministic_sampling_mode)
+        em.__enter__()
+        rm = set_recurrent_mode(True)
+        rm.__enter__()
+        try:
             return func(self, *args, **kwargs)
+        finally:
+            em.__exit__(None, None, None)
+            rm.__exit__(None, None, None)
 
     return new_forward
 
