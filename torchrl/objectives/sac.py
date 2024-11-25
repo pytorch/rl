@@ -16,7 +16,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
 from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey
+from tensordict.utils import expand_right, NestedKey
 from torch import Tensor
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
@@ -711,13 +711,37 @@ class SACLoss(LossModule):
             with set_exploration_type(
                 ExplorationType.RANDOM
             ), self.actor_network_params.to_module(self.actor_network):
-                next_tensordict = tensordict.get("next").clone(False)
-                next_dist = self.actor_network.get_dist(next_tensordict)
+                next_tensordict = tensordict.get("next").copy()
+                # Check done state and avoid passing these to the actor
+                done = next_tensordict.get(self.tensor_keys.done)
+                if done is not None and done.any():
+                    next_tensordict_select = next_tensordict[~done.squeeze(-1)]
+                else:
+                    next_tensordict_select = next_tensordict
+                next_dist = self.actor_network.get_dist(next_tensordict_select)
                 next_action = next_dist.rsample()
-                next_tensordict.set(self.tensor_keys.action, next_action)
                 next_sample_log_prob = compute_log_prob(
                     next_dist, next_action, self.tensor_keys.log_prob
                 )
+                if next_tensordict_select is not next_tensordict:
+                    mask = ~done.squeeze(-1)
+                    if mask.ndim < next_action.ndim:
+                        mask = expand_right(
+                            mask, (*mask.shape, *next_action.shape[mask.ndim :])
+                        )
+                    next_action = next_action.new_zeros(mask.shape).masked_scatter_(
+                        mask, next_action
+                    )
+                    mask = ~done.squeeze(-1)
+                    if mask.ndim < next_sample_log_prob.ndim:
+                        mask = expand_right(
+                            mask,
+                            (*mask.shape, *next_sample_log_prob.shape[mask.ndim :]),
+                        )
+                    next_sample_log_prob = next_sample_log_prob.new_zeros(
+                        mask.shape
+                    ).masked_scatter_(mask, next_sample_log_prob)
+                next_tensordict.set(self.tensor_keys.action, next_action)
 
             # get q-values
             next_tensordict_expand = self._vmap_qnetworkN0(
@@ -1194,15 +1218,21 @@ class DiscreteSACLoss(LossModule):
         with torch.no_grad():
             next_tensordict = tensordict.get("next").clone(False)
 
+            done = next_tensordict.get(self.tensor_keys.done)
+            if done is not None and done.any():
+                next_tensordict_select = next_tensordict[~done.squeeze(-1)]
+            else:
+                next_tensordict_select = next_tensordict
+
             # get probs and log probs for actions computed from "next"
             with self.actor_network_params.to_module(self.actor_network):
-                next_dist = self.actor_network.get_dist(next_tensordict)
-            next_prob = next_dist.probs
-            next_log_prob = torch.log(torch.where(next_prob == 0, 1e-8, next_prob))
+                next_dist = self.actor_network.get_dist(next_tensordict_select)
+            next_log_prob = next_dist.logits
+            next_prob = next_log_prob.exp()
 
             # get q-values for all actions
             next_tensordict_expand = self._vmap_qnetworkN0(
-                next_tensordict, self.target_qvalue_network_params
+                next_tensordict_select, self.target_qvalue_network_params
             )
             next_action_value = next_tensordict_expand.get(
                 self.tensor_keys.action_value
@@ -1212,6 +1242,11 @@ class DiscreteSACLoss(LossModule):
             next_state_value = next_action_value.min(0)[0] - self._alpha * next_log_prob
             # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
             next_state_value = (next_prob * next_state_value).sum(-1).unsqueeze(-1)
+            if next_tensordict_select is not next_tensordict:
+                mask = ~done.squeeze(-1)
+                next_state_value = next_state_value.new_zeros(
+                    mask.shape
+                ).masked_scatter_(mask, next_state_value)
 
             tensordict.set(
                 ("next", self.value_estimator.tensor_keys.value), next_state_value
