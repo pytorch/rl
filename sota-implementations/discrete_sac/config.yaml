@@ -44,6 +44,11 @@ network:
   activation: relu
   device: null
 
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
+
 # logging
 logger:
   backend: wandb

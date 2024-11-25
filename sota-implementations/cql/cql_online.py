@@ -170,7 +170,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     c_iter = iter(collector)
     for i in range(len(collector)):
         with timeit("collecting"):
-            torch.compiler.cudagraph_mark_step_begin()
             tensordict = next(c_iter)
         pbar.update(tensordict.numel())
         # update weights of the inference policy
