@@ -743,7 +743,7 @@ def check_env_specs(
         3,
         return_contiguous=return_contiguous,
         tensordict=tensordict,
-        auto_reset=tensordict is not None,
+        auto_reset=tensordict is None,
     )
 
     if return_contiguous:
