@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import warnings
+
 import hydra
 import torch
 
@@ -149,6 +151,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         adv_module = torch.compile(adv_module, mode=compile_mode)
 
     if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
         update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
         adv_module = CudaGraphModule(adv_module)
 

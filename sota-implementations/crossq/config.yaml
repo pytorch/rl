@@ -12,7 +12,7 @@ collector:
   init_random_frames: 25000
   frames_per_batch: 1000
   init_env_steps: 1000
-  device: cpu
+  device:
   env_per_collector: 1
   reset_at_each_iter: False
 
@@ -46,7 +46,12 @@ network:
   actor_activation: relu
   default_policy_scale: 1.0
   scale_lb: 0.1
-  device: "cuda:0"
+  device:
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
 
 # logging
 logger:

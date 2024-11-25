@@ -10,9 +10,11 @@ The helper functions are coded in the utils.py associated with this script.
 
 """
 import time
+import warnings
 
 import hydra
 import numpy as np
+
 import torch
 import tqdm
 from tensordict.nn import CudaGraphModule
@@ -31,6 +33,8 @@ from utils import (
     make_environment,
     make_offline_replay_buffer,
 )
+
+torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(config_path="", config_name="offline_config", version_base="1.1")
@@ -77,7 +81,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         eval_env.start()
 
     # Create loss
-    loss_module, target_net_updater = make_continuous_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_continuous_loss(
+        cfg.loss, model, device=device
+    )
 
     # Create Optimizer
     (
@@ -134,6 +140,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             compile_mode = "reduce-overhead"
         update = torch.compile(update, mode=compile_mode)
     if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
         update = CudaGraphModule(update, warmup=50)
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
@@ -154,6 +164,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         with timeit("update"):
             # compute loss
+            torch.compiler.cudagraph_mark_step_begin()
             i_device = torch.tensor(i, device=device)
             loss, loss_vals = update(
                 data.to(device), policy_eval_start=policy_eval_start, iteration=i_device

@@ -894,7 +894,6 @@ class TD1Estimator(ValueEstimatorBase):
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-
         if self.gamma.device != device:
             self.gamma = self.gamma.to(device)
         gamma = self.gamma
@@ -1361,13 +1360,12 @@ class GAE(ValueEstimatorBase):
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-
         if self.gamma.device != device:
             self.gamma = self.gamma.to(device)
+        gamma = self.gamma
         if self.lmbda.device != device:
             self.lmbda = self.lmbda.to(device)
-        gamma, lmbda = self.gamma, self.lmbda
-
+        lmbda = self.lmbda
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -1448,13 +1446,12 @@ class GAE(ValueEstimatorBase):
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-
         if self.gamma.device != device:
             self.gamma = self.gamma.to(device)
+        gamma = self.gamma
         if self.lmbda.device != device:
             self.lmbda = self.lmbda.to(device)
-        gamma, lmbda = self.gamma, self.lmbda
-
+        lmbda = self.lmbda
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)

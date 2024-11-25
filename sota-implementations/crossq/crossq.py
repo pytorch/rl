@@ -10,15 +10,19 @@ It supports state environments like MuJoCo.
 
 The helper functions are coded in the utils.py associated with this script.
 """
-import time
+import warnings
 
 import hydra
 
 import numpy as np
+
 import torch
 import torch.cuda
 import tqdm
-from torchrl._utils import logger as torchrl_logger
+from tensordict import TensorDict
+from tensordict.nn import CudaGraphModule
+
+from torchrl._utils import timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -31,6 +35,8 @@ from utils import (
     make_loss_module,
     make_replay_buffer,
 )
+
+torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
@@ -69,10 +75,27 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model, exploration_policy = make_crossQ_agent(cfg, train_env, device)
 
     # Create CrossQ loss
-    loss_module = make_loss_module(cfg, model)
+    loss_module = make_loss_module(cfg, model, device=device)
+
+    compile_mode = None
+    if cfg.compile.compile:
+        if cfg.compile.compile_mode not in (None, ""):
+            compile_mode = cfg.compile.compile_mode
+        elif cfg.compile.cudagraphs:
+            compile_mode = "default"
+        else:
+            compile_mode = "reduce-overhead"
 
     # Create off-policy collector
-    collector = make_collector(cfg, train_env, exploration_policy.eval(), device=device)
+    collector = make_collector(
+        cfg,
+        train_env,
+        exploration_policy.eval(),
+        device=device,
+        compile=cfg.compile.compile,
+        compile_mode=compile_mode,
+        cudagraph=cfg.compile.cudagraphs,
+    )
 
     # Create replay buffer
     replay_buffer = make_replay_buffer(
@@ -89,9 +112,70 @@ def main(cfg: "DictConfig"):  # noqa: F821
         optimizer_critic,
         optimizer_alpha,
     ) = make_crossQ_optimizer(cfg, loss_module)
+    # optimizer = group_optimizers(optimizer_actor, optimizer_critic, optimizer_alpha)
+    # del optimizer_actor, optimizer_critic, optimizer_alpha
+
+    def update_qloss(sampled_tensordict):
+        optimizer_critic.zero_grad(set_to_none=True)
+        td_loss = {}
+        q_loss, value_meta = loss_module.qvalue_loss(sampled_tensordict)
+        sampled_tensordict.set(loss_module.tensor_keys.priority, value_meta["td_error"])
+        q_loss = q_loss.mean()
+
+        # Update critic
+        q_loss.backward()
+        optimizer_critic.step()
+        td_loss["loss_qvalue"] = q_loss
+        td_loss["loss_actor"] = float("nan")
+        td_loss["loss_alpha"] = float("nan")
+        return TensorDict(td_loss, device=device).detach()
+
+    def update_all(sampled_tensordict: TensorDict):
+        optimizer_critic.zero_grad(set_to_none=True)
+        optimizer_actor.zero_grad(set_to_none=True)
+        optimizer_alpha.zero_grad(set_to_none=True)
+
+        td_loss = {}
+        q_loss, value_meta = loss_module.qvalue_loss(sampled_tensordict)
+        sampled_tensordict.set(loss_module.tensor_keys.priority, value_meta["td_error"])
+        q_loss = q_loss.mean()
+
+        actor_loss, metadata_actor = loss_module.actor_loss(sampled_tensordict)
+        actor_loss = actor_loss.mean()
+        alpha_loss = loss_module.alpha_loss(
+            log_prob=metadata_actor["log_prob"].detach()
+        ).mean()
+
+        # Updates
+        (q_loss + actor_loss + actor_loss).backward()
+        optimizer_critic.step()
+        optimizer_actor.step()
+        optimizer_alpha.step()
+
+        # Update critic
+        td_loss["loss_qvalue"] = q_loss
+        td_loss["loss_actor"] = actor_loss
+        td_loss["loss_alpha"] = alpha_loss
+
+        return TensorDict(td_loss, device=device).detach()
+
+    if compile_mode:
+        update_all = torch.compile(update_all, mode=compile_mode)
+        update_qloss = torch.compile(update_qloss, mode=compile_mode)
+    if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
+        update_all = CudaGraphModule(update_all, warmup=50)
+        update_qloss = CudaGraphModule(update_qloss, warmup=50)
+
+    def update(sampled_tensordict: TensorDict, update_actor: bool):
+        if update_actor:
+            return update_all(sampled_tensordict)
+        return update_qloss(sampled_tensordict)
 
     # Main loop
-    start_time = time.time()
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
@@ -106,79 +190,45 @@ def main(cfg: "DictConfig"):  # noqa: F821
     frames_per_batch = cfg.collector.frames_per_batch
     eval_rollout_steps = cfg.env.max_episode_steps
 
-    sampling_start = time.time()
     update_counter = 0
     delayed_updates = cfg.optim.policy_update_delay
-    for _, tensordict in enumerate(collector):
-        sampling_time = time.time() - sampling_start
+    c_iter = iter(collector)
+    for i in range(len(collector)):
+        with timeit("collecting"):
+            torch.compiler.cudagraph_mark_step_begin()
+            tensordict = next(c_iter)
 
         # Update weights of the inference policy
         collector.update_policy_weights_()
 
-        pbar.update(tensordict.numel())
-
-        tensordict = tensordict.reshape(-1)
         current_frames = tensordict.numel()
-        # Add to replay buffer
-        replay_buffer.extend(tensordict.cpu())
+        pbar.update(current_frames)
+        tensordict = tensordict.reshape(-1)
+
+        with timeit("rb - extend"):
+            # Add to replay buffer
+            replay_buffer.extend(tensordict)
         collected_frames += current_frames
 
         # Optimization steps
-        training_start = time.time()
         if collected_frames >= init_random_frames:
-            (
-                actor_losses,
-                alpha_losses,
-                q_losses,
-            ) = ([], [], [])
+            tds = []
             for _ in range(num_updates):
-
                 # Update actor every delayed_updates
                 update_counter += 1
                 update_actor = update_counter % delayed_updates == 0
                 # Sample from replay buffer
-                sampled_tensordict = replay_buffer.sample()
-                if sampled_tensordict.device != device:
-                    sampled_tensordict = sampled_tensordict.to(device)
-                else:
-                    sampled_tensordict = sampled_tensordict.clone()
-
-                # Compute loss
-                q_loss, *_ = loss_module.qvalue_loss(sampled_tensordict)
-                q_loss = q_loss.mean()
-                # Update critic
-                optimizer_critic.zero_grad()
-                q_loss.backward()
-                optimizer_critic.step()
-                q_losses.append(q_loss.detach().item())
-
-                if update_actor:
-                    actor_loss, metadata_actor = loss_module.actor_loss(
-                        sampled_tensordict
-                    )
-                    actor_loss = actor_loss.mean()
-                    alpha_loss = loss_module.alpha_loss(
-                        log_prob=metadata_actor["log_prob"]
-                    ).mean()
-
-                    # Update actor
-                    optimizer_actor.zero_grad()
-                    actor_loss.backward()
-                    optimizer_actor.step()
-
-                    # Update alpha
-                    optimizer_alpha.zero_grad()
-                    alpha_loss.backward()
-                    optimizer_alpha.step()
-
-                    actor_losses.append(actor_loss.detach().item())
-                    alpha_losses.append(alpha_loss.detach().item())
-
+                with timeit("rb - sample"):
+                    sampled_tensordict = replay_buffer.sample().to(device)
+                with timeit("update"):
+                    torch.compiler.cudagraph_mark_step_begin()
+                    td_loss = update(sampled_tensordict, update_actor=update_actor)
+                tds.append(td_loss.clone())
                 # Update priority
                 if prb:
                     replay_buffer.update_priority(sampled_tensordict)
 
-        training_time = time.time() - training_start
+            tds = TensorDict.stack(tds).nanmean()
         episode_end = (
             tensordict["next", "done"]
             if tensordict["next", "done"].any()
@@ -186,47 +236,47 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
         episode_rewards = tensordict["next", "episode_reward"][episode_end]
 
-        # Logging
         metrics_to_log = {}
-        if len(episode_rewards) > 0:
-            episode_length = tensordict["next", "step_count"][episode_end]
-            metrics_to_log["train/reward"] = episode_rewards.mean().item()
-            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
-                episode_length
-            )
-        if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = np.mean(q_losses).item()
-            metrics_to_log["train/actor_loss"] = np.mean(actor_losses).item()
-            metrics_to_log["train/alpha_loss"] = np.mean(alpha_losses).item()
-            metrics_to_log["train/sampling_time"] = sampling_time
-            metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
         if abs(collected_frames % eval_iter) < frames_per_batch:
-            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
-                eval_start = time.time()
+            with set_exploration_type(
+                ExplorationType.DETERMINISTIC
+            ), torch.no_grad(), timeit("eval"):
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,
                     model[0],
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
-                eval_time = time.time() - eval_start
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward
-                metrics_to_log["eval/time"] = eval_time
+
+        # Logging
+        if len(episode_rewards) > 0:
+            episode_length = tensordict["next", "step_count"][episode_end]
+            metrics_to_log["train/reward"] = episode_rewards.mean().item()
+            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
+                episode_length
+            )
+            if i % 20 == 0:
+                metrics_to_log.update(timeit.todict(prefix="time"))
+        if collected_frames >= init_random_frames:
+            metrics_to_log["train/q_loss"] = tds["loss_qvalue"]
+            metrics_to_log["train/actor_loss"] = tds["loss_actor"]
+            metrics_to_log["train/alpha_loss"] = tds["loss_alpha"]
+
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
-        sampling_start = time.time()
+        if i % 20 == 0:
+            timeit.print()
+            timeit.erase()
 
     collector.shutdown()
     if not eval_env.is_closed:
         eval_env.close()
     if not train_env.is_closed:
         train_env.close()
-    end_time = time.time()
-    execution_time = end_time - start_time
-    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

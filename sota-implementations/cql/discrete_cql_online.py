@@ -10,9 +10,11 @@ It supports state environments like gym and gymnasium.
 
 The helper functions are coded in the utils.py associated with this script.
 """
+import warnings
 
 import hydra
 import numpy as np
+
 import torch
 import torch.cuda
 import tqdm
@@ -32,6 +34,8 @@ from utils import (
     make_environment,
     make_replay_buffer,
 )
+
+torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="discrete_cql_config")
@@ -70,7 +74,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model, explore_policy = make_discretecql_model(cfg, train_env, eval_env, device)
 
     # Create loss
-    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model, device=device)
 
     compile_mode = None
     if cfg.compile.compile:
@@ -123,6 +127,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if compile_mode:
         update = torch.compile(update, mode=compile_mode)
     if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
         update = CudaGraphModule(update, warmup=50)
 
     # Main loop
@@ -170,6 +178,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     sampled_tensordict = replay_buffer.sample()
                     sampled_tensordict = sampled_tensordict.to(device)
                 with timeit("update"):
+                    torch.compiler.cudagraph_mark_step_begin()
                     loss_dict = update(sampled_tensordict)
                 tds.append(loss_dict)
 
