@@ -412,6 +412,15 @@ class TestComposite:
         with pytest.raises(KeyError):
             _ = ts["UNK"]
 
+    def test_setitem_newshape(self, shape, is_complete, device, dtype):
+        ts = self._composite_spec(shape, is_complete, device, dtype)
+        new_spec = ts.clone()
+        new_spec.shape = torch.Size(())
+        new_spec.clear_device_()
+        ts["new_spec"] = new_spec
+        assert ts["new_spec"].shape == ts.shape
+        assert ts["new_spec"].device == ts.device
+
     def test_setitem_forbidden_keys(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
         for key in {"shape", "device", "dtype", "space"}:

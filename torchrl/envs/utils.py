@@ -16,8 +16,6 @@ import warnings
 from enum import Enum
 from typing import Any, Dict, List, Union
 
-import tensordict.base
-
 import torch
 
 from tensordict import (
@@ -29,7 +27,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
-from tensordict.base import _is_leaf_nontensor
+from tensordict.base import _default_is_leaf, _is_leaf_nontensor
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
     interaction_type as exploration_type,
@@ -691,7 +689,11 @@ def _per_level_env_check(data0, data1, check_dtype):
 
 
 def check_env_specs(
-    env, return_contiguous=True, check_dtype=True, seed: int | None = None
+    env,
+    return_contiguous=True,
+    check_dtype=True,
+    seed: int | None = None,
+    tensordict: TensorDictBase | None = None,
 ):
     """Tests an environment specs against the results of short rollout.
 
@@ -715,6 +717,7 @@ def check_env_specs(
             setting the rng state back to what is was isn't a feature of most environment,
             we leave it to the user to accomplish that.
             Defaults to ``None``.
+        tensordict (TensorDict, optional): an optional tensordict instance to use for reset.
 
     Caution: this function resets the env seed. It should be used "offline" to
     check that an env is adequately constructed, but it may affect the seeding
@@ -732,7 +735,16 @@ def check_env_specs(
             )
 
     fake_tensordict = env.fake_tensordict()
-    real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
+    if not env._batch_locked and tensordict is not None:
+        shape = torch.broadcast_shapes(fake_tensordict.shape, tensordict.shape)
+        fake_tensordict = fake_tensordict.expand(shape)
+        tensordict = tensordict.expand(shape)
+    real_tensordict = env.rollout(
+        3,
+        return_contiguous=return_contiguous,
+        tensordict=tensordict,
+        auto_reset=tensordict is None,
+    )
 
     if return_contiguous:
         fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
@@ -743,17 +755,17 @@ def check_env_specs(
         )
     # eliminate empty containers
     fake_tensordict_select = fake_tensordict.select(
-        *fake_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+        *fake_tensordict.keys(True, True, is_leaf=_default_is_leaf)
     )
     real_tensordict_select = real_tensordict.select(
-        *real_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+        *real_tensordict.keys(True, True, is_leaf=_default_is_leaf)
     )
     # check keys
     fake_tensordict_keys = set(
-        fake_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+        fake_tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
     )
     real_tensordict_keys = set(
-        real_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+        real_tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
     )
     if fake_tensordict_keys != real_tensordict_keys:
         raise AssertionError(
