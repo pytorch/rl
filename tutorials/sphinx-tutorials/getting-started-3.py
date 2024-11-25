@@ -152,7 +152,7 @@ buffer = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
 indices = buffer.extend(data)
 
 #################################
-# We can check that the buffer now has the same number of elements than what
+# We can check that the buffer now has the same number of elements as what
 # we got from the collector:
 
 assert len(buffer) == collector.frames_per_batch
@@ -174,7 +174,7 @@ print(sample)
 # Next steps
 # ----------
 #
-# - You can have look at other multirpocessed
+# - You can have look at other multiprocessed
 #   collectors such as :class:`~torchrl.collectors.collectors.MultiSyncDataCollector` or
 #   :class:`~torchrl.collectors.collectors.MultiaSyncDataCollector`.
 # - TorchRL also offers distributed collectors if you have multiple nodes to
