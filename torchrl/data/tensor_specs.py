@@ -1392,6 +1392,7 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
             spec.type_check(val)
 
     def is_in(self, value) -> bool:
+        raise RuntimeError
         if self.dim == 0 and not hasattr(value, "unbind"):
             # We don't use unbind because value could be a tuple or a nested tensor
             return all(
@@ -1820,6 +1821,7 @@ class OneHot(TensorSpec):
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
+        raise RuntimeError
         if self.mask is None:
             shape = torch.broadcast_shapes(self._safe_shape, val.shape)
             shape_match = val.shape == shape
@@ -2270,6 +2272,7 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
+        raise RuntimeError
         val_shape = _remove_neg_shapes(tensordict.utils._shape(val))
         shape = torch.broadcast_shapes(self._safe_shape, val_shape)
         shape = list(shape)
@@ -2467,6 +2470,7 @@ class NonTensor(TensorSpec):
         )
 
     def is_in(self, val: torch.Tensor) -> bool:
+        raise RuntimeError
         shape = torch.broadcast_shapes(self._safe_shape, val.shape)
         return (
             isinstance(val, NonTensorData)
@@ -2659,6 +2663,7 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         return torch.empty(shape, device=self.device, dtype=self.dtype).random_()
 
     def is_in(self, val: torch.Tensor) -> bool:
+        raise RuntimeError
         shape = torch.broadcast_shapes(self._safe_shape, val.shape)
         return val.shape == shape and val.dtype == self.dtype
 
@@ -3007,6 +3012,7 @@ class MultiOneHot(OneHot):
         return torch.cat(out, -1)
 
     def is_in(self, val: torch.Tensor) -> bool:
+        raise RuntimeError
         vals = self._split(val)
         if vals is None:
             return False
@@ -3352,6 +3358,7 @@ class Categorical(TensorSpec):
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
+        raise RuntimeError
         if self.mask is None:
             shape = torch.broadcast_shapes(self._safe_shape, val.shape)
             shape_match = val.shape == shape
@@ -3977,6 +3984,7 @@ class MultiCategorical(Categorical):
         return val.squeeze(0) if val_is_scalar else val
 
     def is_in(self, val: torch.Tensor) -> bool:
+        raise RuntimeError
         if self.mask is not None:
             vals = val.unbind(-1)
             splits = self._split_self()
