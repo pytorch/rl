@@ -955,7 +955,7 @@ class DuelingCnnDQNet(nn.Module):
             >>> cnn_kwargs = {
             ...     'num_cells': [32, 64, 64],
             ...     'strides': [4, 2, 1],
-            ...     'kernels': [8, 4, 3],
+            ...     'kernel_sizes': [8, 4, 3],
             ... }
 
         mlp_kwargs (dict or list of dicts, optional): kwargs for the advantage
