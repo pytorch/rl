@@ -298,12 +298,10 @@ class TestTokenizers:
                 "Lettuce in, it's cold out here!",
             ]
         }
-        if not truncation and return_tensordict and max_length == 10:
-            with pytest.raises(ValueError, match="TensorDict conversion only supports"):
-                out = process(example)
-            return
         out = process(example)
-        if return_tensordict:
+        if not truncation and return_tensordict and max_length == 10:
+            assert out.get("input_ids").shape[-1] == -1
+        elif return_tensordict:
             assert out.get("input_ids").shape[-1] == max_length
         else:
             obj = out.get("input_ids")
@@ -346,12 +344,10 @@ class TestTokenizers:
             ],
             "label": ["right", "wrong", "right", "wrong", "right"],
         }
-        if not truncation and return_tensordict and max_length == 10:
-            with pytest.raises(ValueError, match="TensorDict conversion only supports"):
-                out = process(example)
-            return
         out = process(example)
-        if return_tensordict:
+        if not truncation and return_tensordict and max_length == 10:
+            assert out.get("input_ids").shape[-1] == -1
+        elif return_tensordict:
             assert out.get("input_ids").shape[-1] == max_length
         else:
             obj = out.get("input_ids")
