@@ -822,7 +822,7 @@ class ClearCudaCache(TrainerHookBase):
             torch.cuda.empty_cache()
 
 
-class LogReward(TrainerHookBase):
+class LogScalar(TrainerHookBase):
     """Reward logger hook.
 
     Args:
@@ -833,7 +833,7 @@ class LogReward(TrainerHookBase):
             in the input batch. Defaults to ``("next", "reward")``
 
     Examples:
-        >>> log_reward = LogReward(("next", "reward"))
+        >>> log_reward = LogScalar(("next", "reward"))
         >>> trainer.register_op("pre_steps_log", log_reward)
 
     """
@@ -868,6 +868,20 @@ class LogReward(TrainerHookBase):
     def register(self, trainer: Trainer, name: str = "log_reward"):
         trainer.register_op("pre_steps_log", self)
         trainer.register_module(name, self)
+
+
+class LogReward(LogScalar):
+    """Deprecated class. Use LogScalar instead."""
+    def __init__(self, 
+                 logname="r_training", 
+                 log_pbar: bool = False,
+                 reward_key: Union[str, tuple] = None):
+        warnings.warn("The 'LogReward' class is deprecated and will be removed in a future release. Please use 'LogScalar' instead.",
+                      DeprecationWarning,
+                      stacklevel=2)
+        super().__init__(logname=logname, 
+                         log_pbar=log_pbar, 
+                         reward_key=reward_key)
 
 
 class RewardNormalizer(TrainerHookBase):
@@ -1127,7 +1141,7 @@ class BatchSubSampler(TrainerHookBase):
         trainer.register_module(name, self)
 
 
-class Recorder(TrainerHookBase):
+class LogValidationReward(TrainerHookBase):
     """Recorder hook for :class:`~torchrl.trainers.Trainer`.
 
     Args:
@@ -1262,6 +1276,39 @@ class Recorder(TrainerHookBase):
             "post_steps_log",
             self,
         )
+
+
+class Recorder(LogValidationReward):
+    """Deprecated class. Use LogValidationReward instead."""
+    def __init__(
+        self,
+        *,
+        record_interval: int,
+        record_frames: int,
+        frame_skip: int = 1,
+        policy_exploration: TensorDictModule,
+        environment: EnvBase = None,
+        exploration_type: ExplorationType = ExplorationType.RANDOM,
+        log_keys: Optional[List[Union[str, Tuple[str]]]] = None,
+        out_keys: Optional[Dict[Union[str, Tuple[str]], str]] = None,
+        suffix: Optional[str] = None,
+        log_pbar: bool = False,
+        recorder: EnvBase = None,
+    ) -> None:
+        warnings.warn("The 'Recorder' class is deprecated and will be removed in a future release. Please use 'LogValidationReward' instead.",
+                      DeprecationWarning,
+                      stacklevel=2)
+        super().__init__(record_interval=record_interval,
+                         record_frames=record_frames,
+                         frame_skip=frame_skip,
+                         policy_exploration=policy_exploration,
+                         environment=environment,
+                         exploration_type=exploration_type,
+                         log_keys=log_keys,
+                         out_keys=out_keys,
+                         suffix=suffix,
+                         log_pbar=log_pbar,
+                         recorder=recorder)
 
 
 class UpdateWeights(TrainerHookBase):

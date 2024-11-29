@@ -35,14 +35,14 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.trainers import Recorder, Trainer
+from torchrl.trainers import Trainer, LogValidationReward
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
     _has_ts,
     BatchSubSampler,
     CountFramesLog,
-    LogReward,
+    LogScalar,
     mask_batch,
     OptimizerHook,
     ReplayBufferTrainer,
@@ -638,7 +638,7 @@ class TestLogReward:
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
-        log_reward = LogReward(logname, log_pbar=pbar)
+        log_reward = LogScalar(logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
         td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
@@ -654,7 +654,7 @@ class TestLogReward:
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
-        log_reward = LogReward(logname, log_pbar=pbar)
+        log_reward = LogScalar(logname, log_pbar=pbar)
         log_reward.register(trainer)
         td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
@@ -873,7 +873,7 @@ class TestRecorder:
                 logger=logger,
             )()
 
-            recorder = Recorder(
+            recorder = LogValidationReward(
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
@@ -919,13 +919,13 @@ class TestRecorder:
         os.environ["CKPT_BACKEND"] = backend
         state_dict_has_been_called = [False]
         load_state_dict_has_been_called = [False]
-        Recorder.state_dict, Recorder_state_dict = _fun_checker(
-            Recorder.state_dict, state_dict_has_been_called
+        LogValidationReward.state_dict, Recorder_state_dict = _fun_checker(
+            LogValidationReward.state_dict, state_dict_has_been_called
         )
         (
-            Recorder.load_state_dict,
+            LogValidationReward.load_state_dict,
             Recorder_load_state_dict,
-        ) = _fun_checker(Recorder.load_state_dict, load_state_dict_has_been_called)
+        ) = _fun_checker(LogValidationReward.load_state_dict, load_state_dict_has_been_called)
 
         args = self._get_args()
 
@@ -948,7 +948,7 @@ class TestRecorder:
             )()
             environment.rollout(2)
 
-            recorder = Recorder(
+            recorder = LogValidationReward(
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
@@ -969,8 +969,8 @@ class TestRecorder:
             assert recorder2._count == 8
             assert state_dict_has_been_called[0]
             assert load_state_dict_has_been_called[0]
-        Recorder.state_dict = Recorder_state_dict
-        Recorder.load_state_dict = Recorder_load_state_dict
+        LogValidationReward.state_dict = Recorder_state_dict
+        LogValidationReward.load_state_dict = Recorder_load_state_dict
 
 
 def test_updateweights():
