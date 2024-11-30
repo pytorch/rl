@@ -872,16 +872,19 @@ class LogScalar(TrainerHookBase):
 
 class LogReward(LogScalar):
     """Deprecated class. Use LogScalar instead."""
-    def __init__(self, 
-                 logname="r_training", 
-                 log_pbar: bool = False,
-                 reward_key: Union[str, tuple] = None):
-        warnings.warn("The 'LogReward' class is deprecated and will be removed in a future release. Please use 'LogScalar' instead.",
-                      DeprecationWarning,
-                      stacklevel=2)
-        super().__init__(logname=logname, 
-                         log_pbar=log_pbar, 
-                         reward_key=reward_key)
+
+    def __init__(
+        self,
+        logname="r_training",
+        log_pbar: bool = False,
+        reward_key: Union[str, tuple] = None,
+    ):
+        warnings.warn(
+            "The 'LogReward' class is deprecated and will be removed in v0.9. Please use 'LogScalar' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(logname=logname, log_pbar=log_pbar, reward_key=reward_key)
 
 
 class RewardNormalizer(TrainerHookBase):
@@ -1280,6 +1283,7 @@ class LogValidationReward(TrainerHookBase):
 
 class Recorder(LogValidationReward):
     """Deprecated class. Use LogValidationReward instead."""
+
     def __init__(
         self,
         *,
@@ -1295,20 +1299,24 @@ class Recorder(LogValidationReward):
         log_pbar: bool = False,
         recorder: EnvBase = None,
     ) -> None:
-        warnings.warn("The 'Recorder' class is deprecated and will be removed in a future release. Please use 'LogValidationReward' instead.",
-                      DeprecationWarning,
-                      stacklevel=2)
-        super().__init__(record_interval=record_interval,
-                         record_frames=record_frames,
-                         frame_skip=frame_skip,
-                         policy_exploration=policy_exploration,
-                         environment=environment,
-                         exploration_type=exploration_type,
-                         log_keys=log_keys,
-                         out_keys=out_keys,
-                         suffix=suffix,
-                         log_pbar=log_pbar,
-                         recorder=recorder)
+        warnings.warn(
+            "The 'Recorder' class is deprecated and will be removed in v0.9. Please use 'LogValidationReward' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(
+            record_interval=record_interval,
+            record_frames=record_frames,
+            frame_skip=frame_skip,
+            policy_exploration=policy_exploration,
+            environment=environment,
+            exploration_type=exploration_type,
+            log_keys=log_keys,
+            out_keys=out_keys,
+            suffix=suffix,
+            log_pbar=log_pbar,
+            recorder=recorder,
+        )
 
 
 class UpdateWeights(TrainerHookBase):

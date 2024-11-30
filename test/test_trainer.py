@@ -35,7 +35,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.trainers import Trainer, LogValidationReward
+from torchrl.trainers import LogValidationReward, Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
@@ -922,10 +922,9 @@ class TestRecorder:
         LogValidationReward.state_dict, Recorder_state_dict = _fun_checker(
             LogValidationReward.state_dict, state_dict_has_been_called
         )
-        (
-            LogValidationReward.load_state_dict,
-            Recorder_load_state_dict,
-        ) = _fun_checker(LogValidationReward.load_state_dict, load_state_dict_has_been_called)
+        (LogValidationReward.load_state_dict, Recorder_load_state_dict,) = _fun_checker(
+            LogValidationReward.load_state_dict, load_state_dict_has_been_called
+        )
 
         args = self._get_args()
 
