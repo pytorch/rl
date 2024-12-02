@@ -3560,19 +3560,23 @@ def test_env_that_does_nothing():
     env = EnvThatDoesNothing()
     env.check_env_specs()
     r = env.rollout(3)
-    r_done = r.separates("done", "terminated", ("next", "done"), ("next", "terminated"))
+    r.exclude(
+        "done", "terminated", ("next", "done"), ("next", "terminated"), inplace=True
+    )
     assert r.is_empty()
     p_env = SerialEnv(2, EnvThatDoesNothing)
     p_env.check_env_specs()
     r = p_env.rollout(3)
-    r_done = r.separates("done", "terminated", ("next", "done"), ("next", "terminated"))
+    r.exclude(
+        "done", "terminated", ("next", "done"), ("next", "terminated"), inplace=True
+    )
     assert r.is_empty()
     p_env = ParallelEnv(2, EnvThatDoesNothing)
     try:
         p_env.check_env_specs()
         r = p_env.rollout(3)
-        r_done = r.separates(
-            "done", "terminated", ("next", "done"), ("next", "terminated")
+        r.exclude(
+            "done", "terminated", ("next", "done"), ("next", "terminated"), inplace=True
         )
         assert r.is_empty()
     finally:
