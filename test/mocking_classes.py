@@ -1996,3 +1996,17 @@ class EnvWithScalarAction(EnvBase):
 
     def _set_seed(self, seed: Optional[int]):
         ...
+
+
+class EnvThatDoesNothing(EnvBase):
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        return TensorDict(batch_size=self.batch_size, device=self.device)
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        return TensorDict(batch_size=self.batch_size, device=self.device)
+
+    def _set_seed(self, seed):
+        ...
