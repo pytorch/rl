@@ -126,10 +126,10 @@ class SACLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        skip_done_states (bool, optional): whether the actor network should only be run on valid, non-terminating
-            next states. If ``True``, it is assumed that the done state can be broadcast to the shape of the
-            data and that masking the data results in a valid data structure. Among other things, this may not
-            be true in MARL settings or when using RNNs. Defaults to ``False``.
+        skip_done_states (bool, optional): whether the actor network used for value computation should only be run on
+            valid, non-terminating next states. If ``True``, it is assumed that the done state can be broadcast to the
+            shape of the data and that masking the data results in a valid data structure. Among other things, this may
+            not be true in MARL settings or when using RNNs. Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -891,10 +891,10 @@ class DiscreteSACLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
-        skip_done_states (bool, optional): whether the actor network should only be run on valid, non-terminating
-            next states. If ``True``, it is assumed that the done state can be broadcast to the shape of the
-            data and that masking the data results in a valid data structure. Among other things, this may not
-            be true in MARL settings or when using RNNs. Defaults to ``False``.
+        skip_done_states (bool, optional): whether the actor network used for value computation should only be run on
+            valid, non-terminating next states. If ``True``, it is assumed that the done state can be broadcast to the
+            shape of the data and that masking the data results in a valid data structure. Among other things, this may
+            not be true in MARL settings or when using RNNs. Defaults to ``False``.
 
     Examples:
         >>> import torch
