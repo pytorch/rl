@@ -41,7 +41,7 @@ from tensordict import (
     unravel_key,
 )
 from tensordict.base import NO_DEFAULT
-from tensordict.utils import _getitem_batch_size, NestedKey
+from tensordict.utils import _getitem_batch_size, is_non_tensor, NestedKey
 from torchrl._utils import _make_ordinal_device, get_binary_env_var, implement_for
 
 DEVICE_TYPING = Union[torch.device, str, int]
@@ -2466,10 +2466,10 @@ class NonTensor(TensorSpec):
             data=None, batch_size=(*shape, *self._safe_shape), device=self.device
         )
 
-    def is_in(self, val: torch.Tensor) -> bool:
+    def is_in(self, val: Any) -> bool:
         shape = torch.broadcast_shapes(self._safe_shape, val.shape)
         return (
-            isinstance(val, NonTensorData)
+            is_non_tensor(val)
             and val.shape == shape
             # We relax constrains on device as they're hard to enforce for non-tensor
             #  tensordicts and pointless
@@ -4373,7 +4373,7 @@ class Composite(TensorSpec):
             shape = spec.shape
             if shape[: self.ndim] != self.shape:
                 if (
-                    isinstance(spec, Composite)
+                    isinstance(spec, (Composite, NonTensor))
                     and spec.ndim < self.ndim
                     and self.shape[: spec.ndim] == spec.shape
                 ):
@@ -4382,7 +4382,7 @@ class Composite(TensorSpec):
                     spec.shape = self.shape
                 else:
                     raise ValueError(
-                        "The shape of the spec and the Composite mismatch: the first "
+                        f"The shape of the spec {type(spec).__name__} and the Composite {type(self).__name__} mismatch: the first "
                         f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
                         f"Composite.shape={self.shape}."
                     )

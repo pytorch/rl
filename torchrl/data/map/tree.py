@@ -15,6 +15,7 @@ from tensordict import (
     TensorClass,
     TensorDict,
     TensorDictBase,
+    unravel_key,
 )
 from torchrl.data.map.tdstorage import TensorDictMap
 from torchrl.data.map.utils import _plot_plotly_box, _plot_plotly_tree
@@ -94,7 +95,7 @@ class Tree(TensorClass["nocast"]):
 
     @property
     def is_terminal(self):
-        """Returns True if the the tree has no children nodes."""
+        """Returns True if the tree has no children nodes."""
         return self.subtree is None
 
     def get_vertex_by_id(self, id: int) -> Tree:
@@ -163,9 +164,6 @@ class Tree(TensorClass["nocast"]):
             if h in memo and not use_path:
                 continue
             memo.add(h)
-            r = tree.rollout
-            if r is not None:
-                r = r["next", "observation"]
             if use_path:
                 result[cur_path] = tree
             elif use_id:
@@ -206,6 +204,14 @@ class Tree(TensorClass["nocast"]):
         )
 
     def edges(self) -> List[Tuple[int, int]]:
+        """Retrieves a list of edges in the tree.
+
+        Each edge is represented as a tuple of two node IDs: the parent node ID and the child node ID.
+        The tree is traversed using Breadth-First Search (BFS) to ensure all edges are visited.
+
+        Returns:
+            A list of tuples, where each tuple contains a parent node ID and a child node ID.
+        """
         result = []
         q = deque()
         parent = self.node_id
@@ -221,22 +227,62 @@ class Tree(TensorClass["nocast"]):
         return result
 
     def valid_paths(self):
+        """Generates all valid paths in the tree.
+
+        A valid path is a sequence of child indices that starts at the root node and ends at a leaf node.
+        Each path is represented as a tuple of integers, where each integer corresponds to the index of a child node.
+
+        Yields:
+            tuple: A valid path in the tree.
+        """
+        # Initialize a queue with the current tree node and an empty path
         q = deque()
         cur_path = ()
         q.append((self, cur_path))
+        # Perform BFS traversal of the tree
         while len(q):
+            # Dequeue the next tree node and its current path
             tree, cur_path = q.popleft()
+            # Get the number of child nodes
             n = int(tree.num_children)
+            # If this is a leaf node, yield the current path
             if not n:
                 yield cur_path
+            # Iterate over the child nodes
             for i in range(n):
                 cur_path_tree = cur_path + (i,)
                 q.append((tree.subtree[i], cur_path_tree))
 
     def max_length(self):
-        return max(*(len(path) for path in self.valid_paths()))
+        """Returns the maximum length of all valid paths in the tree.
+
+        The length of a path is defined as the number of nodes in the path.
+        If the tree is empty, returns 0.
+
+        Returns:
+            int: The maximum length of all valid paths in the tree.
+
+        """
+        lengths = tuple(len(path) for path in self.valid_paths())
+        if len(lengths) == 0:
+            return 0
+        elif len(lengths) == 1:
+            return lengths[0]
+        return max(*lengths)
 
     def rollout_from_path(self, path: Tuple[int]) -> TensorDictBase | None:
+        """Retrieves the rollout data along a given path in the tree.
+
+        The rollout data is concatenated along the last dimension (dim=-1) for each node in the path.
+        If no rollout data is found along the path, returns ``None``.
+
+        Args:
+            path: A tuple of integers representing the path in the tree.
+
+        Returns:
+            The concatenated rollout data along the path, or None if no data is found.
+
+        """
         r = self.rollout
         tree = self
         rollouts = []
@@ -272,8 +318,19 @@ class Tree(TensorClass["nocast"]):
         backend: str = "plotly",
         figure: str = "tree",
         info: List[str] = None,
-        make_labels: Callable[[Any], Any] | None = None,
+        make_labels: Callable[[Any, ...], Any] | None = None,
     ):
+        """Plots a visualization of the tree using the specified backend and figure type.
+
+        Args:
+            backend: The plotting backend to use. Currently only supports 'plotly'.
+            figure: The type of figure to plot. Can be either 'tree' or 'box'.
+            info: A list of additional information to include in the plot (not currently used).
+            make_labels: An optional function to generate custom labels for the plot.
+
+        Raises:
+            NotImplementedError: If an unsupported backend or figure type is specified.
+        """
         if backend == "plotly":
             if figure == "box":
                 _plot_plotly_box(self)
@@ -284,7 +341,7 @@ class Tree(TensorClass["nocast"]):
             else:
                 pass
         raise NotImplementedError(
-            f"Unkown plotting backend {backend} with figure {figure}."
+            f"Unknown plotting backend {backend} with figure {figure}."
         )
 
 
@@ -423,47 +480,99 @@ class MCTSForest:
         self.consolidated = consolidated
 
     @property
-    def done_keys(self):
+    def done_keys(self) -> List[NestedKey]:
+        """Done Keys.
+
+        Returns the keys used to indicate that an episode has ended.
+        The default done keys are "done", "terminated", and "truncated". These keys can be
+        used in the environment's output to signal the end of an episode.
+
+        Returns:
+            A list of strings representing the done keys.
+
+        """
         done_keys = getattr(self, "_done_keys", None)
         if done_keys is None:
-            self._done_keys = done_keys = ("done", "terminated", "truncated")
+            self._done_keys = done_keys = ["done", "terminated", "truncated"]
         return done_keys
 
     @done_keys.setter
     def done_keys(self, value):
+        if isinstance(value, (str, tuple)):
+            value = [value]
+        if value is not None:
+            value = [unravel_key(val) for val in value]
         self._done_keys = value
 
     @property
-    def reward_keys(self):
+    def reward_keys(self) -> List[NestedKey]:
+        """Reward Keys.
+
+        Returns the keys used to retrieve rewards from the environment's output.
+        The default reward key is "reward".
+
+        Returns:
+            A list of strings or tuples representing the reward keys.
+
+        """
         reward_keys = getattr(self, "_reward_keys", None)
         if reward_keys is None:
-            self._reward_keys = reward_keys = ("reward",)
+            self._reward_keys = reward_keys = ["reward"]
         return reward_keys
 
     @reward_keys.setter
     def reward_keys(self, value):
+        if isinstance(value, (str, tuple)):
+            value = [value]
+        if value is not None:
+            value = [unravel_key(val) for val in value]
         self._reward_keys = value
 
     @property
-    def action_keys(self):
+    def action_keys(self) -> List[NestedKey]:
+        """Action Keys.
+
+        Returns the keys used to retrieve actions from the environment's input.
+        The default action key is "action".
+
+        Returns:
+            A list of strings or tuples representing the action keys.
+
+        """
         action_keys = getattr(self, "_action_keys", None)
         if action_keys is None:
-            self._action_keys = action_keys = ("action",)
+            self._action_keys = action_keys = ["action"]
         return action_keys
 
     @action_keys.setter
     def action_keys(self, value):
+        if isinstance(value, (str, tuple)):
+            value = [value]
+        if value is not None:
+            value = [unravel_key(val) for val in value]
         self._action_keys = value
 
     @property
-    def observation_keys(self):
+    def observation_keys(self) -> List[NestedKey]:
+        """Observation Keys.
+
+        Returns the keys used to retrieve observations from the environment's output.
+        The default observation key is "observation".
+
+        Returns:
+            A list of strings or tuples representing the observation keys.
+        """
         observation_keys = getattr(self, "_observation_keys", None)
         if observation_keys is None:
-            self._observation_keys = observation_keys = ("observation",)
+            self._observation_keys = observation_keys = ["observation"]
         return observation_keys
 
     @observation_keys.setter
     def observation_keys(self, value):
+        if isinstance(value, (str, tuple)):
+            value = [value]
+        if value is not None:
+            value = [unravel_key(val) for val in value]
         self._observation_keys = value
 
     def get_keys_from_env(self, env: EnvBase):
@@ -482,8 +591,21 @@ class MCTSForest:
 
     @classmethod
     def _write_fn_stack(cls, new, old=None):
+        # This function updates the old values by adding the new ones
+        # if and only if the new ones are not there.
+        # If the old value is not provided, we assume there are none and the
+        # `new` is just prepared.
+        # This involves unsqueezing the last dim (since we'll be stacking tensors
+        # and calling unique).
+        # The update involves calling cat along the last dim + unique
+        # which will keep only the new values that were unknown to
+        # the storage.
+        # We use this method to track all the indices that are associated with
+        # an observation. Every time a new index is obtained, it is stacked alongside
+        # the others.
         if old is None:
-            result = new.apply(lambda x: x.unsqueeze(0), filter_empty=False)
+            # we unsqueeze the values to stack them along dim -1
+            result = new.apply(lambda x: x.unsqueeze(-1), filter_empty=False)
             result.set(
                 "count", torch.ones(result.shape, dtype=torch.int, device=result.device)
             )
@@ -493,8 +615,15 @@ class MCTSForest:
                 if name == "count":
                     return x
                 if y.ndim < x.ndim:
-                    y = y.unsqueeze(0)
-                result = torch.cat([x, y], 0).unique(dim=0, sorted=False)
+                    y = y.unsqueeze(-1)
+                result = torch.cat([x, y], -1)
+                # Breaks on mps
+                if result.device.type == "mps":
+                    result = result.cpu()
+                    result = result.unique(dim=-1, sorted=False)
+                    result = result.to("mps")
+                else:
+                    result = result.unique(dim=-1, sorted=False)
                 return result
 
             result = old.named_apply(cat, new, default=None)
@@ -543,11 +672,34 @@ class MCTSForest:
         # # Set the action in the 'next'
         # dest[1:] = source[:-1].exclude(*self.done_keys)
 
+        # Add ('observation', 'action') -> ('next, observation')
         self.data_map[source] = dest
         value = source
         if self.node_map is None:
             self._make_storage_branches(source, dest)
+        # map ('observation',) -> ('indices',)
         self.node_map[source] = TensorDict.lazy_stack(value.unbind(0))
+
+    def add(self, step):
+        source, dest = (
+            step.exclude("next").copy(),
+            step.select("next", *self.action_keys).copy(),
+        )
+
+        if self.data_map is None:
+            self._make_storage(source, dest)
+
+        # We need to set the action somewhere to keep track of what action lead to what child
+        # # Set the action in the 'next'
+        # dest[1:] = source[:-1].exclude(*self.done_keys)
+
+        # Add ('observation', 'action') -> ('next, observation')
+        self.data_map[source] = dest
+        value = source
+        if self.node_map is None:
+            self._make_storage_branches(source, dest)
+        # map ('observation',) -> ('indices',)
+        self.node_map[source] = value
 
     def get_child(self, root: TensorDictBase) -> TensorDictBase:
         return self.data_map[root]
@@ -582,6 +734,14 @@ class MCTSForest:
                 if not compact:
                     break
             else:
+                # If the root is provided and not gathered from the storage, it could be that its
+                # device doesn't match the data_map storage device.
+                device = getattr(self.data_map.storage, "device", None)
+                if root.device != device:
+                    if device is not None:
+                        root = root.to(self.data_map.storage.device)
+                    else:
+                        root.clear_device_()
                 index = None
                 break
         rollout = None

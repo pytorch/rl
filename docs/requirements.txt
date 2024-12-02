@@ -28,3 +28,7 @@ vmas
 onnxscript
 onnxruntime
 onnx
+plotly
+igraph
+transformers
+datasets

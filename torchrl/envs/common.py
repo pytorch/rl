@@ -14,8 +14,14 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key
-from tensordict.utils import NestedKey
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDictBase,
+    unravel_key,
+)
+from tensordict.base import _is_leaf_nontensor
+from tensordict.utils import is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
@@ -25,7 +31,13 @@ from torchrl._utils import (
     seed_generator,
 )
 
-from torchrl.data.tensor_specs import Categorical, Composite, TensorSpec, Unbounded
+from torchrl.data.tensor_specs import (
+    Categorical,
+    Composite,
+    NonTensor,
+    TensorSpec,
+    Unbounded,
+)
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _make_compatible_policy,
@@ -430,7 +442,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         done_key: NestedKey | List[NestedKey] | None = None,
         observation_key: NestedKey | List[NestedKey] = "observation",
         reward_key: NestedKey | List[NestedKey] = "reward",
-        batch_size: torch.Size | None = None,
     ):
         """Automatically sets the specifications (specs) of the environment based on a random rollout using a given policy.
 
@@ -484,6 +495,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict2,
             named=True,
             nested_keys=True,
+            is_leaf=_is_leaf_nontensor,
         )
         input_spec = Composite(input_spec_stack, batch_size=batch_size)
         if not self.batch_locked and batch_size != self.batch_size:
@@ -501,6 +513,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nexts_1,
             named=True,
             nested_keys=True,
+            is_leaf=_is_leaf_nontensor,
         )
 
         output_spec = Composite(output_spec_stack, batch_size=batch_size)
@@ -523,7 +536,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         full_observation_spec = output_spec.separates(*observation_key, default=None)
         if not output_spec.is_empty(recurse=True):
             raise RuntimeError(
-                f"Keys {list(output_spec.keys(True, True))} are unaccounted for."
+                f"Keys {list(output_spec.keys(True, True))} are unaccounted for. "
+                f"Make sure you have passed all the leaf names to the auto_specs_ method."
             )
 
         if full_action_spec is not None:
@@ -2995,6 +3009,52 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self.__dict__["_done_keys"] = None
         return self
 
+    def step_mdp(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        """Advances the environment state by one step using the provided `next_tensordict`.
+
+        This method updates the environment's state by transitioning from the current
+        state to the next, as defined by the `next_tensordict`. The resulting tensordict
+        includes updated observations and any other relevant state information, with
+        keys managed according to the environment's specifications.
+
+        Internally, this method utilizes a precomputed :class:`~torchrl.envs.utils._StepMDP` instance to efficiently
+        handle the transition of state, observation, action, reward, and done keys. The
+        :class:`~torchrl.envs.utils._StepMDP` class optimizes the process by precomputing the keys to include and
+        exclude, reducing runtime overhead during repeated calls. The :class:`~torchrl.envs.utils._StepMDP` instance
+        is created with `exclude_action=False`, meaning that action keys are retained in
+        the root tensordict.
+
+        Args:
+            next_tensordict (TensorDictBase): A tensordict containing the state of the
+                environment at the next time step. This tensordict should include keys
+                for observations, actions, rewards, and done flags, as defined by the
+                environment's specifications.
+
+        Returns:
+            TensorDictBase: A new tensordict representing the environment state after
+            advancing by one step.
+
+        .. note:: The method ensures that the environment's key specifications are validated
+              against the provided `next_tensordict`, issuing warnings if discrepancies
+              are found.
+
+        .. note:: This method is designed to work efficiently with environments that have
+              consistent key specifications, leveraging the `_StepMDP` class to minimize
+              overhead.
+
+        Example:
+            >>> from torchrl.envs import GymEnv
+            >>> env = GymEnv("Pendulum-1")
+            >>> data = env.reset()
+            >>> for i in range(10):
+            ...     # compute action
+            ...     env.rand_action(data)
+            ...     # Perform action
+            ...     next_data = env.step(reset_data)
+            ...     data = env.step_mdp(next_data)
+        """
+        return self._step_mdp(next_tensordict)
+
     @property
     def _step_mdp(self):
         step_func = self.__dict__.get("_step_mdp_value")
@@ -3568,6 +3628,12 @@ def _has_dynamic_specs(spec: Composite):
 
 
 def _tensor_to_spec(name, leaf, leaf_compare=None, *, stack):
+    if not (isinstance(leaf, torch.Tensor) or is_tensor_collection(leaf)):
+        stack[name] = NonTensor(shape=())
+        return
+    elif is_non_tensor(leaf):
+        stack[name] = NonTensor(shape=leaf.shape)
+        return
     shape = leaf.shape
     if leaf_compare is not None:
         shape_compare = leaf_compare.shape

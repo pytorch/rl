@@ -3526,8 +3526,13 @@ def test_single_env_spec():
     assert env.input_spec.is_in(env.input_spec_unbatched.zeros(env.shape))
 
 
-def test_auto_spec():
-    env = CountingEnv()
+@pytest.mark.parametrize("env_type", [CountingEnv, EnvWithMetadata])
+def test_auto_spec(env_type):
+    if env_type is EnvWithMetadata:
+        obs_vals = ["tensor", "non_tensor"]
+    else:
+        obs_vals = "observation"
+    env = env_type()
     td = env.reset()
 
     policy = lambda td, action_spec=env.full_action_spec.clone(): td.update(
@@ -3550,7 +3555,7 @@ def test_auto_spec():
         shape=env.full_state_spec.shape, device=env.full_state_spec.device
     )
     env._action_keys = ["action"]
-    env.auto_specs_(policy, tensordict=td.copy())
+    env.auto_specs_(policy, tensordict=td.copy(), observation_key=obs_vals)
     env.check_env_specs(tensordict=td.copy())
 
 
