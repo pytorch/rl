@@ -615,3 +615,8 @@ def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimize
             raise ValueError("Cannot group optimizers of different type.")
         params.extend(optimizer.param_groups)
     return cls(params)
+
+
+def _sum_td_features(data: TensorDictBase) -> torch.Tensor:
+    # Sum all features and return a tensor
+    return data.sum(dim="feature", reduce=True)
