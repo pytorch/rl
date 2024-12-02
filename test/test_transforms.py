@@ -41,6 +41,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         CountingEnvCountPolicy,
         DiscreteActionConvMockEnv,
         DiscreteActionConvMockEnvNumpy,
+        EnvWithScalarAction,
         IncrementingEnv,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
@@ -66,6 +67,7 @@ else:
         CountingEnvCountPolicy,
         DiscreteActionConvMockEnv,
         DiscreteActionConvMockEnvNumpy,
+        EnvWithScalarAction,
         IncrementingEnv,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
@@ -11781,17 +11783,33 @@ class TestBatchSizeTransform(TransformBase):
 
 class TestActionDiscretizer(TransformBase):
     @pytest.mark.parametrize("categorical", [True, False])
-    def test_single_trans_env_check(self, categorical):
-        base_env = ContinuousActionVecMockEnv()
+    @pytest.mark.parametrize(
+        "env_cls",
+        [
+            ContinuousActionVecMockEnv,
+            partial(EnvWithScalarAction, singleton=True),
+            partial(EnvWithScalarAction, singleton=False),
+        ],
+    )
+    def test_single_trans_env_check(self, categorical, env_cls):
+        base_env = env_cls()
         env = base_env.append_transform(
             ActionDiscretizer(num_intervals=5, categorical=categorical)
         )
         check_env_specs(env)
 
     @pytest.mark.parametrize("categorical", [True, False])
-    def test_serial_trans_env_check(self, categorical):
+    @pytest.mark.parametrize(
+        "env_cls",
+        [
+            ContinuousActionVecMockEnv,
+            partial(EnvWithScalarAction, singleton=True),
+            partial(EnvWithScalarAction, singleton=False),
+        ],
+    )
+    def test_serial_trans_env_check(self, categorical, env_cls):
         def make_env():
-            base_env = ContinuousActionVecMockEnv()
+            base_env = env_cls()
             return base_env.append_transform(
                 ActionDiscretizer(num_intervals=5, categorical=categorical)
             )
@@ -11800,9 +11818,17 @@ class TestActionDiscretizer(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("categorical", [True, False])
-    def test_parallel_trans_env_check(self, categorical):
+    @pytest.mark.parametrize(
+        "env_cls",
+        [
+            ContinuousActionVecMockEnv,
+            partial(EnvWithScalarAction, singleton=True),
+            partial(EnvWithScalarAction, singleton=False),
+        ],
+    )
+    def test_parallel_trans_env_check(self, categorical, env_cls):
         def make_env():
-            base_env = ContinuousActionVecMockEnv()
+            base_env = env_cls()
             env = base_env.append_transform(
                 ActionDiscretizer(num_intervals=5, categorical=categorical)
             )
@@ -11812,17 +11838,33 @@ class TestActionDiscretizer(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("categorical", [True, False])
-    def test_trans_serial_env_check(self, categorical):
-        env = SerialEnv(2, ContinuousActionVecMockEnv).append_transform(
+    @pytest.mark.parametrize(
+        "env_cls",
+        [
+            ContinuousActionVecMockEnv,
+            partial(EnvWithScalarAction, singleton=True),
+            partial(EnvWithScalarAction, singleton=False),
+        ],
+    )
+    def test_trans_serial_env_check(self, categorical, env_cls):
+        env = SerialEnv(2, env_cls).append_transform(
             ActionDiscretizer(num_intervals=5, categorical=categorical)
         )
         check_env_specs(env)
 
     @pytest.mark.parametrize("categorical", [True, False])
-    def test_trans_parallel_env_check(self, categorical):
-        env = ParallelEnv(
-            2, ContinuousActionVecMockEnv, mp_start_method=mp_ctx
-        ).append_transform(ActionDiscretizer(num_intervals=5, categorical=categorical))
+    @pytest.mark.parametrize(
+        "env_cls",
+        [
+            ContinuousActionVecMockEnv,
+            partial(EnvWithScalarAction, singleton=True),
+            partial(EnvWithScalarAction, singleton=False),
+        ],
+    )
+    def test_trans_parallel_env_check(self, categorical, env_cls):
+        env = ParallelEnv(2, env_cls, mp_start_method=mp_ctx).append_transform(
+            ActionDiscretizer(num_intervals=5, categorical=categorical)
+        )
         check_env_specs(env)
 
     def test_transform_no_env(self):
@@ -11838,7 +11880,6 @@ class TestActionDiscretizer(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
-    @pytest.mark.parametrize("envname", ["cheetah", "pendulum"])
     @pytest.mark.parametrize("interval_as_tensor", [False, True])
     @pytest.mark.parametrize("categorical", [True, False])
     @pytest.mark.parametrize(
@@ -11851,15 +11892,37 @@ class TestActionDiscretizer(TransformBase):
             ActionDiscretizer.SamplingStrategy.RANDOM,
         ],
     )
-    def test_transform_env(self, envname, interval_as_tensor, categorical, sampling):
+    @pytest.mark.parametrize(
+        "env_cls",
+        [
+            "cheetah",
+            "pendulum",
+            partial(EnvWithScalarAction, singleton=True),
+            partial(EnvWithScalarAction, singleton=False),
+        ],
+    )
+    def test_transform_env(self, env_cls, interval_as_tensor, categorical, sampling):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        base_env = GymEnv(
-            HALFCHEETAH_VERSIONED() if envname == "cheetah" else PENDULUM_VERSIONED(),
-            device=device,
-        )
-        if interval_as_tensor:
-            num_intervals = torch.arange(5, 11 if envname == "cheetah" else 6)
+        if env_cls == "cheetah":
+            base_env = GymEnv(
+                HALFCHEETAH_VERSIONED(),
+                device=device,
+            )
+            num_intervals = torch.arange(5, 11)
+        elif env_cls == "pendulum":
+            base_env = GymEnv(
+                PENDULUM_VERSIONED(),
+                device=device,
+            )
+            num_intervals = torch.arange(5, 6)
         else:
+            base_env = env_cls(
+                device=device,
+            )
+            num_intervals = torch.arange(5, 6)
+
+        if not interval_as_tensor:
+            # override
             num_intervals = 5
         t = ActionDiscretizer(
             num_intervals=num_intervals,
