@@ -1927,3 +1927,72 @@ class EnvWithDynamicSpec(EnvBase):
     def _set_seed(self, seed: Optional[int]):
         self.manual_seed = seed
         return seed
+
+
+class EnvWithScalarAction(EnvBase):
+    def __init__(self, singleton: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.singleton = singleton
+        self.action_spec = Bounded(
+            -1,
+            1,
+            shape=(
+                *self.batch_size,
+                1,
+            )
+            if self.singleton
+            else self.batch_size,
+        )
+        self.observation_spec = Composite(
+            observation=Unbounded(
+                shape=(
+                    *self.batch_size,
+                    3,
+                )
+            ),
+            shape=self.batch_size,
+        )
+        self.done_spec = Composite(
+            done=Unbounded(self.batch_size + (1,), dtype=torch.bool),
+            terminated=Unbounded(self.batch_size + (1,), dtype=torch.bool),
+            truncated=Unbounded(self.batch_size + (1,), dtype=torch.bool),
+            shape=self.batch_size,
+        )
+        self.reward_spec = Unbounded(
+            shape=(
+                *self.batch_size,
+                1,
+            )
+        )
+
+    def _reset(self, td: TensorDict):
+        return TensorDict(
+            observation=torch.randn(*self.batch_size, 3, device=self.device),
+            done=torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
+            truncated=torch.zeros(
+                *self.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
+            terminated=torch.zeros(
+                *self.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
+            device=self.device,
+        )
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        return TensorDict(
+            observation=torch.randn(*self.batch_size, 3, device=self.device),
+            reward=torch.zeros(1, device=self.device),
+            done=torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
+            truncated=torch.zeros(
+                *self.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
+            terminated=torch.zeros(
+                *self.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
+        )
+
+    def _set_seed(self, seed: Optional[int]):
+        ...
