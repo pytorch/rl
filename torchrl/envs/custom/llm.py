@@ -149,8 +149,7 @@ class LLMHashingEnv(EnvBase):
         return out.update(kwargs)
 
     def _set_seed(self, *args):
-        """
-        Sets the seed for the environment's randomness.
+        """Sets the seed for the environment's randomness.
 
         .. note:: This environment has no randomness, so this method does nothing.
         """
