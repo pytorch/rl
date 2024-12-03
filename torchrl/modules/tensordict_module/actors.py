@@ -153,14 +153,14 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
-        default_interaction_type (str, optional): keyword-only argument.
+        default_interaction_type (tensordict.nn.InteractionType, optional): keyword-only argument.
             Default method to be used to retrieve
-            the output value. Should be one of: 'InteractionType.MODE', 'InteractionType.DETERMINISTIC',
-            'InteractionType.MEDIAN', 'InteractionType.MEAN' or
-            'InteractionType.RANDOM' (in which case the value is sampled
+            the output value. Should be one of: ``InteractionType.MODE``, ``InteractionType.DETERMINISTIC``,
+            ``InteractionType.MEDIAN``, ``InteractionType.MEAN`` or
+            ``InteractionType.RANDOM`` (in which case the value is sampled
             randomly from the distribution).
             TorchRL's ``ExplorationType`` class is a proxy to ``InteractionType``.
-            Defaults to is 'InteractionType.DETERMINISTIC'.
+            Defaults to ``InteractionType.DETERMINISTIC``.
 
             .. note:: When a sample is drawn, the :class:`ProbabilisticActor` instance will
               first look for the interaction mode dictated by the
