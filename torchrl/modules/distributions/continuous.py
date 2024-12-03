@@ -205,8 +205,8 @@ class TruncatedNormal(D.Independent):
 
             Default is 5.0
 
-        min (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
-        max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
+        low (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
+        high (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
         tanh_loc (bool, optional): if ``True``, the above formula is used for
             the location scaling, otherwise the raw value is kept.
             Default is ``False``;
