@@ -28,8 +28,6 @@ each step, and selecting the top-scoring candidates to move forward to the next 
 import argparse
 
 import torch
-
-import torchrl.data
 import tqdm
 from tensordict import NonTensorStack, TensorDict
 from tensordict.nn import (
@@ -37,15 +35,14 @@ from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
 )
-from tensordict.tensorclass import NonTensorData
 from torch.distributions import Categorical
 
 from torchrl._utils import _make_ordinal_device
-from torchrl.data import MCTSForest, SipHash
-from torchrl.envs import EnvBase
-from torchrl.envs.common import _StepMDP
+from torchrl.data import MCTSForest
 from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer, pipeline
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
+
+from torchrl.envs import LLMHashingEnv
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", choices=["llama3.1", "gpt2"], default="gpt2")
@@ -98,7 +95,6 @@ elif args.model == "llama3.1":
     else:
         device = "cpu"
 
-
 torch.set_default_device(device)
 
 text_to_tensor = Seq(
@@ -111,6 +107,7 @@ td = TensorDict(
     batch_size=[4],
 )
 print(text_to_tensor(td))
+
 
 ################################################
 # Define the policy
@@ -187,117 +184,41 @@ policy = Seq(
 )
 
 ################################################
-# Build the hash module
-# ---------------------
+# LLM Environment with Hashing
+# ----------------------------
 #
-# We are going to build a hash module to mark each step in the dataset. In theory, observations could be used directly
-# but the shape of each observation in the rollout will differ because the number of tokens is different at each step
-# of the trajectory.
+# This environment represents a dataset of text sequences as a Markov Decision Process (MDP), where each observation is
+# reduced to a unique integer using a hashing module.
 #
-# Using a hashing module, we can reduce every observation to an integer. Although we cannot recover the prompt directly
-# from the hash, we can easily recover this by concatenating the previous actions with the initial prompt.
+# By hashing observations, we can efficiently store and retrieve them: instead of identifying nodes with their
+# associated (observation, action) pair, we use a (hash, action) pair. This approach has multiple advantages:
 #
+# - Observations have a variable shape, making it hard to preallocate storage or store them contiguously and efficiently
+#   in memory.
+# - Using observations directly incurs extra memory cost as duplicated data will be stored (since successive steps in a
+#   branch share several tokens). Successive nodes only differ by an extra action (i.e., an extra token), and
+#   lateral (sibling) nodes differ only by their action.
+#   The only information we need to store is the action associated with the node itself. To reconstruct the sequence of
+#   tokens up to a certain node, we concatenate the actions along the path to that node - an operation for which
+#   torchrl has all the necessary tooling.
+#
+# The environment has two main methods: `_reset`, which initializes the environment with a given observation, and `_step`, which takes an action (i.e., the next token in the sequence) and returns the updated observation.
 #
 # .. figure:: /_static/img/rollout-llm.png
 #    :alt: Data collection loop with our LLM environment.
 #
-siphash = SipHash()
 
-
-################################################
-# Build the environment
-# ---------------------
-#
-# We define an environment that simulates the text generation process.
-# The environment has two main methods: _reset, which initializes the environment with a given observation, and
-# _step, which takes an action (i.e., the next token to generate) and returns the next observation and reward.
-
-
-class LLMEnv(EnvBase):
-    def __init__(self):
-        super().__init__()
-        self._batch_locked = False
-        _StepMDP(self)
-
-    def _reset(self, tensordict):
-        out = tensordict.copy()
-        obs = out["observation"]
-        if obs.ndim > 1:
-            text = tokenizer.batch_decode(obs)
-            text = NonTensorStack.from_list(text)
-        else:
-            text = tokenizer.decode(obs)
-            text = NonTensorData(text)
-        out["text"] = text
-
-        if obs.ndim > 1:
-            out["hash"] = siphash(out["observation"]).unsqueeze(-1)
-        else:
-            out["hash"] = siphash(out["observation"].unsqueeze(0)).transpose(0, -1)
-
-        if not self.full_done_spec.is_empty():
-            out.update(self.full_done_spec.zero(tensordict.shape))
-        else:
-            out.set("done", torch.zeros((*tensordict.batch_size, 1), dtype=torch.bool))
-            out.set(
-                "terminated", torch.zeros((*tensordict.batch_size, 1), dtype=torch.bool)
-            )
-        return out
-
-    def _step(self, tensordict):
-        action = tensordict.get("action")
-        obs = torch.cat([tensordict.get("observation"), action], -1)
-
-        catval = torch.cat([tensordict.get("hash"), action], -1)
-        if obs.ndim > 1:
-            new_hash = siphash(catval).unsqueeze(-1)
-        else:
-            new_hash = siphash(catval.unsqueeze(0)).transpose(0, -1)
-
-        if obs.ndim > 1:
-            text = tokenizer.batch_decode(obs)
-            text = NonTensorStack.from_list(text)
-        else:
-            text = tokenizer.decode(obs)
-            text = NonTensorData(text)
-        return TensorDict(
-            observation=obs,
-            hash=new_hash,
-            text=text,
-            reward=torch.zeros((*tensordict.batch_size, 1)),
-            done=torch.zeros((*tensordict.batch_size, 1), dtype=torch.bool),
-            terminated=torch.zeros((*tensordict.batch_size, 1), dtype=torch.bool),
-            batch_size=tensordict.batch_size,
-        )
-
-    def _set_seed(self, *args):
-        pass
-
-
-env = LLMEnv()
+env = LLMHashingEnv(vocab_size=tokenizer.vocab_size, tokenizer=tokenizer)
 
 ################################################
-# Define specs
-# ------------
+# Check specs
+# -----------
 #
-
-policy = policy.select_out_keys("action")
+# Verify that the environment's observation and action specs match the input data.
 
 x = tokenizer(["Check out TorchRL!"])["input_ids"]
-td = TensorDict(observation=x, batch_size=[1]).repeat_interleave(args.beta)
+td = TensorDict(observation=x, batch_size=[1])
 td = env.reset(td)
-print("data after reset", td)
-print("action", policy(td))
-# We must indicate what the observations are
-env.auto_specs_(policy, tensordict=td, observation_key=["observation", "text", "hash"])
-print(env.specs)
-# Reset out keys - we want them all
-policy.reset_out_keys()
-policy = policy.select_out_keys("action", "logits_select")
-
-td = TensorDict(observation=x, batch_size=[1]).repeat_interleave(args.beta, dim=0)
-td = env.reset(td)
-env.action_spec = torchrl.data.Categorical(n=tokenizer.vocab_size, shape=(1,))
 env.check_env_specs(tensordict=td, return_contiguous=False)
 
 ################################################

@@ -321,8 +321,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         t_collect_init = time.time()
 
-    test_env.close()
-    train_env.close()
+    if not test_env.is_closed:
+        test_env.close()
+    if not train_env.is_closed:
+        train_env.close()
     collector.shutdown()
 
     del test_env

@@ -2448,8 +2448,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             apply_api_compatibility=apply_api_compatibility,
         )
 
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise NotImplementedError("EnvBase.forward is not implemented")
+    def forward(self, *args, **kwargs):
+        raise NotImplementedError(
+            "EnvBase.forward is not implemented. If you ended here during a call to `ParallelEnv(...)`, please use "
+            "a constructor such as `ParallelEnv(num_env, lambda env=env: env)` instead. "
+            "Batched envs require constructors because environment instances may not always be serializable."
+        )
 
     @abc.abstractmethod
     def _step(

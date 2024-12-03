@@ -44,6 +44,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DiscreteActionConvMockEnvNumpy,
         DiscreteActionVecMockEnv,
         DummyModelBasedEnvBase,
+        EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
         HeterogeneousCountingEnv,
@@ -81,6 +82,7 @@ else:
         DiscreteActionConvMockEnvNumpy,
         DiscreteActionVecMockEnv,
         DummyModelBasedEnvBase,
+        EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
         HeterogeneousCountingEnv,
@@ -3557,6 +3559,34 @@ def test_auto_spec(env_type):
     env._action_keys = ["action"]
     env.auto_specs_(policy, tensordict=td.copy(), observation_key=obs_vals)
     env.check_env_specs(tensordict=td.copy())
+
+
+def test_env_that_does_nothing():
+    env = EnvThatDoesNothing()
+    env.check_env_specs()
+    r = env.rollout(3)
+    r.exclude(
+        "done", "terminated", ("next", "done"), ("next", "terminated"), inplace=True
+    )
+    assert r.is_empty()
+    p_env = SerialEnv(2, EnvThatDoesNothing)
+    p_env.check_env_specs()
+    r = p_env.rollout(3)
+    r.exclude(
+        "done", "terminated", ("next", "done"), ("next", "terminated"), inplace=True
+    )
+    assert r.is_empty()
+    p_env = ParallelEnv(2, EnvThatDoesNothing)
+    try:
+        p_env.check_env_specs()
+        r = p_env.rollout(3)
+        r.exclude(
+            "done", "terminated", ("next", "done"), ("next", "terminated"), inplace=True
+        )
+        assert r.is_empty()
+    finally:
+        p_env.close()
+        del p_env
 
 
 if __name__ == "__main__":

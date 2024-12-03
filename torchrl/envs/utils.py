@@ -287,6 +287,8 @@ class _StepMDP:
         if self.validate(tensordict):
             if self.keep_other:
                 out = self._exclude(self.exclude_from_root, tensordict, out=None)
+                if out is None:
+                    out = tensordict.empty()
             else:
                 out = next_td.empty()
                 self._grab_and_place(
