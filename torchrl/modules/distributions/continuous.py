@@ -554,7 +554,7 @@ class TanhNormal(FasterTransformedDistribution):
     def mean(self):
         raise NotImplementedError(
             f"{type(self).__name__} does not have a closed form formula for the average. "
-            "Am estimate of this value can be computed using dist.sample((N,)).mean(dim=0), "
+            "An estimate of this value can be computed using dist.sample((N,)).mean(dim=0), "
             "where N is a large number of samples."
         )
 
