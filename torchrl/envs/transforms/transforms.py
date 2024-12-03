@@ -8583,56 +8583,68 @@ class ActionDiscretizer(Transform):
             f"\n{_indent(out_action_key)},\n{_indent(sampling)},\n{_indent(categorical)})"
         )
 
+    def _custom_arange(self, nint, device):
+        result = torch.arange(
+            start=0.0,
+            end=1.0,
+            step=1 / nint,
+            dtype=self.dtype,
+            device=device,
+        )
+        result_ = result
+        if self.sampling in (
+            self.SamplingStrategy.HIGH,
+            self.SamplingStrategy.MEDIAN,
+        ):
+            result_ = (1 - result).flip(0)
+        if self.sampling == self.SamplingStrategy.MEDIAN:
+            result = (result + result_) / 2
+        else:
+            result = result_
+        return result
+
     def transform_input_spec(self, input_spec):
         try:
-            action_spec = input_spec["full_action_spec", self.in_keys_inv[0]]
+            action_spec = self.parent.full_action_spec_unbatched[self.in_keys_inv[0]]
             if not isinstance(action_spec, Bounded):
                 raise TypeError(
-                    f"action spec type {type(action_spec)} is not supported."
+                    f"action spec type {type(action_spec)} is not supported. The action spec type must be Bounded."
                 )
 
             n_act = action_spec.shape
             if not n_act:
-                n_act = 1
+                n_act = ()
+                empty_shape = True
             else:
-                n_act = n_act[-1]
+                n_act = (n_act[-1],)
+                empty_shape = False
             self.n_act = n_act
 
             self.dtype = action_spec.dtype
-            interval = (action_spec.high - action_spec.low).unsqueeze(-1)
+            interval = action_spec.high - action_spec.low
 
             num_intervals = self.num_intervals
 
-            def custom_arange(nint):
-                result = torch.arange(
-                    start=0.0,
-                    end=1.0,
-                    step=1 / nint,
-                    dtype=self.dtype,
-                    device=action_spec.device,
-                )
-                result_ = result
-                if self.sampling in (
-                    self.SamplingStrategy.HIGH,
-                    self.SamplingStrategy.MEDIAN,
-                ):
-                    result_ = (1 - result).flip(0)
-                if self.sampling == self.SamplingStrategy.MEDIAN:
-                    result = (result + result_) / 2
-                else:
-                    result = result_
-                return result
+            if not empty_shape:
+                interval = interval.unsqueeze(-1)
+            elif isinstance(num_intervals, torch.Tensor):
+                num_intervals = int(num_intervals.squeeze())
+                self.num_intervals = torch.as_tensor(num_intervals)
 
             if isinstance(num_intervals, int):
                 arange = (
-                    custom_arange(num_intervals).expand(n_act, num_intervals) * interval
+                    self._custom_arange(num_intervals, action_spec.device).expand(
+                        (*n_act, num_intervals)
+                    )
+                    * interval
                 )
-                self.register_buffer(
-                    "intervals", action_spec.low.unsqueeze(-1) + arange
-                )
+                low = action_spec.low
+                if not empty_shape:
+                    low = low.unsqueeze(-1)
+                self.register_buffer("intervals", low + arange)
             else:
                 arange = [
-                    custom_arange(_num_intervals) * interval
+                    self._custom_arange(_num_intervals, action_spec.device) * interval
                     for _num_intervals, interval in zip(
                         num_intervals.tolist(), interval.unbind(-2)
                     )
@@ -8644,12 +8656,6 @@ class ActionDiscretizer(Transform):
                     )
                 ]
 
-            cls = (
-                functools.partial(MultiCategorical, remove_singleton=False)
-                if self.categorical
-                else MultiOneHot
-            )
-
             if not isinstance(num_intervals, torch.Tensor):
                 nvec = torch.as_tensor(num_intervals, device=action_spec.device)
             else:
@@ -8657,7 +8663,10 @@ class ActionDiscretizer(Transform):
             if nvec.ndim > 1:
                 raise RuntimeError(f"Cannot use num_intervals with shape {nvec.shape}")
             if nvec.ndim == 0 or nvec.numel() == 1:
-                nvec = nvec.expand(action_spec.shape[-1])
+                if not empty_shape:
+                    nvec = nvec.expand(action_spec.shape[-1])
+                else:
+                    nvec = nvec.squeeze()
             self.register_buffer("nvec", nvec)
             if self.sampling == self.SamplingStrategy.RANDOM:
                 # compute jitters
@@ -8667,7 +8676,22 @@ class ActionDiscretizer(Transform):
                 if self.categorical
                 else (*action_spec.shape[:-1], nvec.sum())
             )
-            action_spec = cls(nvec=nvec, shape=shape, device=action_spec.device)
+
+            if not empty_shape:
+                cls = (
+                    functools.partial(MultiCategorical, remove_singleton=False)
+                    if self.categorical
+                    else MultiOneHot
+                )
+                action_spec = cls(nvec=nvec, shape=shape, device=action_spec.device)
+
+            else:
+                cls = Categorical if self.categorical else OneHot
+                action_spec = cls(n=int(nvec), shape=shape, device=action_spec.device)
+
+            batch_size = self.parent.batch_size
+            if batch_size:
+                action_spec = action_spec.expand(batch_size + action_spec.shape)
             input_spec["full_action_spec", self.out_keys_inv[0]] = action_spec
 
             if self.out_keys_inv[0] != self.in_keys_inv[0]:
@@ -8705,6 +8729,8 @@ class ActionDiscretizer(Transform):
         if self.categorical:
             action = action.unsqueeze(-1)
             if isinstance(intervals, torch.Tensor):
+                shape = action.shape[: -intervals.ndim]
+                intervals = intervals.expand(shape + intervals.shape)
                 action = intervals.gather(index=action, dim=-1).squeeze(-1)
             else:
                 action = torch.stack(
@@ -8715,17 +8741,26 @@ class ActionDiscretizer(Transform):
                     -1,
                 )
         else:
-            nvec = self.nvec.tolist()
-            action = action.split(nvec, dim=-1)
-            if isinstance(intervals, torch.Tensor):
-                intervals = intervals.unbind(-2)
-            action = torch.stack(
-                [
-                    intervals[action].view(action.shape[:-1])
-                    for (intervals, action) in zip(intervals, action)
-                ],
-                -1,
-            )
+            nvec = self.nvec
+            empty_shape = not nvec.ndim
+            if not empty_shape:
+                nvec = nvec.tolist()
+                if isinstance(intervals, torch.Tensor):
+                    shape = action.shape[: (-intervals.ndim + 1)]
+                    intervals = intervals.expand(shape + intervals.shape)
+                    intervals = intervals.unbind(-2)
+                action = action.split(nvec, dim=-1)
+                action = torch.stack(
+                    [
+                        intervals[action].view(action.shape[:-1])
+                        for (intervals, action) in zip(intervals, action)
+                    ],
+                    -1,
+                )
+            else:
+                shape = action.shape[: -intervals.ndim]
+                intervals = intervals.expand(shape + intervals.shape)
+                action = intervals[action].squeeze(-1)
 
         if self.sampling == self.SamplingStrategy.RANDOM:
             action = action + self.jitters * torch.rand_like(self.jitters)

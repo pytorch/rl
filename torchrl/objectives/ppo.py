@@ -18,6 +18,7 @@ from tensordict import (
     TensorDictParams,
 )
 from tensordict.nn import (
+    CompositeDistribution,
     dispatch,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
@@ -33,6 +34,7 @@ from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
+    _sum_td_features,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -462,9 +464,13 @@ class PPOLoss(LossModule):
 
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
         try:
-            entropy = dist.entropy()
+            if isinstance(dist, CompositeDistribution):
+                kwargs = {"aggregate_probabilities": False, "include_sum": False}
+            else:
+                kwargs = {}
+            entropy = dist.entropy(**kwargs)
             if is_tensor_collection(entropy):
-                entropy = entropy.get(dist.entropy_key)
+                entropy = _sum_td_features(entropy)
         except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
             log_prob = dist.log_prob(x)
@@ -497,13 +503,20 @@ class PPOLoss(LossModule):
         if isinstance(action, torch.Tensor):
             log_prob = dist.log_prob(action)
         else:
-            maybe_log_prob = dist.log_prob(tensordict)
-            if not isinstance(maybe_log_prob, torch.Tensor):
-                # In some cases (Composite distribution with aggregate_probabilities toggled off) the returned type may not
-                # be a tensor
-                log_prob = maybe_log_prob.get(self.tensor_keys.sample_log_prob)
+            if isinstance(dist, CompositeDistribution):
+                is_composite = True
+                kwargs = {
+                    "inplace": False,
+                    "aggregate_probabilities": False,
+                    "include_sum": False,
+                }
             else:
-                log_prob = maybe_log_prob
+                is_composite = False
+                kwargs = {}
+            log_prob = dist.log_prob(tensordict, **kwargs)
+            if is_composite and not isinstance(prev_log_prob, TensorDict):
+                log_prob = _sum_td_features(log_prob)
+                log_prob.view_as(prev_log_prob)
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
@@ -598,6 +611,9 @@ class PPOLoss(LossModule):
             advantage = (advantage - loc) / scale
 
         log_weight, dist, kl_approx = self._log_weight(tensordict)
+        if is_tensor_collection(log_weight):
+            log_weight = _sum_td_features(log_weight)
+            log_weight = log_weight.view(advantage.shape)
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
         if self.entropy_bonus:
@@ -1149,16 +1165,19 @@ class KLPENPPOLoss(PPOLoss):
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
-            previous_log_prob = previous_dist.log_prob(x)
-            current_log_prob = current_dist.log_prob(x)
+            if isinstance(previous_dist, CompositeDistribution):
+                kwargs = {
+                    "aggregate_probabilities": False,
+                    "inplace": False,
+                    "include_sum": False,
+                }
+            else:
+                kwargs = {}
+            previous_log_prob = previous_dist.log_prob(x, **kwargs)
+            current_log_prob = current_dist.log_prob(x, **kwargs)
             if is_tensor_collection(current_log_prob):
-                previous_log_prob = previous_log_prob.get(
-                    self.tensor_keys.sample_log_prob
-                )
-                current_log_prob = current_log_prob.get(
-                    self.tensor_keys.sample_log_prob
-                )
-
+                previous_log_prob = _sum_td_features(previous_log_prob)
+                current_log_prob = _sum_td_features(current_log_prob)
             kl = (previous_log_prob - current_log_prob).mean(0)
         kl = kl.unsqueeze(-1)
         neg_loss = neg_loss - self.beta * kl
