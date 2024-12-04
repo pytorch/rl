@@ -28,8 +28,6 @@ jobs:
     with:
       repository: pytorch/rl
       upload-artifact: docs
-      runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
         set -e
