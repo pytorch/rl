@@ -72,4 +72,5 @@ git clone https://github.com/facebookresearch/habitat-lab.git
 cd habitat-lab
 pip3 install -e habitat-lab
 pip3 install -e habitat-baselines  # install habitat_baselines
+pip3 install "numpy<2.0"
 conda run python -m pip install "gym[atari,accept-rom-license]" pygame
