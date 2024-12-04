@@ -43,15 +43,52 @@ from torchrl.data import MCTSForest
 from torchrl.envs import LLMHashingEnv
 from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer, pipeline
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--model", choices=["llama3.1", "gpt2"], default="gpt2")
-parser.add_argument("--beta", type=int, default=3)
-parser.add_argument("--pool", type=int, default=1000)
-parser.add_argument("--nsteps", type=int, default=10)
-parser.add_argument("--device", type=str, default=None)
-parser.add_argument("--device_map", type=str, default="auto")
+try:
+    is_sphinx = __sphinx_build__
+except NameError:
+    is_sphinx = False
 
-args = parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--pretrained",
+    type=bool,
+    default=not is_sphinx,
+    help="Set to True to load pre-trained weights, False for random weights.",
+)
+parser.add_argument(
+    "--model",
+    choices=["llama3.1", "gpt2"],
+    default="gpt2",
+    help="Choose the model to use: 'llama3.1' or 'gpt2'.",
+)
+parser.add_argument(
+    "--beta", type=int, default=3, help="Set the beta parameter for the model."
+)
+parser.add_argument(
+    "--pool", type=int, default=1000, help="Set the pool size for processing."
+)
+parser.add_argument(
+    "--nsteps", type=int, default=10, help="Set the number of steps for the process."
+)
+parser.add_argument(
+    "--device",
+    type=str,
+    default=None,
+    help="Specify the device to use (e.g., 'cpu', 'cuda').",
+)
+parser.add_argument(
+    "--device_map",
+    type=str,
+    default="auto",
+    help="Specify the device map for model parallelism (e.g., 'auto').",
+)
+
+args = parser.parse_args(
+    [
+        # When executing this in a notebook, change the parameters here, eg
+        # "--device", "cuda:0"
+    ]
+)
 
 ################################################
 # Build the model
@@ -61,7 +98,10 @@ args = parser.parse_args()
 
 if args.model == "gpt2":
     tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
-    cfg = GPT2Config.from_pretrained("openai-community/gpt2")
+    if args.pretrained:
+        cfg = GPT2Config.from_pretrained("openai-community/gpt2")
+    else:
+        cfg = GPT2Config()
     llm = GPT2LMHeadModel(cfg).eval().requires_grad_(False)
 
     if torch.cuda.is_available():
@@ -70,6 +110,9 @@ if args.model == "gpt2":
         device = "cpu"
 
 elif args.model == "llama3.1":
+    if not args.pretrained:
+        raise ValueError("llama3.1 can only be used with --pretrained=True")
+
     model_id = "meta-llama/Llama-3.1-8B"
 
     if args.device:
@@ -168,6 +211,7 @@ env = LLMHashingEnv(vocab_size=tokenizer.vocab_size, tokenizer=tokenizer)
 # Notice that indexing the relevant nodes is made easy thanks to tensordict's API!
 #
 
+
 def select_unique_obs(td):
     # Get the obs (the hash)
     hashes = td["hash"]
@@ -222,6 +266,7 @@ select_last = Mod(
 # and sample from it on-the-fly. Through the ``log_prob_key`` keyword argument, we indicate that we want to register
 # the value of the log-probability in the tensordict (which we will need for the Beam search algorithm).
 #
+
 
 class CategoricalWithoutReplacement(Categorical):
     def sample(self, sample_shape=()) -> torch.Tensor:
