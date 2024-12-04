@@ -41,6 +41,7 @@ jobs:
         yum install -y mesa-dri-drivers
         # Install Xvfb for Headless Environments:
         yum install -y xorg-x11-server-Xvfb
+        xhost +local:docker
         Xvfb :1 -screen 0 1024x768x24 &
         export DISPLAY=:1
 
