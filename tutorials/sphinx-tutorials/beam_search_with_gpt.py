@@ -1,6 +1,9 @@
 """
 Beam Search with TorchRL
 ========================
+**Author**: `Vincent Moens <https://github.com/vmoens>`_
+
+.. _beam_search:
 
 Key learning
 ------------

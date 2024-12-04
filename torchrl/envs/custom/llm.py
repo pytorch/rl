@@ -22,8 +22,20 @@ from torchrl.envs.utils import _StepMDP
 class LLMHashingEnv(EnvBase):
     """A text generation environment that uses a hashing module to identify unique observations.
 
+    The primary goal of this environment is to identify token chains using a hashing function.
+    This allows the data to be stored in a :class:`~torchrl.data.MCTSForest` using nothing but hashes as node
+    identifiers, or easily prune repeated token chains in a data structure.
+    The following figure gives an overview of this workflow:
+
+    .. figure:: /_static/img/rollout-llm.png
+        :alt: Data collection loop with our LLM environment.
+
+    .. seealso:: the :ref:`Beam Search <beam_search>` tutorial gives a practical example of how this env can be used.
+
     Args:
-        vocab_size (int): The size of the vocabulary.
+        vocab_size (int): The size of the vocabulary. Can be omitted if the tokenizer is passed.
+
+    Keyword Args:
         hashing_module (Callable[[torch.Tensor], torch.Tensor], optional):
             A hashing function that takes a tensor as input and returns a hashed tensor.
             Defaults to :class:`~torchrl.data.SipHash` if not provided.
@@ -39,11 +51,36 @@ class LLMHashingEnv(EnvBase):
         text_key (NestedKey | None, optional): The key for the text output in the TensorDict.
             Defaults to "text".
 
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs import LLMHashingEnv
+        >>> from transformers import GPT2Tokenizer
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        >>> x = tokenizer(["Check out TorchRL!"])["input_ids"]
+        >>> env = LLMHashingEnv(tokenizer=tokenizer)
+        >>> td = TensorDict(observation=x, batch_size=[1])
+        >>> td = env.reset(td)
+        >>> print(td)
+        TensorDict(
+            fields={
+                done: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                hash: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                observation: Tensor(shape=torch.Size([1, 5]), device=cpu, dtype=torch.int64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                text: NonTensorStack(
+                    ['Check out TorchRL!'],
+                    batch_size=torch.Size([1]),
+                    device=None)},
+            batch_size=torch.Size([1]),
+            device=None,
+            is_shared=False)
+
     """
 
     def __init__(
         self,
-        vocab_size: int,
+        vocab_size: int | None=None,
+        *,
         hashing_module: Callable[[torch.Tensor], torch.Tensor] = None,
         observation_key: NestedKey = "observation",
         text_output: bool = True,
@@ -51,6 +88,10 @@ class LLMHashingEnv(EnvBase):
         text_key: NestedKey | None = "text",
     ):
         super().__init__()
+        if vocab_size is None:
+            if tokenizer is None:
+                raise TypeError("You must provide a vocab_size integer if tokenizer is `None`.")
+            vocab_size = tokenizer.vocab_size
         self._batch_locked = False
         if hashing_module is None:
             hashing_module = SipHash()
