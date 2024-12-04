@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Callable, List
+from typing import Callable, List, Union
 
 import torch
 from tensordict import NestedKey, TensorDictBase
@@ -47,7 +47,7 @@ class LLMHashingEnv(EnvBase):
         hashing_module: Callable[[torch.Tensor], torch.Tensor] = None,
         observation_key: NestedKey = "observation",
         text_output: bool = True,
-        tokenizer: Callable[[str | List[str]], torch.Tensor] | None = None,
+        tokenizer: Callable[[Union[str, List[str]]], torch.Tensor] | None = None,
         text_key: NestedKey | None = "text",
     ):
         super().__init__()
