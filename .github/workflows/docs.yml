@@ -34,7 +34,8 @@ jobs:
         set -v
         # apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
         yum makecache
-        yum install -y glfw glew mesa-libGL mesa-libGL-devel mesa-libOSMesa-devel egl-utils freeglut
+        # yum install -y glfw glew mesa-libGL mesa-libGL-devel mesa-libOSMesa-devel egl-utils freeglut
+        yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut
 
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"
