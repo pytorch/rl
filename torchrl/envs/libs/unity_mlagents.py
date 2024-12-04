@@ -363,12 +363,12 @@ class UnityMLAgentsWrapper(_EnvWrapper):
                     # Add rewards
                     if not is_reset:
                         source[group_name][agent_name]["reward"] = torch.tensor(
-                            steps.reward[steps_idx],
+                            [steps.reward[steps_idx]],
                             device=self.device,
                             dtype=torch.float32,
                         )
                         source[group_name][agent_name]["group_reward"] = torch.tensor(
-                            steps.group_reward[steps_idx],
+                            [steps.group_reward[steps_idx]],
                             device=self.device,
                             dtype=torch.float32,
                         )

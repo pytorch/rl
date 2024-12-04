@@ -4323,6 +4323,217 @@ class CatTensors(Transform):
         )
 
 
+class Stack(Transform):
+    """Stacks tensors and tensordicts.
+
+    Concatenates a sequence of tensors or tensordicts along a new dimension.
+    The tensordicts or tensors under ``in_keys`` must all have the same shapes.
+
+    This transform only stacks the inputs into one output key. Stacking multiple
+    groups of input keys into different output keys requires multiple
+    transforms.
+
+    This transform can be useful for environments that have multiple agents with
+    identical specs under different keys. The specs and tensordicts for the
+    agents can be stacked together under a shared key, in order to run MARL
+    algorithms that expect the tensors for observations, rewards, etc. to
+    contain batched data for all the agents.
+
+    Args:
+        in_keys (sequence of NestedKey): keys to be stacked.
+        out_key (NestedKey): key of the resulting stacked entry.
+        in_key_inv (NestedKey, optional): key to unstack during :meth:`~.inv`
+            calls. Default is ``None``.
+        out_keys_inv (sequence of NestedKey, optional): keys of the resulting
+            unstacked entries after :meth:`~.inv` calls. Default is ``None``.
+        dim (int, optional): dimension to insert. Default is ``-1``.
+        allow_positive_dim (bool, optional): if ``True``, positive dimensions
+            are accepted.  Defaults to ``False``, ie. non-negative dimensions are
+            not permitted.
+
+    Keyword Args:
+        del_keys (bool, optional): if ``True``, the input values will be deleted
+            after stacking. Default is ``True``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs import Stack
+        >>> td = TensorDict({"key1": torch.zeros(3), "key2": torch.ones(3)}, [])
+        >>> td
+        TensorDict(
+            fields={
+                key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> transform = Stack(in_keys=["key1", "key2"], out_key="out", dim=-2)
+        >>> transform(td)
+        TensorDict(
+            fields={
+                out: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> td["out"]
+        tensor([[0., 0., 0.],
+                [1., 1., 1.]])
+
+        >>> agent_0 = TensorDict({"obs": torch.rand(4, 5), "reward": torch.zeros(1)})
+        >>> agent_1 = TensorDict({"obs": torch.rand(4, 5), "reward": torch.zeros(1)})
+        >>> td = TensorDict({"agent_0": agent_0, "agent_1": agent_1})
+        >>> transform = Stack(in_keys=["agent_0", "agent_1"], out_key="agents")
+        >>> transform(td)
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        obs: Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+    """
+
+    invertible = True
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_key: NestedKey,
+        in_key_inv: NestedKey | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
+        dim: int = -1,
+        allow_positive_dim: bool = False,
+        *,
+        del_keys: bool = True,
+    ):
+        if not allow_positive_dim and dim >= 0:
+            raise ValueError(
+                "dim should be negative to accommodate for envs of different "
+                "batch_sizes. If you need dim to be positive, set "
+                "allow_positive_dim=True."
+            )
+
+        if in_key_inv is None and out_keys_inv is not None:
+            raise ValueError("out_keys_inv was specified, but in_key_inv was not")
+        elif in_key_inv is not None and out_keys_inv is None:
+            raise ValueError("in_key_inv was specified, but out_keys_inv was not")
+
+        super(Stack, self).__init__(
+            in_keys=in_keys,
+            out_keys=[out_key],
+            in_keys_inv=None if in_key_inv is None else [in_key_inv],
+            out_keys_inv=out_keys_inv,
+        )
+
+        for in_key in self.in_keys:
+            if len(in_key) == len(self.out_keys[0]):
+                if all(k1 == k2 for k1, k2 in zip(in_key, self.out_keys[0])):
+                    raise ValueError(f"{self}: out_key cannot be in in_keys")
+        parent_keys = []
+        for key in self.in_keys:
+            if isinstance(key, (list, tuple)):
+                for parent_level in range(1, len(key)):
+                    parent_key = tuple(key[:-parent_level])
+                    if parent_key not in parent_keys:
+                        parent_keys.append(parent_key)
+        self._maybe_del_parent_keys = sorted(parent_keys, key=len, reverse=True)
+        self.dim = dim
+        self._del_keys = del_keys
+        self._keys_to_exclude = None
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        values = []
+        for in_key in self.in_keys:
+            value = tensordict.get(in_key, default=None)
+            if value is not None:
+                values.append(value)
+            elif not self.missing_tolerance:
+                raise KeyError(
+                    f"{self}: '{in_key}' not found in tensordict {tensordict}"
+                )
+
+        out_tensor = torch.stack(values, dim=self.dim)
+        tensordict.set(self.out_keys[0], out_tensor)
+        if self._del_keys:
+            tensordict.exclude(*self.in_keys, inplace=True)
+            for parent_key in self._maybe_del_parent_keys:
+                if len(tensordict[parent_key].keys()) == 0:
+                    tensordict.exclude(parent_key, inplace=True)
+        return tensordict
+
+    forward = _call
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if len(self.in_keys_inv) == 0:
+            return tensordict
+
+        if self.in_keys_inv[0] not in tensordict.keys(include_nested=True):
+            return tensordict
+        values = torch.unbind(tensordict[self.in_keys_inv[0]], dim=self.dim)
+        for value, out_key_inv in _zip_strict(values, self.out_keys_inv):
+            tensordict = tensordict.set(out_key_inv, value)
+        return tensordict.exclude(self.in_keys_inv[0])
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
+    def _transform_spec(self, spec: TensorSpec) -> TensorSpec:
+        if not isinstance(spec, Composite):
+            raise TypeError(f"{self}: Only specs of type Composite can be transformed")
+
+        spec_keys = spec.keys(include_nested=True)
+        keys_to_stack = [key for key in spec_keys if key in self.in_keys]
+        specs_to_stack = [spec[key] for key in keys_to_stack]
+
+        if len(specs_to_stack) == 0:
+            return spec
+
+        stacked_specs = torch.stack(specs_to_stack, dim=self.dim)
+        spec.set(self.out_keys[0], stacked_specs)
+
+        if self._del_keys:
+            for key in keys_to_stack:
+                del spec[key]
+            for parent_key in self._maybe_del_parent_keys:
+                if len(spec[parent_key]) == 0:
+                    del spec[parent_key]
+
+        return spec
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        self._transform_spec(input_spec["full_state_spec"])
+        self._transform_spec(input_spec["full_action_spec"])
+        return input_spec
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(observation_spec)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(reward_spec)
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(done_spec)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"in_keys={self.in_keys}, "
+            f"out_key={self.out_keys[0]}, "
+            f"dim={self.dim}"
+            ")"
+        )
+
+
 class DiscreteActionProjection(Transform):
     """Projects discrete actions from a high dimensional space to a low dimensional space.
 
