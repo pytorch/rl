@@ -48,6 +48,7 @@ from .transforms import (
     SelectTransform,
     SignTransform,
     SqueezeTransform,
+    Stack,
     StepCounter,
     TargetReturn,
     TensorDictPrimer,
