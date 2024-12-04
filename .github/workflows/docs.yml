@@ -32,7 +32,7 @@ jobs:
       script: |
         set -e
         set -v
-        apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
+        # apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"
         env_dir="${root_dir}/env"
@@ -49,7 +49,7 @@ jobs:
         conda activate "${env_dir}"
 
         # 2. upgrade pip, ninja and packaging
-        apt-get install python3-pip unzip -y -f
+        # apt-get install python3-pip unzip -y -f
         python3 -m pip install --upgrade pip
         python3 -m pip install setuptools ninja packaging cmake -U
         
