@@ -246,8 +246,8 @@ class ListStorage(Storage):
         set_cursor: bool = True,
     ):
         if not isinstance(cursor, INT_CLASSES):
-            if (isinstance(cursor, torch.Tensor) and cursor.numel() <= 1) or (
-                isinstance(cursor, np.ndarray) and cursor.size <= 1
+            if (isinstance(cursor, torch.Tensor) and cursor.ndim == 0) or (
+                isinstance(cursor, np.ndarray) and cursor.ndim == 0
             ):
                 self.set(int(cursor), data, set_cursor=set_cursor)
                 return
