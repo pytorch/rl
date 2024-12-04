@@ -1567,6 +1567,9 @@ class TestHabitat:
         check_env_specs(env)
 
     def test_from_config(self):
+        import habitat
+
+        cfg = habitat.get_config("benchmark/nav/objectnav/objectnav_hssd-hab.yaml")
         env = HabitatEnv.from_config(cfg)
         check_env_specs(env)
         assert isinstance(env, HabitatEnv)
