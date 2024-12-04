@@ -35,7 +35,14 @@ jobs:
         # apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
         yum makecache
         # yum install -y glfw glew mesa-libGL mesa-libGL-devel mesa-libOSMesa-devel egl-utils freeglut
-        yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut
+        # Install Mesa and OpenGL Libraries:
+        yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL
+        # Install DRI Drivers:
+        yum install -y mesa-dri-drivers
+        # Install Xvfb for Headless Environments:
+        yum install -y xorg-x11-server-Xvfb
+        Xvfb :1 -screen 0 1024x768x24 &
+        export DISPLAY=:1
 
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"
