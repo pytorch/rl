@@ -829,6 +829,7 @@ def _can_be_pickled(obj):
 def _make_ordinal_device(device: torch.device):
     if device is None:
         return device
+    device = torch.device(device)
     if device.type == "cuda" and device.index is None:
         return torch.device("cuda", index=torch.cuda.current_device())
     if device.type == "mps" and device.index is None:
