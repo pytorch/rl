@@ -17,13 +17,13 @@ def _plot_plotly_tree(
 
     if make_labels is None:
 
-        def make_labels(tree):
+        def make_labels(tree, path, *args, **kwargs):
             return str((tree.node_id, tree.hash))
 
     nr_vertices = tree.num_vertices()
-    vertices = tree.vertices()
+    vertices = tree.vertices(key_type="path")
 
-    v_label = [make_labels(subtree) for subtree in vertices.values()]
+    v_label = [make_labels(subtree, path) for path, subtree in vertices.items()]
     G = Graph(nr_vertices, tree.edges())
 
     layout = G.layout_sugiyama(range(nr_vertices))
