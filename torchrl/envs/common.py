@@ -559,6 +559,25 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     check_env_specs.__doc__ = check_env_specs_func.__doc__
 
+    def cardinality(self, tensordict: TensorDictBase|None=None) -> int:
+        """The cardinality of the action space.
+
+        By default, this is just a wrapper around :meth:`env.action_space.cardinality <~torchrl.data.TensorSpec.cardinality>`.
+
+        This class is useful when the action spec is variable:
+
+        - The number of actions can be undefined, e.g., ``Categorical(n=-1)``;
+        - The action cardinality may depend on the action mask;
+        - The shape can be dynamic, as in ``Unbound(shape=(-1))``.
+
+        In these cases, the :meth:`~.cardinality` should be overwritten,
+
+        Args:
+            tensordict (TensorDictBase, optional): a tensordict containing the data required to compute the cardinality.
+
+        """
+        return self.full_action_spec.cardinality()
+
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
         # inplace update will write tensors in-place on the provided tensordict.
