@@ -3266,7 +3266,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         if self._simple_done:
             done = tensordict._get_str("done", default=None)
-            any_done = done.any()
+            any_done = done is not None and done.any()
             if any_done:
                 tensordict._set_str(
                     "_reset",
