@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from typing import Dict, List, Optional
 
 import torch
@@ -1929,14 +1931,18 @@ class EnvWithMetadata(EnvBase):
             tensor=Unbounded(3),
             non_tensor=NonTensor(shape=()),
         )
+        self._saved_obs_spec = self.observation_spec.clone()
         self.state_spec = Composite(
             non_tensor=NonTensor(shape=()),
         )
+        self._saved_state_spec = self.state_spec.clone()
         self.reward_spec = Unbounded(1)
+        self._saved_full_reward_spec = self.full_reward_spec.clone()
         self.action_spec = Unbounded(1)
+        self._saved_full_action_spec = self.full_action_spec.clone()
 
     def _reset(self, tensordict):
-        data = self.observation_spec.zero()
+        data = self._saved_obs_spec.zero()
         data.set_non_tensor("non_tensor", 0)
         data.update(self.full_done_spec.zero())
         return data
@@ -1945,10 +1951,10 @@ class EnvWithMetadata(EnvBase):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        data = self.observation_spec.zero()
+        data = self._saved_obs_spec.zero()
         data.set_non_tensor("non_tensor", tensordict["non_tensor"] + 1)
         data.update(self.full_done_spec.zero())
-        data.update(self.full_reward_spec.zero())
+        data.update(self._saved_full_reward_spec.zero())
         return data
 
     def _set_seed(self, seed: Optional[int]):
