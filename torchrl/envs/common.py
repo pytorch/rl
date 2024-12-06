@@ -14,8 +14,14 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import LazyStackedTensorDict, TensorDictBase, unravel_key
-from tensordict.utils import NestedKey
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDictBase,
+    unravel_key,
+)
+from tensordict.base import _is_leaf_nontensor
+from tensordict.utils import is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
@@ -25,7 +31,13 @@ from torchrl._utils import (
     seed_generator,
 )
 
-from torchrl.data.tensor_specs import Categorical, Composite, TensorSpec, Unbounded
+from torchrl.data.tensor_specs import (
+    Categorical,
+    Composite,
+    NonTensor,
+    TensorSpec,
+    Unbounded,
+)
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _make_compatible_policy,
@@ -430,7 +442,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         done_key: NestedKey | List[NestedKey] | None = None,
         observation_key: NestedKey | List[NestedKey] = "observation",
         reward_key: NestedKey | List[NestedKey] = "reward",
-        batch_size: torch.Size | None = None,
     ):
         """Automatically sets the specifications (specs) of the environment based on a random rollout using a given policy.
 
@@ -484,6 +495,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict2,
             named=True,
             nested_keys=True,
+            is_leaf=_is_leaf_nontensor,
         )
         input_spec = Composite(input_spec_stack, batch_size=batch_size)
         if not self.batch_locked and batch_size != self.batch_size:
@@ -501,6 +513,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nexts_1,
             named=True,
             nested_keys=True,
+            is_leaf=_is_leaf_nontensor,
         )
 
         output_spec = Composite(output_spec_stack, batch_size=batch_size)
@@ -523,7 +536,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         full_observation_spec = output_spec.separates(*observation_key, default=None)
         if not output_spec.is_empty(recurse=True):
             raise RuntimeError(
-                f"Keys {list(output_spec.keys(True, True))} are unaccounted for."
+                f"Keys {list(output_spec.keys(True, True))} are unaccounted for. "
+                f"Make sure you have passed all the leaf names to the auto_specs_ method."
             )
 
         if full_action_spec is not None:
@@ -3572,6 +3586,12 @@ def _has_dynamic_specs(spec: Composite):
 
 
 def _tensor_to_spec(name, leaf, leaf_compare=None, *, stack):
+    if not (isinstance(leaf, torch.Tensor) or is_tensor_collection(leaf)):
+        stack[name] = NonTensor(shape=())
+        return
+    elif is_non_tensor(leaf):
+        stack[name] = NonTensor(shape=leaf.shape)
+        return
     shape = leaf.shape
     if leaf_compare is not None:
         shape_compare = leaf_compare.shape

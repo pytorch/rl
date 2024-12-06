@@ -76,7 +76,7 @@ class _classproperty(property):
 
 
 class _StepMDP:
-    """Stateful version of step_mdp.
+    """Stateful version of :func:`~torchrl.envs.step_mdp`.
 
     Precomputes the list of keys to include and exclude during a call to step_mdp
     to reduce runtime.

@@ -347,6 +347,8 @@ TorchRL offers a series of custom built-in environments.
 
     PendulumEnv
     TicTacToeEnv
+    LLMHashingEnv
+
 
 Multi-agent environments
 ------------------------
