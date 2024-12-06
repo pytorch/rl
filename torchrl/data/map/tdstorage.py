@@ -139,6 +139,10 @@ class TensorDictMap(
         self.write_fn = write_fn
 
     @property
+    def max_size(self):
+        return self.storage.max_size
+
+    @property
     def out_keys(self) -> List[NestedKey]:
         out_keys = self.__dict__.get("_out_keys_and_lazy")
         if out_keys is not None:
@@ -177,7 +181,7 @@ class TensorDictMap(
         collate_fn: Callable[[Any], Any] | None = None,
         write_fn: Callable[[Any, Any], Any] | None = None,
         consolidated: bool | None = None,
-    ):
+    ) -> TensorDictMap:
         """Creates a new TensorDictStorage from a pair of tensordicts (source and dest) using pre-defined rules of thumb.
 
         Args:
@@ -238,7 +242,13 @@ class TensorDictMap(
             n_feat = 0
             hash_module = []
             for in_key in in_keys:
-                n_feat = source[in_key].shape[-1]
+                entry = source[in_key]
+                if entry.ndim == source.ndim:
+                    # this is a good example of why td/tc are useful - carrying metadata
+                    # allows us to know if there's a feature dim or not
+                    n_feat = 0
+                else:
+                    n_feat = entry.shape[-1]
                 if n_feat > RandomProjectionHash._N_COMPONENTS_DEFAULT:
                     _hash_module = RandomProjectionHash()
                 else:
@@ -308,7 +318,23 @@ class TensorDictMap(
         if not self._has_lazy_out_keys():
             # TODO: make this work with pytrees and avoid calling select if keys match
             value = value.select(*self.out_keys, strict=False)
+        item, value = self._maybe_add_batch(item, value)
+        index = self._to_index(item, extend=True)
+        if index.unique().numel() < index.numel():
+            # If multiple values point to the same place in the storage, we cannot process them by batch
+            # There could be a better way to deal with this, using unique ids.
+            vals = []
+            for it, val in zip(item.split(1), value.split(1)):
+                self[it] = val
+                vals.append(val)
+            # __setitem__ may affect the content of the input data
+            value.update(TensorDictBase.lazy_stack(vals))
+            return
         if self.write_fn is not None:
+            # We use this block in the following context: the value written in the storage is already present,
+            # but it needs to be updated.
+            # We first check if the value is already there using `contains`. If so, we pass the new value and the
+            # previous one to write_fn. The values that are not present are passed alone.
             if len(self):
                 modifiable = self.contains(item)
                 if modifiable.any():
@@ -322,8 +348,6 @@ class TensorDictMap(
                     value = self.write_fn(value)
             else:
                 value = self.write_fn(value)
-        item, value = self._maybe_add_batch(item, value)
-        index = self._to_index(item, extend=True)
         self.storage.set(index, value)
 
     def __len__(self):
