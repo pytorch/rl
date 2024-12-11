@@ -2825,9 +2825,9 @@ class ObservationNorm(ObservationTransform):
 class CatFrames(ObservationTransform):
     """Concatenates successive observation frames into a single tensor.
 
-    This can, for instance, account for movement/velocity of the observed
-    feature. Proposed in "Playing Atari with Deep Reinforcement Learning" (
-    https://arxiv.org/pdf/1312.5602.pdf).
+    This transform is useful for creating a sense of movement or velocity in the observed features.
+    It can also be used with models that require access to past observations such as transformers and the like.
+    It was first proposed in "Playing Atari with Deep Reinforcement Learning" (https://arxiv.org/pdf/1312.5602.pdf).
 
     When used within a transformed environment,
     :class:`CatFrames` is a stateful class, and it can be reset to its native state by
@@ -2915,6 +2915,14 @@ class CatFrames(ObservationTransform):
         such as those found in MARL settings, are currently not supported.
         If this feature is needed, please raise an issue on TorchRL repo.
 
+    .. note:: Storing stacks of frames in the replay buffer can significantly increase memory consumption (by N times).
+        To mitigate this, you can store trajectories directly in the replay buffer and apply :class:`CatFrames` at sampling time.
+        This approach involves sampling slices of the stored trajectories and then applying the frame stacking transform.
+        For convenience, :class:`CatFrames` provides a :meth:`~.make_rb_transform_and_sampler` method that creates:
+
+        - A modified version of the transform suitable for use in replay buffers
+        - A corresponding :class:`SliceSampler` to use with the buffer
+
     """
 
     inplace = False
@@ -2963,6 +2971,56 @@ class CatFrames(ObservationTransform):
         self.as_inverse = as_inverse
         self.reset_key = reset_key
         self.done_key = done_key
+
+    def make_rb_transform_and_sampler(
+        self, batch_size: int, **sampler_kwargs
+    ) -> Tuple[Transform, "torchrl.data.replay_buffers.SliceSampler"]:  # noqa: F821
+        """Creates a transform and sampler to be used with a replay buffer when storing frame-stacked data.
+
+        This method helps reduce redundancy in stored data by avoiding the need to
+        store the entire stack of frames in the buffer. Instead, it creates a
+        transform that stacks frames on-the-fly during sampling, and a sampler that
+        ensures the correct sequence length is maintained.
+
+        Args:
+            batch_size (int): The batch size to use for the sampler.
+            **sampler_kwargs: Additional keyword arguments to pass to the
+                :class:`~torchrl.data.replay_buffers.SliceSampler` constructor.
+
+        Returns:
+            A tuple containing:
+                - transform (Transform): A transform that stacks frames on-the-fly during sampling.
+                - sampler (SliceSampler): A sampler that ensures the correct sequence length is maintained.
+
+        Example:
+            >>> env = TransformedEnv(...)
+            >>> catframes = CatFrames(N=4, ...)
+            >>> transform, sampler = catframes.make_rb_transform_and_sampler(batch_size=32)
+            >>> rb = ReplayBuffer(..., sampler=sampler, transform=transform)
+
+        .. note:: When working with images, it's recommended to use distinct ``in_keys`` and ``out_keys`` in the preceding
+            :class:`~torchrl.envs.ToTensorImage` transform. This ensures that the tensors stored in the buffer are separate
+            from their processed counterparts, which we don't want to store.
+            For non-image data, consider inserting a :class:`~torchrl.envs.RenameTransform` before :class:`CatFrames` to create
+            a copy of the data that will be stored in the buffer.
+
+        .. note:: For a more complete example, refer to torchrl's github repo `examples` folder:
+            https://github.com/pytorch/rl/tree/main/examples/replay-buffers/catframes-in-buffer.py
+
+        """
+        from torchrl.data.replay_buffers import SliceSampler
+
+        catframes = self.clone()
+        sampler = SliceSampler(slice_len=self.N, **sampler_kwargs)
+        sampler._batch_size_multiplier = self.N
+        transform = Compose(
+            lambda td: td.reshape(-1, self.N),
+            catframes,
+            lambda td: td[:, -1],
+            # We only store "pixels" to the replay buffer to save memory
+            ExcludeTransform(*self.in_keys, inverse=True),
+        )
+        return transform, sampler
 
     @property
     def done_key(self):

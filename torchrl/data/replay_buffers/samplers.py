@@ -968,6 +968,9 @@ class SliceSampler(Sampler):
 
     """
 
+    # We use this whenever we need to sample N times too many transitions to then select only a 1/N fraction of them
+    _batch_size_multiplier: int | None
+
     def __init__(
         self,
         *,
@@ -1295,6 +1298,8 @@ class SliceSampler(Sampler):
         return seq_length, num_slices
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+        if self._batch_size_multiplier is not None:
+            batch_size = batch_size * self._batch_size_multiplier
         # pick up as many trajs as we need
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         # we have to make sure that the number of dims of the storage
@@ -1747,6 +1752,8 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
     def sample(
         self, storage: Storage, batch_size: int
     ) -> Tuple[Tuple[torch.Tensor, ...], dict]:
+        if self._batch_size_multiplier is not None:
+            batch_size = batch_size * self._batch_size_multiplier
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         # we have to make sure that the number of dims of the storage
         # is the same as the stop/start signals since we will
