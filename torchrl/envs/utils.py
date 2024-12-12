@@ -784,8 +784,7 @@ def check_env_specs(
     if _has_dynamic_specs(env.specs):
         for real, fake in zip(
             real_tensordict_select.filter_non_tensor_data().unbind(-1),
-            fake_tensordict_select.filter_non_tensor_data().unbind(-1)
-        ,
+            fake_tensordict_select.filter_non_tensor_data().unbind(-1),
         ):
             fake = fake.apply(lambda x, y: x.expand_as(y), real)
             if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
