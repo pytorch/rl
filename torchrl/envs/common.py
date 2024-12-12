@@ -555,6 +555,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @wraps(check_env_specs_func)
     def check_env_specs(self, *args, **kwargs):
+        return_contiguous = kwargs.pop("return_contiguous", not self._has_dynamic_specs)
+        kwargs["return_contiguous"] = return_contiguous
         return check_env_specs_func(self, *args, **kwargs)
 
     check_env_specs.__doc__ = check_env_specs_func.__doc__
@@ -3220,7 +3222,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         if self._simple_done:
             done = tensordict._get_str("done", default=None)
-            any_done = done.any()
+            if done is not None:
+                any_done = done.any()
+            else:
+                any_done = False
             if any_done:
                 tensordict._set_str(
                     "_reset",
