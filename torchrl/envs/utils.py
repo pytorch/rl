@@ -778,12 +778,15 @@ def check_env_specs(
         )
     zeroing_err_msg = (
         "zeroing the two tensordicts did not make them identical. "
-        "Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
+        f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
     )
     from torchrl.envs.common import _has_dynamic_specs
 
     if _has_dynamic_specs(env.specs):
-        for real, fake in zip(real_tensordict.unbind(-1), fake_tensordict.unbind(-1)):
+        for real, fake in zip(
+            real_tensordict.filter_non_tensor_data().unbind(-1),
+            fake_tensordict.filter_non_tensor_data().unbind(-1),
+        ):
             fake = fake.apply(lambda x, y: x.expand_as(y), real)
             if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
                 raise AssertionError(zeroing_err_msg)
@@ -1367,6 +1370,8 @@ def _update_during_reset(
     reset_keys: List[NestedKey],
 ):
     """Updates the input tensordict with the reset data, based on the reset keys."""
+    if not reset_keys:
+        return tensordict.update(tensordict_reset)
     roots = set()
     for reset_key in reset_keys:
         # get the node of the reset key
