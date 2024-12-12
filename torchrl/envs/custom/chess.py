@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Optional
+from typing import Dict, Optional
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -11,7 +11,7 @@ from torchrl.data import Categorical, Composite, NonTensor, Unbounded
 from torchrl.envs import EnvBase
 
 from torchrl.envs.utils import _classproperty
-from typing import Dict
+
 
 class ChessEnv(EnvBase):
     """A chess environment that follows the TorchRL API.
@@ -192,6 +192,6 @@ class ChessEnv(EnvBase):
     def _set_seed(self, *args, **kwargs):
         ...
 
-    def cardinality(self, tensordict: TensorDictBase|None=None) -> int:
+    def cardinality(self, tensordict: TensorDictBase | None = None) -> int:
         self._set_action_space(tensordict)
         return self.action_spec.cardinality()
