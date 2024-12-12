@@ -561,7 +561,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     check_env_specs.__doc__ = check_env_specs_func.__doc__
 
-    def cardinality(self, tensordict: TensorDictBase|None=None) -> int:
+    def cardinality(self, tensordict: TensorDictBase | None = None) -> int:
         """The cardinality of the action space.
 
         By default, this is just a wrapper around :meth:`env.action_space.cardinality <~torchrl.data.TensorSpec.cardinality>`.
