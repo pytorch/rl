@@ -11,7 +11,7 @@ from torchrl.data import Categorical, Composite, NonTensor, Unbounded
 from torchrl.envs import EnvBase
 
 from torchrl.envs.utils import _classproperty
-
+from typing import Dict
 
 class ChessEnv(EnvBase):
     """A chess environment that follows the TorchRL API.
@@ -87,7 +87,7 @@ class ChessEnv(EnvBase):
 
     """
 
-    _hash_table = {}
+    _hash_table: Dict[int, str] = {}
 
     @_classproperty
     def lib(cls):
