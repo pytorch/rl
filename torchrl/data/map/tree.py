@@ -135,35 +135,40 @@ class Tree(TensorClass["nocast"]):
     def full_observation_spec(self):
         """The observation spec of the tree.
 
-        This is an alias for `Tree.specs['output_spec', 'full_observation_spec']`."""
+        This is an alias for `Tree.specs['output_spec', 'full_observation_spec']`.
+        """
         return self.specs["output_spec", "full_observation_spec"]
 
     @property
     def full_reward_spec(self):
         """The reward spec of the tree.
 
-        This is an alias for `Tree.specs['output_spec', 'full_reward_spec']`."""
+        This is an alias for `Tree.specs['output_spec', 'full_reward_spec']`.
+        """
         return self.specs["output_spec", "full_reward_spec"]
 
     @property
     def full_done_spec(self):
         """The done spec of the tree.
 
-        This is an alias for `Tree.specs['output_spec', 'full_done_spec']`."""
+        This is an alias for `Tree.specs['output_spec', 'full_done_spec']`.
+        """
         return self.specs["output_spec", "full_done_spec"]
 
     @property
     def full_state_spec(self):
         """The state spec of the tree.
 
-        This is an alias for `Tree.specs['input_spec', 'full_state_spec']`."""
+        This is an alias for `Tree.specs['input_spec', 'full_state_spec']`.
+        """
         return self.specs["input_spec", "full_state_spec"]
 
     @property
     def full_action_spec(self):
         """The action spec of the tree.
 
-        This is an alias for `Tree.specs['input_spec', 'full_action_spec']`."""
+        This is an alias for `Tree.specs['input_spec', 'full_action_spec']`.
+        """
         return self.specs["input_spec", "full_action_spec"]
 
     @property
