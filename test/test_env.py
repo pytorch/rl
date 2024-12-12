@@ -8,6 +8,7 @@ import contextlib
 import functools
 import gc
 import os.path
+import random
 import re
 from collections import defaultdict
 from functools import partial
@@ -114,6 +115,7 @@ from torchrl.envs import (
     DoubleToFloat,
     EnvBase,
     EnvCreator,
+    LLMHashingEnv,
     ParallelEnv,
     PendulumEnv,
     SerialEnv,
@@ -3418,6 +3420,29 @@ class TestCustomEnvs:
             assert r.shape == torch.Size((10,))
             r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
             assert r.shape == torch.Size((5, 10))
+
+    def test_llm_hashing_env(self):
+        vocab_size = 5
+
+        class Tokenizer:
+            def __call__(self, obj):
+                return torch.randint(vocab_size, (len(obj.split(" ")),)).tolist()
+
+            def decode(self, obj):
+                words = ["apple", "banana", "cherry", "date", "elderberry"]
+                return " ".join(random.choice(words) for _ in obj)
+
+            def batch_decode(self, obj):
+                return [self.decode(_obj) for _obj in obj]
+
+            def encode(self, obj):
+                return self(obj)
+
+        tokenizer = Tokenizer()
+        env = LLMHashingEnv(tokenizer=tokenizer, vocab_size=vocab_size)
+        td = env.make_tensordict("some sentence")
+        assert isinstance(td, TensorDict)
+        env.check_env_specs(tensordict=td)
 
 
 @pytest.mark.parametrize("device", [None, *get_default_devices()])
