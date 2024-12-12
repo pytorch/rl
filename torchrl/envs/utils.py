@@ -777,13 +777,15 @@ def check_env_specs(
         )
     zeroing_err_msg = (
         "zeroing the two tensordicts did not make them identical. "
-        "Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
+        f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
     )
     from torchrl.envs.common import _has_dynamic_specs
 
     if _has_dynamic_specs(env.specs):
         for real, fake in zip(
-            real_tensordict_select.unbind(-1), fake_tensordict_select.unbind(-1)
+            real_tensordict_select.filter_non_tensor_data().unbind(-1),
+            fake_tensordict_select.filter_non_tensor_data().unbind(-1)
+        ,
         ):
             fake = fake.apply(lambda x, y: x.expand_as(y), real)
             if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
