@@ -16,13 +16,13 @@ from tensordict import (
     TensorClass,
     TensorDict,
     TensorDictBase,
-    unravel_key, LazyStackedTensorDict,
+    unravel_key,
 )
 from torchrl.data.map.tdstorage import TensorDictMap
 from torchrl.data.map.utils import _plot_plotly_box, _plot_plotly_tree
 from torchrl.data.replay_buffers.storages import ListStorage
+from torchrl.data.tensor_specs import Composite
 
-from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.common import EnvBase
 
 
@@ -84,28 +84,37 @@ class Tree(TensorClass["nocast"]):
     # rollout following the observation encoded in node, in a TorchRL (TED) format
     rollout: TensorDict | None = None
 
-    # The data specifying the node
-    node: TensorDict | None = None
+    # The data specifying the node (typically an observation or a set of observations)
+    node_data: TensorDict | None = None
 
     # Stack of subtrees. A subtree is produced when an action is taken.
     subtree: "Tree" = None
 
-    _parent: weakref.ref | None = None
+    # weakrefs to the parent(s) of the node
+    _parent: weakref.ref | List[weakref.ref] | None = None
+
+    # Specs: contains information such as action or observation keys and spaces.
+    #  If present, they should be structured like env specs are:
+    #  Composite(input_spec=Composite(full_state_spec=..., full_action_spec=...),
+    #            output_spec=Composite(full_observation_spec=..., full_reward_spec=..., full_done_spec=...))
+    #  where every leaf component is optional.
+    specs: Composite | None = None
 
     @classmethod
     def make_node(
         cls,
-        data,
+        data: TensorDictBase,
         *,
-        parent=None,
         device: torch.device | None = None,
         batch_size: torch.Size | None = None,
+        specs: Composite | None = None,
     ) -> Tree:
+        """Creates a new node given some data."""
         if "next" in data.keys():
             rollout = data
             if not rollout.ndim:
                 rollout = rollout.unsqueeze(0)
-            subtree = TensorDict.lazy_stack([cls.make_node(data["next"][..., 0])])
+            subtree = TensorDict.lazy_stack([cls.make_node(data["next"][..., -1])])
         else:
             rollout = None
             subtree = None
@@ -116,44 +125,207 @@ class Tree(TensorClass["nocast"]):
             wins=torch.zeros(()),
             node=data.exclude("action", "next"),
             rollout=rollout,
-            _parent=parent,
             subtree=subtree,
             device=device,
             batch_size=batch_size,
         )
 
-    def __post_init__(self):
-        if (self.subtree is None) ^ (self.rollout is None):
-            raise ValueError("A node was created with only a subtree or a rollout but not both.")
+    # Specs
+    @property
+    def full_observation_spec(self):
+        """The observation spec of the tree.
 
-    # @property
-    # def children(self) -> Tree:
-    #     return self.subtree
+        This is an alias for `Tree.specs['output_spec', 'full_observation_spec']`."""
+        return self.specs["output_spec", "full_observation_spec"]
+
+    @property
+    def full_reward_spec(self):
+        """The reward spec of the tree.
+
+        This is an alias for `Tree.specs['output_spec', 'full_reward_spec']`."""
+        return self.specs["output_spec", "full_reward_spec"]
+
+    @property
+    def full_done_spec(self):
+        """The done spec of the tree.
+
+        This is an alias for `Tree.specs['output_spec', 'full_done_spec']`."""
+        return self.specs["output_spec", "full_done_spec"]
+
+    @property
+    def full_state_spec(self):
+        """The state spec of the tree.
+
+        This is an alias for `Tree.specs['input_spec', 'full_state_spec']`."""
+        return self.specs["input_spec", "full_state_spec"]
+
+    @property
+    def full_action_spec(self):
+        """The action spec of the tree.
+
+        This is an alias for `Tree.specs['input_spec', 'full_action_spec']`."""
+        return self.specs["input_spec", "full_action_spec"]
+
+    @property
+    def selected_actions(self) -> torch.Tensor | TensorDictBase | None:
+        """Returns a tensor containing all the selected actions branching out from this node."""
+        if self.subtree is None:
+            return None
+        return self.subtree.rollout[..., 0]["action"]
+
+    @property
+    def prev_action(self) -> torch.Tensor | TensorDictBase | None:
+        """The action undertaken just before this node's observation was generated.
+
+        Returns:
+            a tensor, tensordict or None if the node has no parent.
+
+        .. seealso:: This will be equal to :class:`~torchrl.data.Tree.branching_action` whenever the rollout data contains a single step.
+
+        .. seealso:: :class:`All actions associated with a given node (or observation) in the tree <~torchrl.data.Tree.selected_action>`.
+
+        """
+        if self.rollout is None:
+            return None
+        return self.rollout[..., -1]["action"]
+
+    @property
+    def branching_action(self) -> torch.Tensor | TensorDictBase | None:
+        """Returns the action that branched out to this particular node.
+
+        Returns:
+            a tensor, tensordict or None if the node has no parent.
+
+        .. seealso:: This will be equal to :class:`~torchrl.data.Tree.prev_action` whenever the rollout data contains a single step.
+
+        .. seealso:: :class:`All actions associated with a given node (or observation) in the tree <~torchrl.data.Tree.selected_action>`.
+
+        """
+        if self.rollout is None:
+            return None
+        return self.rollout[..., 0]["action"]
+
+    @property
+    def node_observation(self) -> torch.Tensor | TensorDictBase:
+        """Returns the observation associated with this particular node.
+
+        This is the observation (or bag of observations) that defines the node before a branching occurs.
+        If the node contains a :attr:`~.rollout` attribute, the node observation is typically identical to the
+        observation resulting from the last action undertaken, i.e., ``node.rollout[..., -1]["next", "observation"]``.
+
+        If more than one observation key is associated with the tree specs, a :class:`~tensordict.TensorDict` instance
+        is returned instead.
+
+        For a more consistent representation, see :attr:`~.node_observations`.
+
+        """
+        # TODO: implement specs
+        return self.node_data["observation"]
+
+    @property
+    def node_observations(self) -> torch.Tensor | TensorDictBase:
+        """Returns the observations associated with this particular node in a TensorDict format.
+
+        This is the observation (or bag of observations) that defines the node before a branching occurs.
+        If the node contains a :attr:`~.rollout` attribute, the node observation is typically identical to the
+        observation resulting from the last action undertaken, i.e., ``node.rollout[..., -1]["next", "observation"]``.
+
+        If more than one observation key is associated with the tree specs, a :class:`~tensordict.TensorDict` instance
+        is returned instead.
+
+        For a more consistent representation, see :attr:`~.node_observations`.
+
+        """
+        # TODO: implement specs
+        return self.node_data.select("observation")
 
     @property
     def visits(self) -> int | torch.Tensor:
+        """Returns the number of visits associated with this particular node.
+
+        This is an alias for the :attr:`~.count` attribute.
+
+        """
         return self.count
+
     @visits.setter
     def visits(self, count):
         self.count = count
 
-    def fully_expanded(self, *, action_spec: TensorSpec | None = None) -> bool:
-        ...
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "subtree" and value is not None:
+            wr = weakref.ref(self._tensordict)
+            if value._parent is None:
+                value._parent = wr
+            elif isinstance(value._parent, list):
+                value._parent.append(wr)
+            else:
+                value._parent = [value._parent, wr]
+        return super().__setattr__(name, value)
 
     @property
     def parent(self) -> Tree | None:
+        """The parent of the node.
+
+        If the node has a parent and this object is still present in the python workspace, it will be returned by this
+        property.
+
+        For re-branching trees, this property may return a stack of trees where every index of the stack corresponds to
+        a different parent.
+
+        .. note:: the ``parent`` attribute will match in content but not in identity: the tensorclass object is recustructed
+            using the same tensors (i.e., tensors that point to the same memory locations).
+
+        Returns:
+            A ``Tree`` containing the parent data or ``None`` if the parent data is out of scope or the node is the root.
+        """
         parent = self._parent
         if parent is not None:
             # Check that all parents match
-            if isinstance(parent, list):
-                parent = [p() for p in parent]
-                for p in parent[1:]:
-                    if p is not parent[0]:
-                        raise ValueError(
-                            "All parents of a given node level must match."
-                        )
-                return parent[0]
-            return parent()
+            queue = [parent]
+
+            def maybe_flatten_list(maybe_nested_list):
+                if isinstance(maybe_nested_list, list):
+                    for p in maybe_nested_list:
+                        if isinstance(p, list):
+                            queue.append(p)
+                        else:
+                            yield p()
+                else:
+                    yield maybe_nested_list()
+
+            parent_result = None
+            while len(queue):
+                local_result = None
+                for r in maybe_flatten_list(queue.pop()):
+                    if local_result is None:
+                        local_result = r
+                    elif r is not None and r is not local_result:
+                        if isinstance(local_result, list):
+                            local_result.append(r)
+                        else:
+                            local_result = [local_result, r]
+                if local_result is None:
+                    continue
+                # replicate logic at macro level
+                if parent_result is None:
+                    parent_result = local_result
+                else:
+                    if isinstance(local_result, list):
+                        local_result = [
+                            r for r in local_result if r not in parent_result
+                        ]
+                    else:
+                        local_result = [local_result]
+                    if isinstance(parent_result, list):
+                        parent_result.extend(local_result)
+                    else:
+                        parent_result = [parent_result, *local_result]
+            if isinstance(parent_result, list):
+                return TensorDict.lazy_stack(
+                    [self._from_tensordict(r) for r in parent_result]
+                )
+            return self._from_tensordict(parent_result)
 
     @property
     def num_children(self) -> int:
@@ -168,13 +340,13 @@ class Tree(TensorClass["nocast"]):
         """Returns True if the tree has no children nodes."""
         if self.rollout is not None:
             return self.rollout[..., -1]["next", "done"].squeeze(-1)
-        # Here we have two options: (1) subtree is None, in which case this is a node that
-        # has no child yet. Therefore, it can be explored further.
-        # (2) subtree is there, in which case it's not terminal.
-        return True
+        # If there is no rollout, there is no preceding data - either this is a root or it's a floating node.
+        # In either case, we assume that the node is not terminal.
+        return False
 
     def fully_expanded(self, env: EnvBase) -> bool:
-        cardinality = env.cardinality(self.node)
+        """Returns True if the number of children is equal to the environment cardinality."""
+        cardinality = env.cardinality(self.node_data)
         num_actions = self.num_children
         return cardinality == num_actions
 
@@ -843,7 +1015,6 @@ class MCTSForest:
         root: TensorDictBase,
         index: torch.Tensor | None = None,
         compact: bool = True,
-        parent: Tree | None = None,
     ) -> Tuple[Tree, torch.Tensor | None, torch.Tensor | None]:
         root = root.select(*self.node_map.in_keys)
         node_meta = None
@@ -860,6 +1031,8 @@ class MCTSForest:
         while index.numel() <= 1:
             index = index.squeeze()
             d = self.data_map.storage[index]
+
+            # Rebuild rollout step
             steps.append(merge_tensordicts(d, root, callback_exist=lambda *x: None))
             d = d["next"]
             if d in self.node_map:
@@ -871,6 +1044,7 @@ class MCTSForest:
             else:
                 # If the root is provided and not gathered from the storage, it could be that its
                 # device doesn't match the data_map storage device.
+                root = steps[-1]["next"].select(*self.node_map.in_keys)
                 device = getattr(self.data_map.storage, "device", None)
                 if root.device != device:
                     if device is not None:
@@ -889,12 +1063,11 @@ class MCTSForest:
                 rollout=rollout,
                 count=torch.zeros((), dtype=torch.int32),
                 wins=torch.zeros(()),
-                node=root,
+                node_data=root,
                 index=index,
                 hash=None,
                 # We do this to avoid raising an exception as rollout and subtree must be provided together
-                subtree=LazyStackedTensorDict(),
-                _parent=weakref.ref(parent) if parent is not None else None,
+                subtree=None,
             ),
             index,
             hash,
@@ -916,7 +1089,7 @@ class MCTSForest:
     ):
         q = deque()
         memo = {}
-        tree, indices, hash = self._make_local_tree(root, index=index)
+        tree, indices, hash = self._make_local_tree(root, index=index, compact=compact)
         tree.node_id = 0
 
         result = tree
@@ -924,7 +1097,6 @@ class MCTSForest:
         counter = 1
         if indices is not None:
             q.append((tree, indices, hash, depth))
-        del tree, indices
 
         while len(q):
             tree, indices, hash, depth = q.popleft()
@@ -936,15 +1108,29 @@ class MCTSForest:
                 subtree, subtree_indices, subtree_hash = memo.get(h, (None,) * 3)
                 if subtree is None:
                     subtree, subtree_indices, subtree_hash = self._make_local_tree(
-                        tree.node,
+                        tree.node_data,
                         index=i,
                         compact=compact,
-                        parent=tree,
                     )
                     subtree.node_id = counter
                     counter += 1
                     subtree.hash = h
                     memo[h] = (subtree, subtree_indices, subtree_hash)
+                else:
+                    # We just need to save the two (or more) rollouts
+                    subtree_bis, _, _ = self._make_local_tree(
+                        tree.node_data,
+                        index=i,
+                        compact=compact,
+                    )
+                    if subtree.rollout.ndim == subtree_bis.rollout.ndim:
+                        subtree.rollout = TensorDict.stack(
+                            [subtree.rollout, subtree_bis.rollout]
+                        )
+                    else:
+                        subtree.rollout = TensorDict.stack(
+                            [*subtree.rollout, subtree_bis.rollout]
+                        )
 
                 subtrees.append(subtree)
                 if extend and subtree_indices is not None:
