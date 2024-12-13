@@ -118,7 +118,7 @@ def make_collector(
     compile=False,
     compile_mode=None,
     cudagraph=False,
-        device: torch.device|None=None,
+    device: torch.device | None = None,
 ):
     """Make collector."""
     collector = SyncDataCollector(
@@ -180,7 +180,7 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
     """Make DDPG agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.single_action_spec
+    action_spec = train_env.action_spec_unbatched
     actor_net_kwargs = {
         "num_cells": cfg.network.hidden_sizes,
         "out_features": action_spec.shape[-1],

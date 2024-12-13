@@ -190,12 +190,12 @@ commands = {
   logger.backend=
 """,
     "dreamer": """python sota-implementations/dreamer/dreamer.py \
-  collector.total_frames=200 \
+  collector.total_frames=600 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=200 \
   env.n_parallel_envs=1 \
   optimization.optim_steps_per_batch=1 \
-  logger.video=True \
+  logger.video=False \
   logger.backend=csv \
   replay_buffer.buffer_size=120 \
   replay_buffer.batch_size=24 \

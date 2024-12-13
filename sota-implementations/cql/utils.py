@@ -6,10 +6,8 @@ import functools
 
 import torch.nn
 import torch.optim
-from tensordict import TensorDict, TensorDictParams
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.distributions import NormalParamExtractor
-from tensordict.tensorclass import NonTensorData
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
@@ -219,17 +217,22 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         # Wrapping the kwargs in a TensorDictParams such that these items are
-        #  send to device when necessary
-        distribution_kwargs=TensorDictParams(
-            TensorDict(
-                {
-                    "low": torch.as_tensor(action_spec.space.low, device=device),
-                    "high": torch.as_tensor(action_spec.space.high, device=device),
-                    "tanh_loc": NonTensorData(False),
-                }
-            ),
-            no_convert=True,
-        ),
+        #  send to device when necessary - not compatible with compile yet
+        # distribution_kwargs=TensorDictParams(
+        #     TensorDict(
+        #         {
+        #             "low": torch.as_tensor(action_spec.space.low, device=device),
+        #             "high": torch.as_tensor(action_spec.space.high, device=device),
+        #             "tanh_loc": NonTensorData(False),
+        #         }
+        #     ),
+        #     no_convert=True,
+        # ),
+        distribution_kwargs={
+            "low": action_spec.space.low.to(device),
+            "high": action_spec.space.high.to(device),
+            "tanh_loc": False,
+        },
         default_interaction_type=ExplorationType.RANDOM,
     )
 
