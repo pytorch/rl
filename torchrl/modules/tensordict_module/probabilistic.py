@@ -68,12 +68,12 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             returned by the input module. If the sample is out of bounds, it is
             projected back onto the desired space using the `TensorSpec.project` method.
             Default is ``False``.
-        default_interaction_type (str, optional): default method to be used to retrieve
-            the output value. Should be one of: 'mode', 'median', 'mean' or 'random'
+        default_interaction_type (tensordict.nn.InteractionType, optional): default method to be used to retrieve
+            the output value. Should be one of: ``InteractionType.MODE``, ``InteractionType.MEDIAN``, ``InteractionType.MEAN`` or ``InteractionType.RANDOM``
             (in which case the value is sampled randomly from the distribution). Default
-            is 'mode'.
+            is ``InteractionType.MODE``.
             Note: When a sample is drawn, the :obj:`ProbabilisticTDModule` instance will
-            fist look for the interaction mode dictated by the `interaction_typ()`
+            fist look for the interaction mode dictated by the `interaction_type()`
             global function. If this returns `None` (its default value), then the
             `default_interaction_type` of the :class:`~.ProbabilisticTDModule`
             instance will be used. Note that DataCollector instances will use

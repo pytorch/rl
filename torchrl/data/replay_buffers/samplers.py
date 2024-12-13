@@ -802,6 +802,112 @@ class SliceSampler(Sampler):
         attempt to find the ``traj_key`` entry in the storage. If it cannot be
         found, the ``end_key`` will be used to reconstruct the episodes.
 
+    .. note:: When using `strict_length=False`, it is recommended to use
+        :func:`~torchrl.collectors.utils.split_trajectories` to split the sampled trajectories.
+        However, if two samples from the same episode are placed next to each other,
+        this may produce incorrect results. To avoid this issue, consider one of these solutions:
+
+        - using a :class:`~torchrl.data.TensorDictReplayBuffer` instance with the slice sampler
+
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.collectors.utils import split_trajectories
+            >>> from torchrl.data import TensorDictReplayBuffer, ReplayBuffer, LazyTensorStorage, SliceSampler, SliceSamplerWithoutReplacement
+            >>>
+            >>> rb = TensorDictReplayBuffer(storage=LazyTensorStorage(max_size=1000),
+            ...                   sampler=SliceSampler(
+            ...                       slice_len=5, traj_key="episode",strict_length=False,
+            ...                   ))
+            ...
+            >>> ep_1 = TensorDict(
+            ...     {"obs": torch.arange(100),
+            ...     "episode": torch.zeros(100),},
+            ...     batch_size=[100]
+            ... )
+            >>> ep_2 = TensorDict(
+            ...     {"obs": torch.arange(4),
+            ...     "episode": torch.ones(4),},
+            ...     batch_size=[4]
+            ... )
+            >>> rb.extend(ep_1)
+            >>> rb.extend(ep_2)
+            >>>
+            >>> s = rb.sample(50)
+            >>> print(s)
+            TensorDict(
+                fields={
+                    episode: Tensor(shape=torch.Size([46]), device=cpu, dtype=torch.float32, is_shared=False),
+                    index: Tensor(shape=torch.Size([46, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                    next: TensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([46, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            terminated: Tensor(shape=torch.Size([46, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([46, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        batch_size=torch.Size([46]),
+                        device=cpu,
+                        is_shared=False),
+                    obs: Tensor(shape=torch.Size([46]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([46]),
+                device=cpu,
+                is_shared=False)
+            >>> t = split_trajectories(s, done_key="truncated")
+            >>> print(t["obs"])
+            tensor([[73, 74, 75, 76, 77],
+                    [ 0,  1,  2,  3,  0],
+                    [ 0,  1,  2,  3,  0],
+                    [41, 42, 43, 44, 45],
+                    [ 0,  1,  2,  3,  0],
+                    [67, 68, 69, 70, 71],
+                    [27, 28, 29, 30, 31],
+                    [80, 81, 82, 83, 84],
+                    [17, 18, 19, 20, 21],
+                    [ 0,  1,  2,  3,  0]])
+            >>> print(t["episode"])
+            tensor([[0., 0., 0., 0., 0.],
+                    [1., 1., 1., 1., 0.],
+                    [1., 1., 1., 1., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [1., 1., 1., 1., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [1., 1., 1., 1., 0.]])
+
+        - using a :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement`
+
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.collectors.utils import split_trajectories
+            >>> from torchrl.data import ReplayBuffer, LazyTensorStorage, SliceSampler, SliceSamplerWithoutReplacement
+            >>>
+            >>> rb = ReplayBuffer(storage=LazyTensorStorage(max_size=1000),
+            ...                   sampler=SliceSamplerWithoutReplacement(
+            ...                       slice_len=5, traj_key="episode",strict_length=False
+            ...                   ))
+            ...
+            >>> ep_1 = TensorDict(
+            ...     {"obs": torch.arange(100),
+            ...     "episode": torch.zeros(100),},
+            ...     batch_size=[100]
+            ... )
+            >>> ep_2 = TensorDict(
+            ...     {"obs": torch.arange(4),
+            ...     "episode": torch.ones(4),},
+            ...     batch_size=[4]
+            ... )
+            >>> rb.extend(ep_1)
+            >>> rb.extend(ep_2)
+            >>>
+            >>> s = rb.sample(50)
+            >>> t = split_trajectories(s, trajectory_key="episode")
+            >>> print(t["obs"])
+            tensor([[75, 76, 77, 78, 79],
+                    [ 0,  1,  2,  3,  0]])
+            >>> print(t["episode"])
+            tensor([[0., 0., 0., 0., 0.],
+                    [1., 1., 1., 1., 0.]])
+
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
@@ -861,6 +967,9 @@ class SliceSampler(Sampler):
                 [ 8]])
 
     """
+
+    # We use this whenever we need to sample N times too many transitions to then select only a 1/N fraction of them
+    _batch_size_multiplier: int | None = 1
 
     def __init__(
         self,
@@ -1189,6 +1298,8 @@ class SliceSampler(Sampler):
         return seq_length, num_slices
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+        if self._batch_size_multiplier is not None:
+            batch_size = batch_size * self._batch_size_multiplier
         # pick up as many trajs as we need
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         # we have to make sure that the number of dims of the storage
@@ -1427,6 +1538,10 @@ class SliceSampler(Sampler):
 class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
     """Samples slices of data along the first dimension, given start and stop signals, without replacement.
 
+    In this context, ``without replacement`` means that the same element (NOT trajectory) will not be sampled twice
+    before the counter is automatically reset. Within a single sample, however, only one slice of a given trajectory
+    will appear (see example below).
+
     This class is to be used with static replay buffers or in between two
     replay buffer extensions. Extending the replay buffer will reset the
     the sampler, and continuous sampling without replacement is currently not
@@ -1533,6 +1648,52 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         tensor([ 1,  2,  7,  9, 10, 13, 15, 18, 21, 22])
         tensor([ 0,  3,  4, 20, 23])
 
+    When requesting a large total number of samples with few trajectories and small span, the batch will contain
+    only at most one sample of each trajectory:
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.collectors.utils import split_trajectories
+        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage, SliceSampler, SliceSamplerWithoutReplacement
+        >>>
+        >>> rb = ReplayBuffer(storage=LazyTensorStorage(max_size=1000),
+        ...                   sampler=SliceSamplerWithoutReplacement(
+        ...                       slice_len=5, traj_key="episode",strict_length=False
+        ...                   ))
+        ...
+        >>> ep_1 = TensorDict(
+        ...     {"obs": torch.arange(100),
+        ...     "episode": torch.zeros(100),},
+        ...     batch_size=[100]
+        ... )
+        >>> ep_2 = TensorDict(
+        ...     {"obs": torch.arange(51),
+        ...     "episode": torch.ones(51),},
+        ...     batch_size=[51]
+        ... )
+        >>> rb.extend(ep_1)
+        >>> rb.extend(ep_2)
+        >>>
+        >>> s = rb.sample(50)
+        >>> t = split_trajectories(s, trajectory_key="episode")
+        >>> print(t["obs"])
+        tensor([[14, 15, 16, 17, 18],
+                [ 3,  4,  5,  6,  7]])
+        >>> print(t["episode"])
+        tensor([[0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1.]])
+        >>>
+        >>> s = rb.sample(50)
+        >>> t = split_trajectories(s, trajectory_key="episode")
+        >>> print(t["obs"])
+        tensor([[ 4,  5,  6,  7,  8],
+                [26, 27, 28, 29, 30]])
+        >>> print(t["episode"])
+        tensor([[0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1.]])
+
+
     """
 
     def __init__(
@@ -1591,6 +1752,8 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
     def sample(
         self, storage: Storage, batch_size: int
     ) -> Tuple[Tuple[torch.Tensor, ...], dict]:
+        if self._batch_size_multiplier is not None:
+            batch_size = batch_size * self._batch_size_multiplier
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         # we have to make sure that the number of dims of the storage
         # is the same as the stop/start signals since we will
