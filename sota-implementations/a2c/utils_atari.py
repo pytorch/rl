@@ -92,12 +92,12 @@ def make_ppo_modules_pixels(proof_environment, device):
     input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs
-    if isinstance(proof_environment.single_action_spec.space, CategoricalBox):
-        num_outputs = proof_environment.single_action_spec.space.n
+    if isinstance(proof_environment.action_spec_unbatched.space, CategoricalBox):
+        num_outputs = proof_environment.action_spec_unbatched.space.n
         distribution_class = OneHotCategorical
         distribution_kwargs = {}
     else:  # is ContinuousBox
-        num_outputs = proof_environment.single_action_spec.shape
+        num_outputs = proof_environment.action_spec_unbatched.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
             "low": proof_environment.action_spec_unbatched.space.low.to(device),
