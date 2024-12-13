@@ -2,7 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Optional
+from __future__ import annotations
+
+from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
@@ -24,7 +26,12 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import consolidate_spec
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
-from torchrl.envs.utils import _terminated_or_truncated
+from torchrl.envs.utils import (
+    _terminated_or_truncated,
+    check_marl_grouping,
+    MarlGroupMapType,
+)
+
 
 spec_dict = {
     "bounded": Bounded,
@@ -1038,11 +1045,13 @@ class CountingEnv(EnvBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         action = tensordict.get(self.action_key)
+        try:
+            device = self.full_action_spec[self.action_key].device
+        except KeyError:
+            device = self.device
         self.count += action.to(
             dtype=torch.int,
-            device=self.full_action_spec[self.action_key].device
-            if self.device is None
-            else self.device,
+            device=device if self.device is None else self.device,
         )
         tensordict = TensorDict(
             source={
@@ -1054,6 +1063,154 @@ class CountingEnv(EnvBase):
             batch_size=self.batch_size,
             device=self.device,
         )
+        return tensordict
+
+
+class MultiAgentCountingEnv(EnvBase):
+    """A multi-agent env that is done after a given number of steps.
+
+    All agents have identical specs.
+
+    The count is incremented by 1 on each step.
+
+    """
+
+    def __init__(
+        self,
+        n_agents: int,
+        group_map: MarlGroupMapType
+        | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        max_steps: int = 5,
+        start_val: int = 0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.max_steps = max_steps
+        self.start_val = start_val
+        self.n_agents = n_agents
+        self.agent_names = [f"agent_{idx}" for idx in range(n_agents)]
+
+        if isinstance(group_map, MarlGroupMapType):
+            group_map = group_map.get_group_map(self.agent_names)
+        check_marl_grouping(group_map, self.agent_names)
+
+        self.group_map = group_map
+
+        observation_specs = {}
+        reward_specs = {}
+        done_specs = {}
+        action_specs = {}
+
+        for group_name, agents in group_map.items():
+            observation_specs[group_name] = {}
+            reward_specs[group_name] = {}
+            done_specs[group_name] = {}
+            action_specs[group_name] = {}
+
+            for agent_name in agents:
+                observation_specs[group_name][agent_name] = Composite(
+                    observation=Unbounded(
+                        (
+                            *self.batch_size,
+                            3,
+                            4,
+                        ),
+                        dtype=torch.float32,
+                        device=self.device,
+                    ),
+                    shape=self.batch_size,
+                    device=self.device,
+                )
+                reward_specs[group_name][agent_name] = Composite(
+                    reward=Unbounded(
+                        (
+                            *self.batch_size,
+                            1,
+                        ),
+                        device=self.device,
+                    ),
+                    shape=self.batch_size,
+                    device=self.device,
+                )
+                done_specs[group_name][agent_name] = Composite(
+                    done=Categorical(
+                        2,
+                        dtype=torch.bool,
+                        shape=(
+                            *self.batch_size,
+                            1,
+                        ),
+                        device=self.device,
+                    ),
+                    shape=self.batch_size,
+                    device=self.device,
+                )
+                action_specs[group_name][agent_name] = Composite(
+                    action=Binary(n=1, shape=[*self.batch_size, 1], device=self.device),
+                    shape=self.batch_size,
+                    device=self.device,
+                )
+
+        self.observation_spec = Composite(observation_specs)
+        self.reward_spec = Composite(reward_specs)
+        self.done_spec = Composite(done_specs)
+        self.action_spec = Composite(action_specs)
+        self.register_buffer(
+            "count",
+            torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
+        )
+
+    def _set_seed(self, seed: Optional[int]):
+        torch.manual_seed(seed)
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        if tensordict is not None and "_reset" in tensordict.keys():
+            _reset = tensordict.get("_reset")
+            self.count[_reset] = self.start_val
+        else:
+            self.count[:] = self.start_val
+
+        source = {}
+        for group_name, agents in self.group_map.items():
+            source[group_name] = {}
+            for agent_name in agents:
+                source[group_name][agent_name] = TensorDict(
+                    source={
+                        "observation": torch.rand(
+                            (*self.batch_size, 3, 4), device=self.device
+                        ),
+                        "done": self.count > self.max_steps,
+                        "terminated": self.count > self.max_steps,
+                    },
+                    batch_size=self.batch_size,
+                    device=self.device,
+                )
+
+        tensordict = TensorDict(source, batch_size=self.batch_size, device=self.device)
+        return tensordict
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        self.count += 1
+        source = {}
+        for group_name, agents in self.group_map.items():
+            source[group_name] = {}
+            for agent_name in agents:
+                source[group_name][agent_name] = TensorDict(
+                    source={
+                        "observation": torch.rand(
+                            (*self.batch_size, 3, 4), device=self.device
+                        ),
+                        "done": self.count > self.max_steps,
+                        "terminated": self.count > self.max_steps,
+                        "reward": torch.zeros_like(self.count, dtype=torch.float),
+                    },
+                    batch_size=self.batch_size,
+                    device=self.device,
+                )
+        tensordict = TensorDict(source, batch_size=self.batch_size, device=self.device)
         return tensordict
 
 
@@ -1275,8 +1432,10 @@ class CountingBatchedEnv(EnvBase):
             max_steps = torch.tensor(5)
         if start_val is None:
             start_val = torch.zeros((), dtype=torch.int32)
-        if not max_steps.shape == self.batch_size:
-            raise RuntimeError("batch_size and max_steps shape must match.")
+        if max_steps.shape != self.batch_size:
+            raise RuntimeError(
+                f"batch_size and max_steps shape must match. Got self.batch_size={self.batch_size} and max_steps.shape={max_steps.shape}."
+            )
 
         self.max_steps = max_steps
 
@@ -1772,14 +1931,18 @@ class EnvWithMetadata(EnvBase):
             tensor=Unbounded(3),
             non_tensor=NonTensor(shape=()),
         )
+        self._saved_obs_spec = self.observation_spec.clone()
         self.state_spec = Composite(
             non_tensor=NonTensor(shape=()),
         )
+        self._saved_state_spec = self.state_spec.clone()
         self.reward_spec = Unbounded(1)
+        self._saved_full_reward_spec = self.full_reward_spec.clone()
         self.action_spec = Unbounded(1)
+        self._saved_full_action_spec = self.full_action_spec.clone()
 
     def _reset(self, tensordict):
-        data = self.observation_spec.zero()
+        data = self._saved_obs_spec.zero()
         data.set_non_tensor("non_tensor", 0)
         data.update(self.full_done_spec.zero())
         return data
@@ -1788,10 +1951,10 @@ class EnvWithMetadata(EnvBase):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        data = self.observation_spec.zero()
+        data = self._saved_obs_spec.zero()
         data.set_non_tensor("non_tensor", tensordict["non_tensor"] + 1)
         data.update(self.full_done_spec.zero())
-        data.update(self.full_reward_spec.zero())
+        data.update(self._saved_full_reward_spec.zero())
         return data
 
     def _set_seed(self, seed: Optional[int]):
@@ -1923,3 +2086,86 @@ class EnvWithDynamicSpec(EnvBase):
     def _set_seed(self, seed: Optional[int]):
         self.manual_seed = seed
         return seed
+
+
+class EnvWithScalarAction(EnvBase):
+    def __init__(self, singleton: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.singleton = singleton
+        self.action_spec = Bounded(
+            -1,
+            1,
+            shape=(
+                *self.batch_size,
+                1,
+            )
+            if self.singleton
+            else self.batch_size,
+        )
+        self.observation_spec = Composite(
+            observation=Unbounded(
+                shape=(
+                    *self.batch_size,
+                    3,
+                )
+            ),
+            shape=self.batch_size,
+        )
+        self.done_spec = Composite(
+            done=Unbounded(self.batch_size + (1,), dtype=torch.bool),
+            terminated=Unbounded(self.batch_size + (1,), dtype=torch.bool),
+            truncated=Unbounded(self.batch_size + (1,), dtype=torch.bool),
+            shape=self.batch_size,
+        )
+        self.reward_spec = Unbounded(
+            shape=(
+                *self.batch_size,
+                1,
+            )
+        )
+
+    def _reset(self, td: TensorDict):
+        return TensorDict(
+            observation=torch.randn(*self.batch_size, 3, device=self.device),
+            done=torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
+            truncated=torch.zeros(
+                *self.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
+            terminated=torch.zeros(
+                *self.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
+            device=self.device,
+        )
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        return TensorDict(
+            observation=torch.randn(*self.batch_size, 3, device=self.device),
+            reward=torch.zeros(1, device=self.device),
+            done=torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device),
+            truncated=torch.zeros(
+                *self.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
+            terminated=torch.zeros(
+                *self.batch_size, 1, dtype=torch.bool, device=self.device
+            ),
+        )
+
+    def _set_seed(self, seed: Optional[int]):
+        ...
+
+
+class EnvThatDoesNothing(EnvBase):
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        return TensorDict(batch_size=self.batch_size, device=self.device)
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        return TensorDict(batch_size=self.batch_size, device=self.device)
+
+    def _set_seed(self, seed):
+        ...

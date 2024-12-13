@@ -205,8 +205,8 @@ class TruncatedNormal(D.Independent):
 
             Default is 5.0
 
-        min (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
-        max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
+        low (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
+        high (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
         tanh_loc (bool, optional): if ``True``, the above formula is used for
             the location scaling, otherwise the raw value is kept.
             Default is ``False``;
@@ -554,7 +554,7 @@ class TanhNormal(FasterTransformedDistribution):
     def mean(self):
         raise NotImplementedError(
             f"{type(self).__name__} does not have a closed form formula for the average. "
-            "Am estimate of this value can be computed using dist.sample((N,)).mean(dim=0), "
+            "An estimate of this value can be computed using dist.sample((N,)).mean(dim=0), "
             "where N is a large number of samples."
         )
 
@@ -695,10 +695,15 @@ class TanhDelta(FasterTransformedDistribution):
     ):
         minmax_msg = "high value has been found to be equal or less than low value"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
-            if not (high > low).all():
-                raise ValueError(minmax_msg)
+            if is_dynamo_compiling():
+                assert (high > low).all()
+            else:
+                if not (high > low).all():
+                    raise ValueError(minmax_msg)
         elif isinstance(high, Number) and isinstance(low, Number):
-            if high <= low:
+            if is_dynamo_compiling():
+                assert high > low
+            elif high <= low:
                 raise ValueError(minmax_msg)
         else:
             if not all(high > low):

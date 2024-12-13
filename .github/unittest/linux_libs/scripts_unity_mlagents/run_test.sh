@@ -23,6 +23,7 @@ conda deactivate && conda activate ./env
 python -c "import mlagents_envs"
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestUnityMLAgents --runslow
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_transforms.py --instafail -v --durations 200 --capture no -k test_transform_env[unity]
 
 coverage combine
 coverage xml -i
