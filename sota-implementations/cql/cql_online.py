@@ -176,6 +176,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if collected_frames >= init_random_frames:
             log_loss_td = TensorDict(batch_size=[num_updates], device=device)
             for j in range(num_updates):
+                pbar.set_description(f"optim iter {j}")
                 with timeit("rb - sample"):
                     # sample from replay buffer
                     sampled_tensordict = replay_buffer.sample().to(device)
