@@ -110,7 +110,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
-        update = torch.compile(update, mode=compile_mode)
+        update = torch.compile(update, mode=compile_mode, dynamic=True)
     if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",

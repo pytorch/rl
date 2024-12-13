@@ -15,11 +15,14 @@ from typing import Callable, List, Union
 import torch
 from tensordict import TensorDictBase
 from tensordict.nn import (
+    CompositeDistribution,
     dispatch,
+    ProbabilisticTensorDictModule,
     set_skip_existing,
     TensorDictModule,
     TensorDictModuleBase,
 )
+from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey
 from torch import Tensor
 
@@ -74,14 +77,22 @@ def _self_set_skip_existing(fun):
 
 
 def _call_actor_net(
-    actor_net: TensorDictModuleBase,
+    actor_net: ProbabilisticTensorDictModule,
     data: TensorDictBase,
     params: TensorDictBase,
     log_prob_key: NestedKey,
 ):
-    # TODO: extend to handle time dimension (and vmap?)
-    log_pi = actor_net(data.select(*actor_net.in_keys, strict=False)).get(log_prob_key)
-    return log_pi
+    dist = actor_net.get_dist(data.select(*actor_net.in_keys, strict=False))
+    if isinstance(dist, CompositeDistribution):
+        kwargs = {
+            "aggregate_probabilities": True,
+            "inplace": False,
+            "include_sum": False,
+        }
+    else:
+        kwargs = {}
+    s = actor_net._dist_sample(dist, interaction_type=interaction_type())
+    return dist.log_prob(s, **kwargs)
 
 
 class ValueEstimatorBase(TensorDictModuleBase):
@@ -1768,7 +1779,8 @@ class VTrace(ValueEstimatorBase):
                 data=tensordict,
                 params=None,
                 log_prob_key=self.tensor_keys.sample_log_prob,
-            ).view_as(value)
+            )
+            log_pi = log_pi.view_as(value)
 
         # Compute the V-Trace correction
         done = tensordict.get(("next", self.tensor_keys.done))
