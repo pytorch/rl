@@ -13,7 +13,7 @@ collector:
   init_env_steps: 1000
   frames_per_batch: 1000
   reset_at_each_iter: False
-  device: cpu
+  device:
   env_per_collector: 1
   num_workers: 1
 

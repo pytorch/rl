@@ -16,9 +16,9 @@ import tqdm
 
 from gail_utils import log_metrics, make_gail_discriminator, make_offline_replay_buffer
 from ppo_utils import eval_model, make_env, make_ppo_models
+from tensordict.nn import CudaGraphModule
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
-from tensordict.nn import CudaGraphModule
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 
 from torchrl.envs import set_gym_backend
@@ -262,7 +262,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
-                                            / len(episode_length),
+                    / len(episode_length),
                 }
             )
 
