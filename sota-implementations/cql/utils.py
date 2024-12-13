@@ -113,7 +113,14 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(
+    cfg,
+    train_env,
+    actor_model_explore,
+    compile=False,
+    compile_mode=None,
+    cudagraph=False,
+):
     """Make collector."""
     collector = SyncDataCollector(
         train_env,
@@ -123,6 +130,8 @@ def make_collector(cfg, train_env, actor_model_explore):
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
+        compile_policy={"mode": compile_mode} if compile else False,
+        cudagraph_policy=cudagraph,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -207,11 +216,21 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         in_keys=["loc", "scale"],
         spec=action_spec,
         distribution_class=TanhNormal,
+        # Wrapping the kwargs in a TensorDictParams such that these items are
+        #  send to device when necessary - not compatible with compile yet
+        # distribution_kwargs=TensorDictParams(
+        #     TensorDict(
+        #         {
+        #             "low": action_spec.space.low,
+        #             "high": action_spec.space.high,
+        #             "tanh_loc": NonTensorData(False),
+        #         }
+        #     ),
+        #     no_convert=True,
+        # ),
         distribution_kwargs={
-            "low": action_spec.space.low[len(train_env.batch_size) :],
-            "high": action_spec.space.high[
-                len(train_env.batch_size) :
-            ],  # remove batch-size
+            "low": action_spec.space.low.to(device),
+            "high": action_spec.space.high.to(device),
             "tanh_loc": False,
         },
         default_interaction_type=ExplorationType.RANDOM,

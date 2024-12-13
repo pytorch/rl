@@ -10,14 +10,15 @@ It supports state environments like gym and gymnasium.
 
 The helper functions are coded in the utils.py associated with this script.
 """
-import time
 
 import hydra
 import numpy as np
 import torch
 import torch.cuda
 import tqdm
-from torchrl._utils import logger as torchrl_logger
+from tensordict.nn import CudaGraphModule
+
+from torchrl._utils import timeit
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
@@ -71,8 +72,24 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create loss
     loss_module, target_net_updater = make_discrete_loss(cfg.loss, model)
 
+    compile_mode = None
+    if cfg.compile.compile:
+        if cfg.compile.compile_mode not in (None, ""):
+            compile_mode = cfg.compile.compile_mode
+        elif cfg.compile.cudagraphs:
+            compile_mode = "default"
+        else:
+            compile_mode = "reduce-overhead"
+
     # Create off-policy collector
-    collector = make_collector(cfg, train_env, explore_policy)
+    collector = make_collector(
+        cfg,
+        train_env,
+        explore_policy,
+        compile=cfg.compile.compile,
+        compile_mode=compile_mode,
+        cudagraph=cfg.compile.cudagraphs,
+    )
 
     # Create replay buffer
     replay_buffer = make_replay_buffer(
@@ -85,6 +102,28 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create optimizers
     optimizer = make_discrete_cql_optimizer(cfg, loss_module)
+
+    def update(sampled_tensordict):
+        # Compute loss
+        optimizer.zero_grad(set_to_none=True)
+        loss_dict = loss_module(sampled_tensordict)
+
+        q_loss = loss_dict["loss_qvalue"]
+        cql_loss = loss_dict["loss_cql"]
+        loss = q_loss + cql_loss
+
+        # Update model
+        loss.backward()
+        optimizer.step()
+
+        # Update target params
+        target_net_updater.step()
+        return loss_dict.detach()
+
+    if compile_mode:
+        update = torch.compile(update, mode=compile_mode)
+    if cfg.compile.cudagraphs:
+        update = CudaGraphModule(update, warmup=50)
 
     # Main loop
     collected_frames = 0
@@ -101,9 +140,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_iter = cfg.logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
 
-    start_time = sampling_start = time.time()
-    for tensordict in collector:
-        sampling_time = time.time() - sampling_start
+    c_iter = iter(collector)
+    for i in range(len(collector)):
+        with timeit("collecting"):
+            torch.compiler.cudagraph_mark_step_begin()
+            tensordict = next(c_iter)
 
         # Update exploration policy
         explore_policy[1].step(tensordict.numel())
@@ -111,53 +152,31 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Update weights of the inference policy
         collector.update_policy_weights_()
 
-        pbar.update(tensordict.numel())
+        current_frames = tensordict.numel()
+        pbar.update(current_frames)
 
         tensordict = tensordict.reshape(-1)
-        current_frames = tensordict.numel()
-        # Add to replay buffer
-        replay_buffer.extend(tensordict.cpu())
+        with timeit("rb - extend"):
+            # Add to replay buffer
+            replay_buffer.extend(tensordict)
         collected_frames += current_frames
 
         # Optimization steps
-        training_start = time.time()
         if collected_frames >= init_random_frames:
-            (
-                q_losses,
-                cql_losses,
-            ) = ([], [])
+            tds = []
             for _ in range(num_updates):
-
                 # Sample from replay buffer
-                sampled_tensordict = replay_buffer.sample()
-                if sampled_tensordict.device != device:
-                    sampled_tensordict = sampled_tensordict.to(
-                        device, non_blocking=True
-                    )
-                else:
-                    sampled_tensordict = sampled_tensordict.clone()
+                with timeit("rb - sample"):
+                    sampled_tensordict = replay_buffer.sample()
+                    sampled_tensordict = sampled_tensordict.to(device)
+                with timeit("update"):
+                    loss_dict = update(sampled_tensordict)
+                tds.append(loss_dict)
 
-                # Compute loss
-                loss_dict = loss_module(sampled_tensordict)
-
-                q_loss = loss_dict["loss_qvalue"]
-                cql_loss = loss_dict["loss_cql"]
-                loss = q_loss + cql_loss
-
-                # Update model
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                q_losses.append(q_loss.item())
-                cql_losses.append(cql_loss.item())
-
-                # Update target params
-                target_net_updater.step()
                 # Update priority
                 if prb:
                     replay_buffer.update_priority(sampled_tensordict)
 
-        training_time = time.time() - training_start
         episode_end = (
             tensordict["next", "done"]
             if tensordict["next", "done"].any()
@@ -165,8 +184,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
         episode_rewards = tensordict["next", "episode_reward"][episode_end]
 
-        # Logging
         metrics_to_log = {}
+        # Evaluation
+        with timeit("eval"):
+            if collected_frames % eval_iter < frames_per_batch:
+                with set_exploration_type(
+                    ExplorationType.DETERMINISTIC
+                ), torch.no_grad():
+                    eval_rollout = eval_env.rollout(
+                        eval_rollout_steps,
+                        model,
+                        auto_cast_to_device=True,
+                        break_when_any_done=True,
+                    )
+                    eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                    metrics_to_log["eval/reward"] = eval_reward
+
+        # Logging
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][episode_end]
             metrics_to_log["train/reward"] = episode_rewards.mean().item()
@@ -176,33 +210,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/epsilon"] = explore_policy[1].eps
 
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = np.mean(q_losses)
-            metrics_to_log["train/cql_loss"] = np.mean(cql_losses)
-            metrics_to_log["train/sampling_time"] = sampling_time
-            metrics_to_log["train/training_time"] = training_time
+            tds = torch.stack(tds, dim=0).mean()
+            metrics_to_log["train/q_loss"] = tds["loss_qvalue"]
+            metrics_to_log["train/cql_loss"] = tds["loss_cql"]
+            if i % 100 == 0:
+                metrics_to_log.update(timeit.todict(prefix="time"))
 
-        # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch:
-            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
-                eval_start = time.time()
-                eval_rollout = eval_env.rollout(
-                    eval_rollout_steps,
-                    model,
-                    auto_cast_to_device=True,
-                    break_when_any_done=True,
-                )
-                eval_time = time.time() - eval_start
-                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                metrics_to_log["eval/reward"] = eval_reward
-                metrics_to_log["eval/time"] = eval_time
+        if i % 100 == 0:
+            timeit.print()
+            timeit.erase()
+
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
-        sampling_start = time.time()
 
     collector.shutdown()
-    end_time = time.time()
-    execution_time = end_time - start_time
-    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":
