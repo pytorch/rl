@@ -136,6 +136,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             data = offline_buffer.sample()
 
         with timeit("update"):
+            torch.compiler.cudagraph_mark_step_begin()
             loss_vals = update(data.to(model_device))
 
         scheduler.step()
