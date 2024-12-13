@@ -112,6 +112,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
         )
+        if cfg.optim.optimizer == "lamb":
+            raise ValueError(
+                "cudagraphs isn't compatible with the Lamb optimizer. Use optim.optimizer=Adam instead."
+            )
         update = CudaGraphModule(update, warmup=50)
 
     pbar = tqdm.tqdm(total=cfg.optim.pretrain_gradient_steps)
