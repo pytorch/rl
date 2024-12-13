@@ -116,6 +116,7 @@ from torchrl.envs import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
+    Hash,
     InitTracker,
     MultiStepTransform,
     NoopResetEnv,
@@ -2175,6 +2176,158 @@ class TestTrajCounter(TransformBase):
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
     def test_transform_no_env(self, device, batch):
         pytest.skip("TrajCounter cannot be called without env")
+
+
+# TODO: Add tests that hash NonTensorStacks of strings
+class TestHash(TransformBase):
+    @pytest.mark.parametrize("datatype", ["tensor", "str"])
+    def test_transform_no_env(self, datatype):
+        if datatype == "tensor":
+            obs = torch.tensor(10)
+        elif datatype == "str":
+            obs = "abcdefg"
+        else:
+            raise RuntimeError(f"please add a test case for datatype {datatype}")
+
+        td = TensorDict(
+            {
+                "observation": obs,
+            }
+        )
+        t = Hash(in_keys=["observation"], out_keys=["hash"])
+        td_hashed = t(td)
+
+        assert td_hashed["observation"] is td["observation"]
+        assert td_hashed["hash"] == hash(td["observation"])
+
+    def test_single_trans_env_check(self):
+        t = Hash(in_keys=["observation"], out_keys=["hash"])
+        env = TransformedEnv(CountingEnv(), t)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            t = Hash(
+                in_keys=["observation"],
+                out_keys=["hash"],
+            )
+            return TransformedEnv(CountingEnv(), t)
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        def make_env():
+            t = Hash(in_keys=["observation"], out_keys=["hash"])
+            return TransformedEnv(CountingEnv(), t)
+
+        env = maybe_fork_ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        t = Hash(
+            in_keys=["observation"],
+            out_keys=["hash"],
+        )
+
+        env = TransformedEnv(SerialEnv(2, CountingEnv), t)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        t = Hash(
+            in_keys=["observation"],
+            out_keys=["hash"],
+        )
+
+        env = TransformedEnv(maybe_fork_ParallelEnv(2, CountingEnv), t)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    @pytest.mark.parametrize("datatype", ["tensor", "str"])
+    def test_transform_compose(self, datatype):
+        if datatype == "tensor":
+            obs = torch.tensor(10)
+        elif datatype == "str":
+            obs = "abcdefg"
+        else:
+            raise RuntimeError(f"please add a test case for datatype {datatype}")
+
+        td = TensorDict(
+            {
+                "observation": obs,
+            }
+        )
+        t = Hash(in_keys=["observation"], out_keys=["hash"])
+        t = Compose(t)
+        td_hashed = t(td)
+
+        assert td_hashed["observation"] is td["observation"]
+        assert td_hashed["hash"] == hash(td["observation"])
+
+    def test_transform_model(self):
+        t = Hash(
+            in_keys=[("next", "observation"), ("observation",)],
+            out_keys=[("next", "hash"), ("hash",)],
+        )
+        model = nn.Sequential(t, nn.Identity())
+        td = TensorDict(
+            {("next", "observation"): torch.randn(3), "observation": torch.randn(3)}, []
+        )
+        td_out = model(td)
+        assert ("next", "hash") in td_out.keys(True)
+        assert ("hash",) in td_out.keys(True)
+        assert td_out["next", "hash"] == hash(td["next", "observation"])
+        assert td_out["hash"] == hash(td["observation"])
+
+    @pytest.mark.skipif(not _has_gym, reason="Gym not found")
+    def test_transform_env(self):
+        t = Hash(
+            in_keys=["observation"],
+            out_keys=["hash"],
+        )
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), t)
+        assert env.observation_spec["hash"]
+        assert "observation" in env.observation_spec
+        assert "observation" in env.base_env.observation_spec
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        t = Hash(
+            in_keys=[("next", "observation"), ("observation",)],
+            out_keys=[("next", "hash"), ("hash",)],
+        )
+        rb = rbclass(storage=LazyTensorStorage(10))
+        rb.append_transform(t)
+        td = TensorDict(
+            {
+                "observation": torch.randn(3, 4),
+                "next": TensorDict(
+                    {"observation": torch.randn(3, 4)},
+                    [],
+                ),
+            },
+            [],
+        ).expand(10)
+        rb.extend(td)
+        td = rb.sample(2)
+        assert "observation_out" in td.keys()
+        assert "observation" not in td.keys()
+        assert ("next", "observation") not in td.keys(True)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for Hash")
 
 
 class TestStack(TransformBase):

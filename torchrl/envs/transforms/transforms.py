@@ -4400,6 +4400,52 @@ class CatTensors(Transform):
         )
 
 
+class Hash(Transform):
+    """Adds a hash value to a tensordict.
+
+    Args:
+        in_keys (sequence of NestedKey): the key of the data to create the hash from.
+        out_key (sequence of NestedKey): the key of the resulting hash.
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey],
+    ):
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+
+    # TODO: If this transform is run on a tensordict like
+    # `TensorDict({"obs": # tensor.rand(2)}, batch_size=[2])`, then
+    # `_apply_transform` will create only one hash value for the tensor of size
+    # 2. Then, when `forward` tries to add the hash to the tensordict, an error
+    # is raised since the hash doesn't have a leading dimension of size 2.
+    # TODO: Add support for NonTensorStack inputs.
+    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        if isinstance(observation, NonTensorData):
+            obs = observation.get("data")
+        else:
+            obs = observation
+        return hash(obs)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if not isinstance(observation_spec, Composite):
+            raise TypeError(f"{self}: Only specs of type Composite can be transformed")
+        for out_key in self.out_keys:
+            observation_spec.set(
+                out_key,
+                Unbounded(shape=(), dtype=torch.int64),
+            )
+        return observation_spec
+
+
 class Stack(Transform):
     """Stacks tensors and tensordicts.
 

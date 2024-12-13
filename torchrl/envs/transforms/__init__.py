@@ -31,6 +31,7 @@ from .transforms import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
+    Hash,
     InitTracker,
     NoopResetEnv,
     ObservationNorm,
