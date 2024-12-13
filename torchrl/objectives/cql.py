@@ -628,14 +628,15 @@ class CQLLoss(LossModule):
     def _get_value_v(self, tensordict, _alpha, actor_params, qval_params):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
-        with set_exploration_type(ExplorationType.RANDOM), actor_params.data.to_module(
-            self.actor_network
-        ):
+        # TODO: wait for compile to handle this properly
+        actor_data = actor_params.data.to_module(self.actor_network)
+        with set_exploration_type(ExplorationType.RANDOM):
             next_tensordict = tensordict.get("next").clone(False)
             next_dist = self.actor_network.get_dist(next_tensordict)
             next_action = next_dist.rsample()
             next_tensordict.set(self.tensor_keys.action, next_action)
             next_sample_log_prob = next_dist.log_prob(next_action)
+        actor_data.to_module(self.actor_network, return_swap=False)
 
         # get q-values
         if not self.max_q_backup:
