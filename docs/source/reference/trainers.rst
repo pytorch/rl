@@ -78,8 +78,8 @@ Hooks can be split into 3 categories: **data processing** (``"batch_process"`` a
   constants update), data subsampling (:class:``~torchrl.trainers.BatchSubSampler``) and such.
 
 - **Logging** hooks take a batch of data presented as a ``TensorDict`` and write in the logger
-  some information retrieved from that data. Examples include the ``Recorder`` hook, the reward
-  logger (``LogReward``) and such. Hooks should return a dictionary (or a None value) containing the
+  some information retrieved from that data. Examples include the ``LogValidationReward`` hook, the reward
+  logger (``LogScalar``) and such. Hooks should return a dictionary (or a None value) containing the
   data to log. The key ``"log_pbar"`` is reserved to boolean values indicating if the logged value
   should be displayed on the progression bar printed on the training log.
 
@@ -174,9 +174,9 @@ Trainer and hooks
     BatchSubSampler
     ClearCudaCache
     CountFramesLog
-    LogReward
+    LogScalar
     OptimizerHook
-    Recorder
+    LogValidationReward
     ReplayBufferTrainer
     RewardNormalizer
     SelectKeys

@@ -25,8 +25,8 @@ from torchrl.trainers.trainers import (
     BatchSubSampler,
     ClearCudaCache,
     CountFramesLog,
-    LogReward,
-    Recorder,
+    LogScalar,
+    LogValidationReward,
     ReplayBufferTrainer,
     RewardNormalizer,
     SelectKeys,
@@ -259,7 +259,7 @@ def make_trainer(
 
     if recorder is not None:
         # create recorder object
-        recorder_obj = Recorder(
+        recorder_obj = LogValidationReward(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
@@ -275,7 +275,7 @@ def make_trainer(
         # call recorder - could be removed
         recorder_obj(None)
         # create explorative recorder - could be optional
-        recorder_obj_explore = Recorder(
+        recorder_obj_explore = LogValidationReward(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
@@ -297,7 +297,7 @@ def make_trainer(
         "post_steps", UpdateWeights(collector, update_weights_interval=1)
     )
 
-    trainer.register_op("pre_steps_log", LogReward())
+    trainer.register_op("pre_steps_log", LogScalar())
     trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=cfg.frame_skip))
 
     return trainer

@@ -344,8 +344,8 @@ def make_odt_model(cfg, device: torch.device | None = None) -> TensorDictModule:
         make_base_env(env_cfg), env_cfg, obs_loc=0, obs_std=1
     )
 
-    action_spec = proof_environment.single_action_spec
-    for key, value in proof_environment.single_observation_spec.items():
+    action_spec = proof_environment.action_spec_unbatched
+    for key, value in proof_environment.observation_spec_unbatched.items():
         if key == "observation":
             state_dim = value.shape[-1]
     in_keys = [
@@ -375,7 +375,7 @@ def make_odt_model(cfg, device: torch.device | None = None) -> TensorDictModule:
         "high": 1.0,
         "tanh_loc": False,
         "upscale": 5.0,
-        "safe_tanh": not cfg.compile.compile,
+        # "safe_tanh": not cfg.compile.compile,
     }
 
     actor = ProbabilisticActor(
@@ -405,9 +405,6 @@ def make_dt_model(cfg, device: torch.device | None = None):
     )
 
     action_spec = proof_environment.action_spec_unbatched
-    for key, value in proof_environment.observation_spec.items():
-        if key == "observation":
-            state_dim = value.shape[-1]
     in_keys = [
         "observation_cat",
         "action_cat",
@@ -415,7 +412,7 @@ def make_dt_model(cfg, device: torch.device | None = None):
     ]
 
     actor_net = DTActor(
-        state_dim=obs_spec["observation"].shape[-1],
+        state_dim=proof_environment.observation_spec_unbatched["observation"].shape[-1],
         action_dim=action_spec.shape[-1],
         transformer_config=cfg.transformer,
         device=device,
@@ -428,8 +425,8 @@ def make_dt_model(cfg, device: torch.device | None = None):
     )
     dist_class = TanhDelta
     dist_kwargs = {
-        "low": action_spec.space.low,
-        "high": action_spec.space.high,
+        "low": action_spec.space.low.to(device),
+        "high": action_spec.space.high.to(device),
         "safe": not cfg.compile.compile,
     }
 

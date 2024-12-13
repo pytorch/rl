@@ -343,8 +343,6 @@ with TemporaryDirectory() as tmpdir:
     with torch.no_grad():
         pkg_path = aoti_compile_and_package(
             exported_policy,
-            args=(),
-            kwargs={"pixels": pixels},
             # Specify the generated shared library path
             package_path=path,
         )
