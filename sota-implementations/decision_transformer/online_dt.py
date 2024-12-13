@@ -102,15 +102,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         return loss_vals.detach()
 
-    compile_mode = None
     if cfg.compile.compile:
         compile_mode = cfg.compile.compile_mode
         if compile_mode in ("", None):
-            if cfg.compile.cudagraphs:
-                compile_mode = "default"
-            else:
-                compile_mode = "reduce-overhead"
-        update = torch.compile(update, mode=compile_mode, dynamic=True)
+            compile_mode = "default"
+        update = torch.compile(update, mode=compile_mode, dynamic=False)
     if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
