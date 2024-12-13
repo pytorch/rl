@@ -68,7 +68,7 @@ def make_ppo_modules_pixels(proof_environment):
     input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs
-    num_outputs = proof_environment.single_action_spec.space.n
+    num_outputs = proof_environment.action_spec_unbatched.space.n
     distribution_class = OneHotCategorical
     distribution_kwargs = {}
 
