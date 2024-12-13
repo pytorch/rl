@@ -42,6 +42,7 @@ replay_buffer:
 
 # optimizer
 optim:
+  optimizer: lamb
   device: null
   lr: 1.0e-4
   weight_decay: 5.0e-4
