@@ -371,10 +371,10 @@ def make_odt_model(cfg, device: torch.device | None = None) -> TensorDictModule:
     )
     dist_class = TanhNormal
     dist_kwargs = {
-        "low": -1.0,
-        "high": 1.0,
+        "low": -torch.ones((), device=device),
+        "high": torch.ones((), device=device),
         "tanh_loc": False,
-        "upscale": 5.0,
+        "upscale": torch.full((), 5, device=device),
         # "safe_tanh": not cfg.compile.compile,
     }
 
