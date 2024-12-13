@@ -2825,9 +2825,9 @@ class ObservationNorm(ObservationTransform):
 class CatFrames(ObservationTransform):
     """Concatenates successive observation frames into a single tensor.
 
-    This can, for instance, account for movement/velocity of the observed
-    feature. Proposed in "Playing Atari with Deep Reinforcement Learning" (
-    https://arxiv.org/pdf/1312.5602.pdf).
+    This transform is useful for creating a sense of movement or velocity in the observed features.
+    It can also be used with models that require access to past observations such as transformers and the like.
+    It was first proposed in "Playing Atari with Deep Reinforcement Learning" (https://arxiv.org/pdf/1312.5602.pdf).
 
     When used within a transformed environment,
     :class:`CatFrames` is a stateful class, and it can be reset to its native state by
@@ -2915,6 +2915,14 @@ class CatFrames(ObservationTransform):
         such as those found in MARL settings, are currently not supported.
         If this feature is needed, please raise an issue on TorchRL repo.
 
+    .. note:: Storing stacks of frames in the replay buffer can significantly increase memory consumption (by N times).
+        To mitigate this, you can store trajectories directly in the replay buffer and apply :class:`CatFrames` at sampling time.
+        This approach involves sampling slices of the stored trajectories and then applying the frame stacking transform.
+        For convenience, :class:`CatFrames` provides a :meth:`~.make_rb_transform_and_sampler` method that creates:
+
+        - A modified version of the transform suitable for use in replay buffers
+        - A corresponding :class:`SliceSampler` to use with the buffer
+
     """
 
     inplace = False
@@ -2963,6 +2971,75 @@ class CatFrames(ObservationTransform):
         self.as_inverse = as_inverse
         self.reset_key = reset_key
         self.done_key = done_key
+
+    def make_rb_transform_and_sampler(
+        self, batch_size: int, **sampler_kwargs
+    ) -> Tuple[Transform, "torchrl.data.replay_buffers.SliceSampler"]:  # noqa: F821
+        """Creates a transform and sampler to be used with a replay buffer when storing frame-stacked data.
+
+        This method helps reduce redundancy in stored data by avoiding the need to
+        store the entire stack of frames in the buffer. Instead, it creates a
+        transform that stacks frames on-the-fly during sampling, and a sampler that
+        ensures the correct sequence length is maintained.
+
+        Args:
+            batch_size (int): The batch size to use for the sampler.
+            **sampler_kwargs: Additional keyword arguments to pass to the
+                :class:`~torchrl.data.replay_buffers.SliceSampler` constructor.
+
+        Returns:
+            A tuple containing:
+                - transform (Transform): A transform that stacks frames on-the-fly during sampling.
+                - sampler (SliceSampler): A sampler that ensures the correct sequence length is maintained.
+
+        Example:
+            >>> env = TransformedEnv(...)
+            >>> catframes = CatFrames(N=4, ...)
+            >>> transform, sampler = catframes.make_rb_transform_and_sampler(batch_size=32)
+            >>> rb = ReplayBuffer(..., sampler=sampler, transform=transform)
+
+        .. note:: When working with images, it's recommended to use distinct ``in_keys`` and ``out_keys`` in the preceding
+            :class:`~torchrl.envs.ToTensorImage` transform. This ensures that the tensors stored in the buffer are separate
+            from their processed counterparts, which we don't want to store.
+            For non-image data, consider inserting a :class:`~torchrl.envs.RenameTransform` before :class:`CatFrames` to create
+            a copy of the data that will be stored in the buffer.
+
+        .. note:: When adding the transform to the replay buffer, one should pay attention to also pass the transforms
+            that precede CatFrames, such as :class:`~torchrl.envs.ToTensorImage` or :class:`~torchrl.envs.UnsqueezeTransform`
+            in such a way that the :class:`~torchrl.envs.CatFrames` transforms sees data formatted as it was during data
+            collection.
+
+        .. note:: For a more complete example, refer to torchrl's github repo `examples` folder:
+            https://github.com/pytorch/rl/tree/main/examples/replay-buffers/catframes-in-buffer.py
+
+        """
+        from torchrl.data.replay_buffers import SliceSampler
+
+        in_keys = self.in_keys
+        in_keys = in_keys + [unravel_key(("next", key)) for key in in_keys]
+        out_keys = self.out_keys
+        out_keys = out_keys + [unravel_key(("next", key)) for key in out_keys]
+        catframes = type(self)(
+            N=self.N,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            dim=self.dim,
+            padding=self.padding,
+            padding_value=self.padding_value,
+            as_inverse=False,
+            reset_key=self.reset_key,
+            done_key=self.done_key,
+        )
+        sampler = SliceSampler(slice_len=self.N, **sampler_kwargs)
+        sampler._batch_size_multiplier = self.N
+        transform = Compose(
+            lambda td: td.reshape(-1, self.N),
+            catframes,
+            lambda td: td[:, -1],
+            # We only store "pixels" to the replay buffer to save memory
+            ExcludeTransform(*out_keys, inverse=True),
+        )
+        return transform, sampler
 
     @property
     def done_key(self):
@@ -4320,6 +4397,217 @@ class CatTensors(Transform):
         return (
             f"{self.__class__.__name__}(in_keys={self.in_keys}, out_key"
             f"={self.out_keys[0]})"
+        )
+
+
+class Stack(Transform):
+    """Stacks tensors and tensordicts.
+
+    Concatenates a sequence of tensors or tensordicts along a new dimension.
+    The tensordicts or tensors under ``in_keys`` must all have the same shapes.
+
+    This transform only stacks the inputs into one output key. Stacking multiple
+    groups of input keys into different output keys requires multiple
+    transforms.
+
+    This transform can be useful for environments that have multiple agents with
+    identical specs under different keys. The specs and tensordicts for the
+    agents can be stacked together under a shared key, in order to run MARL
+    algorithms that expect the tensors for observations, rewards, etc. to
+    contain batched data for all the agents.
+
+    Args:
+        in_keys (sequence of NestedKey): keys to be stacked.
+        out_key (NestedKey): key of the resulting stacked entry.
+        in_key_inv (NestedKey, optional): key to unstack during :meth:`~.inv`
+            calls. Default is ``None``.
+        out_keys_inv (sequence of NestedKey, optional): keys of the resulting
+            unstacked entries after :meth:`~.inv` calls. Default is ``None``.
+        dim (int, optional): dimension to insert. Default is ``-1``.
+        allow_positive_dim (bool, optional): if ``True``, positive dimensions
+            are accepted.  Defaults to ``False``, ie. non-negative dimensions are
+            not permitted.
+
+    Keyword Args:
+        del_keys (bool, optional): if ``True``, the input values will be deleted
+            after stacking. Default is ``True``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs import Stack
+        >>> td = TensorDict({"key1": torch.zeros(3), "key2": torch.ones(3)}, [])
+        >>> td
+        TensorDict(
+            fields={
+                key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> transform = Stack(in_keys=["key1", "key2"], out_key="out", dim=-2)
+        >>> transform(td)
+        TensorDict(
+            fields={
+                out: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> td["out"]
+        tensor([[0., 0., 0.],
+                [1., 1., 1.]])
+
+        >>> agent_0 = TensorDict({"obs": torch.rand(4, 5), "reward": torch.zeros(1)})
+        >>> agent_1 = TensorDict({"obs": torch.rand(4, 5), "reward": torch.zeros(1)})
+        >>> td = TensorDict({"agent_0": agent_0, "agent_1": agent_1})
+        >>> transform = Stack(in_keys=["agent_0", "agent_1"], out_key="agents")
+        >>> transform(td)
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        obs: Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+    """
+
+    invertible = True
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_key: NestedKey,
+        in_key_inv: NestedKey | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
+        dim: int = -1,
+        allow_positive_dim: bool = False,
+        *,
+        del_keys: bool = True,
+    ):
+        if not allow_positive_dim and dim >= 0:
+            raise ValueError(
+                "dim should be negative to accommodate for envs of different "
+                "batch_sizes. If you need dim to be positive, set "
+                "allow_positive_dim=True."
+            )
+
+        if in_key_inv is None and out_keys_inv is not None:
+            raise ValueError("out_keys_inv was specified, but in_key_inv was not")
+        elif in_key_inv is not None and out_keys_inv is None:
+            raise ValueError("in_key_inv was specified, but out_keys_inv was not")
+
+        super(Stack, self).__init__(
+            in_keys=in_keys,
+            out_keys=[out_key],
+            in_keys_inv=None if in_key_inv is None else [in_key_inv],
+            out_keys_inv=out_keys_inv,
+        )
+
+        for in_key in self.in_keys:
+            if len(in_key) == len(self.out_keys[0]):
+                if all(k1 == k2 for k1, k2 in zip(in_key, self.out_keys[0])):
+                    raise ValueError(f"{self}: out_key cannot be in in_keys")
+        parent_keys = []
+        for key in self.in_keys:
+            if isinstance(key, (list, tuple)):
+                for parent_level in range(1, len(key)):
+                    parent_key = tuple(key[:-parent_level])
+                    if parent_key not in parent_keys:
+                        parent_keys.append(parent_key)
+        self._maybe_del_parent_keys = sorted(parent_keys, key=len, reverse=True)
+        self.dim = dim
+        self._del_keys = del_keys
+        self._keys_to_exclude = None
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        values = []
+        for in_key in self.in_keys:
+            value = tensordict.get(in_key, default=None)
+            if value is not None:
+                values.append(value)
+            elif not self.missing_tolerance:
+                raise KeyError(
+                    f"{self}: '{in_key}' not found in tensordict {tensordict}"
+                )
+
+        out_tensor = torch.stack(values, dim=self.dim)
+        tensordict.set(self.out_keys[0], out_tensor)
+        if self._del_keys:
+            tensordict.exclude(*self.in_keys, inplace=True)
+            for parent_key in self._maybe_del_parent_keys:
+                if len(tensordict[parent_key].keys()) == 0:
+                    tensordict.exclude(parent_key, inplace=True)
+        return tensordict
+
+    forward = _call
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if len(self.in_keys_inv) == 0:
+            return tensordict
+
+        if self.in_keys_inv[0] not in tensordict.keys(include_nested=True):
+            return tensordict
+        values = torch.unbind(tensordict[self.in_keys_inv[0]], dim=self.dim)
+        for value, out_key_inv in _zip_strict(values, self.out_keys_inv):
+            tensordict = tensordict.set(out_key_inv, value)
+        return tensordict.exclude(self.in_keys_inv[0])
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
+    def _transform_spec(self, spec: TensorSpec) -> TensorSpec:
+        if not isinstance(spec, Composite):
+            raise TypeError(f"{self}: Only specs of type Composite can be transformed")
+
+        spec_keys = spec.keys(include_nested=True)
+        keys_to_stack = [key for key in spec_keys if key in self.in_keys]
+        specs_to_stack = [spec[key] for key in keys_to_stack]
+
+        if len(specs_to_stack) == 0:
+            return spec
+
+        stacked_specs = torch.stack(specs_to_stack, dim=self.dim)
+        spec.set(self.out_keys[0], stacked_specs)
+
+        if self._del_keys:
+            for key in keys_to_stack:
+                del spec[key]
+            for parent_key in self._maybe_del_parent_keys:
+                if len(spec[parent_key]) == 0:
+                    del spec[parent_key]
+
+        return spec
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        self._transform_spec(input_spec["full_state_spec"])
+        self._transform_spec(input_spec["full_action_spec"])
+        return input_spec
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(observation_spec)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(reward_spec)
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(done_spec)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"in_keys={self.in_keys}, "
+            f"out_key={self.out_keys[0]}, "
+            f"dim={self.dim}"
+            ")"
         )
 
 
@@ -8583,56 +8871,68 @@ class ActionDiscretizer(Transform):
             f"\n{_indent(out_action_key)},\n{_indent(sampling)},\n{_indent(categorical)})"
         )
 
+    def _custom_arange(self, nint, device):
+        result = torch.arange(
+            start=0.0,
+            end=1.0,
+            step=1 / nint,
+            dtype=self.dtype,
+            device=device,
+        )
+        result_ = result
+        if self.sampling in (
+            self.SamplingStrategy.HIGH,
+            self.SamplingStrategy.MEDIAN,
+        ):
+            result_ = (1 - result).flip(0)
+        if self.sampling == self.SamplingStrategy.MEDIAN:
+            result = (result + result_) / 2
+        else:
+            result = result_
+        return result
+
     def transform_input_spec(self, input_spec):
         try:
-            action_spec = input_spec["full_action_spec", self.in_keys_inv[0]]
+            action_spec = self.parent.full_action_spec_unbatched[self.in_keys_inv[0]]
             if not isinstance(action_spec, Bounded):
                 raise TypeError(
-                    f"action spec type {type(action_spec)} is not supported."
+                    f"action spec type {type(action_spec)} is not supported. The action spec type must be Bounded."
                 )
 
             n_act = action_spec.shape
             if not n_act:
-                n_act = 1
+                n_act = ()
+                empty_shape = True
             else:
-                n_act = n_act[-1]
+                n_act = (n_act[-1],)
+                empty_shape = False
             self.n_act = n_act
 
             self.dtype = action_spec.dtype
-            interval = (action_spec.high - action_spec.low).unsqueeze(-1)
+            interval = action_spec.high - action_spec.low
 
             num_intervals = self.num_intervals
 
-            def custom_arange(nint):
-                result = torch.arange(
-                    start=0.0,
-                    end=1.0,
-                    step=1 / nint,
-                    dtype=self.dtype,
-                    device=action_spec.device,
-                )
-                result_ = result
-                if self.sampling in (
-                    self.SamplingStrategy.HIGH,
-                    self.SamplingStrategy.MEDIAN,
-                ):
-                    result_ = (1 - result).flip(0)
-                if self.sampling == self.SamplingStrategy.MEDIAN:
-                    result = (result + result_) / 2
-                else:
-                    result = result_
-                return result
+            if not empty_shape:
+                interval = interval.unsqueeze(-1)
+            elif isinstance(num_intervals, torch.Tensor):
+                num_intervals = int(num_intervals.squeeze())
+                self.num_intervals = torch.as_tensor(num_intervals)
 
             if isinstance(num_intervals, int):
                 arange = (
-                    custom_arange(num_intervals).expand(n_act, num_intervals) * interval
+                    self._custom_arange(num_intervals, action_spec.device).expand(
+                        (*n_act, num_intervals)
+                    )
+                    * interval
                 )
-                self.register_buffer(
-                    "intervals", action_spec.low.unsqueeze(-1) + arange
-                )
+                low = action_spec.low
+                if not empty_shape:
+                    low = low.unsqueeze(-1)
+                self.register_buffer("intervals", low + arange)
             else:
                 arange = [
-                    custom_arange(_num_intervals) * interval
+                    self._custom_arange(_num_intervals, action_spec.device) * interval
                     for _num_intervals, interval in zip(
                         num_intervals.tolist(), interval.unbind(-2)
                     )
@@ -8644,12 +8944,6 @@ class ActionDiscretizer(Transform):
                     )
                 ]
 
-            cls = (
-                functools.partial(MultiCategorical, remove_singleton=False)
-                if self.categorical
-                else MultiOneHot
-            )
-
             if not isinstance(num_intervals, torch.Tensor):
                 nvec = torch.as_tensor(num_intervals, device=action_spec.device)
             else:
@@ -8657,7 +8951,10 @@ class ActionDiscretizer(Transform):
             if nvec.ndim > 1:
                 raise RuntimeError(f"Cannot use num_intervals with shape {nvec.shape}")
             if nvec.ndim == 0 or nvec.numel() == 1:
-                nvec = nvec.expand(action_spec.shape[-1])
+                if not empty_shape:
+                    nvec = nvec.expand(action_spec.shape[-1])
+                else:
+                    nvec = nvec.squeeze()
             self.register_buffer("nvec", nvec)
             if self.sampling == self.SamplingStrategy.RANDOM:
                 # compute jitters
@@ -8667,7 +8964,22 @@ class ActionDiscretizer(Transform):
                 if self.categorical
                 else (*action_spec.shape[:-1], nvec.sum())
             )
-            action_spec = cls(nvec=nvec, shape=shape, device=action_spec.device)
+
+            if not empty_shape:
+                cls = (
+                    functools.partial(MultiCategorical, remove_singleton=False)
+                    if self.categorical
+                    else MultiOneHot
+                )
+                action_spec = cls(nvec=nvec, shape=shape, device=action_spec.device)
+
+            else:
+                cls = Categorical if self.categorical else OneHot
+                action_spec = cls(n=int(nvec), shape=shape, device=action_spec.device)
+
+            batch_size = self.parent.batch_size
+            if batch_size:
+                action_spec = action_spec.expand(batch_size + action_spec.shape)
             input_spec["full_action_spec", self.out_keys_inv[0]] = action_spec
 
             if self.out_keys_inv[0] != self.in_keys_inv[0]:
@@ -8705,6 +9017,8 @@ class ActionDiscretizer(Transform):
         if self.categorical:
             action = action.unsqueeze(-1)
             if isinstance(intervals, torch.Tensor):
+                shape = action.shape[: -intervals.ndim]
+                intervals = intervals.expand(shape + intervals.shape)
                 action = intervals.gather(index=action, dim=-1).squeeze(-1)
             else:
                 action = torch.stack(
@@ -8715,17 +9029,26 @@ class ActionDiscretizer(Transform):
                     -1,
                 )
         else:
-            nvec = self.nvec.tolist()
-            action = action.split(nvec, dim=-1)
-            if isinstance(intervals, torch.Tensor):
-                intervals = intervals.unbind(-2)
-            action = torch.stack(
-                [
-                    intervals[action].view(action.shape[:-1])
-                    for (intervals, action) in zip(intervals, action)
-                ],
-                -1,
-            )
+            nvec = self.nvec
+            empty_shape = not nvec.ndim
+            if not empty_shape:
+                nvec = nvec.tolist()
+                if isinstance(intervals, torch.Tensor):
+                    shape = action.shape[: (-intervals.ndim + 1)]
+                    intervals = intervals.expand(shape + intervals.shape)
+                    intervals = intervals.unbind(-2)
+                action = action.split(nvec, dim=-1)
+                action = torch.stack(
+                    [
+                        intervals[action].view(action.shape[:-1])
+                        for (intervals, action) in zip(intervals, action)
+                    ],
+                    -1,
+                )
+            else:
+                shape = action.shape[: -intervals.ndim]
+                intervals = intervals.expand(shape + intervals.shape)
+                action = intervals[action].squeeze(-1)
 
         if self.sampling == self.SamplingStrategy.RANDOM:
             action = action + self.jitters * torch.rand_like(self.jitters)

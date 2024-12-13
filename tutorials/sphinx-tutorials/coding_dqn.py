@@ -140,8 +140,8 @@ from torchrl.modules import DuelingCnnDQNet, EGreedyModule, QValueActor
 from torchrl.objectives import DQNLoss, SoftUpdate
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.trainers import (
-    LogReward,
-    Recorder,
+    LogScalar,
+    LogValidationReward,
     ReplayBufferTrainer,
     Trainer,
     UpdateWeights,
@@ -666,7 +666,7 @@ buffer_hook = ReplayBufferTrainer(
 buffer_hook.register(trainer)
 weight_updater = UpdateWeights(collector, update_weights_interval=1)
 weight_updater.register(trainer)
-recorder = Recorder(
+recorder = LogValidationReward(
     record_interval=100,  # log every 100 optimization steps
     record_frames=1000,  # maximum number of frames in the record
     frame_skip=1,
@@ -704,7 +704,7 @@ trainer.register_op("post_optim", target_net_updater.step)
 # This will be reflected by the `total_rewards` value displayed in the
 # progress bar.
 #
-log_reward = LogReward(log_pbar=True)
+log_reward = LogScalar(log_pbar=True)
 log_reward.register(trainer)
 
 ###############################################################################
