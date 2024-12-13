@@ -67,6 +67,7 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 
+
 try:
     from torch.compiler import cudagraph_mark_step_begin
 except ImportError:
@@ -712,10 +713,10 @@ class SyncDataCollector(DataCollectorBase):
         )
         self.reset_at_each_iter = reset_at_each_iter
         self.init_random_frames = (
-            int(init_random_frames) if init_random_frames is not None else 0
+            int(init_random_frames) if init_random_frames not in (None, -1) else 0
         )
         if (
-            init_random_frames is not None
+            init_random_frames not in (-1, None, 0)
             and init_random_frames % frames_per_batch != 0
             and RL_WARNINGS
         ):
