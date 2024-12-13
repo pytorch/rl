@@ -412,6 +412,15 @@ class TestComposite:
         with pytest.raises(KeyError):
             _ = ts["UNK"]
 
+    def test_setitem_newshape(self, shape, is_complete, device, dtype):
+        ts = self._composite_spec(shape, is_complete, device, dtype)
+        new_spec = ts.clone()
+        new_spec.shape = torch.Size(())
+        new_spec.clear_device_()
+        ts["new_spec"] = new_spec
+        assert ts["new_spec"].shape == ts.shape
+        assert ts["new_spec"].device == ts.device
+
     def test_setitem_forbidden_keys(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
         for key in {"shape", "device", "dtype", "space"}:
@@ -1678,6 +1687,85 @@ class TestClone:
         spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
         assert spec == spec.clone()
         assert spec is not spec.clone()
+
+
+class TestCardinality:
+    @pytest.mark.parametrize("shape1", [(5, 4)])
+    def test_binary(self, shape1):
+        spec = Binary(n=4, shape=shape1, device="cpu", dtype=torch.bool)
+        assert spec.cardinality() == len(list(spec.enumerate()))
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_discrete(
+        self,
+        shape1,
+    ):
+        spec = Categorical(n=4, shape=shape1, device="cpu", dtype=torch.long)
+        assert spec.cardinality() == len(list(spec.enumerate()))
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_multidiscrete(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (3,)
+        else:
+            shape1 = (*shape1, 3)
+        spec = MultiCategorical(
+            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec.cardinality() == len(spec.enumerate())
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_multionehot(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = MultiOneHot(nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long)
+        assert spec.cardinality() == len(list(spec.enumerate()))
+
+    def test_non_tensor(self):
+        spec = NonTensor(shape=(3, 4), device="cpu")
+        with pytest.raises(RuntimeError, match="Cannot enumerate a NonTensorSpec."):
+            spec.cardinality()
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_onehot(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = OneHot(n=15, shape=shape1, device="cpu", dtype=torch.long)
+        assert spec.cardinality() == len(list(spec.enumerate()))
+
+    def test_composite(self):
+        batch_size = (5,)
+        spec2 = Binary(n=4, shape=(*batch_size, 4), device="cpu", dtype=torch.bool)
+        spec3 = Categorical(n=4, shape=batch_size, device="cpu", dtype=torch.long)
+        spec4 = MultiCategorical(
+            nvec=(4, 5, 6), shape=(*batch_size, 3), device="cpu", dtype=torch.long
+        )
+        spec5 = MultiOneHot(
+            nvec=(4, 5, 6), shape=(*batch_size, 15), device="cpu", dtype=torch.long
+        )
+        spec6 = OneHot(n=15, shape=(*batch_size, 15), device="cpu", dtype=torch.long)
+        spec = Composite(
+            spec2=spec2,
+            spec3=spec3,
+            spec4=spec4,
+            spec5=spec5,
+            spec6=spec6,
+            shape=batch_size,
+        )
+        assert spec.cardinality() == len(spec.enumerate())
 
 
 class TestUnbind:
