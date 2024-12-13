@@ -477,12 +477,25 @@ def make_dt_loss(loss_cfg, actor_network, device: torch.device | None = None):
 
 
 def make_odt_optimizer(optim_cfg, loss_module):
-    dt_optimizer = Lamb(
-        loss_module.actor_network_params.flatten_keys().values(),
-        lr=torch.as_tensor(optim_cfg.lr, device=next(loss_module.parameters()).device),
-        weight_decay=optim_cfg.weight_decay,
-        eps=1.0e-8,
-    )
+    if optim_cfg.optimizer == "lamb":
+        dt_optimizer = Lamb(
+            loss_module.actor_network_params.flatten_keys().values(),
+            lr=torch.as_tensor(
+                optim_cfg.lr, device=next(loss_module.parameters()).device
+            ),
+            weight_decay=optim_cfg.weight_decay,
+            eps=1.0e-8,
+        )
+    elif optim_cfg.optimizer == "adam":
+        dt_optimizer = torch.optim.Adam(
+            loss_module.actor_network_params.flatten_keys().values(),
+            lr=torch.as_tensor(
+                optim_cfg.lr, device=next(loss_module.parameters()).device
+            ),
+            weight_decay=optim_cfg.weight_decay,
+            eps=1.0e-8,
+        )
+
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         dt_optimizer, lambda steps: min((steps + 1) / optim_cfg.warmup_steps, 1)
     )
