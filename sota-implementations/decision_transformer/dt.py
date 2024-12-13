@@ -88,8 +88,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         return_to_go="return_to_go_cat",
     )
 
-    pbar = tqdm.tqdm(total=cfg.optim.pretrain_gradient_steps)
-
     pretrain_gradient_steps = cfg.optim.pretrain_gradient_steps
     clip_grad = cfg.optim.clip_grad
 
@@ -99,13 +97,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         loss_vals = loss_module(data)
         transformer_loss = loss_vals["loss"]
 
-        torch.nn.utils.clip_grad_norm_(actor.parameters(), clip_grad)
         transformer_loss.backward()
+        torch.nn.utils.clip_grad_norm_(actor.parameters(), clip_grad)
         transformer_optim.step()
 
         return loss_vals
 
-    compile_mode = None
     if cfg.compile.compile:
         compile_mode = cfg.compile.compile_mode
         if compile_mode in ("", None):
@@ -113,7 +110,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
-        update = torch.compile(update, mode=compile_mode)
+        update = torch.compile(update, mode=compile_mode, dynamic=True)
     if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
@@ -127,9 +124,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     torchrl_logger.info(" ***Pretraining*** ")
     # Pretraining
-    for i in range(pretrain_gradient_steps):
-        pbar.update(1)
-
+    pbar = tqdm.tqdm(range(pretrain_gradient_steps))
+    for i in pbar:
         # Sample data
         with timeit("rb - sample"):
             data = offline_buffer.sample().to(model_device)

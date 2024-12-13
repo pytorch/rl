@@ -345,8 +345,11 @@ TorchRL offers a series of custom built-in environments.
     :toctree: generated/
     :template: rl_template.rst
 
+    ChessEnv
     PendulumEnv
     TicTacToeEnv
+    LLMHashingEnv
+
 
 Multi-agent environments
 ------------------------
