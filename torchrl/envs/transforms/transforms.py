@@ -3004,13 +3004,32 @@ class CatFrames(ObservationTransform):
             For non-image data, consider inserting a :class:`~torchrl.envs.RenameTransform` before :class:`CatFrames` to create
             a copy of the data that will be stored in the buffer.
 
+        .. note:: When adding the transform to the replay buffer, one should pay attention to also pass the transforms
+            that precede CatFrames, such as :class:`~torchrl.envs.ToTensorImage` or :class:`~torchrl.envs.UnsqueezeTransform`
+            in such a way that the :class:`~torchrl.envs.CatFrames` transforms sees data formatted as it was during data
+            collection.
+
         .. note:: For a more complete example, refer to torchrl's github repo `examples` folder:
             https://github.com/pytorch/rl/tree/main/examples/replay-buffers/catframes-in-buffer.py
 
         """
         from torchrl.data.replay_buffers import SliceSampler
 
-        catframes = self.clone()
+        in_keys = self.in_keys
+        in_keys = in_keys + [unravel_key(("next", key)) for key in in_keys]
+        out_keys = self.out_keys
+        out_keys = out_keys + [unravel_key(("next", key)) for key in out_keys]
+        catframes = type(self)(
+            N=self.N,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            dim=self.dim,
+            padding=self.padding,
+            padding_value=self.padding_value,
+            as_inverse=False,
+            reset_key=self.reset_key,
+            done_key=self.done_key,
+        )
         sampler = SliceSampler(slice_len=self.N, **sampler_kwargs)
         sampler._batch_size_multiplier = self.N
         transform = Compose(
@@ -3018,7 +3037,7 @@ class CatFrames(ObservationTransform):
             catframes,
             lambda td: td[:, -1],
             # We only store "pixels" to the replay buffer to save memory
-            ExcludeTransform(*self.in_keys, inverse=True),
+            ExcludeTransform(*out_keys, inverse=True),
         )
         return transform, sampler
 

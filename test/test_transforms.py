@@ -933,6 +933,29 @@ class TestCatFrames(TransformBase):
         assert (tdsample["out_" + key1] == td["out_" + key1]).all()
         assert (tdsample["next", "out_" + key1] == td["next", "out_" + key1]).all()
 
+    def test_transform_rb_maker(self):
+        env = CountingEnv(max_steps=10)
+        catframes = CatFrames(
+            in_keys=["observation"], out_keys=["observation_stack"], dim=-1, N=4
+        )
+        env.append_transform(catframes)
+        policy = lambda td: td.update(env.full_action_spec.zeros() + 1)
+        rollout = env.rollout(150, policy, break_when_any_done=False)
+        transform, sampler = catframes.make_rb_transform_and_sampler(batch_size=32)
+        rb = ReplayBuffer(
+            sampler=sampler, storage=LazyTensorStorage(150), transform=transform
+        )
+        rb.extend(rollout)
+        sample = rb.sample(32)
+        assert "observation_stack" not in rb._storage._storage
+        assert sample.shape == (32,)
+        assert sample["observation_stack"].shape == (32, 4)
+        assert sample["next", "observation_stack"].shape == (32, 4)
+        assert (
+            sample["observation_stack"]
+            == sample["observation_stack"][:, :1] + torch.arange(4)
+        ).all()
+
     @pytest.mark.parametrize("dim", [-1])
     @pytest.mark.parametrize("N", [3, 4])
     @pytest.mark.parametrize("padding", ["same", "constant"])

@@ -969,7 +969,7 @@ class SliceSampler(Sampler):
     """
 
     # We use this whenever we need to sample N times too many transitions to then select only a 1/N fraction of them
-    _batch_size_multiplier: int | None
+    _batch_size_multiplier: int | None = 1
 
     def __init__(
         self,

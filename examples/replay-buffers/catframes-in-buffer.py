@@ -28,6 +28,12 @@ seed = 123
 
 
 def main():
+    catframes = CatFrames(
+        N=frame_stack,
+        dim=stack_dim,
+        in_keys=["pixels_trsf"],
+        out_keys=["pixels_trsf"],
+    )
     env = TransformedEnv(
         DMControlEnv(
             env_name="cartpole",
@@ -47,31 +53,17 @@ def main():
             UnsqueezeTransform(
                 dim=stack_dim, in_keys=["pixels_trsf"], out_keys=["pixels_trsf"]
             ),
-            CatFrames(
-                N=frame_stack,
-                dim=stack_dim,
-                in_keys=["pixels_trsf"],
-                out_keys=["pixels_trsf"],
-            ),
+            catframes,
             StepCounter(),
         ),
     )
     env.set_seed(seed)
 
-    sampler = None
-    transform = None
-
-    def collect_transform_sampler(module):
-        nonlocal sampler
-        nonlocal transform
-        if isinstance(module, CatFrames):
-            transform, sampler = module.make_rb_transform_and_sampler(
-                batch_size=training_batch_size,
-                traj_key=("collector", "traj_ids"),
-                strict_length=True,
-            )
-
-    env.apply(collect_transform_sampler)
+    transform, sampler = catframes.make_rb_transform_and_sampler(
+        batch_size=training_batch_size,
+        traj_key=("collector", "traj_ids"),
+        strict_length=True,
+    )
 
     rb_transforms = Compose(
         ToTensorImage(
@@ -99,7 +91,6 @@ def main():
     data = env.rollout(1000, break_when_any_done=False)
     rb.extend(data)
 
-    # This is where things do not work as expected right now.
     training_batch = rb.sample()
     print(training_batch)
 
