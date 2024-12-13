@@ -8,6 +8,7 @@ import contextlib
 import functools
 import gc
 import os.path
+import random
 import re
 from collections import defaultdict
 from functools import partial
@@ -44,6 +45,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DiscreteActionConvMockEnvNumpy,
         DiscreteActionVecMockEnv,
         DummyModelBasedEnvBase,
+        EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
         HeterogeneousCountingEnv,
@@ -81,6 +83,7 @@ else:
         DiscreteActionConvMockEnvNumpy,
         DiscreteActionVecMockEnv,
         DummyModelBasedEnvBase,
+        EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
         HeterogeneousCountingEnv,
@@ -112,6 +115,7 @@ from torchrl.envs import (
     DoubleToFloat,
     EnvBase,
     EnvCreator,
+    LLMHashingEnv,
     ParallelEnv,
     PendulumEnv,
     SerialEnv,
@@ -3417,6 +3421,29 @@ class TestCustomEnvs:
             r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
             assert r.shape == torch.Size((5, 10))
 
+    def test_llm_hashing_env(self):
+        vocab_size = 5
+
+        class Tokenizer:
+            def __call__(self, obj):
+                return torch.randint(vocab_size, (len(obj.split(" ")),)).tolist()
+
+            def decode(self, obj):
+                words = ["apple", "banana", "cherry", "date", "elderberry"]
+                return " ".join(random.choice(words) for _ in obj)
+
+            def batch_decode(self, obj):
+                return [self.decode(_obj) for _obj in obj]
+
+            def encode(self, obj):
+                return self(obj)
+
+        tokenizer = Tokenizer()
+        env = LLMHashingEnv(tokenizer=tokenizer, vocab_size=vocab_size)
+        td = env.make_tensordict("some sentence")
+        assert isinstance(td, TensorDict)
+        env.check_env_specs(tensordict=td)
+
 
 @pytest.mark.parametrize("device", [None, *get_default_devices()])
 @pytest.mark.parametrize("env_device", [None, *get_default_devices()])
@@ -3524,6 +3551,67 @@ def test_single_env_spec():
 
     assert env.output_spec.is_in(env.output_spec_unbatched.zeros(env.shape))
     assert env.input_spec.is_in(env.input_spec_unbatched.zeros(env.shape))
+
+
+@pytest.mark.parametrize("env_type", [CountingEnv, EnvWithMetadata])
+def test_auto_spec(env_type):
+    if env_type is EnvWithMetadata:
+        obs_vals = ["tensor", "non_tensor"]
+    else:
+        obs_vals = "observation"
+    env = env_type()
+    td = env.reset()
+
+    policy = lambda td, action_spec=env.full_action_spec.clone(): td.update(
+        action_spec.rand()
+    )
+
+    env.full_observation_spec = Composite(
+        shape=env.full_observation_spec.shape, device=env.full_observation_spec.device
+    )
+    env.full_action_spec = Composite(
+        shape=env.full_action_spec.shape, device=env.full_action_spec.device
+    )
+    env.full_reward_spec = Composite(
+        shape=env.full_reward_spec.shape, device=env.full_reward_spec.device
+    )
+    env.full_done_spec = Composite(
+        shape=env.full_done_spec.shape, device=env.full_done_spec.device
+    )
+    env.full_state_spec = Composite(
+        shape=env.full_state_spec.shape, device=env.full_state_spec.device
+    )
+    env._action_keys = ["action"]
+    env.auto_specs_(policy, tensordict=td.copy(), observation_key=obs_vals)
+    env.check_env_specs(tensordict=td.copy())
+
+
+def test_env_that_does_nothing():
+    env = EnvThatDoesNothing()
+    env.check_env_specs()
+    r = env.rollout(3)
+    r.exclude(
+        "done", "terminated", ("next", "done"), ("next", "terminated"), inplace=True
+    )
+    assert r.is_empty()
+    p_env = SerialEnv(2, EnvThatDoesNothing)
+    p_env.check_env_specs()
+    r = p_env.rollout(3)
+    r.exclude(
+        "done", "terminated", ("next", "done"), ("next", "terminated"), inplace=True
+    )
+    assert r.is_empty()
+    p_env = ParallelEnv(2, EnvThatDoesNothing)
+    try:
+        p_env.check_env_specs()
+        r = p_env.rollout(3)
+        r.exclude(
+            "done", "terminated", ("next", "done"), ("next", "terminated"), inplace=True
+        )
+        assert r.is_empty()
+    finally:
+        p_env.close()
+        del p_env
 
 
 if __name__ == "__main__":

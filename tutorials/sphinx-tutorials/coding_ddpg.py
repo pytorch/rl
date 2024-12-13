@@ -883,12 +883,12 @@ collector = SyncDataCollector(
 #
 # As the training data is obtained using some exploration strategy, the true
 # performance of our algorithm needs to be assessed in deterministic mode. We
-# do this using a dedicated class, ``Recorder``, which executes the policy in
+# do this using a dedicated class, ``LogValidationReward``, which executes the policy in
 # the environment at a given frequency and returns some statistics obtained
 # from these simulations.
 #
 # The following helper function builds this object:
-from torchrl.trainers import Recorder
+from torchrl.trainers import LogValidationReward
 
 
 def make_recorder(actor_model_explore, transform_state_dict, record_interval):
@@ -899,7 +899,7 @@ def make_recorder(actor_model_explore, transform_state_dict, record_interval):
     )  # must be instantiated to load the state dict
     environment.transform[2].load_state_dict(transform_state_dict)
 
-    recorder_obj = Recorder(
+    recorder_obj = LogValidationReward(
         record_frames=1000,
         policy_exploration=actor_model_explore,
         environment=environment,

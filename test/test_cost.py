@@ -4493,6 +4493,7 @@ class TestSAC(LossModuleTestBase):
             actor_network=actor,
             qvalue_network=qvalue,
             value_network=value,
+            skip_done_states=True,
         )
         loss.set_keys(
             action=action_key,
@@ -5204,6 +5205,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             qvalue_network=qvalue,
             num_actions=actor.spec[action_key].space.n,
             action_space="one-hot",
+            skip_done_states=True,
         )
         loss.set_keys(
             action=action_key,
