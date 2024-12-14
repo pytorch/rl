@@ -55,6 +55,7 @@ class EGreedyModule(TensorDictModuleBase):
             Default is ``"action"``.
         action_mask_key (NestedKey, optional): the key where the action mask can be found in the input tensordict.
             Default is ``None`` (corresponding to no mask).
+        device (torch.device, optional): the device of the exploration module.
 
     .. note::
         It is crucial to incorporate a call to :meth:`~.step` in the training loop
@@ -97,6 +98,7 @@ class EGreedyModule(TensorDictModuleBase):
         *,
         action_key: Optional[NestedKey] = "action",
         action_mask_key: Optional[NestedKey] = None,
+        device: torch.device | None = None,
     ):
         if not isinstance(eps_init, float):
             warnings.warn("eps_init should be a float.")
@@ -112,14 +114,18 @@ class EGreedyModule(TensorDictModuleBase):
 
         super().__init__()
 
-        self.register_buffer("eps_init", torch.as_tensor(eps_init))
-        self.register_buffer("eps_end", torch.as_tensor(eps_end))
+        self.register_buffer("eps_init", torch.as_tensor(eps_init, device=device))
+        self.register_buffer("eps_end", torch.as_tensor(eps_end, device=device))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.as_tensor(eps_init, dtype=torch.float32))
+        self.register_buffer(
+            "eps", torch.as_tensor(eps_init, dtype=torch.float32, device=device)
+        )
 
         if spec is not None:
             if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
                 spec = Composite({action_key: spec}, shape=spec.shape[:-1])
+            if device is not None:
+                spec = spec.to(device)
         self._spec = spec
 
     @property
@@ -183,7 +189,10 @@ class EGreedyModule(TensorDictModuleBase):
                             f"Action mask key {self.action_mask_key} not found in {tensordict}."
                         )
                     spec.update_mask(action_mask)
-                out = torch.where(cond, spec.rand().to(out.device), out)
+                r = spec.rand()
+                if r.device != out.device:
+                    r = r.to(out.device)
+                out = torch.where(cond, r, out)
             else:
                 raise RuntimeError("spec must be provided to the exploration wrapper.")
             action_tensordict.set(action_key, out)
