@@ -43,7 +43,7 @@ def make_env(env_name="HalfCheetah-v4", device="cpu", from_pixels: bool = False)
 # --------------------------------------------------------------------
 
 
-def make_ppo_models_state(proof_environment, compile):
+def make_ppo_models_state(proof_environment, compile, device):
 
     # Define input shape
     input_shape = proof_environment.observation_spec["observation"].shape
@@ -52,8 +52,8 @@ def make_ppo_models_state(proof_environment, compile):
     num_outputs = proof_environment.action_spec_unbatched.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
-        "low": proof_environment.action_spec_unbatched.space.low,
-        "high": proof_environment.action_spec_unbatched.space.high,
+        "low": proof_environment.action_spec_unbatched.space.low.to(device),
+        "high": proof_environment.action_spec_unbatched.space.high.to(device),
         "tanh_loc": False,
         "safe_tanh": not compile,
     }
@@ -64,6 +64,7 @@ def make_ppo_models_state(proof_environment, compile):
         activation_class=torch.nn.Tanh,
         out_features=num_outputs,  # predict only loc
         num_cells=[64, 64],
+        device=device,
     )
 
     # Initialize policy weights
@@ -88,7 +89,7 @@ def make_ppo_models_state(proof_environment, compile):
             out_keys=["loc", "scale"],
         ),
         in_keys=["loc", "scale"],
-        spec=proof_environment.single_full_action_spec,
+        spec=proof_environment.full_action_spec_unbatched.to(device),
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
@@ -118,9 +119,11 @@ def make_ppo_models_state(proof_environment, compile):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name, compile):
-    proof_environment = make_env(env_name, device="cpu")
-    actor, critic = make_ppo_models_state(proof_environment, compile=compile)
+def make_ppo_models(env_name, compile, device):
+    proof_environment = make_env(env_name, device=device)
+    actor, critic = make_ppo_models_state(
+        proof_environment, compile=compile, device=device
+    )
     return actor, critic
 
 

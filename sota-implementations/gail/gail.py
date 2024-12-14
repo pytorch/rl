@@ -11,6 +11,8 @@ The helper functions for gail are coded in the gail_utils.py and helper function
 """
 from __future__ import annotations
 
+import warnings
+
 import hydra
 import numpy as np
 import torch
@@ -18,6 +20,7 @@ import tqdm
 
 from gail_utils import log_metrics, make_gail_discriminator, make_offline_replay_buffer
 from ppo_utils import eval_model, make_env, make_ppo_models
+from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
@@ -72,8 +75,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     np.random.seed(cfg.env.seed)
 
     # Create models (check utils_mujoco.py)
-    actor, critic = make_ppo_models(cfg.env.env_name, compile=cfg.compile.compile)
-    actor, critic = actor.to(device), critic.to(device)
+    actor, critic = make_ppo_models(
+        cfg.env.env_name, compile=cfg.compile.compile, device=device
+    )
 
     # Create data buffer
     data_buffer = TensorDictReplayBuffer(
@@ -101,8 +105,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizers
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.ppo.optim.lr, eps=1e-5)
-    critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.ppo.optim.lr, eps=1e-5)
+    actor_optim = torch.optim.Adam(
+        actor.parameters(), lr=torch.tensor(cfg.ppo.optim.lr, device=device), eps=1e-5
+    )
+    critic_optim = torch.optim.Adam(
+        critic.parameters(), lr=torch.tensor(cfg.ppo.optim.lr, device=device), eps=1e-5
+    )
     optim = group_optimizers(actor_optim, critic_optim)
     del actor_optim, critic_optim
 
@@ -196,12 +204,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 optim.zero_grad(set_to_none=True)
 
                 # Linearly decrease the learning rate and clip epsilon
-                alpha = 1.0
+                alpha = torch.ones((), device=device)
                 if cfg_optim_anneal_lr:
                     alpha = 1 - (num_network_updates / total_network_updates)
-                    for group in actor_optim.param_groups:
-                        group["lr"] = cfg_optim_lr * alpha
-                    for group in critic_optim.param_groups:
+                    for group in optim.param_groups:
                         group["lr"] = cfg_optim_lr * alpha
                 if cfg_loss_anneal_clip_eps:
                     loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
@@ -217,7 +223,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Update the networks
                 optim.step()
-        return d_loss.detach()
+        return TensorDict(dloss=d_loss, alpha=alpha).detach()
 
     if cfg.compile.compile:
         update = torch.compile(update, mode=compile_mode)
@@ -253,7 +259,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         expert_data = replay_buffer.sample()
         expert_data = expert_data.to(device)
 
-        d_loss = update(data, expert_data)
+        metadata = update(data, expert_data)
+        d_loss = metadata["d_loss"]
+        alpha = metadata["alpha"]
 
         # Get training rewards and episode lengths
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
