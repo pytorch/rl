@@ -61,7 +61,7 @@ def make_env(env_name, frame_skip, device, is_test=False):
 # --------------------------------------------------------------------
 
 
-def make_dqn_modules_pixels(proof_environment):
+def make_dqn_modules_pixels(proof_environment, device):
 
     # Define input shape
     input_shape = proof_environment.observation_spec["pixels"].shape
@@ -75,13 +75,15 @@ def make_dqn_modules_pixels(proof_environment):
         num_cells=[32, 64, 64],
         kernel_sizes=[8, 4, 3],
         strides=[4, 2, 1],
+        device=device,
     )
-    cnn_output = cnn(torch.ones(input_shape))
+    cnn_output = cnn(torch.ones(input_shape, device=device))
     mlp = MLP(
         in_features=cnn_output.shape[-1],
         activation_class=torch.nn.ReLU,
         out_features=num_actions,
         num_cells=[512],
+        device=device,
     )
     qvalue_module = QValueActor(
         module=torch.nn.Sequential(cnn, mlp),
@@ -91,9 +93,9 @@ def make_dqn_modules_pixels(proof_environment):
     return qvalue_module
 
 
-def make_dqn_model(env_name, frame_skip):
-    proof_environment = make_env(env_name, frame_skip, device="cpu")
-    qvalue_module = make_dqn_modules_pixels(proof_environment)
+def make_dqn_model(env_name, frame_skip, device):
+    proof_environment = make_env(env_name, frame_skip, device=device)
+    qvalue_module = make_dqn_modules_pixels(proof_environment, device=device)
     del proof_environment
     return qvalue_module
 
