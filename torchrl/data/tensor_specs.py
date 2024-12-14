@@ -1695,7 +1695,7 @@ class OneHot(TensorSpec):
             for i in range(self.shape[dim])
         )
 
-    @implement_for("torch", None, "2.1")
+    @implement_for("torch", None, "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
         if shape is None:
             shape = self.shape[:-1]
@@ -1718,7 +1718,7 @@ class OneHot(TensorSpec):
         # out.scatter_(-1, m, 1)
         return out
 
-    @implement_for("torch", "2.1")
+    @implement_for("torch", "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:  # noqa: F811
         if shape is None:
             shape = self.shape[:-1]
