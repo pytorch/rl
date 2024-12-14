@@ -7,6 +7,8 @@
 This script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the Atari Environments.
 """
+from __future__ import annotations
+
 import hydra
 from torchrl._utils import logger as torchrl_logger
 from torchrl.record import VideoRecorder
