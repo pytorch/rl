@@ -39,3 +39,8 @@ loss:
   gamma: 0.99
   hard_update_freq: 10_000
   num_updates: 1
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
