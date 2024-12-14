@@ -4,6 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import torch.nn
 
 import torch.optim
@@ -156,6 +159,7 @@ def make_parallel_env(
         obs_std,
         train,
     )
+    env.start()
     return env
 
 
@@ -262,6 +266,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         direct_download=True,
         prefetch=4,
         writer=RoundRobinWriter(),
+        root=Path(os.environ["HOME"]) / ".cache" / "torchrl" / "data" / "d4rl",
     )
 
     # since we're not extending the data, adding keys can only be done via
@@ -335,14 +340,14 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
 # -----
 
 
-def make_odt_model(cfg):
+def make_odt_model(cfg, device: torch.device | None = None) -> TensorDictModule:
     env_cfg = cfg.env
     proof_environment = make_transformed_env(
         make_base_env(env_cfg), env_cfg, obs_loc=0, obs_std=1
     )
 
-    action_spec = proof_environment.action_spec
-    for key, value in proof_environment.observation_spec.items():
+    action_spec = proof_environment.action_spec_unbatched
+    for key, value in proof_environment.observation_spec_unbatched.items():
         if key == "observation":
             state_dim = value.shape[-1]
     in_keys = [
@@ -355,6 +360,7 @@ def make_odt_model(cfg):
         state_dim=state_dim,
         action_dim=action_spec.shape[-1],
         transformer_config=cfg.transformer,
+        device=device,
     )
 
     actor_module = TensorDictModule(
@@ -366,7 +372,13 @@ def make_odt_model(cfg):
         ],
     )
     dist_class = TanhNormal
-    dist_kwargs = {"low": -1.0, "high": 1.0, "tanh_loc": False, "upscale": 5.0}
+    dist_kwargs = {
+        "low": -torch.ones((), device=device),
+        "high": torch.ones((), device=device),
+        "tanh_loc": False,
+        "upscale": torch.full((), 5, device=device),
+        # "safe_tanh": not cfg.compile.compile,
+    }
 
     actor = ProbabilisticActor(
         spec=action_spec,
@@ -383,21 +395,18 @@ def make_odt_model(cfg):
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = proof_environment.rollout(max_steps=100)
         td["action"] = td["next", "action"]
-        actor(td)
+        actor(td.to(device))
 
     return actor
 
 
-def make_dt_model(cfg):
+def make_dt_model(cfg, device: torch.device | None = None):
     env_cfg = cfg.env
     proof_environment = make_transformed_env(
         make_base_env(env_cfg), env_cfg, obs_loc=0, obs_std=1
     )
 
     action_spec = proof_environment.action_spec_unbatched
-    for key, value in proof_environment.observation_spec.items():
-        if key == "observation":
-            state_dim = value.shape[-1]
     in_keys = [
         "observation_cat",
         "action_cat",
@@ -405,9 +414,10 @@ def make_dt_model(cfg):
     ]
 
     actor_net = DTActor(
-        state_dim=state_dim,
+        state_dim=proof_environment.observation_spec_unbatched["observation"].shape[-1],
         action_dim=action_spec.shape[-1],
         transformer_config=cfg.transformer,
+        device=device,
     )
 
     actor_module = TensorDictModule(
@@ -417,12 +427,13 @@ def make_dt_model(cfg):
     )
     dist_class = TanhDelta
     dist_kwargs = {
-        "low": action_spec.space.low,
-        "high": action_spec.space.high,
+        "low": action_spec.space.low.to(device),
+        "high": action_spec.space.high.to(device),
+        "safe": not cfg.compile.compile,
     }
 
     actor = ProbabilisticActor(
-        spec=action_spec,
+        spec=action_spec.to(device),
         in_keys=["param"],
         out_keys=["action"],
         module=actor_module,
@@ -434,9 +445,10 @@ def make_dt_model(cfg):
 
     # init the lazy layers
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = proof_environment.rollout(max_steps=100)
+        td = proof_environment.fake_tensordict()
+        td = td.expand((100, *td.shape))
         td["action"] = td["next", "action"]
-        actor(td)
+        actor(td.to(device))
 
     return actor
 
@@ -456,29 +468,43 @@ def make_odt_loss(loss_cfg, actor_network):
     return loss
 
 
-def make_dt_loss(loss_cfg, actor_network):
+def make_dt_loss(loss_cfg, actor_network, device: torch.device | None = None):
     loss = DTLoss(
         actor_network,
         loss_function=loss_cfg.loss_function,
+        device=device,
     )
     loss.set_keys(action_target="action_cat")
     return loss
 
 
 def make_odt_optimizer(optim_cfg, loss_module):
-    dt_optimizer = Lamb(
-        loss_module.actor_network_params.flatten_keys().values(),
-        lr=optim_cfg.lr,
-        weight_decay=optim_cfg.weight_decay,
-        eps=1.0e-8,
-    )
+    if optim_cfg.optimizer == "lamb":
+        dt_optimizer = Lamb(
+            loss_module.actor_network_params.flatten_keys().values(),
+            lr=torch.as_tensor(
+                optim_cfg.lr, device=next(loss_module.parameters()).device
+            ),
+            weight_decay=optim_cfg.weight_decay,
+            eps=1.0e-8,
+        )
+    elif optim_cfg.optimizer == "adam":
+        dt_optimizer = torch.optim.Adam(
+            loss_module.actor_network_params.flatten_keys().values(),
+            lr=torch.as_tensor(
+                optim_cfg.lr, device=next(loss_module.parameters()).device
+            ),
+            weight_decay=optim_cfg.weight_decay,
+            eps=1.0e-8,
+        )
+
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         dt_optimizer, lambda steps: min((steps + 1) / optim_cfg.warmup_steps, 1)
     )
 
     log_temp_optimizer = torch.optim.Adam(
         [loss_module.log_alpha],
-        lr=1e-4,
+        lr=torch.as_tensor(1e-4, device=next(loss_module.parameters()).device),
         betas=[0.9, 0.999],
     )
 
@@ -488,7 +514,7 @@ def make_odt_optimizer(optim_cfg, loss_module):
 def make_dt_optimizer(optim_cfg, loss_module):
     dt_optimizer = torch.optim.Adam(
         loss_module.actor_network_params.flatten_keys().values(),
-        lr=optim_cfg.lr,
+        lr=torch.as_tensor(optim_cfg.lr),
         weight_decay=optim_cfg.weight_decay,
         eps=1.0e-8,
     )

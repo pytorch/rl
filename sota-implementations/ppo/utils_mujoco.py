@@ -8,7 +8,6 @@ import torch.nn
 import torch.optim
 
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
-from torchrl.data import Composite
 from torchrl.envs import (
     ClipTransform,
     DoubleToFloat,
@@ -50,7 +49,7 @@ def make_ppo_models_state(proof_environment):
     input_shape = proof_environment.observation_spec["observation"].shape
 
     # Define policy output distribution class
-    num_outputs = proof_environment.action_spec.shape[-1]
+    num_outputs = proof_environment.single_action_spec.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
         "low": proof_environment.action_spec_unbatched.space.low,
@@ -76,7 +75,7 @@ def make_ppo_models_state(proof_environment):
     policy_mlp = torch.nn.Sequential(
         policy_mlp,
         AddStateIndependentNormalScale(
-            proof_environment.action_spec.shape[-1], scale_lb=1e-8
+            proof_environment.single_action_spec.shape[-1], scale_lb=1e-8
         ),
     )
 
@@ -88,7 +87,7 @@ def make_ppo_models_state(proof_environment):
             out_keys=["loc", "scale"],
         ),
         in_keys=["loc", "scale"],
-        spec=Composite(action=proof_environment.action_spec),
+        spec=proof_environment.single_full_action_spec,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
