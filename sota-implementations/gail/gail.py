@@ -9,6 +9,8 @@ This is a self-contained example of an offline GAIL training script.
 The helper functions for gail are coded in the gail_utils.py and helper functions for ppo in ppo_utils.
 
 """
+from __future__ import annotations
+
 import hydra
 import numpy as np
 import torch
