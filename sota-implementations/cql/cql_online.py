@@ -11,6 +11,8 @@ It works across Gym and MuJoCo over a variety of tasks.
 The helper functions are coded in the utils.py associated with this script.
 
 """
+from __future__ import annotations
+
 import warnings
 
 import hydra

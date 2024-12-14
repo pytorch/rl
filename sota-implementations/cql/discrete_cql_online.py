@@ -10,6 +10,8 @@ It supports state environments like gym and gymnasium.
 
 The helper functions are coded in the utils.py associated with this script.
 """
+from __future__ import annotations
+
 import warnings
 
 import hydra

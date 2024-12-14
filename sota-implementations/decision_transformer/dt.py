@@ -6,6 +6,8 @@
 This is a self-contained example of an offline Decision Transformer training script.
 The helper functions are coded in the utils.py associated with this script.
 """
+from __future__ import annotations
+
 import time
 
 import hydra

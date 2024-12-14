@@ -7,6 +7,8 @@
 This script reproduces the IMPALA Algorithm
 results from Espeholt et al. 2018 for the on Atari Environments.
 """
+from __future__ import annotations
+
 import hydra
 from torchrl._utils import logger as torchrl_logger
 
