@@ -39,6 +39,7 @@ def make_env(env_name, frame_skip, device, is_test=False):
         from_pixels=True,
         pixels_only=False,
         device=device,
+        categorical_action_encoding=True,
     )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
