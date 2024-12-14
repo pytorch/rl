@@ -49,7 +49,7 @@ def make_ppo_models_state(proof_environment):
     input_shape = proof_environment.observation_spec["observation"].shape
 
     # Define policy output distribution class
-    num_outputs = proof_environment.single_action_spec.shape[-1]
+    num_outputs = proof_environment.action_spec_unbatched.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
         "low": proof_environment.action_spec_unbatched.space.low,
@@ -75,7 +75,7 @@ def make_ppo_models_state(proof_environment):
     policy_mlp = torch.nn.Sequential(
         policy_mlp,
         AddStateIndependentNormalScale(
-            proof_environment.single_action_spec.shape[-1], scale_lb=1e-8
+            proof_environment.action_spec_unbatched.shape[-1], scale_lb=1e-8
         ),
     )
 
