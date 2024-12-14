@@ -455,7 +455,7 @@ class ContinuousBox(Box):
         )
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class CategoricalBox(Box):
     """A box of discrete, categorical values."""
 
@@ -502,7 +502,7 @@ class BoxList(Box):
             return BoxList([BoxList.from_nvec(n) for n in nvec.unbind(-1)])
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class BinaryBox(Box):
     """A box of n binary values."""
 
@@ -3313,6 +3313,7 @@ class Categorical(TensorSpec):
         )
         self.update_mask(mask)
         self._provisional_n = None
+        self._undefined_n = self.space.n < 0
 
     def enumerate(self) -> torch.Tensor:
         dtype = self.dtype
@@ -3379,7 +3380,7 @@ class Categorical(TensorSpec):
         self._provisional_n = n
 
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
-        if self.space.n < 0:
+        if self._undefined_n:
             if self._provisional_n is None:
                 raise RuntimeError(
                     "Cannot generate random categorical samples for undefined cardinality (n=-1). "
