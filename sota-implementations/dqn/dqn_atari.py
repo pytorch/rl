@@ -7,6 +7,8 @@
 DQN: Reproducing experimental results from Mnih et al. 2015 for the
 Deep Q-Learning Algorithm on Atari Environments.
 """
+from __future__ import annotations
+
 import tempfile
 import time
 
