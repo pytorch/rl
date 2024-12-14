@@ -11,6 +11,10 @@ It works across Gym and MuJoCo over a variety of tasks.
 The helper functions are coded in the utils.py associated with this script.
 
 """
+from __future__ import annotations
+
+import warnings
+
 import hydra
 import numpy as np
 import torch
@@ -33,6 +37,8 @@ from utils import (
     make_environment,
     make_replay_buffer,
 )
+
+torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="online_config")
@@ -103,7 +109,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create loss
-    loss_module, target_net_updater = make_continuous_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_continuous_loss(
+        cfg.loss, model, device=device
+    )
 
     # Create optimizer
     (
@@ -140,6 +148,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if compile_mode:
         update = torch.compile(update, mode=compile_mode)
     if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
         update = CudaGraphModule(update, warmup=50)
 
     # Main loop
