@@ -395,7 +395,7 @@ def make_odt_model(cfg, device: torch.device | None = None) -> TensorDictModule:
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = proof_environment.rollout(max_steps=100)
         td["action"] = td["next", "action"]
-        actor(td)
+        actor(td.to(device))
 
     return actor
 
