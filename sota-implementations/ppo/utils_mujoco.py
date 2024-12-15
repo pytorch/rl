@@ -43,7 +43,7 @@ def make_env(env_name="HalfCheetah-v4", device="cpu", from_pixels: bool = False)
 # --------------------------------------------------------------------
 
 
-def make_ppo_models_state(proof_environment):
+def make_ppo_models_state(proof_environment, device):
 
     # Define input shape
     input_shape = proof_environment.observation_spec["observation"].shape
@@ -52,8 +52,8 @@ def make_ppo_models_state(proof_environment):
     num_outputs = proof_environment.action_spec_unbatched.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
-        "low": proof_environment.action_spec_unbatched.space.low,
-        "high": proof_environment.action_spec_unbatched.space.high,
+        "low": proof_environment.action_spec_unbatched.space.low.to(device),
+        "high": proof_environment.action_spec_unbatched.space.high.to(device),
         "tanh_loc": False,
     }
 
@@ -63,6 +63,7 @@ def make_ppo_models_state(proof_environment):
         activation_class=torch.nn.Tanh,
         out_features=num_outputs,  # predict only loc
         num_cells=[64, 64],
+        device=device,
     )
 
     # Initialize policy weights
@@ -76,7 +77,7 @@ def make_ppo_models_state(proof_environment):
         policy_mlp,
         AddStateIndependentNormalScale(
             proof_environment.action_spec_unbatched.shape[-1], scale_lb=1e-8
-        ),
+        ).to(device),
     )
 
     # Add probabilistic sampling of the actions
@@ -87,7 +88,7 @@ def make_ppo_models_state(proof_environment):
             out_keys=["loc", "scale"],
         ),
         in_keys=["loc", "scale"],
-        spec=proof_environment.full_action_spec_unbatched,
+        spec=proof_environment.full_action_spec_unbatched.to(device),
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
@@ -100,6 +101,7 @@ def make_ppo_models_state(proof_environment):
         activation_class=torch.nn.Tanh,
         out_features=1,
         num_cells=[64, 64],
+        device=device,
     )
 
     # Initialize value weights
@@ -117,9 +119,9 @@ def make_ppo_models_state(proof_environment):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name):
-    proof_environment = make_env(env_name, device="cpu")
-    actor, critic = make_ppo_models_state(proof_environment)
+def make_ppo_models(env_name, device):
+    proof_environment = make_env(env_name, device=device)
+    actor, critic = make_ppo_models_state(proof_environment, device=device)
     return actor, critic
 
 

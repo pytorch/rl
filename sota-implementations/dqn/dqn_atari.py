@@ -28,6 +28,8 @@ from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils_atari import eval_model, make_dqn_model, make_env
 
+torch.set_float32_matmul_precision("high")
+
 
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
