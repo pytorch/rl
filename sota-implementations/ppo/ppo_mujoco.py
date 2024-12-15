@@ -162,7 +162,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         optim.step()
         return loss.detach().set("alpha", alpha)
 
-
     if cfg.compile.compile:
         update = torch.compile(update, mode=compile_mode)
         adv_module = torch.compile(adv_module, mode=compile_mode)
@@ -180,7 +179,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_network_updates = 0
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
-
     # extract cfg variables
     cfg_loss_ppo_epochs = cfg.loss.ppo_epochs
     cfg_optim_anneal_lr = cfg.optim.anneal_lr
@@ -192,8 +190,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     losses = TensorDict(batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
 
     collector_iter = iter(collector)
+    total_iter = len(collector)
+    for i in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
 
-    for i in range(len(collector)):
         with timeit("collecting"):
             data = next(collector_iter)
 
@@ -245,7 +245,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
         # Get test rewards
-        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC), timeit("eval"):
+        with torch.no_grad(), set_exploration_type(
+            ExplorationType.DETERMINISTIC
+        ), timeit("eval"):
             if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
                 i * frames_in_batch
             ) // cfg_logger_test_interval:

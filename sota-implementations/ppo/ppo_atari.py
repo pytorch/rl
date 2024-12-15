@@ -165,9 +165,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Forward pass PPO loss
         loss = loss_module(batch)
-        loss_sum = (
-                loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
-        )
+        loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
         # Backward pass
         loss_sum.backward()
         torch.nn.utils.clip_grad_norm_(
@@ -177,7 +175,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Update the networks
         optim.step()
         return loss.detach().set("alpha", alpha)
-
 
     if cfg.compile.compile:
         update = torch.compile(update, mode=compile_mode)
@@ -203,8 +200,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     losses = TensorDict(batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
 
     collector_iter = iter(collector)
+    total_iter = len(collector)
+    for i in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
 
-    for i in range(len(collector)):
         with timeit("collecting"):
             data = next(collector_iter)
 
@@ -255,7 +254,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
         # Get test rewards
-        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC), timeit("eval"):
+        with torch.no_grad(), set_exploration_type(
+            ExplorationType.DETERMINISTIC
+        ), timeit("eval"):
             if ((i - 1) * frames_in_batch * frame_skip) // test_interval < (
                 i * frames_in_batch * frame_skip
             ) // test_interval:

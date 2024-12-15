@@ -133,6 +133,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Training loop
     for i in pbar:
+        timeit.printevery(1000, cfg.optim.gradient_steps, erase=True)
+
         # sample data
         with timeit("sample"):
             data = replay_buffer.sample()

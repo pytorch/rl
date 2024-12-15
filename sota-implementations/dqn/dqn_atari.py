@@ -173,7 +173,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pbar = tqdm.tqdm(total=total_frames)
 
     c_iter = iter(collector)
-    for i in range(len(collector)):
+    total_iter = len(collector)
+    for i in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             data = next(c_iter)
         log_info = {}
@@ -241,10 +243,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 model.train()
 
-        if i % 200 == 0:
-            timeit.print()
-            log_info.update(timeit.todict(prefix="time"))
-            timeit.erase()
+        log_info.update(timeit.todict(prefix="time"))
 
         # Log all the information
         if logger:

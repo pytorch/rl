@@ -103,7 +103,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 compile_mode = "reduce-overhead"
 
     # Create collector
-    collector = make_collector(cfg, train_env, actor_model_explore=model[0], compile_mode=compile_mode)
+    collector = make_collector(
+        cfg, train_env, actor_model_explore=model[0], compile_mode=compile_mode
+    )
 
     # Create loss
     loss_module, target_net_updater = make_loss(cfg.loss, model)
@@ -154,7 +156,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = cfg.collector.max_frames_per_traj
     collector_iter = iter(collector)
     pbar = tqdm.tqdm(range(collector.total_frames))
-    for _ in range(len(collector)):
+    total_iter = len(collector)
+    for _ in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
+
         with timeit("collection"):
             tensordict = next(collector_iter)
         current_frames = tensordict.numel()
