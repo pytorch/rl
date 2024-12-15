@@ -785,7 +785,7 @@ class DiscreteIQLLoss(IQLLoss):
         state_action_value = td_q.get(self.tensor_keys.state_action_value)
         action = tensordict.get(self.tensor_keys.action)
         if self.action_space == "categorical":
-            if action.shape != state_action_value.shape:
+            if action.ndim < state_action_value.ndim:
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
             chosen_state_action_value = torch.gather(
@@ -830,7 +830,7 @@ class DiscreteIQLLoss(IQLLoss):
             state_action_value = td_q.get(self.tensor_keys.state_action_value)
             action = tensordict.get(self.tensor_keys.action)
             if self.action_space == "categorical":
-                if action.shape != state_action_value.shape:
+                if action.ndim < state_action_value.ndim:
                     # unsqueeze the action if it lacks on trailing singleton dim
                     action = action.unsqueeze(-1)
                 chosen_state_action_value = torch.gather(
@@ -867,7 +867,7 @@ class DiscreteIQLLoss(IQLLoss):
         state_action_value = td_q.get(self.tensor_keys.state_action_value)
         action = tensordict.get(self.tensor_keys.action)
         if self.action_space == "categorical":
-            if action.shape != state_action_value.shape:
+            if action.ndim < state_action_value.ndim:
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
             pred_val = torch.gather(state_action_value, -1, index=action).squeeze(-1)
