@@ -617,9 +617,9 @@ class ReplayBuffer:
         return index
 
     def _extend(self, data: Sequence) -> torch.Tensor:
-        is_compiling = is_compiling()
+        is_comp = is_compiling()
         nc = contextlib.nullcontext()
-        with self._replay_lock if not is_compiling else nc, self._write_lock if not is_compiling else nc:
+        with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             if self.dim_extend > 0:
                 data = self._transpose(data)
             index = self._writer.extend(data)
