@@ -226,6 +226,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 with torch.no_grad(), timeit("adv"):
                     torch.compiler.cudagraph_mark_step_begin()
                     data = adv_module(data)
+                    if compile_mode:
+                        data = data.clone()
+
                 with timeit("rb - extend"):
                     # Update the data buffer
                     data_reshape = data.reshape(-1)
