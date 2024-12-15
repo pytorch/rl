@@ -156,7 +156,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         storing_device=device,
         max_frames_per_traj=-1,
         init_random_frames=init_random_frames,
-        compile_policy={"mode": compile_mode} if compile_mode is not None else False,
+        compile_policy={"mode": compile_mode, "fullgraph": True}
+        if compile_mode is not None
+        else False,
         cudagraph_policy=cfg.compile.cudagraphs,
     )
 
@@ -212,9 +214,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Get and log q-values, loss, epsilon, sampling time and training time
         log_info.update(
             {
-                "train/q_values": (data["action_value"] * data["action"]).sum().item()
-                / frames_per_batch,
-                "train/q_loss": q_losses.mean().item(),
+                "train/q_values": data["chosen_action_value"].sum() / frames_per_batch,
+                "train/q_loss": q_losses.mean(),
                 "train/epsilon": greedy_module.eps,
             }
         )

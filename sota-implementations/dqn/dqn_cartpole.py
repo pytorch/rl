@@ -36,18 +36,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(device)
 
     # Make the components
-    model = make_dqn_model(cfg.env.env_name)
+    model = make_dqn_model(cfg.env.env_name, device=device)
 
     greedy_module = EGreedyModule(
         annealing_num_steps=cfg.collector.annealing_frames,
         eps_init=cfg.collector.eps_start,
         eps_end=cfg.collector.eps_end,
         spec=model.spec,
+        device=device,
     )
     model_explore = TensorDictSequential(
         model,
         greedy_module,
-    ).to(device)
+    )
 
     # Create the replay buffer
     replay_buffer = TensorDictReplayBuffer(
@@ -135,7 +136,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         storing_device="cpu",
         max_frames_per_traj=-1,
         init_random_frames=cfg.collector.init_random_frames,
-        compile_policy={"mode": compile_mode} if compile_mode is not None else False,
+        compile_policy={"mode": compile_mode, "fullgraph": True}
+        if compile_mode is not None
+        else False,
         cudagraph_policy=cfg.compile.cudagraphs,
     )
 

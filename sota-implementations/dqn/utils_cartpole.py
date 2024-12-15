@@ -31,7 +31,7 @@ def make_env(env_name="CartPole-v1", device="cpu", from_pixels=False):
 # --------------------------------------------------------------------
 
 
-def make_dqn_modules(proof_environment):
+def make_dqn_modules(proof_environment, device):
 
     # Define input shape
     input_shape = proof_environment.observation_spec["observation"].shape
@@ -45,19 +45,20 @@ def make_dqn_modules(proof_environment):
         activation_class=torch.nn.ReLU,
         out_features=num_outputs,
         num_cells=[120, 84],
+        device=device,
     )
 
     qvalue_module = QValueActor(
         module=mlp,
-        spec=Composite(action=action_spec),
+        spec=Composite(action=action_spec).to(device),
         in_keys=["observation"],
     )
     return qvalue_module
 
 
-def make_dqn_model(env_name):
-    proof_environment = make_env(env_name, device="cpu")
-    qvalue_module = make_dqn_modules(proof_environment)
+def make_dqn_model(env_name, device):
+    proof_environment = make_env(env_name, device=device)
+    qvalue_module = make_dqn_modules(proof_environment, device=device)
     del proof_environment
     return qvalue_module
 

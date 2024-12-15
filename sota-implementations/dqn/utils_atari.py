@@ -88,7 +88,7 @@ def make_dqn_modules_pixels(proof_environment, device):
     )
     qvalue_module = QValueActor(
         module=torch.nn.Sequential(cnn, mlp),
-        spec=Composite(action=action_spec),
+        spec=Composite(action=action_spec).to(device),
         in_keys=["pixels"],
     )
     return qvalue_module
