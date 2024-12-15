@@ -81,7 +81,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(frames_per_batch, compilable=cfg.compile.compile),
+        storage=LazyTensorStorage(
+            frames_per_batch, compilable=cfg.compile.compile, device=device
+        ),
         sampler=sampler,
         batch_size=mini_batch_size,
         compilable=cfg.compile.compile,
@@ -93,6 +95,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         lmbda=cfg.loss.gae_lambda,
         value_network=critic,
         average_gae=False,
+        device=device,
     )
     loss_module = ClipPPOLoss(
         actor_network=actor,
@@ -232,7 +235,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Compute GAE
                 with torch.no_grad(), timeit("adv"):
-                    data = adv_module(data.to(device))
+                    data = adv_module(data)
                 with timeit("rb - extend"):
                     # Update the data buffer
                     data_reshape = data.reshape(-1)
