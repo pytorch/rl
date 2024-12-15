@@ -82,7 +82,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
         storage=LazyTensorStorage(
-            cfg.collector.frames_per_batch, compilable=cfg.compile.compile
+            cfg.collector.frames_per_batch,
+            compilable=cfg.compile.compile,
+            device=device,
         ),
         sampler=sampler,
         batch_size=cfg.loss.mini_batch_size,
@@ -95,6 +97,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         lmbda=cfg.loss.gae_lambda,
         value_network=critic,
         average_gae=False,
+        device=device,
     )
 
     loss_module = ClipPPOLoss(
