@@ -77,7 +77,7 @@ def make_ppo_models_state(proof_environment, device):
         policy_mlp,
         AddStateIndependentNormalScale(
             proof_environment.action_spec_unbatched.shape[-1], scale_lb=1e-8
-        ),
+        ).to(device),
     )
 
     # Add probabilistic sampling of the actions
