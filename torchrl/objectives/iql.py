@@ -782,7 +782,7 @@ class DiscreteIQLLoss(IQLLoss):
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
-        state_action_value = td_q.get(self.tensor_keys.state_action_value)
+        state_action_value = td_q.get(self.tensor_keys.chosen_state_action_value)
         action = tensordict.get(self.tensor_keys.action)
         if self.action_space == "categorical":
             if action.shape != state_action_value.shape:
@@ -791,9 +791,11 @@ class DiscreteIQLLoss(IQLLoss):
             chosen_state_action_value = torch.gather(
                 state_action_value, -1, index=action
             ).squeeze(-1)
-        else:
+        elif self.action_space == "one_hot":
             action = action.to(torch.float)
             chosen_state_action_value = (state_action_value * action).sum(-1)
+        else:
+            raise RuntimeError(f"Unknown action space {self.action_space}.")
         min_Q, _ = torch.min(chosen_state_action_value, dim=0)
         if log_prob.shape != min_Q.shape:
             raise RuntimeError(
@@ -834,9 +836,11 @@ class DiscreteIQLLoss(IQLLoss):
                 chosen_state_action_value = torch.gather(
                     state_action_value, -1, index=action
                 ).squeeze(-1)
-            else:
+            elif self.action_space == "one_hot":
                 action = action.to(torch.float)
                 chosen_state_action_value = (state_action_value * action).sum(-1)
+            else:
+                raise RuntimeError(f"Unknown action space {self.action_space}.")
             min_Q, _ = torch.min(chosen_state_action_value, dim=0)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False)
@@ -867,9 +871,11 @@ class DiscreteIQLLoss(IQLLoss):
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
             pred_val = torch.gather(state_action_value, -1, index=action).squeeze(-1)
-        else:
+        elif self.action_space == "one_hot":
             action = action.to(torch.float)
             pred_val = (state_action_value * action).sum(-1)
+        else:
+            raise RuntimeError(f"Unknown action space {self.action_space}.")
 
         td_error = (pred_val - target_value.expand_as(pred_val)).pow(2)
         loss_qval = distance_loss(
