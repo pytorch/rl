@@ -276,6 +276,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             expert_data = expert_data.to(device)
 
         with timeit("update"):
+            torch.compiler.cudagraph_mark_step_begin()
             metadata = update(data, expert_data)
         d_loss = metadata["dloss"]
         alpha = metadata["alpha"]
