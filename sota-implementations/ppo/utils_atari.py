@@ -115,7 +115,7 @@ def make_ppo_modules_pixels(proof_environment, device):
         strides=[4, 2, 1],
         device=device,
     )
-    common_cnn_output = common_cnn(torch.ones(input_shape))
+    common_cnn_output = common_cnn(torch.ones(input_shape, device=device))
     common_mlp = MLP(
         in_features=common_cnn_output.shape[-1],
         activation_class=torch.nn.ReLU,
