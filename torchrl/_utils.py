@@ -880,11 +880,11 @@ def compile_with_warmup(*args, warmup: int, **kwargs):
         >>> # First 10 calls use the original model
         >>> # After 10 calls, the model is compiled and used
     """
-
     if len(args):
         model = args[0]
+        args = ()
     else:
-        model = kwargs.get("model")
+        model = kwargs.pop("model", None)
     if model is None:
         return lambda model: compile_with_warmup(model, warmup=warmup, **kwargs)
     else:
