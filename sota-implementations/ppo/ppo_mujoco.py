@@ -98,6 +98,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_network=critic,
         average_gae=False,
         device=device,
+        vectorized=not cfg.compile.compile,
     )
 
     loss_module = ClipPPOLoss(
