@@ -184,7 +184,8 @@ def make_offline_replay_buffer(rb_cfg):
         dataset_id=rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
-        sampler=SamplerWithoutReplacement(drop_last=False),
+        # We use drop_last to avoid recompiles (and dynamic shapes)
+        sampler=SamplerWithoutReplacement(drop_last=True),
         prefetch=4,
         direct_download=True,
     )
