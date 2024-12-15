@@ -13,10 +13,14 @@ The helper functions are coded in the utils.py associated with this script.
 """
 from __future__ import annotations
 
+import warnings
+
 import hydra
 import numpy as np
 import torch
 import tqdm
+from tensordict.nn import CudaGraphModule
+
 from torchrl._utils import timeit
 
 from torchrl.envs import set_gym_backend
@@ -89,8 +93,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create model
     model = make_iql_model(cfg, train_env, eval_env, device)
 
+    compile_mode = None
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
+        if compile_mode in ("", None):
+            if cfg.compile.cudagraphs:
+                compile_mode = "default"
+            else:
+                compile_mode = "reduce-overhead"
+
     # Create collector
-    collector = make_collector(cfg, train_env, actor_model_explore=model[0])
+    collector = make_collector(cfg, train_env, actor_model_explore=model[0], compile_mode=compile_mode)
 
     # Create loss
     loss_module, target_net_updater = make_loss(cfg.loss, model)
@@ -101,6 +114,30 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     optimizer = group_optimizers(optimizer_actor, optimizer_critic, optimizer_value)
     del optimizer_actor, optimizer_critic, optimizer_value
+
+    def update(sampled_tensordict):
+        optimizer.zero_grad(set_to_none=True)
+        # compute losses
+        loss_info = loss_module(sampled_tensordict)
+        actor_loss = loss_info["loss_actor"]
+        value_loss = loss_info["loss_value"]
+        q_loss = loss_info["loss_qvalue"]
+
+        (actor_loss + value_loss + q_loss).backward()
+        optimizer.step()
+
+        # update qnet_target params
+        target_net_updater.step()
+        return loss_info.detach()
+
+    if cfg.compile.compile:
+        update = torch.compile(update, mode=compile_mode)
+    if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
+        update = CudaGraphModule(update, warmup=50)
 
     # Main loop
     collected_frames = 0
@@ -138,22 +175,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     with timeit("rb - sampling"):
                         # sample from replay buffer
                         sampled_tensordict = replay_buffer.sample().to(device)
-
-                    def update(sampled_tensordict):
-                        optimizer.zero_grad()
-                        # compute losses
-                        loss_info = loss_module(sampled_tensordict)
-                        actor_loss = loss_info["loss_actor"]
-                        value_loss = loss_info["loss_value"]
-                        q_loss = loss_info["loss_qvalue"]
-
-                        (actor_loss + value_loss + q_loss).backward()
-                        optimizer.step()
-
-                        # update qnet_target params
-                        target_net_updater.step()
-                        return loss_info.detach()
-
                     with timeit("update"):
                         loss_info = update(sampled_tensordict)
                     # update priority
@@ -188,10 +209,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 episode_length
             )
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = loss_info["loss_qvalue"].detach()
-            metrics_to_log["train/actor_loss"] = loss_info["loss_actor"].detach()
-            metrics_to_log["train/value_loss"] = loss_info["loss_value"].detach()
-            metrics_to_log["train/entropy"] = loss_info.get("entropy").detach()
+            metrics_to_log["train/q_loss"] = loss_info["loss_qvalue"]
+            metrics_to_log["train/actor_loss"] = loss_info["loss_actor"]
+            metrics_to_log["train/value_loss"] = loss_info["loss_value"]
+            metrics_to_log["train/entropy"] = loss_info.get("entropy")
             metrics_to_log.update(timeit.todict(prefix="time"))
 
         if logger is not None:

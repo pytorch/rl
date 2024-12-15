@@ -87,7 +87,7 @@ def make_ppo_models_state(proof_environment):
             out_keys=["loc", "scale"],
         ),
         in_keys=["loc", "scale"],
-        spec=proof_environment.single_full_action_spec,
+        spec=proof_environment.full_action_spec_unbatched,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
