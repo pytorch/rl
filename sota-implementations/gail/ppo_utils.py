@@ -55,7 +55,7 @@ def make_ppo_models_state(proof_environment, compile, device):
         "low": proof_environment.action_spec_unbatched.space.low.to(device),
         "high": proof_environment.action_spec_unbatched.space.high.to(device),
         "tanh_loc": False,
-        "safe_tanh": not compile,
+        # "safe_tanh": not compile,
     }
 
     # Define policy architecture
@@ -77,7 +77,9 @@ def make_ppo_models_state(proof_environment, compile, device):
     policy_mlp = torch.nn.Sequential(
         policy_mlp,
         AddStateIndependentNormalScale(
-            proof_environment.action_spec_unbatched.shape[-1], scale_lb=1e-8
+            proof_environment.action_spec_unbatched.shape[-1],
+            scale_lb=1e-8,
+            device=device,
         ),
     )
 
@@ -102,6 +104,7 @@ def make_ppo_models_state(proof_environment, compile, device):
         activation_class=torch.nn.Tanh,
         out_features=1,
         num_cells=[64, 64],
+        device=device,
     )
 
     # Initialize value weights
