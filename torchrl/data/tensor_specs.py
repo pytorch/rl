@@ -462,6 +462,11 @@ class CategoricalBox(Box):
     n: int
     register = invertible_dict()
 
+    def __post_init__(self):
+        # n could be a numpy array or a tensor, making compile go a bit crazy
+        # We want to make sure we're working with a regular integer
+        self.__dict__["n"] = int(self.n)
+
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CategoricalBox:
         return deepcopy(self)
 
@@ -3313,7 +3318,10 @@ class Categorical(TensorSpec):
         )
         self.update_mask(mask)
         self._provisional_n = None
-        self._undefined_n = self.space.n < 0
+
+    @torch.compiler.assume_constant_result
+    def _undefined_n(self):
+        return self.space.n == -1
 
     def enumerate(self) -> torch.Tensor:
         dtype = self.dtype
@@ -3380,7 +3388,7 @@ class Categorical(TensorSpec):
         self._provisional_n = n
 
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
-        if self._undefined_n:
+        if self._undefined_n():
             if self._provisional_n is None:
                 raise RuntimeError(
                     "Cannot generate random categorical samples for undefined cardinality (n=-1). "
