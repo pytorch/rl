@@ -332,7 +332,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities:
+        for ent in list(self._storage._attached_entities):
             ent.mark_update(index)
         return index
 
