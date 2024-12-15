@@ -233,7 +233,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Update the networks
                 optim.step()
-        return TensorDict(dloss=d_loss, alpha=alpha).detach()
+        return {"dloss": d_loss, "alpha": alpha}
 
     if cfg.compile.compile:
         update = compile_with_warmup(update, warmup=2, mode=compile_mode)
