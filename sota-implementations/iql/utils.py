@@ -298,19 +298,16 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
     """Make discrete IQL agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    if train_env.batch_size:
-        action_spec = action_spec[(0,) * len(train_env.batch_size)]
+    action_spec = train_env.action_spec_unbatched
     # Define Actor Network
     in_keys = ["observation"]
 
-    actor_net_kwargs = {
-        "num_cells": cfg.model.hidden_sizes,
-        "out_features": action_spec.shape[-1],
-        "activation_class": ACTIVATIONS[cfg.model.activation],
-    }
-
-    actor_net = MLP(**actor_net_kwargs)
+    actor_net = MLP(
+        num_cells=cfg.model.hidden_sizes,
+        out_features=action_spec.space.n,
+        activation_class=ACTIVATIONS[cfg.model.activation],
+        device=device,
+    )
 
     actor_module = SafeModule(
         module=actor_net,
@@ -318,7 +315,7 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
         out_keys=["logits"],
     )
     actor = ProbabilisticActor(
-        spec=Composite(action=eval_env.action_spec),
+        spec=Composite(action=eval_env.action_spec_unbatched).to(device),
         module=actor_module,
         in_keys=["logits"],
         out_keys=["action"],
@@ -329,15 +326,12 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
     )
 
     # Define Critic Network
-    qvalue_net_kwargs = {
-        "num_cells": cfg.model.hidden_sizes,
-        "out_features": action_spec.shape[-1],
-        "activation_class": ACTIVATIONS[cfg.model.activation],
-    }
     qvalue_net = MLP(
-        **qvalue_net_kwargs,
+        num_cells=cfg.model.hidden_sizes,
+        out_features=action_spec.space.n,
+        activation_class=ACTIVATIONS[cfg.model.activation],
+        device=device,
     )
-
     qvalue = TensorDictModule(
         in_keys=["observation"],
         out_keys=["state_action_value"],
@@ -345,26 +339,25 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
     )
 
     # Define Value Network
-    value_net_kwargs = {
-        "num_cells": cfg.model.hidden_sizes,
-        "out_features": 1,
-        "activation_class": ACTIVATIONS[cfg.model.activation],
-    }
-    value_net = MLP(**value_net_kwargs)
+    value_net = MLP(
+        num_cells=cfg.model.hidden_sizes,
+        out_features=1,
+        activation_class=ACTIVATIONS[cfg.model.activation],
+        device=device,
+    )
     value_net = TensorDictModule(
         in_keys=["observation"],
         out_keys=["state_value"],
         module=value_net,
     )
 
-    model = torch.nn.ModuleList([actor, qvalue, value_net]).to(device)
+    model = torch.nn.ModuleList([actor, qvalue, value_net])
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = eval_env.reset()
+        td = eval_env.fake_tensordict()
         td = td.to(device)
         for net in model:
             net(td)
-    del td
     eval_env.close()
 
     return model
