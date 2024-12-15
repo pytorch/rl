@@ -153,7 +153,8 @@ class EGreedyModule(TensorDictModuleBase):
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
+        expl = exploration_type()
+        if expl in (ExplorationType.RANDOM, None):
             if isinstance(self.action_key, tuple) and len(self.action_key) > 1:
                 action_tensordict = tensordict.get(self.action_key[:-1])
                 action_key = self.action_key[-1]
