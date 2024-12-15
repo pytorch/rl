@@ -43,7 +43,7 @@ gail:
 
 compile:
   compile: False
-  compile_mode:
+  compile_mode: default
   cudagraphs: False
 
 replay_buffer:
