@@ -854,7 +854,7 @@ class _ContextManager:
 
 
 @wraps(torch.compile)
-def compile_with_warmup(*args, warmup: int, **kwargs):
+def compile_with_warmup(*args, warmup: int = 1, **kwargs):
     """Compile a model with warm-up.
 
     This function wraps :func:`~torch.compile` to add a warm-up phase. During the warm-up phase,
@@ -863,7 +863,7 @@ def compile_with_warmup(*args, warmup: int, **kwargs):
 
     Args:
         *args: Arguments to be passed to `torch.compile`.
-        warmup (int): Number of calls to the model before compiling it.
+        warmup (int): Number of calls to the model before compiling it. Defaults to 1.
         **kwargs: Keyword arguments to be passed to `torch.compile`.
 
     Returns:
@@ -888,7 +888,7 @@ def compile_with_warmup(*args, warmup: int, **kwargs):
     if model is None:
         return lambda model: compile_with_warmup(model, warmup=warmup, **kwargs)
     else:
-        count = 0
+        count = -1
         compiled_model = model
 
         @wraps(model)

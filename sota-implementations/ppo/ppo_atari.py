@@ -12,10 +12,8 @@ from __future__ import annotations
 import warnings
 
 import hydra
-from tensordict.nn import CudaGraphModule
 
-from torchrl._utils import logger as torchrl_logger, timeit
-from torchrl.record import VideoRecorder
+from torchrl._utils import compile_with_warmup
 
 
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
@@ -25,12 +23,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
+    from tensordict.nn import CudaGraphModule
+
+    from torchrl._utils import timeit
     from torchrl.collectors import SyncDataCollector
-    from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+    from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
     from torchrl.objectives import ClipPPOLoss
     from torchrl.objectives.value.advantages import GAE
+    from torchrl.record import VideoRecorder
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils_atari import eval_model, make_parallel_env, make_ppo_models
 
@@ -79,9 +81,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(frames_per_batch),
+        storage=LazyTensorStorage(frames_per_batch, compilable=cfg.compile.compile),
         sampler=sampler,
         batch_size=mini_batch_size,
+        compilable=cfg.compile.compile,
     )
 
     # Create loss and adv modules
@@ -141,7 +144,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Main loop
     collected_frames = 0
-    num_network_updates = 0
+    num_network_updates = torch.zeros((), dtype=torch.int64, device=device)
     pbar = tqdm.tqdm(total=total_frames)
     num_mini_batches = frames_per_batch // mini_batch_size
     total_network_updates = (
@@ -152,7 +155,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         optim.zero_grad(set_to_none=True)
 
         # Linearly decrease the learning rate and clip epsilon
-        alpha = 1.0
+        alpha = torch.ones((), device=device)
         if cfg_optim_anneal_lr:
             alpha = 1 - (num_network_updates / total_network_updates)
             for group in optim.param_groups:
@@ -165,9 +168,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Forward pass PPO loss
         loss = loss_module(batch)
-        loss_sum = (
-                loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
-        )
+        loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
         # Backward pass
         loss_sum.backward()
         torch.nn.utils.clip_grad_norm_(
@@ -176,12 +177,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Update the networks
         optim.step()
-        return loss.detach().set("alpha", alpha)
-
+        return loss.detach().set("alpha", alpha), num_network_updates.clone()
 
     if cfg.compile.compile:
-        update = torch.compile(update, mode=compile_mode)
-        adv_module = torch.compile(adv_module, mode=compile_mode)
+        update = compile_with_warmup(update, mode=compile_mode, warmup=1)
+        adv_module = compile_with_warmup(adv_module, mode=compile_mode, warmup=1)
 
     if cfg.compile.cudagraphs:
         warnings.warn(
@@ -238,7 +238,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 for k, batch in enumerate(data_buffer):
 
-                    loss = update(batch, num_network_updates=num_network_updates)
+                    loss, num_network_updates = update(
+                        batch, num_network_updates=num_network_updates
+                    )
                     losses[j, k] = loss.select(
                         "loss_critic", "loss_entropy", "loss_objective"
                     )
@@ -255,7 +257,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
         # Get test rewards
-        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC), timeit("eval"):
+        with torch.no_grad(), set_exploration_type(
+            ExplorationType.DETERMINISTIC
+        ), timeit("eval"):
             if ((i - 1) * frames_in_batch * frame_skip) // test_interval < (
                 i * frames_in_batch * frame_skip
             ) // test_interval:

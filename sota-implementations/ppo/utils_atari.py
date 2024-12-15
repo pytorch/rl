@@ -31,7 +31,6 @@ from torchrl.modules import (
     ActorValueOperator,
     ConvNet,
     MLP,
-    OneHotCategorical,
     ProbabilisticActor,
     TanhNormal,
     ValueOperator,
@@ -51,6 +50,7 @@ def make_base_env(env_name="BreakoutNoFrameskip-v4", frame_skip=4, is_test=False
         from_pixels=True,
         pixels_only=False,
         device="cpu",
+        categorical_action_encoding=True,
     )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
@@ -86,7 +86,7 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
 # --------------------------------------------------------------------
 
 
-def make_ppo_modules_pixels(proof_environment):
+def make_ppo_modules_pixels(proof_environment, device):
 
     # Define input shape
     input_shape = proof_environment.observation_spec["pixels"].shape
@@ -94,14 +94,14 @@ def make_ppo_modules_pixels(proof_environment):
     # Define distribution class and kwargs
     if isinstance(proof_environment.action_spec_unbatched.space, CategoricalBox):
         num_outputs = proof_environment.action_spec_unbatched.space.n
-        distribution_class = OneHotCategorical
+        distribution_class = torch.distributions.Categorical
         distribution_kwargs = {}
     else:  # is ContinuousBox
         num_outputs = proof_environment.action_spec_unbatched.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "low": proof_environment.action_spec_unbatched.space.low,
-            "high": proof_environment.action_spec_unbatched.space.high,
+            "low": proof_environment.action_spec_unbatched.space.low.to(device),
+            "high": proof_environment.action_spec_unbatched.space.high.to(device),
         }
 
     # Define input keys
@@ -113,6 +113,7 @@ def make_ppo_modules_pixels(proof_environment):
         num_cells=[32, 64, 64],
         kernel_sizes=[8, 4, 3],
         strides=[4, 2, 1],
+        device=device,
     )
     common_cnn_output = common_cnn(torch.ones(input_shape))
     common_mlp = MLP(
@@ -121,6 +122,7 @@ def make_ppo_modules_pixels(proof_environment):
         activate_last_layer=True,
         out_features=512,
         num_cells=[],
+        device=device,
     )
     common_mlp_output = common_mlp(common_cnn_output)
 
@@ -137,6 +139,7 @@ def make_ppo_modules_pixels(proof_environment):
         out_features=num_outputs,
         activation_class=torch.nn.ReLU,
         num_cells=[],
+        device=device,
     )
     policy_module = TensorDictModule(
         module=policy_net,
@@ -148,7 +151,7 @@ def make_ppo_modules_pixels(proof_environment):
     policy_module = ProbabilisticActor(
         policy_module,
         in_keys=["logits"],
-        spec=proof_environment.full_action_spec_unbatched,
+        spec=proof_environment.full_action_spec_unbatched.to(device),
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
@@ -161,6 +164,7 @@ def make_ppo_modules_pixels(proof_environment):
         in_features=common_mlp_output.shape[-1],
         out_features=1,
         num_cells=[],
+        device=device,
     )
     value_module = ValueOperator(
         value_net,
@@ -170,11 +174,12 @@ def make_ppo_modules_pixels(proof_environment):
     return common_module, policy_module, value_module
 
 
-def make_ppo_models(env_name):
+def make_ppo_models(env_name, device):
 
-    proof_environment = make_parallel_env(env_name, 1, device="cpu")
+    proof_environment = make_parallel_env(env_name, 1, device=device)
     common_module, policy_module, value_module = make_ppo_modules_pixels(
-        proof_environment
+        proof_environment,
+        device=device,
     )
 
     # Wrap modules in a single ActorCritic operator
@@ -185,8 +190,8 @@ def make_ppo_models(env_name):
     )
 
     with torch.no_grad():
-        td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
-        td = actor_critic(td)
+        td = proof_environment.fake_tensordict().expand(10)
+        actor_critic(td)
         del td
 
     actor = actor_critic.get_policy_operator()
