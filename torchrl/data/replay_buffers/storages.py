@@ -69,7 +69,7 @@ class Storage:
         self.max_size = int(max_size)
         self.checkpointer = checkpointer
         self._compilable = compilable
-        self._attached_entities_set = set()
+        self._attached_entities_list = []
 
     @property
     def checkpointer(self):
@@ -89,10 +89,10 @@ class Storage:
     def _attached_entities(self) -> List:
         # RBs that use a given instance of Storage should add
         # themselves to this set.
-        _attached_entities_set = getattr(self, "_attached_entities_set", None)
-        if _attached_entities_set is None:
-            self._attached_entities_set = _attached_entities_set = []
-        return _attached_entities_set
+        _attached_entities_list = getattr(self, "_attached_entities_list", None)
+        if _attached_entities_list is None:
+            self._attached_entities_list = _attached_entities_list = []
+        return _attached_entities_list
 
     @torch._dynamo.assume_constant_result
     def _attached_entities_iter(self):
