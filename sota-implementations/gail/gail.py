@@ -93,6 +93,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         ),
         sampler=SamplerWithoutReplacement(),
         batch_size=cfg.ppo.loss.mini_batch_size,
+        compilable=cfg.compile.compile,
     )
 
     # Create loss and adv modules
