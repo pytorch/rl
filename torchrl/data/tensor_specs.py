@@ -3388,7 +3388,7 @@ class Categorical(TensorSpec):
         self._provisional_n = n
 
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
-        if self._undefined_n():
+        if self._undefined_n:
             if self._provisional_n is None:
                 raise RuntimeError(
                     "Cannot generate random categorical samples for undefined cardinality (n=-1). "
