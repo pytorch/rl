@@ -95,6 +95,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         lmbda=cfg.ppo.loss.gae_lambda,
         value_network=critic,
         average_gae=False,
+        device=device,
     )
 
     loss_module = ClipPPOLoss(
