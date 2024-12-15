@@ -156,7 +156,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = cfg.env.max_episode_steps
 
     c_iter = iter(collector)
-    for i in range(len(collector)):
+    total_iter = len(collector)
+    for _ in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             tensordict = next(c_iter)
         # Update exploration policy
@@ -226,10 +228,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_env.apply(dump_video)
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward
-        if i % 20 == 0:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            timeit.print()
-            timeit.erase()
+        metrics_to_log.update(timeit.todict(prefix="time"))
 
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)

@@ -179,7 +179,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
     c_iter = iter(collector)
-    for i in range(len(collector)):
+    total_iter = len(collector)
+    for i in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
+
         with timeit("collecting"):
             data = next(c_iter)
 
@@ -257,10 +260,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 actor.train()
 
-        if i % 200 == 0:
-            log_info.update(timeit.todict(prefix="time"))
-            timeit.print()
-            timeit.erase()
+        log_info.update(timeit.todict(prefix="time"))
 
         if logger:
             for key, value in log_info.items():

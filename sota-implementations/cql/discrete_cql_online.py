@@ -227,10 +227,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             if i % 100 == 0:
                 metrics_to_log.update(timeit.todict(prefix="time"))
 
-        if i % 100 == 0:
-            timeit.print()
-            timeit.erase()
-
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
 

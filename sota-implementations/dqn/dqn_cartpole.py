@@ -23,6 +23,8 @@ from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils_cartpole import eval_model, make_dqn_model, make_env
 
+torch.set_float32_matmul_precision("high")
+
 
 @hydra.main(config_path="", config_name="config_cartpole", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -154,7 +156,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     q_losses = torch.zeros(num_updates, device=device)
 
     c_iter = iter(collector)
-    for i in range(len(collector)):
+    total_iter = len(collector)
+    for i in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             data = next(c_iter)
 
@@ -224,10 +228,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     }
                 )
 
-        if i % 200 == 0:
-            timeit.print()
-            log_info.update(timeit.todict(prefix="time"))
-            timeit.erase()
+        log_info.update(timeit.todict(prefix="time"))
 
         # Log all the information
         if logger:

@@ -28,6 +28,8 @@ from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils_atari import eval_model, make_dqn_model, make_env
 
+torch.set_float32_matmul_precision("high")
+
 
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -171,7 +173,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pbar = tqdm.tqdm(total=total_frames)
 
     c_iter = iter(collector)
-    for i in range(len(collector)):
+    total_iter = len(collector)
+    for i in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             data = next(c_iter)
         log_info = {}
@@ -239,10 +243,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 model.train()
 
-        if i % 200 == 0:
-            timeit.print()
-            log_info.update(timeit.todict(prefix="time"))
-            timeit.erase()
+        log_info.update(timeit.todict(prefix="time"))
 
         # Log all the information
         if logger:
