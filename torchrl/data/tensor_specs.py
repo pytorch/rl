@@ -455,12 +455,17 @@ class ContinuousBox(Box):
         )
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class CategoricalBox(Box):
     """A box of discrete, categorical values."""
 
     n: int
     register = invertible_dict()
+
+    def __post_init__(self):
+        # n could be a numpy array or a tensor, making compile go a bit crazy
+        # We want to make sure we're working with a regular integer
+        self.__dict__["n"] = int(self.n)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CategoricalBox:
         return deepcopy(self)
@@ -502,7 +507,7 @@ class BoxList(Box):
             return BoxList([BoxList.from_nvec(n) for n in nvec.unbind(-1)])
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class BinaryBox(Box):
     """A box of n binary values."""
 
@@ -1695,7 +1700,7 @@ class OneHot(TensorSpec):
             for i in range(self.shape[dim])
         )
 
-    @implement_for("torch", None, "2.1")
+    @implement_for("torch", None, "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
         if shape is None:
             shape = self.shape[:-1]
@@ -1718,7 +1723,7 @@ class OneHot(TensorSpec):
         # out.scatter_(-1, m, 1)
         return out
 
-    @implement_for("torch", "2.1")
+    @implement_for("torch", "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:  # noqa: F811
         if shape is None:
             shape = self.shape[:-1]
@@ -3314,6 +3319,10 @@ class Categorical(TensorSpec):
         self.update_mask(mask)
         self._provisional_n = None
 
+    @torch.compiler.assume_constant_result
+    def _undefined_n(self):
+        return self.space.n == -1
+
     def enumerate(self) -> torch.Tensor:
         dtype = self.dtype
         if dtype is torch.bool:
@@ -3379,7 +3388,7 @@ class Categorical(TensorSpec):
         self._provisional_n = n
 
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
-        if self.space.n < 0:
+        if self._undefined_n():
             if self._provisional_n is None:
                 raise RuntimeError(
                     "Cannot generate random categorical samples for undefined cardinality (n=-1). "
