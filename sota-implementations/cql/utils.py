@@ -124,6 +124,12 @@ def make_collector(
     cudagraph=False,
 ):
     """Make collector."""
+    device = cfg.collector.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        else:
+            device = torch.device("cpu")
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
@@ -131,7 +137,7 @@ def make_collector(
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.device,
+        device=device,
         compile_policy={"mode": compile_mode} if compile else False,
         cudagraph_policy=cudagraph,
     )

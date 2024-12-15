@@ -3319,9 +3319,9 @@ class Categorical(TensorSpec):
         self.update_mask(mask)
         self._provisional_n = None
 
-    @torch.compiler.assume_constant_result
+    @property
     def _undefined_n(self):
-        return self.space.n == -1
+        return self.space.n < 0
 
     def enumerate(self) -> torch.Tensor:
         dtype = self.dtype
