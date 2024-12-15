@@ -152,7 +152,7 @@ def make_ppo_modules_pixels(proof_environment, device):
     policy_module = ProbabilisticActor(
         policy_module,
         in_keys=["logits"],
-        spec=proof_environment.single_full_action_spec.to(device),
+        spec=proof_environment.full_action_spec_unbatched.to(device),
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
