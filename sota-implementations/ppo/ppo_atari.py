@@ -235,6 +235,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Compute GAE
                 with torch.no_grad(), timeit("adv"):
+                    torch.compiler.cudagraph_mark_step_begin()
                     data = adv_module(data)
                 with timeit("rb - extend"):
                     # Update the data buffer
