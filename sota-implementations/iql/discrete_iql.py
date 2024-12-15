@@ -129,11 +129,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # update qnet_target params
         target_net_updater.step()
-        return TensorDict(
-            metadata.update(
-                {"actor_loss": actor_loss, "value_loss": value_loss, "q_loss": q_loss}
-            )
-        ).detach()
+        metadata.update(
+            {"actor_loss": actor_loss, "value_loss": value_loss, "q_loss": q_loss}
+        )
+        return TensorDict(metadata).detach()
 
     if cfg.compile.compile:
         update = torch.compile(update, mode=compile_mode)
