@@ -380,7 +380,7 @@ def make_loss(loss_cfg, model, device):
     return loss_module, target_net_updater
 
 
-def make_discrete_loss(loss_cfg, model):
+def make_discrete_loss(loss_cfg, model, device):
     loss_module = DiscreteIQLLoss(
         model[0],
         model[1],
@@ -390,7 +390,7 @@ def make_discrete_loss(loss_cfg, model):
         expectile=loss_cfg.expectile,
         action_space="categorical",
     )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    loss_module.make_value_estimator(gamma=loss_cfg.gammam, device=device)
     target_net_updater = HardUpdate(
         loss_module, value_network_update_interval=loss_cfg.hard_update_interval
     )
