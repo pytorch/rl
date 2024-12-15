@@ -71,8 +71,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        device="cpu",
-        storing_device="cpu",
+        device=device,
+        storing_device=device,
         max_frames_per_traj=-1,
         compile_policy={"mode": compile_mode} if compile_mode else False,
         cudagraph_policy=cfg.compile.cudagraphs,
@@ -96,6 +96,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_network=critic,
         average_gae=False,
         device=device,
+        vectorized=not cfg.compile.compile,
     )
     loss_module = ClipPPOLoss(
         actor_network=actor,
