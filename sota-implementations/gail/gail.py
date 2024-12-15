@@ -22,6 +22,8 @@ from gail_utils import log_metrics, make_gail_discriminator, make_offline_replay
 from ppo_utils import eval_model, make_env, make_ppo_models
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
+
+from torchrl._utils import compile_with_warmup
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -84,7 +86,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create data buffer
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(cfg.ppo.collector.frames_per_batch, device=device),
+        storage=LazyTensorStorage(
+            cfg.ppo.collector.frames_per_batch,
+            device=device,
+            compilable=cfg.compile.compile,
+        ),
         sampler=SamplerWithoutReplacement(),
         batch_size=cfg.ppo.loss.mini_batch_size,
     )
@@ -229,7 +235,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         return TensorDict(dloss=d_loss, alpha=alpha).detach()
 
     if cfg.compile.compile:
-        update = torch.compile(update, mode=compile_mode)
+        update = compile_with_warmup(update, warmup=2, mode=compile_mode)
     if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
