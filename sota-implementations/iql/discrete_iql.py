@@ -109,7 +109,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create loss
-    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model, device=device)
 
     # Create optimizer
     optimizer_actor, optimizer_critic, optimizer_value = make_iql_optimizer(
