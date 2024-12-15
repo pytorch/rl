@@ -10,6 +10,7 @@ import torch.nn
 import torch.optim
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
+from torch.distributions import Categorical
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
@@ -36,7 +37,6 @@ from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     MLP,
-    OneHotCategorical,
     ProbabilisticActor,
     SafeModule,
     TanhNormal,
@@ -44,7 +44,6 @@ from torchrl.modules import (
 )
 from torchrl.objectives import DiscreteIQLLoss, HardUpdate, IQLLoss, SoftUpdate
 from torchrl.record import VideoRecorder
-
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
 
@@ -58,7 +57,11 @@ def env_maker(cfg, device="cpu", from_pixels=False):
     if lib in ("gym", "gymnasium"):
         with set_gym_backend(lib):
             return GymEnv(
-                cfg.env.name, device=device, from_pixels=from_pixels, pixels_only=False
+                cfg.env.name,
+                device=device,
+                from_pixels=from_pixels,
+                pixels_only=False,
+                categorical_action_encoding=True,
             )
     elif lib == "dm_control":
         env = DMControlEnv(
@@ -118,7 +121,7 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(cfg, train_env, actor_model_explore, compile_mode):
     """Make collector."""
     device = cfg.collector.device
     if device in ("", None):
@@ -134,6 +137,8 @@ def make_collector(cfg, train_env, actor_model_explore):
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
         device=device,
+        compile_policy={"mode": compile_mode} if compile_mode else False,
+        cudagraph_policy=cfg.compile.cudagraphs,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -179,7 +184,8 @@ def make_offline_replay_buffer(rb_cfg):
         dataset_id=rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
-        sampler=SamplerWithoutReplacement(drop_last=False),
+        # We use drop_last to avoid recompiles (and dynamic shapes)
+        sampler=SamplerWithoutReplacement(drop_last=True),
         prefetch=4,
         direct_download=True,
     )
@@ -219,8 +225,8 @@ def make_iql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "low": action_spec.space.low,
-            "high": action_spec.space.high,
+            "low": action_spec.space.low.to(device),
+            "high": action_spec.space.high.to(device),
             "tanh_loc": False,
         },
         default_interaction_type=ExplorationType.RANDOM,
@@ -244,12 +250,10 @@ def make_iql_model(cfg, train_env, eval_env, device="cpu"):
     model = torch.nn.ModuleList([actor, qvalue, value_net]).to(device)
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = eval_env.reset()
+        td = eval_env.fake_tensordict()
         td = td.to(device)
         for net in model:
             net(td)
-    del td
-    eval_env.close()
 
     return model
 
@@ -292,19 +296,16 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
     """Make discrete IQL agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    if train_env.batch_size:
-        action_spec = action_spec[(0,) * len(train_env.batch_size)]
+    action_spec = train_env.action_spec_unbatched
     # Define Actor Network
     in_keys = ["observation"]
 
-    actor_net_kwargs = {
-        "num_cells": cfg.model.hidden_sizes,
-        "out_features": action_spec.shape[-1],
-        "activation_class": ACTIVATIONS[cfg.model.activation],
-    }
-
-    actor_net = MLP(**actor_net_kwargs)
+    actor_net = MLP(
+        num_cells=cfg.model.hidden_sizes,
+        out_features=action_spec.space.n,
+        activation_class=ACTIVATIONS[cfg.model.activation],
+        device=device,
+    )
 
     actor_module = SafeModule(
         module=actor_net,
@@ -312,26 +313,23 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
         out_keys=["logits"],
     )
     actor = ProbabilisticActor(
-        spec=Composite(action=eval_env.action_spec),
+        spec=Composite(action=eval_env.action_spec_unbatched).to(device),
         module=actor_module,
         in_keys=["logits"],
         out_keys=["action"],
-        distribution_class=OneHotCategorical,
+        distribution_class=Categorical,
         distribution_kwargs={},
         default_interaction_type=InteractionType.RANDOM,
         return_log_prob=False,
     )
 
     # Define Critic Network
-    qvalue_net_kwargs = {
-        "num_cells": cfg.model.hidden_sizes,
-        "out_features": action_spec.shape[-1],
-        "activation_class": ACTIVATIONS[cfg.model.activation],
-    }
     qvalue_net = MLP(
-        **qvalue_net_kwargs,
+        num_cells=cfg.model.hidden_sizes,
+        out_features=action_spec.space.n,
+        activation_class=ACTIVATIONS[cfg.model.activation],
+        device=device,
     )
-
     qvalue = TensorDictModule(
         in_keys=["observation"],
         out_keys=["state_action_value"],
@@ -339,27 +337,25 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
     )
 
     # Define Value Network
-    value_net_kwargs = {
-        "num_cells": cfg.model.hidden_sizes,
-        "out_features": 1,
-        "activation_class": ACTIVATIONS[cfg.model.activation],
-    }
-    value_net = MLP(**value_net_kwargs)
+    value_net = MLP(
+        num_cells=cfg.model.hidden_sizes,
+        out_features=1,
+        activation_class=ACTIVATIONS[cfg.model.activation],
+        device=device,
+    )
     value_net = TensorDictModule(
         in_keys=["observation"],
         out_keys=["state_value"],
         module=value_net,
     )
 
-    model = torch.nn.ModuleList([actor, qvalue, value_net]).to(device)
+    model = torch.nn.ModuleList([actor, qvalue, value_net])
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = eval_env.reset()
+        td = eval_env.fake_tensordict()
         td = td.to(device)
         for net in model:
             net(td)
-    del td
-    eval_env.close()
 
     return model
 
@@ -369,7 +365,7 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
 # ---------
 
 
-def make_loss(loss_cfg, model):
+def make_loss(loss_cfg, model, device):
     loss_module = IQLLoss(
         model[0],
         model[1],
@@ -378,13 +374,13 @@ def make_loss(loss_cfg, model):
         temperature=loss_cfg.temperature,
         expectile=loss_cfg.expectile,
     )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
 
     return loss_module, target_net_updater
 
 
-def make_discrete_loss(loss_cfg, model):
+def make_discrete_loss(loss_cfg, model, device):
     loss_module = DiscreteIQLLoss(
         model[0],
         model[1],
@@ -392,8 +388,9 @@ def make_discrete_loss(loss_cfg, model):
         loss_function=loss_cfg.loss_function,
         temperature=loss_cfg.temperature,
         expectile=loss_cfg.expectile,
+        action_space="categorical",
     )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)
     target_net_updater = HardUpdate(
         loss_module, value_network_update_interval=loss_cfg.hard_update_interval
     )

@@ -785,15 +785,20 @@ class DiscreteIQLLoss(IQLLoss):
         state_action_value = td_q.get(self.tensor_keys.state_action_value)
         action = tensordict.get(self.tensor_keys.action)
         if self.action_space == "categorical":
-            if action.shape != state_action_value.shape:
+            if action.ndim < (state_action_value.ndim - (td_q.ndim - tensordict.ndim)):
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
-            chosen_state_action_value = torch.gather(
-                state_action_value, -1, index=action
-            ).squeeze(-1)
-        else:
+            chosen_state_action_value = torch.vmap(
+                lambda state_action_value, action: torch.gather(
+                    state_action_value, -1, index=action
+                ).squeeze(-1),
+                (0, None),
+            )(state_action_value, action)
+        elif self.action_space == "one_hot":
             action = action.to(torch.float)
             chosen_state_action_value = (state_action_value * action).sum(-1)
+        else:
+            raise RuntimeError(f"Unknown action space {self.action_space}.")
         min_Q, _ = torch.min(chosen_state_action_value, dim=0)
         if log_prob.shape != min_Q.shape:
             raise RuntimeError(
@@ -828,15 +833,22 @@ class DiscreteIQLLoss(IQLLoss):
             state_action_value = td_q.get(self.tensor_keys.state_action_value)
             action = tensordict.get(self.tensor_keys.action)
             if self.action_space == "categorical":
-                if action.shape != state_action_value.shape:
+                if action.ndim < (
+                    state_action_value.ndim - (td_q.ndim - tensordict.ndim)
+                ):
                     # unsqueeze the action if it lacks on trailing singleton dim
                     action = action.unsqueeze(-1)
-                chosen_state_action_value = torch.gather(
-                    state_action_value, -1, index=action
-                ).squeeze(-1)
-            else:
+                chosen_state_action_value = torch.vmap(
+                    lambda state_action_value, action: torch.gather(
+                        state_action_value, -1, index=action
+                    ).squeeze(-1),
+                    (0, None),
+                )(state_action_value, action)
+            elif self.action_space == "one_hot":
                 action = action.to(torch.float)
                 chosen_state_action_value = (state_action_value * action).sum(-1)
+            else:
+                raise RuntimeError(f"Unknown action space {self.action_space}.")
             min_Q, _ = torch.min(chosen_state_action_value, dim=0)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False)
@@ -863,13 +875,20 @@ class DiscreteIQLLoss(IQLLoss):
         state_action_value = td_q.get(self.tensor_keys.state_action_value)
         action = tensordict.get(self.tensor_keys.action)
         if self.action_space == "categorical":
-            if action.shape != state_action_value.shape:
+            if action.ndim < (state_action_value.ndim - (td_q.ndim - tensordict.ndim)):
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
-            pred_val = torch.gather(state_action_value, -1, index=action).squeeze(-1)
-        else:
+            pred_val = torch.vmap(
+                lambda state_action_value, action: torch.gather(
+                    state_action_value, -1, index=action
+                ).squeeze(-1),
+                (0, None),
+            )(state_action_value, action)
+        elif self.action_space == "one_hot":
             action = action.to(torch.float)
             pred_val = (state_action_value * action).sum(-1)
+        else:
+            raise RuntimeError(f"Unknown action space {self.action_space}.")
 
         td_error = (pred_val - target_value.expand_as(pred_val)).pow(2)
         loss_qval = distance_loss(
