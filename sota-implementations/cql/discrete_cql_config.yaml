@@ -14,7 +14,7 @@ collector:
   multi_step: 0
   init_random_frames: 1000
   env_per_collector: 1
-  device: cpu
+  device:
   max_frames_per_traj: 200
   annealing_frames: 10000
   eps_start: 1.0

@@ -176,7 +176,7 @@ class RoundRobinWriter(Writer):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(_cursor, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities:
+        for ent in self._storage._attached_entities_iter():
             ent.mark_update(index)
         return index
 
@@ -302,7 +302,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
             )
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities:
+        for ent in self._storage._attached_entities_iter():
             ent.mark_update(index)
         return index
 
@@ -332,7 +332,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities:
+        for ent in self._storage._attached_entities_iter():
             ent.mark_update(index)
         return index
 
@@ -533,7 +533,7 @@ class TensorDictMaxValueWriter(Writer):
             # Other than that, a "flat" (1d) index is ok to write the data
             self._storage.set(index, data)
             index = self._replicate_index(index)
-            for ent in self._storage._attached_entities:
+            for ent in self._storage._attached_entities_iter():
                 ent.mark_update(index)
         return index
 
@@ -567,7 +567,7 @@ class TensorDictMaxValueWriter(Writer):
             device = getattr(self._storage, "device", None)
             out_index = torch.full(data.shape, -1, dtype=torch.long, device=device)
         index = self._replicate_index(out_index)
-        for ent in self._storage._attached_entities:
+        for ent in self._storage._attached_entities_iter():
             ent.mark_update(index)
         return index
 

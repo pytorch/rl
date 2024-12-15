@@ -120,6 +120,12 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1, logger=None):
 
 def make_collector(cfg, train_env, actor_model_explore):
     """Make collector."""
+    device = cfg.collector.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        else:
+            device = torch.device("cpu")
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
@@ -127,7 +133,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         init_random_frames=cfg.collector.init_random_frames,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.device,
+        device=device,
     )
     collector.set_seed(cfg.env.seed)
     return collector

@@ -20,9 +20,9 @@ import numpy as np
 import torch
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 from tensordict import (
     is_tensor_collection,
@@ -617,9 +617,9 @@ class ReplayBuffer:
         return index
 
     def _extend(self, data: Sequence) -> torch.Tensor:
-        is_compiling = is_dynamo_compiling()
+        is_comp = is_compiling()
         nc = contextlib.nullcontext()
-        with self._replay_lock if not is_compiling else nc, self._write_lock if not is_compiling else nc:
+        with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             if self.dim_extend > 0:
                 data = self._transpose(data)
             index = self._writer.extend(data)
@@ -672,7 +672,7 @@ class ReplayBuffer:
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
-        with self._replay_lock if not is_dynamo_compiling() else contextlib.nullcontext():
+        with self._replay_lock if not is_compiling() else contextlib.nullcontext():
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)
@@ -1159,7 +1159,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
     def __init__(self, *, priority_key: str = "td_error", **kwargs) -> None:
         writer = kwargs.get("writer", None)
         if writer is None:
-            kwargs["writer"] = TensorDictRoundRobinWriter()
+            kwargs["writer"] = TensorDictRoundRobinWriter(
+                compilable=kwargs.get("compilable")
+            )
 
         super().__init__(**kwargs)
         self.priority_key = priority_key
@@ -1343,7 +1345,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
-        with self._replay_lock:
+        with self._replay_lock if not is_compiling() else contextlib.nullcontext():
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)

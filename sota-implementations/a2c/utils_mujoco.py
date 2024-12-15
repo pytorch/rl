@@ -94,7 +94,7 @@ def make_ppo_models_state(proof_environment, device, *, compile: bool = False):
             out_keys=["loc", "scale"],
         ),
         in_keys=["loc", "scale"],
-        spec=proof_environment.single_full_action_spec.to(device),
+        spec=proof_environment.full_action_spec_unbatched.to(device),
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
