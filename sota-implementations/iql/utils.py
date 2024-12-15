@@ -250,12 +250,10 @@ def make_iql_model(cfg, train_env, eval_env, device="cpu"):
     model = torch.nn.ModuleList([actor, qvalue, value_net]).to(device)
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = eval_env.reset()
+        td = eval_env.fake_tensordict()
         td = td.to(device)
         for net in model:
             net(td)
-    del td
-    eval_env.close()
 
     return model
 
@@ -358,7 +356,6 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
         td = td.to(device)
         for net in model:
             net(td)
-    eval_env.close()
 
     return model
 
