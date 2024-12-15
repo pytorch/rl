@@ -103,7 +103,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 compile_mode = "reduce-overhead"
 
     # Create collector
-    collector = make_collector(cfg, train_env, actor_model_explore=model[0], compile_mode=compile_mode)
+    collector = make_collector(
+        cfg, train_env, actor_model_explore=model[0], compile_mode=compile_mode
+    )
 
     # Create loss
     loss_module, target_net_updater = make_loss(cfg.loss, model)
