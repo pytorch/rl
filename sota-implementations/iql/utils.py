@@ -374,7 +374,7 @@ def make_discrete_iql_model(cfg, train_env, eval_env, device):
 # ---------
 
 
-def make_loss(loss_cfg, model):
+def make_loss(loss_cfg, model, device):
     loss_module = IQLLoss(
         model[0],
         model[1],
@@ -383,7 +383,7 @@ def make_loss(loss_cfg, model):
         temperature=loss_cfg.temperature,
         expectile=loss_cfg.expectile,
     )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
 
     return loss_module, target_net_updater
