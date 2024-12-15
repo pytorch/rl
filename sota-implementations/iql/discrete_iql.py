@@ -184,6 +184,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         sampled_tensordict = replay_buffer.sample().to(device)
 
                     with timeit("training - update"):
+                        torch.compiler.cudagraph_mark_step_begin()
                         metadata = update(sampled_tensordict)
                     # update priority
                     if prb:

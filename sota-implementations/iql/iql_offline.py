@@ -139,6 +139,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             data = data.to(device)
 
         with timeit("update"):
+            torch.compiler.cudagraph_mark_step_begin()
             loss_info = update(data)
 
         # evaluation
