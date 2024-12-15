@@ -59,3 +59,8 @@ loss:
 # IQL specific hyperparameter
   temperature: 100
   expectile: 0.8
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

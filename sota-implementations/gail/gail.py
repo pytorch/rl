@@ -34,6 +34,9 @@ from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
+torch.set_float32_matmul_precision("high")
+
+
 @hydra.main(config_path="", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
     set_gym_backend(cfg.env.backend).set()
@@ -260,7 +263,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         expert_data = expert_data.to(device)
 
         metadata = update(data, expert_data)
-        d_loss = metadata["d_loss"]
+        d_loss = metadata["dloss"]
         alpha = metadata["alpha"]
 
         # Get training rewards and episode lengths
