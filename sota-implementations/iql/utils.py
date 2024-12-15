@@ -388,6 +388,7 @@ def make_discrete_loss(loss_cfg, model):
         loss_function=loss_cfg.loss_function,
         temperature=loss_cfg.temperature,
         expectile=loss_cfg.expectile,
+        action_space="categorical",
     )
     loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     target_net_updater = HardUpdate(
