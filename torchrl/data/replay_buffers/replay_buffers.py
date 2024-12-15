@@ -1159,7 +1159,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
     def __init__(self, *, priority_key: str = "td_error", **kwargs) -> None:
         writer = kwargs.get("writer", None)
         if writer is None:
-            kwargs["writer"] = TensorDictRoundRobinWriter(compilable=kwargs.get("compilable"))
+            kwargs["writer"] = TensorDictRoundRobinWriter(
+                compilable=kwargs.get("compilable")
+            )
 
         super().__init__(**kwargs)
         self.priority_key = priority_key

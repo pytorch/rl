@@ -86,17 +86,17 @@ class Storage:
         return len(self) == self.max_size
 
     @property
-    def _attached_entities(self):
+    def _attached_entities(self) -> List:
         # RBs that use a given instance of Storage should add
         # themselves to this set.
         _attached_entities_set = getattr(self, "_attached_entities_set", None)
         if _attached_entities_set is None:
-            self._attached_entities_set = _attached_entities_set = set()
+            self._attached_entities_set = _attached_entities_set = []
         return _attached_entities_set
 
     @torch._dynamo.assume_constant_result
     def _attached_entities_iter(self):
-        return list(self._attached_entities)
+        return self._attached_entities
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any, *, set_cursor: bool = True):
@@ -123,7 +123,8 @@ class Storage:
         Args:
             buffer: the object that reads from this storage.
         """
-        self._attached_entities.add(buffer)
+        if buffer not in self._attached_entities:
+            self._attached_entities.append(buffer)
 
     def __getitem__(self, item):
         return self.get(item)
