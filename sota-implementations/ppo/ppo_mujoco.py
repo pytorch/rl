@@ -191,7 +191,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # extract cfg variables
     cfg_loss_ppo_epochs = cfg.loss.ppo_epochs
     cfg_optim_anneal_lr = cfg.optim.anneal_lr
-    cfg_optim_lr = cfg.optim.lr
+    cfg_optim_lr = torch.tensor(cfg.optim.lr, device=device)
     cfg_loss_anneal_clip_eps = cfg.loss.anneal_clip_epsilon
     cfg_loss_clip_epsilon = cfg.loss.clip_epsilon
     cfg_logger_test_interval = cfg.logger.test_interval
