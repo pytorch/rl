@@ -85,7 +85,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model = make_iql_model(cfg, train_env, eval_env, device)
 
     # Create loss
-    loss_module, target_net_updater = make_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_loss(cfg.loss, model, device=device)
 
     # Create optimizer
     optimizer_actor, optimizer_critic, optimizer_value = make_iql_optimizer(
