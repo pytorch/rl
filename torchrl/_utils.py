@@ -851,3 +851,53 @@ class _ContextManager:
         cm = self._lock if not is_compiling() else nullcontext()
         with cm:
             self._mode = type
+
+
+@wraps(torch.compile)
+def compile_with_warmup(*args, warmup: int, **kwargs):
+    """Compile a model with warm-up.
+
+    This function wraps :func:`~torch.compile` to add a warm-up phase. During the warm-up phase,
+    the original model is used. After the warm-up phase, the model is compiled using
+    `torch.compile`.
+
+    Args:
+        *args: Arguments to be passed to `torch.compile`.
+        warmup (int): Number of calls to the model before compiling it.
+        **kwargs: Keyword arguments to be passed to `torch.compile`.
+
+    Returns:
+        A callable that wraps the original model. If no model is provided, returns a
+        lambda function that takes a model as input and returns the wrapped model.
+
+    Notes:
+        If no model is provided, this function returns a lambda function that can be
+        used to wrap a model later. This allows for delayed compilation of the model.
+
+    Example:
+        >>> model = torch.nn.Linear(5, 3)
+        >>> compiled_model = compile_with_warmup(model, warmup=10)
+        >>> # First 10 calls use the original model
+        >>> # After 10 calls, the model is compiled and used
+    """
+    if len(args):
+        model = args[0]
+        args = ()
+    else:
+        model = kwargs.pop("model", None)
+    if model is None:
+        return lambda model: compile_with_warmup(model, warmup=warmup, **kwargs)
+    else:
+        count = 0
+        compiled_model = model
+
+        @wraps(model)
+        def count_and_compile(*model_args, **model_kwargs):
+            nonlocal count
+            nonlocal compiled_model
+            count += 1
+            if count == warmup:
+                compiled_model = torch.compile(model, *args, **kwargs)
+            return compiled_model(*model_args, **model_kwargs)
+
+        return count_and_compile

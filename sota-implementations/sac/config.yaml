@@ -12,7 +12,7 @@ collector:
   init_random_frames: 25000
   frames_per_batch: 1000
   init_env_steps: 1000
-  device: cpu
+  device:
   env_per_collector: 1
   reset_at_each_iter: False
 

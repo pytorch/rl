@@ -9,15 +9,18 @@ results from Schulman et al. 2017 for the on MuJoCo Environments.
 """
 from __future__ import annotations
 
+import warnings
+
 import hydra
-from torchrl._utils import logger as torchrl_logger
+from tensordict.nn import CudaGraphModule
+
+from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl.objectives import group_optimizers
 from torchrl.record import VideoRecorder
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
-
-    import time
 
     import torch.optim
     import tqdm
@@ -32,7 +35,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils_mujoco import eval_model, make_env, make_ppo_models
 
-    device = "cpu" if not torch.cuda.device_count() else "cuda"
+    torch.set_float32_matmul_precision("high")
+
+    device = cfg.optim.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+    device = torch.device(device)
+
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
     total_network_updates = (
         (cfg.collector.total_frames // cfg.collector.frames_per_batch)
@@ -40,9 +52,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
         * num_mini_batches
     )
 
+    compile_mode = None
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
+        if compile_mode in ("", None):
+            if cfg.compile.cudagraphs:
+                compile_mode = "default"
+            else:
+                compile_mode = "reduce-overhead"
+
     # Create models (check utils_mujoco.py)
-    actor, critic = make_ppo_models(cfg.env.env_name)
-    actor, critic = actor.to(device), critic.to(device)
+    actor, critic = make_ppo_models(cfg.env.env_name, device=device)
 
     # Create collector
     collector = SyncDataCollector(
@@ -53,6 +73,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         storing_device=device,
         max_frames_per_traj=-1,
+        compile_policy={"mode": compile_mode} if compile_mode else False,
+        cudagraph_policy=cfg.compile.cudagraphs,
     )
 
     # Create data buffer
@@ -84,6 +106,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create optimizers
     actor_optim = torch.optim.Adam(actor.parameters(), lr=cfg.optim.lr, eps=1e-5)
     critic_optim = torch.optim.Adam(critic.parameters(), lr=cfg.optim.lr, eps=1e-5)
+    optim = group_optimizers(actor_optim, critic_optim)
+    del actor_optim, critic_optim
 
     # Create logger
     logger = None
@@ -111,13 +135,51 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
     test_env.eval()
 
+    def update(batch, num_network_updates):
+        optim.zero_grad(set_to_none=True)
+        # Linearly decrease the learning rate and clip epsilon
+        alpha = 1.0
+        if cfg_optim_anneal_lr:
+            alpha = 1 - (num_network_updates / total_network_updates)
+            for group in actor_optim.param_groups:
+                group["lr"] = cfg_optim_lr * alpha
+            for group in critic_optim.param_groups:
+                group["lr"] = cfg_optim_lr * alpha
+        if cfg_loss_anneal_clip_eps:
+            loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
+        num_network_updates += 1
+
+        # Forward pass PPO loss
+        loss = loss_module(batch)
+        critic_loss = loss["loss_critic"]
+        actor_loss = loss["loss_objective"] + loss["loss_entropy"]
+        total_loss = critic_loss + actor_loss
+
+        # Backward pass
+        total_loss.backward()
+
+        # Update the networks
+        optim.step()
+        return loss.detach().set("alpha", alpha)
+
+
+    if cfg.compile.compile:
+        update = torch.compile(update, mode=compile_mode)
+        adv_module = torch.compile(adv_module, mode=compile_mode)
+
+    if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
+        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
+        adv_module = CudaGraphModule(adv_module)
+
     # Main loop
     collected_frames = 0
     num_network_updates = 0
-    start_time = time.time()
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
-    sampling_start = time.time()
 
     # extract cfg variables
     cfg_loss_ppo_epochs = cfg.loss.ppo_epochs
@@ -129,13 +191,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg_logger_num_test_episodes = cfg.logger.num_test_episodes
     losses = TensorDict(batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
 
-    for i, data in enumerate(collector):
+    collector_iter = iter(collector)
+
+    for i in range(len(collector)):
+        with timeit("collecting"):
+            data = next(collector_iter)
 
         log_info = {}
-        sampling_time = time.time() - sampling_start
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
-        pbar.update(data.numel())
+        pbar.update(frames_in_batch)
 
         # Get training rewards and episode lengths
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
@@ -149,100 +214,62 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
             )
 
-        training_start = time.time()
-        for j in range(cfg_loss_ppo_epochs):
+        with timeit("training"):
+            for j in range(cfg_loss_ppo_epochs):
 
-            # Compute GAE
-            with torch.no_grad():
-                data = adv_module(data)
-            data_reshape = data.reshape(-1)
+                # Compute GAE
+                with torch.no_grad(), timeit("adv"):
+                    data = adv_module(data.to(device))
+                with timeit("rb - extend"):
+                    # Update the data buffer
+                    data_reshape = data.reshape(-1)
+                    data_buffer.extend(data_reshape)
 
-            # Update the data buffer
-            data_buffer.extend(data_reshape)
-
-            for k, batch in enumerate(data_buffer):
-
-                # Get a data batch
-                batch = batch.to(device)
-
-                # Linearly decrease the learning rate and clip epsilon
-                alpha = 1.0
-                if cfg_optim_anneal_lr:
-                    alpha = 1 - (num_network_updates / total_network_updates)
-                    for group in actor_optim.param_groups:
-                        group["lr"] = cfg_optim_lr * alpha
-                    for group in critic_optim.param_groups:
-                        group["lr"] = cfg_optim_lr * alpha
-                if cfg_loss_anneal_clip_eps:
-                    loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
-                num_network_updates += 1
-
-                # Forward pass PPO loss
-                loss = loss_module(batch)
-                losses[j, k] = loss.select(
-                    "loss_critic", "loss_entropy", "loss_objective"
-                ).detach()
-                critic_loss = loss["loss_critic"]
-                actor_loss = loss["loss_objective"] + loss["loss_entropy"]
-
-                # Backward pass
-                actor_loss.backward()
-                critic_loss.backward()
-
-                # Update the networks
-                actor_optim.step()
-                critic_optim.step()
-                actor_optim.zero_grad()
-                critic_optim.zero_grad()
+                for k, batch in enumerate(data_buffer):
+                    loss = update(batch, num_network_updates=num_network_updates)
+                    losses[j, k] = loss.select(
+                        "loss_critic", "loss_entropy", "loss_objective"
+                    )
 
         # Get training losses and times
-        training_time = time.time() - training_start
         losses_mean = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses_mean.items():
             log_info.update({f"train/{key}": value.item()})
         log_info.update(
             {
-                "train/lr": alpha * cfg_optim_lr,
-                "train/sampling_time": sampling_time,
-                "train/training_time": training_time,
-                "train/clip_epsilon": alpha * cfg_loss_clip_epsilon
+                "train/lr": loss["alpha"] * cfg_optim_lr,
+                "train/clip_epsilon": loss["alpha"] * cfg_loss_clip_epsilon
                 if cfg_loss_anneal_clip_eps
                 else cfg_loss_clip_epsilon,
             }
         )
 
         # Get test rewards
-        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
+        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC), timeit("eval"):
             if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
                 i * frames_in_batch
             ) // cfg_logger_test_interval:
                 actor.eval()
-                eval_start = time.time()
                 test_rewards = eval_model(
                     actor, test_env, num_episodes=cfg_logger_num_test_episodes
                 )
-                eval_time = time.time() - eval_start
                 log_info.update(
                     {
                         "eval/reward": test_rewards.mean(),
-                        "eval/time": eval_time,
                     }
                 )
                 actor.train()
 
         if logger:
+            log_info.update(timeit.todict(prefix="time"))
             for key, value in log_info.items():
                 logger.log_scalar(key, value, collected_frames)
 
         collector.update_policy_weights_()
-        sampling_start = time.time()
 
     collector.shutdown()
     if not test_env.is_closed:
         test_env.close()
-    end_time = time.time()
-    execution_time = end_time - start_time
-    torchrl_logger.info(f"Training took {execution_time:.2f} seconds to finish")
 
 
 if __name__ == "__main__":

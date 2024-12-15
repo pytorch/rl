@@ -546,7 +546,7 @@ def _dreamer_make_actor_real(
                 default_interaction_type=InteractionType.DETERMINISTIC,
                 distribution_class=TanhNormal,
                 distribution_kwargs={"tanh_loc": True},
-                spec=proof_environment.single_full_action_spec.to("cpu"),
+                spec=proof_environment.full_action_spec_unbatched.to("cpu"),
             ),
         ),
         SafeModule(
