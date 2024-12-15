@@ -74,7 +74,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         storing_device=device,
         max_frames_per_traj=-1,
-        compile_policy={"mode": compile_mode} if compile_mode else False,
+        compile_policy={"mode": compile_mode, "warmup": 1} if compile_mode else False,
         cudagraph_policy=cfg.compile.cudagraphs,
     )
 
@@ -166,7 +166,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 group["lr"] = cfg_optim_lr * alpha
         if cfg_loss_anneal_clip_eps:
             loss_module.clip_epsilon.copy_(cfg_loss_clip_epsilon * alpha)
-        num_network_updates += 1
+        num_network_updates = num_network_updates + 1
         # Get a data batch
         batch = batch.to(device, non_blocking=True)
 
