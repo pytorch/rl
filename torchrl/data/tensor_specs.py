@@ -381,11 +381,17 @@ class ContinuousBox(Box):
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
     def low(self):
-        return self._low.to(self.device)
+        low = self._low
+        if low.device != self.device:
+            low = low.to(self.device)
+        return low
 
     @property
     def high(self):
-        return self._high.to(self.device)
+        high = self._high
+        if high.device != self.device:
+            high = high.to(self.device)
+        return high
 
     def unbind(self, dim: int = 0):
         return tuple(
