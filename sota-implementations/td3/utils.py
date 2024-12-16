@@ -142,11 +142,13 @@ def make_replay_buffer(
 ):
     if compile:
         prefetch = 0
-    with (
-        tempfile.TemporaryDirectory()
-        if scratch_dir in ("", None)
-        else nullcontext(scratch_dir)
-    ) as scratch_dir:
+    if scratch_dir in ("", None):
+        ctx = nullcontext(None)
+    elif scratch_dir == "temp":
+        ctx = tempfile.TemporaryDirectory()
+    else:
+        ctx = nullcontext(scratch_dir)
+    with ctx as scratch_dir:
         storage_cls = (
             functools.partial(LazyTensorStorage, device=device, compilable=compile)
             if not scratch_dir
