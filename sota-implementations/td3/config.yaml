@@ -21,7 +21,7 @@ collector:
 replay_buffer:
   prb: 0 # use prioritized experience replay
   size: 1000000
-  scratch_dir:
+  scratch_dir: null
 
 # optim
 optim:
