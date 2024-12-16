@@ -1520,7 +1520,9 @@ class OneHot(TensorSpec):
         use_register: bool = False,
         mask: torch.Tensor | None = None,
     ):
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         self.use_register = use_register
         space = CategoricalBox(n)
         if shape is None:
@@ -2046,7 +2048,9 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         if len(kwargs):
             raise TypeError(f"Got unrecognised kwargs {tuple(kwargs.keys())}.")
 
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if dtype is None:
             dtype = torch.get_default_dtype()
         if domain is None:
@@ -2644,7 +2648,9 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         if isinstance(shape, int):
             shape = _size([shape])
 
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if dtype == torch.bool:
             min_value = False
             max_value = True
@@ -2851,7 +2857,9 @@ class MultiOneHot(OneHot):
         mask: torch.Tensor | None = None,
     ):
         self.nvec = nvec
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if shape is None:
             shape = _size((sum(nvec),))
         else:
@@ -3327,7 +3335,9 @@ class Categorical(TensorSpec):
     ):
         if shape is None:
             shape = _size([])
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         space = CategoricalBox(n)
         super().__init__(
             shape=shape, space=space, device=device, dtype=dtype, domain="discrete"
@@ -3874,7 +3884,9 @@ class MultiCategorical(Categorical):
         if nvec.ndim < 1:
             nvec = nvec.unsqueeze(0)
         self.nvec = nvec
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if shape is None:
             shape = nvec.shape
         else:
