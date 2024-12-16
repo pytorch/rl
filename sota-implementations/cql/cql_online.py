@@ -159,11 +159,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
     init_random_frames = cfg.collector.init_random_frames
-    num_updates = int(
-        cfg.collector.env_per_collector
-        * cfg.collector.frames_per_batch
-        * cfg.optim.utd_ratio
-    )
+    num_updates = int(cfg.collector.frames_per_batch * cfg.optim.utd_ratio)
     prb = cfg.replay_buffer.prb
     frames_per_batch = cfg.collector.frames_per_batch
     evaluation_interval = cfg.logger.log_interval
