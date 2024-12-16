@@ -106,12 +106,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
         buffer_size=cfg.replay_buffer.size,
         scratch_dir=cfg.replay_buffer.scratch_dir,
         device=device,
+        compile=bool(compile_mode),
     )
 
     # Create optimizers
     optimizer_actor, optimizer_critic = make_optimizer(cfg, loss_module)
 
-    def update(sampled_tensordict, update_actor):
+    prb = cfg.replay_buffer.prb
+
+    def update(update_actor, prb=prb):
+        sampled_tensordict = replay_buffer.sample()
+
         # Compute loss
         q_loss, *_ = loss_module.value_loss(sampled_tensordict)
 
@@ -132,6 +137,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             target_net_updater.step()
         else:
             actor_loss = q_loss.new_zeros(())
+
+        # Update priority
+        if prb:
+            replay_buffer.update_priority(sampled_tensordict)
 
         return q_loss.detach(), actor_loss.detach()
 
@@ -156,7 +165,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         * cfg.optim.utd_ratio
     )
     delayed_updates = cfg.optim.policy_update_delay
-    prb = cfg.replay_buffer.prb
     eval_rollout_steps = cfg.env.max_episode_steps
     eval_iter = cfg.logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
@@ -196,21 +204,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     update_counter += 1
                     update_actor = update_counter % delayed_updates == 0
 
-                    with timeit("rb - sample"):
-                        # Sample from replay buffer
-                        sampled_tensordict = replay_buffer.sample()
-
                     with timeit("update"):
                         torch.compiler.cudagraph_mark_step_begin()
-                        q_loss, actor_loss = update(sampled_tensordict, update_actor)
+                        q_loss, actor_loss = update(update_actor)
 
                     q_losses.append(q_loss.clone())
                     if update_actor:
                         actor_losses.append(actor_loss.clone())
-
-                    # Update priority
-                    if prb:
-                        replay_buffer.update_priority(sampled_tensordict)
 
         episode_end = (
             tensordict["next", "done"]

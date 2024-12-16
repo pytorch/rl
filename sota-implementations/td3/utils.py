@@ -138,6 +138,7 @@ def make_replay_buffer(
     scratch_dir: str | None = None,
     device: torch.device = "cpu",
     prefetch: int = 3,
+    compile: bool = False,
 ):
     with (
         tempfile.TemporaryDirectory()
@@ -145,7 +146,7 @@ def make_replay_buffer(
         else nullcontext(scratch_dir)
     ) as scratch_dir:
         storage_cls = (
-            functools.partial(LazyTensorStorage, device=device)
+            functools.partial(LazyTensorStorage, device=device, compilable=compile)
             if not scratch_dir
             else functools.partial(
                 LazyMemmapStorage, device="cpu", scratch_dir=scratch_dir
@@ -160,6 +161,7 @@ def make_replay_buffer(
                 prefetch=prefetch,
                 storage=storage_cls(buffer_size),
                 batch_size=batch_size,
+                compilable=compile,
             )
         else:
             replay_buffer = TensorDictReplayBuffer(
@@ -167,6 +169,7 @@ def make_replay_buffer(
                 prefetch=prefetch,
                 storage=storage_cls(buffer_size),
                 batch_size=batch_size,
+                compilable=compile,
             )
         if scratch_dir:
             replay_buffer.append_transform(lambda td: td.to(device))
