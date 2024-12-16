@@ -229,7 +229,7 @@ def make_td3_agent(cfg, train_env, eval_env, device):
             net(td)
     # Exploration wrappers:
     actor_model_explore = TensorDictSequential(
-        model[0],
+        actor,
         AdditiveGaussianModule(
             sigma_init=1,
             sigma_end=1,
