@@ -397,7 +397,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
             default: "action"
         safe (bool): if ``True``, actions that are out of bounds given the action specs will be projected in the space
             given the :obj:`TensorSpec.project` heuristic.
-            default: True
+            default: False
         device (torch.device, optional): the device where the buffers have to be stored.
 
     .. note::
@@ -420,7 +420,8 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         std: float = 1.0,
         *,
         action_key: Optional[NestedKey] = "action",
-        safe: bool = True,
+        # safe is already implemented because we project in the noise addition
+        safe: bool = False,
         device: torch.device | None = None,
     ):
         if not isinstance(sigma_init, float):
