@@ -38,6 +38,9 @@ from utils import (
 )
 
 
+torch.set_float32_matmul_precision("high")
+
+
 @hydra.main(version_base="1.1", config_path="", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
     device = cfg.network.device
@@ -196,9 +199,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         torch.compiler.cudagraph_mark_step_begin()
                         q_loss, actor_loss = update(sampled_tensordict, update_actor)
 
-                    q_losses.append(q_loss)
+                    q_losses.append(q_loss.clone())
                     if update_actor:
-                        actor_losses.append(actor_loss)
+                        actor_losses.append(actor_loss.clone())
 
                     # Update priority
                     if prb:
