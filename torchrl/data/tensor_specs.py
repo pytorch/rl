@@ -2274,10 +2274,13 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             return r
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        low = self.space.low.to(val.device)
-        high = self.space.high.to(val.device)
+        low = self.space.low
+        high = self.space.high
+        if self.device != val.device:
+            low = low.to(val.device)
+            high = high.to(val.device)
         try:
-            val = val.clamp_(low.item(), high.item())
+            val = torch.maximum(torch.minimum(val, high), low)
         except ValueError:
             low = low.expand_as(val)
             high = high.expand_as(val)
