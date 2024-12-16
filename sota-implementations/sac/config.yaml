@@ -13,7 +13,7 @@ collector:
   frames_per_batch: 1000
   init_env_steps: 1000
   device:
-  env_per_collector: 1
+  env_per_collector: 8
   reset_at_each_iter: False
 
 # replay buffer
