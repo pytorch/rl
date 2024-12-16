@@ -12,6 +12,7 @@ from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
+    LazyMemmapStorage,
     LazyTensorStorage,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -138,16 +139,19 @@ def make_replay_buffer(
     device="cpu",
     prefetch=3,
 ):
+    storage_cls = (
+        functools.partial(LazyTensorStorage, device=device)
+        if not scratch_dir
+        else functools.partial(LazyMemmapStorage, device="cpu", scratch_dir=scratch_dir)
+    )
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,
             beta=0.5,
             pin_memory=False,
             prefetch=prefetch,
-            storage=LazyTensorStorage(
+            storage=storage_cls(
                 buffer_size,
-                scratch_dir=scratch_dir,
-                device=device,
             ),
             batch_size=batch_size,
         )
@@ -155,13 +159,13 @@ def make_replay_buffer(
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
             prefetch=prefetch,
-            storage=LazyTensorStorage(
+            storage=storage_cls(
                 buffer_size,
-                scratch_dir=scratch_dir,
-                device=device,
             ),
             batch_size=batch_size,
         )
+    if scratch_dir:
+        replay_buffer.append_transform(lambda td: td.to(device))
     return replay_buffer
 
 
