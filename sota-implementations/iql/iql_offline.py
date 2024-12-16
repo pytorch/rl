@@ -157,6 +157,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             eval_reward = eval_td["next", "reward"].sum(1).mean().item()
             to_log["evaluation_reward"] = eval_reward
         if logger is not None:
+            to_log.update(timeit.todict(prefix="time"))
             log_metrics(logger, to_log, i)
 
     pbar.close()

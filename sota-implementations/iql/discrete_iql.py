@@ -233,7 +233,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log.update(timeit.todict(prefix="time"))
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
-        timeit.erase()
 
     collector.shutdown()
 

@@ -193,7 +193,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     delayed_updates = cfg.optim.policy_update_delay
     c_iter = iter(collector)
     total_iter = len(collector)
-    for i in range(total_iter):
+    for _ in range(total_iter):
         timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             torch.compiler.cudagraph_mark_step_begin()
@@ -260,8 +260,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
                 episode_length
             )
-            if i % 20 == 0:
-                metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log.update(timeit.todict(prefix="time"))
         if collected_frames >= init_random_frames:
             metrics_to_log["train/q_loss"] = tds["loss_qvalue"]
             metrics_to_log["train/actor_loss"] = tds["loss_actor"]
