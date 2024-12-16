@@ -1094,6 +1094,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
             .. warning:: As of now, the generator has no effect on the transforms.
         shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
             Defaults to ``False``.
+        compilable (bool, optional): whether the writer is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1437,6 +1440,9 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             .. warning:: As of now, the generator has no effect on the transforms.
         shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
             Defaults to ``False``.
+        compilable (bool, optional): whether the writer is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1512,6 +1518,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         dim_extend: int | None = None,
         generator: torch.Generator | None = None,
         shared: bool = False,
+        compilable: bool = False,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -1530,6 +1537,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             dim_extend=dim_extend,
             generator=generator,
             shared=shared,
+            compilable=compilable,
         )
 
 

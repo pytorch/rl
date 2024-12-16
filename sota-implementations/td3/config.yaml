@@ -14,7 +14,7 @@ collector:
   frames_per_batch: 1000
   reset_at_each_iter: False
   device:
-  env_per_collector: 1
+  env_per_collector: 8
   num_workers: 1
 
 # replay buffer
@@ -52,3 +52,8 @@ logger:
   mode: online
   eval_iter: 25000
   video: False
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
