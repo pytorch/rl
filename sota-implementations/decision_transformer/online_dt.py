@@ -8,7 +8,6 @@ The helper functions are coded in the utils.py associated with this script.
 """
 from __future__ import annotations
 
-import time
 import warnings
 
 import hydra
@@ -130,8 +129,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     torchrl_logger.info(" ***Pretraining*** ")
     # Pretraining
-    start_time = time.time()
     for i in range(pretrain_gradient_steps):
+        timeit.printevery(1000, pretrain_gradient_steps, erase=True)
         pbar.update(1)
         with timeit("sample"):
             # Sample data
@@ -170,10 +169,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )
 
-        if i % 200 == 0:
-            to_log.update(timeit.todict(prefix="time"))
-            timeit.print()
-            timeit.erase()
+        to_log.update(timeit.todict(prefix="time"))
 
         if logger is not None:
             log_metrics(logger, to_log, i)
@@ -181,7 +177,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pbar.close()
     if not test_env.is_closed:
         test_env.close()
-    torchrl_logger.info(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":

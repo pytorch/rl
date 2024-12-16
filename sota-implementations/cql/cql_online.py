@@ -170,7 +170,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = cfg.logger.eval_steps
 
     c_iter = iter(collector)
-    for i in range(len(collector)):
+    total_iter = len(collector)
+    for i in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             tensordict = next(c_iter)
         pbar.update(tensordict.numel())
@@ -222,8 +224,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "loss_alpha_prime"
             ).mean()
             metrics_to_log["train/entropy"] = log_loss_td.get("entropy").mean()
-            if i % 10 == 0:
-                metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log.update(timeit.todict(prefix="time"))
 
         # Evaluation
         with timeit("eval"):
@@ -245,9 +246,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     metrics_to_log["eval/reward"] = eval_reward
 
         log_metrics(logger, metrics_to_log, collected_frames)
-        if i % 10 == 0:
-            timeit.print()
-            timeit.erase()
 
     collector.shutdown()
     if not eval_env.is_closed:

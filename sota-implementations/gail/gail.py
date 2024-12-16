@@ -22,7 +22,7 @@ from gail_utils import log_metrics, make_gail_discriminator, make_offline_replay
 from ppo_utils import eval_model, make_env, make_ppo_models
 from tensordict.nn import CudaGraphModule
 
-from torchrl._utils import compile_with_warmup
+from torchrl._utils import compile_with_warmup, timeit
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -256,19 +256,28 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg_logger_test_interval = cfg.logger.test_interval
     cfg_logger_num_test_episodes = cfg.logger.num_test_episodes
 
-    for i, data in enumerate(collector):
+    total_iter = len(collector)
+    collector_iter = iter(collector)
+    for i in range(total_iter):
+
+        timeit.printevery(1000, total_iter, erase=True)
+
+        with timeit("collection"):
+            data = next(collector_iter)
 
         log_info = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
 
-        # Update discriminator
-        # Get expert data
-        expert_data = replay_buffer.sample()
-        expert_data = expert_data.to(device)
+        with timeit("rb - sample expert"):
+            # Get expert data
+            expert_data = replay_buffer.sample()
+            expert_data = expert_data.to(device)
 
-        metadata = update(data, expert_data)
+        with timeit("update"):
+            torch.compiler.cudagraph_mark_step_begin()
+            metadata = update(data, expert_data)
         d_loss = metadata["dloss"]
         alpha = metadata["alpha"]
 
@@ -287,8 +296,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         log_info.update(
             {
-                # "train/actor_loss": actor_loss.item(),
-                # "train/critic_loss": critic_loss.item(),
                 "train/discriminator_loss": d_loss["loss"],
                 "train/lr": alpha * cfg_optim_lr,
                 "train/clip_epsilon": (
@@ -300,7 +307,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
         # evaluation
-        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
+        with torch.no_grad(), set_exploration_type(
+            ExplorationType.DETERMINISTIC
+        ), timeit("eval"):
             if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
                 i * frames_in_batch
             ) // cfg_logger_test_interval:
@@ -315,6 +324,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 actor.train()
         if logger is not None:
+            log_info.update(timeit.todict(prefix="time"))
             log_metrics(logger, log_info, i)
 
     pbar.close()

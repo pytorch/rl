@@ -128,6 +128,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Pretraining
     pbar = tqdm.tqdm(range(pretrain_gradient_steps))
     for i in pbar:
+        timeit.printevery(1000, pretrain_gradient_steps, erase=True)
         # Sample data
         with timeit("rb - sample"):
             data = offline_buffer.sample().to(model_device)
@@ -151,10 +152,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             to_log["eval/reward"] = (
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )
-        if i % 200 == 0:
-            to_log.update(timeit.todict(prefix="time"))
-            timeit.print()
-            timeit.erase()
+        to_log.update(timeit.todict(prefix="time"))
 
         if logger is not None:
             log_metrics(logger, to_log, i)

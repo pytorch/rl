@@ -151,7 +151,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     frames_per_batch = cfg.collector.frames_per_batch
 
     c_iter = iter(collector)
-    for i in range(len(collector)):
+    total_iter = len(collector)
+    for _ in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             torch.compiler.cudagraph_mark_step_begin()
             tensordict = next(c_iter)
@@ -224,12 +226,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             tds = torch.stack(tds, dim=0).mean()
             metrics_to_log["train/q_loss"] = tds["loss_qvalue"]
             metrics_to_log["train/cql_loss"] = tds["loss_cql"]
-            if i % 100 == 0:
-                metrics_to_log.update(timeit.todict(prefix="time"))
-
-        if i % 100 == 0:
-            timeit.print()
-            timeit.erase()
+            metrics_to_log.update(timeit.todict(prefix="time"))
 
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)

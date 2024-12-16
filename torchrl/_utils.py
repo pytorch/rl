@@ -103,7 +103,7 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix=None) -> str:  # noqa: T202
+    def print(prefix: str = None) -> str:  # noqa: T202
         """Prints the state of the timer.
 
         Returns:
@@ -122,6 +122,25 @@ class timeit:
             string.append(" -- ".join(strings))
             logger.info(string[-1])
         return "\n".join(string)
+
+    _printevery_count = 0
+
+    @classmethod
+    def printevery(
+        cls,
+        num_prints: int,
+        total_count: int,
+        *,
+        prefix: str = None,
+        erase: bool = False,
+    ) -> None:
+        """Prints the state of the timer at regular intervals."""
+        interval = max(1, total_count // num_prints)
+        if cls._printevery_count % interval == 0:
+            cls.print(prefix=prefix)
+            if erase:
+                cls.erase()
+        cls._printevery_count += 1
 
     @classmethod
     def todict(cls, percall=True, prefix=None):

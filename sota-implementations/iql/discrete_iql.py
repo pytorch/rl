@@ -159,7 +159,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = cfg.collector.max_frames_per_traj
 
     collector_iter = iter(collector)
-    for _ in range(len(collector)):
+    total_iter = len(collector)
+    for _ in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
+
         with timeit("collection"):
             tensordict = next(collector_iter)
         current_frames = tensordict.numel()
@@ -230,7 +233,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log.update(timeit.todict(prefix="time"))
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
-        timeit.erase()
 
     collector.shutdown()
 

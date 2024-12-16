@@ -11,7 +11,6 @@ The helper functions are coded in the utils.py associated with this script.
 """
 from __future__ import annotations
 
-import time
 import warnings
 
 import hydra
@@ -21,7 +20,7 @@ import torch
 import tqdm
 from tensordict.nn import CudaGraphModule
 
-from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl._utils import timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -156,9 +155,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_steps = cfg.logger.eval_steps
 
     # Training loop
-    start_time = time.time()
     policy_eval_start = torch.tensor(policy_eval_start, device=device)
     for i in range(gradient_steps):
+        timeit.printevery(1000, gradient_steps, erase=True)
         pbar.update(1)
         # sample data
         with timeit("sample"):
@@ -192,15 +191,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 to_log["evaluation_reward"] = eval_reward
 
         with timeit("log"):
-            if i % 200 == 0:
-                to_log.update(timeit.todict(prefix="time"))
+            to_log.update(timeit.todict(prefix="time"))
             log_metrics(logger, to_log, i)
-        if i % 200 == 0:
-            timeit.print()
-            timeit.erase()
 
     pbar.close()
-    torchrl_logger.info(f"Training time: {time.time() - start_time}")
     if not eval_env.is_closed:
         eval_env.close()
 

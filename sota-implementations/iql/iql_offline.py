@@ -133,6 +133,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Training loop
     for i in pbar:
+        timeit.printevery(1000, cfg.optim.gradient_steps, erase=True)
+
         # sample data
         with timeit("sample"):
             data = replay_buffer.sample()
@@ -155,6 +157,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             eval_reward = eval_td["next", "reward"].sum(1).mean().item()
             to_log["evaluation_reward"] = eval_reward
         if logger is not None:
+            to_log.update(timeit.todict(prefix="time"))
             log_metrics(logger, to_log, i)
 
     pbar.close()
