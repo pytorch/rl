@@ -221,9 +221,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
 
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = q_losses.mean()
+            metrics_to_log["train/q_loss"] = torch.stack(q_losses).mean()
             if update_actor:
-                metrics_to_log["train/a_loss"] = actor_losses.mean()
+                metrics_to_log["train/a_loss"] = torch.stack(actor_losses).mean()
 
         # Evaluation
         if abs(collected_frames % eval_iter) < frames_per_batch:
