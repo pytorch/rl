@@ -169,8 +169,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(current_frames)
 
         with timeit("rb - extend"):
-            tensordict = tensordict.reshape(-1)
             # Add to replay buffer
+            tensordict = tensordict.reshape(-1)
             replay_buffer.extend(tensordict)
 
         collected_frames += current_frames
