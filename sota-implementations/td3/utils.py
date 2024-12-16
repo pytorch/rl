@@ -144,7 +144,7 @@ def make_replay_buffer(
         prefetch = 0
     with (
         tempfile.TemporaryDirectory()
-        if scratch_dir is None
+        if scratch_dir in ("", None)
         else nullcontext(scratch_dir)
     ) as scratch_dir:
         storage_cls = (
