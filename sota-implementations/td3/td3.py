@@ -184,15 +184,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     q_losses,
                 ) = ([], [])
                 for _ in range(num_updates):
-
                     # Update actor every delayed_updates
                     update_counter += 1
                     update_actor = update_counter % delayed_updates == 0
 
-                    # Sample from replay buffer
-                    sampled_tensordict = replay_buffer.sample()
+                    with timeit("rb - sample"):
+                        # Sample from replay buffer
+                        sampled_tensordict = replay_buffer.sample()
 
-                    q_loss, actor_loss = update(sampled_tensordict, update_actor)
+                    with timeit("update"):
+                        torch.compiler.cudagraph_mark_step_begin()
+                        q_loss, actor_loss = update(sampled_tensordict, update_actor)
+
                     q_losses.append(q_loss)
                     if update_actor:
                         actor_losses.append(actor_loss)
@@ -218,13 +221,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
 
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = np.mean(q_losses)
+            metrics_to_log["train/q_loss"] = q_losses.mean()
             if update_actor:
-                metrics_to_log["train/a_loss"] = np.mean(actor_losses)
+                metrics_to_log["train/a_loss"] = actor_losses.mean()
 
         # Evaluation
         if abs(collected_frames % eval_iter) < frames_per_batch:
-            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+            with set_exploration_type(
+                ExplorationType.DETERMINISTIC
+            ), torch.no_grad(), timeit("eval"):
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,
                     exploration_policy,
