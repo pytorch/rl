@@ -172,13 +172,13 @@ def make_sac_agent(cfg, train_env, eval_env, device):
     # Define Actor Network
     in_keys = ["observation"]
     action_spec = train_env.action_spec_unbatched.to(device)
-    actor_net_kwargs = {
-        "num_cells": cfg.network.hidden_sizes,
-        "out_features": 2 * action_spec.shape[-1],
-        "activation_class": get_activation(cfg),
-    }
 
-    actor_net = MLP(**actor_net_kwargs)
+    actor_net = MLP(
+        num_cells=cfg.network.hidden_sizes,
+        out_features=2 * action_spec.shape[-1],
+        activation_class=get_activation(cfg),
+        device=device,
+    )
 
     dist_class = TanhNormal
     dist_kwargs = {
