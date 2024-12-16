@@ -182,6 +182,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Update the networks
         optim.step()
         return loss.detach().set("alpha", alpha), num_network_updates
+
     if cfg.compile.compile:
         update = compile_with_warmup(update, mode=compile_mode, warmup=1)
         adv_module = compile_with_warmup(adv_module, mode=compile_mode, warmup=1)
