@@ -9,12 +9,12 @@ import tempfile
 from contextlib import nullcontext
 
 import torch
-from tensordict.nn import TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictSequential
 
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
 from torchrl.envs import (
     CatTensors,
     Compose,
@@ -29,14 +29,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import (
-    AdditiveGaussianModule,
-    MLP,
-    SafeModule,
-    SafeSequential,
-    TanhModule,
-    ValueOperator,
-)
+from torchrl.modules import AdditiveGaussianModule, MLP, TanhModule, ValueOperator
 
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.td3 import TD3Loss
@@ -116,7 +109,7 @@ def make_environment(cfg, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(cfg, train_env, actor_model_explore, compile_mode):
     """Make collector."""
     device = cfg.collector.device
     if device in ("", None):
@@ -132,48 +125,52 @@ def make_collector(cfg, train_env, actor_model_explore):
         total_frames=cfg.collector.total_frames,
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
         device=device,
+        compile_policy={"mode": compile_mode} if compile_mode else False,
+        cudagraph_policy=cfg.compile.cudagraphs,
     )
     collector.set_seed(cfg.env.seed)
     return collector
 
 
 def make_replay_buffer(
-    batch_size,
-    prb=False,
-    buffer_size=1000000,
-    scratch_dir=None,
-    device="cpu",
-    prefetch=3,
+    batch_size: int,
+    prb: bool = False,
+    buffer_size: int = 1000000,
+    scratch_dir: str | None = None,
+    device: torch.device = "cpu",
+    prefetch: int = 3,
 ):
     with (
         tempfile.TemporaryDirectory()
         if scratch_dir is None
         else nullcontext(scratch_dir)
     ) as scratch_dir:
+        storage_cls = (
+            functools.partial(LazyTensorStorage, device=device)
+            if not scratch_dir
+            else functools.partial(
+                LazyMemmapStorage, device="cpu", scratch_dir=scratch_dir
+            )
+        )
+
         if prb:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
                 alpha=0.7,
                 beta=0.5,
                 pin_memory=False,
                 prefetch=prefetch,
-                storage=LazyMemmapStorage(
-                    buffer_size,
-                    scratch_dir=scratch_dir,
-                    device=device,
-                ),
+                storage=storage_cls(buffer_size),
                 batch_size=batch_size,
             )
         else:
             replay_buffer = TensorDictReplayBuffer(
                 pin_memory=False,
                 prefetch=prefetch,
-                storage=LazyMemmapStorage(
-                    buffer_size,
-                    scratch_dir=scratch_dir,
-                    device=device,
-                ),
+                storage=storage_cls(buffer_size),
                 batch_size=batch_size,
             )
+        if scratch_dir:
+            replay_buffer.append_transform(lambda td: td.to(device))
         return replay_buffer
 
 
@@ -186,26 +183,21 @@ def make_td3_agent(cfg, train_env, eval_env, device):
     """Make TD3 agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    if train_env.batch_size:
-        action_spec = action_spec[(0,) * len(train_env.batch_size)]
-    actor_net_kwargs = {
-        "num_cells": cfg.network.hidden_sizes,
-        "out_features": action_spec.shape[-1],
-        "activation_class": get_activation(cfg),
-    }
-
-    actor_net = MLP(**actor_net_kwargs)
+    action_spec = train_env.action_spec_unbatched.to(device)
+    actor_net = MLP(
+        num_cells=cfg.network.hidden_sizes,
+        out_features=action_spec.shape[-1],
+        activation_class=get_activation(cfg),
+        device=device,
+    )
 
     in_keys_actor = in_keys
-    actor_module = SafeModule(
+    actor_module = TensorDictModule(
         actor_net,
         in_keys=in_keys_actor,
-        out_keys=[
-            "param",
-        ],
+        out_keys=["param"],
     )
-    actor = SafeSequential(
+    actor = TensorDictSequential(
         actor_module,
         TanhModule(
             in_keys=["param"],
@@ -215,14 +207,11 @@ def make_td3_agent(cfg, train_env, eval_env, device):
     )
 
     # Define Critic Network
-    qvalue_net_kwargs = {
-        "num_cells": cfg.network.hidden_sizes,
-        "out_features": 1,
-        "activation_class": get_activation(cfg),
-    }
-
     qvalue_net = MLP(
-        **qvalue_net_kwargs,
+        num_cells=cfg.network.hidden_sizes,
+        out_features=1,
+        activation_class=get_activation(cfg),
+        device=device,
     )
 
     qvalue = ValueOperator(
@@ -230,17 +219,14 @@ def make_td3_agent(cfg, train_env, eval_env, device):
         module=qvalue_net,
     )
 
-    model = nn.ModuleList([actor, qvalue]).to(device)
+    model = nn.ModuleList([actor, qvalue])
 
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = eval_env.reset()
+        td = eval_env.fake_tensordict()
         td = td.to(device)
         for net in model:
             net(td)
-    del td
-    eval_env.close()
-
     # Exploration wrappers:
     actor_model_explore = TensorDictSequential(
         model[0],
