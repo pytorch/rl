@@ -224,8 +224,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "loss_alpha_prime"
             ).mean()
             metrics_to_log["train/entropy"] = log_loss_td.get("entropy").mean()
-            if i % 10 == 0:
-                metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log.update(timeit.todict(prefix="time"))
 
         # Evaluation
         with timeit("eval"):

@@ -191,8 +191,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 to_log["evaluation_reward"] = eval_reward
 
         with timeit("log"):
-            if i % 200 == 0:
-                to_log.update(timeit.todict(prefix="time"))
+            to_log.update(timeit.todict(prefix="time"))
             log_metrics(logger, to_log, i)
 
     pbar.close()
