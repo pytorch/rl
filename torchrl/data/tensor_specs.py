@@ -44,6 +44,11 @@ from tensordict.base import NO_DEFAULT
 from tensordict.utils import _getitem_batch_size, is_non_tensor, NestedKey
 from torchrl._utils import _make_ordinal_device, get_binary_env_var, implement_for
 
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
+
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
@@ -877,7 +882,7 @@ class TensorSpec:
             a torch.Tensor belonging to the TensorSpec box.
 
         """
-        if not self.is_in(val):
+        if is_compiling() or not self.is_in(val):
             return self._project(val)
         return val
 
@@ -2696,7 +2701,9 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         return val.shape == shape and val.dtype == self.dtype
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        return torch.as_tensor(val, dtype=self.dtype).reshape(self.shape)
+        return torch.as_tensor(val, dtype=self.dtype).reshape(
+            val.shape[: -self.ndim] + self.shape
+        )
 
     def enumerate(self) -> Any:
         raise NotImplementedError("enumerate cannot be called with continuous specs.")
