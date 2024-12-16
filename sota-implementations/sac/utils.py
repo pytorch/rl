@@ -11,8 +11,11 @@ from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data import (
+    LazyTensorStorage,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.envs import (
     CatTensors,
     Compose,
@@ -141,7 +144,7 @@ def make_replay_buffer(
             beta=0.5,
             pin_memory=False,
             prefetch=prefetch,
-            storage=LazyMemmapStorage(
+            storage=LazyTensorStorage(
                 buffer_size,
                 scratch_dir=scratch_dir,
                 device=device,
@@ -152,7 +155,7 @@ def make_replay_buffer(
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
             prefetch=prefetch,
-            storage=LazyMemmapStorage(
+            storage=LazyTensorStorage(
                 buffer_size,
                 scratch_dir=scratch_dir,
                 device=device,
