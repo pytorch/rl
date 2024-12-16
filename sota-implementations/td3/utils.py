@@ -140,6 +140,8 @@ def make_replay_buffer(
     prefetch: int = 3,
     compile: bool = False,
 ):
+    if compile:
+        prefetch = 0
     with (
         tempfile.TemporaryDirectory()
         if scratch_dir is None
