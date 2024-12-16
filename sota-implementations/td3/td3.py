@@ -49,7 +49,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             device = torch.device("cuda:0")
         else:
             device = torch.device("cpu")
-    device = torch.device(device)
+    else:
+        device = torch.device(device)
 
     # Create logger
     exp_name = generate_exp_name("TD3", cfg.logger.exp_name)
@@ -72,7 +73,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     np.random.seed(cfg.env.seed)
 
     # Create environments
-    train_env, eval_env = make_environment(cfg, logger=logger)
+    train_env, eval_env = make_environment(cfg, logger=logger, device=device)
 
     # Create agent
     model, exploration_policy = make_td3_agent(cfg, train_env, eval_env, device)
@@ -91,7 +92,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create off-policy collector
     collector = make_collector(
-        cfg, train_env, exploration_policy, compile_mode=compile_mode
+        cfg,
+        train_env,
+        exploration_policy,
+        compile_mode=compile_mode,
+        device=device,
     )
 
     # Create replay buffer

@@ -75,13 +75,14 @@ def apply_env_transforms(env, max_episode_steps):
     return transformed_env
 
 
-def make_environment(cfg, logger=None):
+def make_environment(cfg, logger, device):
     """Make environments for training and evaluation."""
     partial = functools.partial(env_maker, cfg=cfg)
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
         EnvCreator(partial),
         serial_for_single=True,
+        device=device,
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -98,6 +99,7 @@ def make_environment(cfg, logger=None):
             cfg.collector.env_per_collector,
             EnvCreator(partial),
             serial_for_single=True,
+            device=device,
         ),
         trsf_clone,
     )
@@ -109,14 +111,11 @@ def make_environment(cfg, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore, compile_mode):
+def make_collector(cfg, train_env, actor_model_explore, compile_mode, device):
     """Make collector."""
-    device = cfg.collector.device
-    if device in ("", None):
-        if torch.cuda.is_available():
-            device = torch.device("cuda:0")
-        else:
-            device = torch.device("cpu")
+    collector_device = cfg.collector.device
+    if collector_device in ("", None):
+        collector_device = device
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
@@ -124,7 +123,7 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode):
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
-        device=device,
+        device=collector_device,
         compile_policy={"mode": compile_mode} if compile_mode else False,
         cudagraph_policy=cfg.compile.cudagraphs,
     )
