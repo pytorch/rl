@@ -407,12 +407,12 @@ class ContinuousBox(Box):
     @low.setter
     def low(self, value):
         self.device = value.device
-        self._low = value.cpu()
+        self._low = value
 
     @high.setter
     def high(self, value):
         self.device = value.device
-        self._high = value.cpu()
+        self._high = value
 
     def __post_init__(self):
         self.low = self.low.clone()
