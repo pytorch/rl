@@ -105,7 +105,7 @@ def make_environment(cfg, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(cfg, train_env, actor_model_explore, compile_mode):
     """Make collector."""
     device = cfg.collector.device
     if device in ("", None):
@@ -120,6 +120,8 @@ def make_collector(cfg, train_env, actor_model_explore):
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         device=device,
+        compile_policy={"mode": compile_mode} if compile_mode else False,
+        cudagraph_policy=cfg.compile.cudagraphs,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -169,7 +171,7 @@ def make_sac_agent(cfg, train_env, eval_env, device):
     """Make SAC agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec_unbatched
+    action_spec = train_env.action_spec_unbatched.to(device)
     actor_net_kwargs = {
         "num_cells": cfg.network.hidden_sizes,
         "out_features": 2 * action_spec.shape[-1],
@@ -188,7 +190,7 @@ def make_sac_agent(cfg, train_env, eval_env, device):
     actor_extractor = NormalParamExtractor(
         scale_mapping=f"biased_softplus_{cfg.network.default_policy_scale}",
         scale_lb=cfg.network.scale_lb,
-    )
+    ).to(device)
     actor_net = nn.Sequential(actor_net, actor_extractor)
 
     in_keys_actor = in_keys
@@ -211,14 +213,11 @@ def make_sac_agent(cfg, train_env, eval_env, device):
     )
 
     # Define Critic Network
-    qvalue_net_kwargs = {
-        "num_cells": cfg.network.hidden_sizes,
-        "out_features": 1,
-        "activation_class": get_activation(cfg),
-    }
-
     qvalue_net = MLP(
-        **qvalue_net_kwargs,
+        num_cells=cfg.network.hidden_sizes,
+        out_features=1,
+        activation_class=get_activation(cfg),
+        device=device,
     )
 
     qvalue = ValueOperator(
@@ -226,7 +225,7 @@ def make_sac_agent(cfg, train_env, eval_env, device):
         module=qvalue_net,
     )
 
-    model = nn.ModuleList([actor, qvalue]).to(device)
+    model = nn.ModuleList([actor, qvalue])
 
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
