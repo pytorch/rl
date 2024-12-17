@@ -170,6 +170,8 @@ if IS_WIN:
 else:
     mp_ctx = "fork"
 
+_has_chess = importlib.util.find_spec("chess") is not None
+
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
 # def _make_atari_env(atari_env):
@@ -3380,8 +3382,6 @@ class TestNonTensorEnv:
         assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
         assert s_["string"] == ["0", "6"]
         assert s["next", "string"] == ["6", "6"]
-
-_has_chess = importlib.util.find_spec("chess") is not None
 
 # fen strings for board positions generated with:
 # https://lichess.org/editor
