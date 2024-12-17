@@ -42,5 +42,5 @@ loss:
 
 compile:
   compile: False
-  compile_mode:
+  compile_mode: default
   cudagraphs: False

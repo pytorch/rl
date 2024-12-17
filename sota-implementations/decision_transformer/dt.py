@@ -76,7 +76,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module = make_dt_loss(cfg.loss, actor, device=model_device)
 
     # Create optimizer
-    transformer_optim, scheduler = make_dt_optimizer(cfg.optim, loss_module)
+    transformer_optim, scheduler = make_dt_optimizer(
+        cfg.optim, loss_module, model_device
+    )
 
     # Create inference policy
     inference_policy = DecisionTransformerInferenceWrapper(
