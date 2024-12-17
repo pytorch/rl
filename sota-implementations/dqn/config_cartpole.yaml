@@ -7,7 +7,7 @@ env:
 # collector
 collector:
   total_frames: 500_100
-  frames_per_batch: 10
+  frames_per_batch: 1000
   eps_start: 1.0
   eps_end: 0.05
   annealing_frames: 250_000
@@ -37,7 +37,7 @@ optim:
 loss:
   gamma: 0.99
   hard_update_freq: 50
-  num_updates: 1
+  num_updates: 100
 
 compile:
   compile: False

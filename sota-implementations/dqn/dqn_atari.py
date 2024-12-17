@@ -9,7 +9,7 @@ Deep Q-Learning Algorithm on Atari Environments.
 """
 from __future__ import annotations
 
-import tempfile
+import functools
 import warnings
 
 import hydra
@@ -20,7 +20,7 @@ from tensordict.nn import CudaGraphModule, TensorDictSequential
 from torchrl._utils import timeit
 
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyModule
 from torchrl.objectives import DQNLoss, HardUpdate
@@ -64,20 +64,26 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create the replay buffer
-    if cfg.buffer.scratch_dir is None:
-        tempdir = tempfile.TemporaryDirectory()
-        scratch_dir = tempdir.name
+    if cfg.buffer.scratch_dir in ("", None):
+        storage_cls = functools.partial(LazyTensorStorage, device=device)
+        transform = None
     else:
-        scratch_dir = cfg.buffer.scratch_dir
+        storage_cls = functools.partial(
+            LazyTensorStorage, scratch_dir=cfg.buffer.scratch_dir
+        )
+
+        def transform(td):
+            return td.to(device)
+
     replay_buffer = TensorDictReplayBuffer(
         pin_memory=False,
-        prefetch=3,
-        storage=LazyMemmapStorage(
+        storage=storage_cls(
             max_size=cfg.buffer.buffer_size,
-            scratch_dir=scratch_dir,
         ),
         batch_size=cfg.buffer.batch_size,
     )
+    if transform is not None:
+        replay_buffer.append_transform(transform)
 
     # Create the loss module
     loss_module = DQNLoss(
@@ -210,7 +216,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for j in range(num_updates):
             with timeit("rb - sample"):
                 sampled_tensordict = replay_buffer.sample()
-                sampled_tensordict = sampled_tensordict.to(device)
             with timeit("update"):
                 q_loss = update(sampled_tensordict)
             q_losses[j].copy_(q_loss)

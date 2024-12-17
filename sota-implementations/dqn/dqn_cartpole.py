@@ -55,11 +55,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create the replay buffer
     replay_buffer = TensorDictReplayBuffer(
         pin_memory=False,
-        prefetch=10,
-        storage=LazyTensorStorage(
-            max_size=cfg.buffer.buffer_size,
-            device="cpu",
-        ),
+        storage=LazyTensorStorage(max_size=cfg.buffer.buffer_size, device=device),
         batch_size=cfg.buffer.batch_size,
     )
 
