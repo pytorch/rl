@@ -3383,6 +3383,7 @@ class TestNonTensorEnv:
         assert s_["string"] == ["0", "6"]
         assert s["next", "string"] == ["6", "6"]
 
+
 # fen strings for board positions generated with:
 # https://lichess.org/editor
 @pytest.mark.parametrize("stateful", [False, True])
