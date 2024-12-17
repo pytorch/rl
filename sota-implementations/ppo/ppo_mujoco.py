@@ -72,7 +72,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         device=device,
-        storing_device=device,
         max_frames_per_traj=-1,
         compile_policy={"mode": compile_mode, "warmup": 1} if compile_mode else False,
         cudagraph_policy=cfg.compile.cudagraphs,

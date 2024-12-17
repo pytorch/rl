@@ -67,12 +67,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, "cpu"),
+        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device),
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         device=device,
-        storing_device=device,
         max_frames_per_traj=-1,
         compile_policy={"mode": compile_mode, "warmup": 1} if compile_mode else False,
         cudagraph_policy=cfg.compile.cudagraphs,
