@@ -3427,7 +3427,8 @@ class TestChessEnv:
     )
     def test_reward(self, stateful, reset_without_fen, endstate):
         if stateful and reset_without_fen:
-            pytest.skip("reset_without_fen is only used for stateless env")
+            # reset_without_fen is only used for stateless env
+            return
 
         env = ChessEnv(stateful=stateful)
 
