@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import functools
 import gc
+import importlib
 import os.path
 import random
 import re
@@ -112,6 +113,7 @@ from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbound
 from torchrl.envs import (
     CatFrames,
     CatTensors,
+    ChessEnv,
     DoubleToFloat,
     EnvBase,
     EnvCreator,
@@ -167,6 +169,8 @@ if IS_WIN:
     mp_ctx = "spawn"
 else:
     mp_ctx = "fork"
+
+_has_chess = importlib.util.find_spec("chess") is not None
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
@@ -3378,6 +3382,113 @@ class TestNonTensorEnv:
         assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
         assert s_["string"] == ["0", "6"]
         assert s["next", "string"] == ["6", "6"]
+
+
+# fen strings for board positions generated with:
+# https://lichess.org/editor
+@pytest.mark.parametrize("stateful", [False, True])
+@pytest.mark.skipif(not _has_chess, reason="chess not found")
+class TestChessEnv:
+    def test_env(self, stateful):
+        env = ChessEnv(stateful=stateful)
+        check_env_specs(env)
+
+    def test_rollout(self, stateful):
+        env = ChessEnv(stateful=stateful)
+        env.rollout(5000)
+
+    def test_reset_white_to_move(self, stateful):
+        env = ChessEnv(stateful=stateful)
+        fen = "5k2/4r3/8/8/8/1Q6/2K5/8 w - - 0 1"
+        td = env.reset(TensorDict({"fen": fen}))
+        assert td["fen"] == fen
+        assert td["turn"] == env.lib.WHITE
+        assert not td["done"]
+
+    def test_reset_black_to_move(self, stateful):
+        env = ChessEnv(stateful=stateful)
+        fen = "5k2/4r3/8/8/8/1Q6/2K5/8 b - - 0 1"
+        td = env.reset(TensorDict({"fen": fen}))
+        assert td["fen"] == fen
+        assert td["turn"] == env.lib.BLACK
+        assert not td["done"]
+
+    def test_reset_done_error(self, stateful):
+        env = ChessEnv(stateful=stateful)
+        fen = "1R3k2/2R5/8/8/8/8/2K5/8 b - - 0 1"
+        with pytest.raises(ValueError) as e_info:
+            env.reset(TensorDict({"fen": fen}))
+
+        assert "Cannot reset to a fen that is a gameover state" in str(e_info)
+
+    @pytest.mark.parametrize("reset_without_fen", [False, True])
+    @pytest.mark.parametrize(
+        "endstate", ["white win", "black win", "stalemate", "50 move", "insufficient"]
+    )
+    def test_reward(self, stateful, reset_without_fen, endstate):
+        if stateful and reset_without_fen:
+            # reset_without_fen is only used for stateless env
+            return
+
+        env = ChessEnv(stateful=stateful)
+
+        if endstate == "white win":
+            fen = "5k2/2R5/8/8/8/1R6/2K5/8 w - - 0 1"
+            expected_turn = env.lib.WHITE
+            move = "Rb8#"
+            expected_reward = 1
+            expected_done = True
+
+        elif endstate == "black win":
+            fen = "5k2/6r1/8/8/8/8/7r/1K6 b - - 0 1"
+            expected_turn = env.lib.BLACK
+            move = "Rg1#"
+            expected_reward = -1
+            expected_done = True
+
+        elif endstate == "stalemate":
+            fen = "5k2/6r1/8/8/8/8/7r/K7 b - - 0 1"
+            expected_turn = env.lib.BLACK
+            move = "Rb7"
+            expected_reward = 0
+            expected_done = True
+
+        elif endstate == "insufficient":
+            fen = "5k2/8/8/8/3r4/2K5/8/8 w - - 0 1"
+            expected_turn = env.lib.WHITE
+            move = "Kxd4"
+            expected_reward = 0
+            expected_done = True
+
+        elif endstate == "50 move":
+            fen = "5k2/8/1R6/8/6r1/2K5/8/8 b - - 99 123"
+            expected_turn = env.lib.BLACK
+            move = "Kf7"
+            expected_reward = 0
+            expected_done = True
+
+        elif endstate == "not_done":
+            fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+            expected_turn = env.lib.WHITE
+            move = "e4"
+            expected_reward = 0
+            expected_done = False
+
+        else:
+            raise RuntimeError(f"endstate not supported: {endstate}")
+
+        if reset_without_fen:
+            td = TensorDict({"fen": fen})
+        else:
+            td = env.reset(TensorDict({"fen": fen}))
+            assert td["turn"] == expected_turn
+
+        moves = env.get_legal_moves(None if stateful else td)
+        td["action"] = moves.index(move)
+        td = env.step(td)["next"]
+        assert td["done"] == expected_done
+        assert td["reward"] == expected_reward
+        assert td["turn"] == (not expected_turn)
 
 
 class TestCustomEnvs:
