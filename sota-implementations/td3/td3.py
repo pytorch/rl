@@ -247,6 +247,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 metrics_to_log["eval/reward"] = eval_reward
         if logger is not None:
             metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
             log_metrics(logger, metrics_to_log, collected_frames)
 
     collector.shutdown()

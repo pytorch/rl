@@ -178,7 +178,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             data = next(c_iter)
-        log_info = {}
+        metrics_to_log = {}
         pbar.update(data.numel())
         data = data.reshape(-1)
         current_frames = data.numel() * frame_skip
@@ -193,7 +193,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             episode_reward_mean = episode_rewards.mean().item()
             episode_length = data["next", "step_count"][data["next", "done"]]
             episode_length_mean = episode_length.sum().item() / len(episode_length)
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/episode_reward": episode_reward_mean,
                     "train/episode_length": episode_length_mean,
@@ -202,7 +202,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         if collected_frames < init_random_frames:
             if logger:
-                for key, value in log_info.items():
+                for key, value in metrics_to_log.items():
                     logger.log_scalar(key, value, step=collected_frames)
             continue
 
@@ -216,7 +216,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             q_losses[j].copy_(q_loss)
 
         # Get and log q-values, loss, epsilon, sampling time and training time
-        log_info.update(
+        metrics_to_log.update(
             {
                 "train/q_values": data["chosen_action_value"].sum() / frames_per_batch,
                 "train/q_loss": q_losses.mean(),
@@ -236,18 +236,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 test_rewards = eval_model(
                     model, test_env, num_episodes=num_test_episodes
                 )
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "eval/reward": test_rewards,
                     }
                 )
                 model.train()
 
-        log_info.update(timeit.todict(prefix="time"))
-
         # Log all the information
         if logger:
-            for key, value in log_info.items():
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            for key, value in metrics_to_log.items():
                 logger.log_scalar(key, value, step=collected_frames)
 
         # update weights of the inference policy

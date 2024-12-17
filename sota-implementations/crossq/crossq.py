@@ -256,13 +256,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
                 episode_length
             )
-            metrics_to_log.update(timeit.todict(prefix="time"))
         if collected_frames >= init_random_frames:
             metrics_to_log["train/q_loss"] = tds["loss_qvalue"]
             metrics_to_log["train/actor_loss"] = tds["loss_actor"]
             metrics_to_log["train/alpha_loss"] = tds["loss_alpha"]
 
         if logger is not None:
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
             log_metrics(logger, metrics_to_log, collected_frames)
 
     collector.shutdown()

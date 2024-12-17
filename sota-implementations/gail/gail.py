@@ -265,7 +265,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         with timeit("collection"):
             data = next(collector_iter)
 
-        log_info = {}
+        metrics_to_log = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
@@ -286,7 +286,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
 
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
@@ -294,7 +294,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
             )
 
-        log_info.update(
+        metrics_to_log.update(
             {
                 "train/discriminator_loss": d_loss["loss"],
                 "train/lr": alpha * cfg_optim_lr,
@@ -317,15 +317,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 test_rewards = eval_model(
                     actor, test_env, num_episodes=cfg_logger_num_test_episodes
                 )
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "eval/reward": test_rewards.mean(),
                     }
                 )
                 actor.train()
         if logger is not None:
-            log_info.update(timeit.todict(prefix="time"))
-            log_metrics(logger, log_info, i)
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            log_metrics(logger, metrics_to_log, i)
 
     pbar.close()
 

@@ -136,7 +136,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             loss_vals = update(data)
         scheduler.step()
         # Log metrics
-        to_log = {"train/loss": loss_vals["loss"]}
+        metrics_to_log = {"train/loss": loss_vals["loss"]}
 
         # Evaluation
         with set_exploration_type(
@@ -149,13 +149,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     auto_cast_to_device=True,
                 )
                 test_env.apply(dump_video)
-            to_log["eval/reward"] = (
+            metrics_to_log["eval/reward"] = (
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )
-        to_log.update(timeit.todict(prefix="time"))
 
         if logger is not None:
-            log_metrics(logger, to_log, i)
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            log_metrics(logger, metrics_to_log, i)
 
     pbar.close()
     if not test_env.is_closed:

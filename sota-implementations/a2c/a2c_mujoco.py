@@ -186,7 +186,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         with timeit("collecting"):
             data = next(c_iter)
 
-        log_info = {}
+        metrics_to_log = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
@@ -195,7 +195,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
@@ -236,8 +236,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Get training losses
         losses = torch.stack(losses).float().mean()
         for key, value in losses.items():
-            log_info.update({f"train/{key}": value.item()})
-        log_info.update(
+            metrics_to_log.update({f"train/{key}": value.item()})
+        metrics_to_log.update(
             {
                 "train/lr": alpha * cfg.optim.lr,
             }
@@ -253,20 +253,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 test_rewards = eval_model(
                     actor, test_env, num_episodes=cfg.logger.num_test_episodes
                 )
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "test/reward": test_rewards.mean(),
                     }
                 )
                 actor.train()
 
-        log_info.update(timeit.todict(prefix="time"))
-
         if logger:
-            for key, value in log_info.items():
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            for key, value in metrics_to_log.items():
                 logger.log_scalar(key, value, collected_frames)
-
-        torch.compiler.cudagraph_mark_step_begin()
 
     collector.shutdown()
     if not test_env.is_closed:

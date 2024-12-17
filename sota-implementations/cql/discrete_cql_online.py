@@ -222,9 +222,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             tds = torch.stack(tds, dim=0).mean()
             metrics_to_log["train/q_loss"] = tds["loss_qvalue"]
             metrics_to_log["train/cql_loss"] = tds["loss_cql"]
-            metrics_to_log.update(timeit.todict(prefix="time"))
 
         if logger is not None:
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
             log_metrics(logger, metrics_to_log, collected_frames)
 
     collector.shutdown()

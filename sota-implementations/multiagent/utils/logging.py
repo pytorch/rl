@@ -56,13 +56,13 @@ def log_training(
             .unsqueeze(-1),
         )
 
-    to_log = {
+    metrics_to_log = {
         f"train/learner/{key}": value.mean().item()
         for key, value in training_td.items()
     }
 
     if "info" in sampling_td.get("agents").keys():
-        to_log.update(
+        metrics_to_log.update(
             {
                 f"train/info/{key}": value.mean().item()
                 for key, value in sampling_td.get(("agents", "info")).items()
@@ -76,7 +76,7 @@ def log_training(
     episode_reward = sampling_td.get(("next", "agents", "episode_reward")).mean(-2)[
         done
     ]
-    to_log.update(
+    metrics_to_log.update(
         {
             "train/reward/reward_min": reward.min().item(),
             "train/reward/reward_mean": reward.mean().item(),
@@ -94,12 +94,12 @@ def log_training(
         }
     )
     if isinstance(logger, WandbLogger):
-        logger.experiment.log(to_log, commit=False)
+        logger.experiment.log(metrics_to_log, commit=False)
     else:
-        for key, value in to_log.items():
+        for key, value in metrics_to_log.items():
             logger.log_scalar(key.replace("/", "_"), value, step=step)
 
-    return to_log
+    return metrics_to_log
 
 
 def log_evaluation(
@@ -121,7 +121,7 @@ def log_evaluation(
         rollouts[k] = r[: done_index + 1]
 
     rewards = [td.get(("next", "agents", "reward")).sum(0).mean() for td in rollouts]
-    to_log = {
+    metrics_to_log = {
         "eval/episode_reward_min": min(rewards),
         "eval/episode_reward_max": max(rewards),
         "eval/episode_reward_mean": sum(rewards) / len(rollouts),
@@ -138,7 +138,7 @@ def log_evaluation(
     if isinstance(logger, WandbLogger):
         import wandb
 
-        logger.experiment.log(to_log, commit=False)
+        logger.experiment.log(metrics_to_log, commit=False)
         logger.experiment.log(
             {
                 "eval/video": wandb.Video(vid, fps=1 / env_test.world.dt, format="mp4"),
@@ -146,6 +146,6 @@ def log_evaluation(
             commit=False,
         )
     else:
-        for key, value in to_log.items():
+        for key, value in metrics_to_log.items():
             logger.log_scalar(key.replace("/", "_"), value, step=step)
         logger.log_video("eval_video", vid, step=step)

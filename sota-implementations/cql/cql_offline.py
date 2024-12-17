@@ -172,7 +172,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
 
         # log metrics
-        to_log = {
+        metrics_to_log = {
             "loss": loss.cpu(),
             **loss_vals.cpu(),
         }
@@ -188,11 +188,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     )
                     eval_env.apply(dump_video)
                 eval_reward = eval_td["next", "reward"].sum(1).mean().item()
-                to_log["evaluation_reward"] = eval_reward
+                metrics_to_log["evaluation_reward"] = eval_reward
 
         with timeit("log"):
-            to_log.update(timeit.todict(prefix="time"))
-            log_metrics(logger, to_log, i)
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            log_metrics(logger, metrics_to_log, i)
 
     pbar.close()
     if not eval_env.is_closed:
