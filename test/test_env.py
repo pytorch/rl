@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import functools
 import gc
+import importlib
 import os.path
 import random
 import re
@@ -3380,10 +3381,12 @@ class TestNonTensorEnv:
         assert s_["string"] == ["0", "6"]
         assert s["next", "string"] == ["6", "6"]
 
+_has_chess = importlib.util.find_spec("chess") is not None
 
 # fen strings for board positions generated with:
 # https://lichess.org/editor
 @pytest.mark.parametrize("stateful", [False, True])
+@pytest.mark.skipif(not _has_chess, reason="chess not found")
 class TestChessEnv:
     def test_env(self, stateful):
         env = ChessEnv(stateful=stateful)
