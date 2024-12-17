@@ -179,7 +179,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     sampled_tensordict = sampled_tensordict.to(device)
                 with timeit("update"):
                     torch.compiler.cudagraph_mark_step_begin()
-                    loss_dict = update(sampled_tensordict)
+                    loss_dict = update(sampled_tensordict).clone()
                 tds.append(loss_dict)
 
                 # Update priority
