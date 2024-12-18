@@ -245,10 +245,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     data_buffer.extend(data_reshape)
 
                 for k, batch in enumerate(data_buffer):
-                    torch.compiler.cudagraph_mark_step_begin()
-                    loss, num_network_updates = update(
-                        batch, num_network_updates=num_network_updates
-                    )
+                    with timeit("update"):
+                        torch.compiler.cudagraph_mark_step_begin()
+                        loss, num_network_updates = update(
+                            batch, num_network_updates=num_network_updates
+                        )
                     loss = loss.clone()
                     num_network_updates = num_network_updates.clone()
                     losses[j, k] = loss.select(
