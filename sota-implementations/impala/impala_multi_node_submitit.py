@@ -157,7 +157,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = sampling_start = time.time()
     for i, data in enumerate(collector):
 
-        log_info = {}
+        metrics_to_log = {}
         sampling_time = time.time() - sampling_start
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
@@ -167,7 +167,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
@@ -178,7 +178,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if len(accumulator) < batch_size:
             accumulator.append(data)
             if logger:
-                for key, value in log_info.items():
+                for key, value in metrics_to_log.items():
                     logger.log_scalar(key, value, collected_frames)
             continue
 
@@ -235,8 +235,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         training_time = time.time() - training_start
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
-            log_info.update({f"train/{key}": value.item()})
-        log_info.update(
+            metrics_to_log.update({f"train/{key}": value.item()})
+        metrics_to_log.update(
             {
                 "train/lr": alpha * lr,
                 "train/sampling_time": sampling_time,
@@ -255,7 +255,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     actor, test_env, num_episodes=num_test_episodes
                 )
                 eval_time = time.time() - eval_start
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "eval/reward": test_reward,
                         "eval/time": eval_time,
@@ -264,7 +264,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor.train()
 
         if logger:
-            for key, value in log_info.items():
+            for key, value in metrics_to_log.items():
                 logger.log_scalar(key, value, collected_frames)
 
         collector.update_policy_weights_()

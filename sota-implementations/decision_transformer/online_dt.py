@@ -143,7 +143,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         scheduler.step()
 
         # Log metrics
-        to_log = {
+        metrics_to_log = {
             "train/loss_log_likelihood": loss_vals["loss_log_likelihood"],
             "train/loss_entropy": loss_vals["loss_entropy"],
             "train/loss_alpha": loss_vals["loss_alpha"],
@@ -165,14 +165,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 test_env.apply(dump_video)
                 inference_policy.train()
-            to_log["eval/reward"] = (
+            metrics_to_log["eval/reward"] = (
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )
 
-        to_log.update(timeit.todict(prefix="time"))
-
         if logger is not None:
-            log_metrics(logger, to_log, i)
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            log_metrics(logger, metrics_to_log, i)
 
     pbar.close()
     if not test_env.is_closed:

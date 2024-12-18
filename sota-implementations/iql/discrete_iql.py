@@ -226,8 +226,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/q_loss"] = metadata["q_loss"]
             metrics_to_log["train/actor_loss"] = metadata["actor_loss"]
             metrics_to_log["train/value_loss"] = metadata["value_loss"]
-            metrics_to_log.update(timeit.todict(prefix="time"))
         if logger is not None:
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
             log_metrics(logger, metrics_to_log, collected_frames)
 
     collector.shutdown()

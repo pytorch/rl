@@ -55,11 +55,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create the replay buffer
     replay_buffer = TensorDictReplayBuffer(
         pin_memory=False,
-        prefetch=10,
-        storage=LazyTensorStorage(
-            max_size=cfg.buffer.buffer_size,
-            device="cpu",
-        ),
+        storage=LazyTensorStorage(max_size=cfg.buffer.buffer_size, device=device),
         batch_size=cfg.buffer.batch_size,
     )
 
@@ -69,7 +65,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         loss_function="l2",
         delay_value=True,
     )
-    loss_module.make_value_estimator(gamma=cfg.loss.gamma)
+    loss_module.make_value_estimator(gamma=cfg.loss.gamma, device=device)
     loss_module = loss_module.to(device)
     target_net_updater = HardUpdate(
         loss_module, value_network_update_interval=cfg.loss.hard_update_freq
@@ -162,7 +158,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         with timeit("collecting"):
             data = next(c_iter)
 
-        log_info = {}
+        metrics_to_log = {}
         pbar.update(data.numel())
         data = data.reshape(-1)
         current_frames = data.numel()
@@ -178,7 +174,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             episode_reward_mean = episode_rewards.mean().item()
             episode_length = data["next", "step_count"][data["next", "done"]]
             episode_length_mean = episode_length.sum().item() / len(episode_length)
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/episode_reward": episode_reward_mean,
                     "train/episode_length": episode_length_mean,
@@ -188,7 +184,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if collected_frames < init_random_frames:
             if collected_frames < init_random_frames:
                 if logger:
-                    for key, value in log_info.items():
+                    for key, value in metrics_to_log.items():
                         logger.log_scalar(key, value, step=collected_frames)
                 continue
 
@@ -202,7 +198,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             q_losses[j].copy_(q_loss)
 
         # Get and log q-values, loss, epsilon, sampling time and training time
-        log_info.update(
+        metrics_to_log.update(
             {
                 "train/q_values": (data["action_value"] * data["action"]).sum().item()
                 / frames_per_batch,
@@ -222,17 +218,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 model.eval()
                 test_rewards = eval_model(model, test_env, num_test_episodes)
                 model.train()
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "eval/reward": test_rewards,
                     }
                 )
 
-        log_info.update(timeit.todict(prefix="time"))
-
         # Log all the information
         if logger:
-            for key, value in log_info.items():
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            for key, value in metrics_to_log.items():
                 logger.log_scalar(key, value, step=collected_frames)
 
         # update weights of the inference policy

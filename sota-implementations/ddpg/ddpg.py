@@ -224,9 +224,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_env.apply(dump_video)
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward
-        metrics_to_log.update(timeit.todict(prefix="time"))
 
         if logger is not None:
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
             log_metrics(logger, metrics_to_log, collected_frames)
 
     collector.shutdown()

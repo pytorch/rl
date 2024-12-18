@@ -67,12 +67,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, "cpu"),
+        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device),
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         device=device,
-        storing_device=device,
         max_frames_per_traj=-1,
         compile_policy={"mode": compile_mode, "warmup": 1} if compile_mode else False,
         cudagraph_policy=cfg.compile.cudagraphs,
@@ -214,7 +213,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         with timeit("collecting"):
             data = next(collector_iter)
 
-        log_info = {}
+        metrics_to_log = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(frames_in_batch)
@@ -223,7 +222,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "terminated"]]
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
@@ -246,10 +245,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     data_buffer.extend(data_reshape)
 
                 for k, batch in enumerate(data_buffer):
-                    torch.compiler.cudagraph_mark_step_begin()
-                    loss, num_network_updates = update(
-                        batch, num_network_updates=num_network_updates
-                    )
+                    with timeit("update"):
+                        torch.compiler.cudagraph_mark_step_begin()
+                        loss, num_network_updates = update(
+                            batch, num_network_updates=num_network_updates
+                        )
                     loss = loss.clone()
                     num_network_updates = num_network_updates.clone()
                     losses[j, k] = loss.select(
@@ -259,8 +259,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Get training losses and times
         losses_mean = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses_mean.items():
-            log_info.update({f"train/{key}": value.item()})
-        log_info.update(
+            metrics_to_log.update({f"train/{key}": value.item()})
+        metrics_to_log.update(
             {
                 "train/lr": loss["alpha"] * cfg_optim_lr,
                 "train/clip_epsilon": loss["alpha"] * cfg_loss_clip_epsilon,
@@ -278,15 +278,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 test_rewards = eval_model(
                     actor, test_env, num_episodes=cfg_logger_num_test_episodes
                 )
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "eval/reward": test_rewards.mean(),
                     }
                 )
                 actor.train()
         if logger:
-            log_info.update(timeit.todict(prefix="time"))
-            for key, value in log_info.items():
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            for key, value in metrics_to_log.items():
                 logger.log_scalar(key, value, collected_frames)
 
         collector.update_policy_weights_()

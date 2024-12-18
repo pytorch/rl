@@ -9,7 +9,7 @@ Deep Q-Learning Algorithm on Atari Environments.
 """
 from __future__ import annotations
 
-import tempfile
+import functools
 import warnings
 
 import hydra
@@ -64,20 +64,25 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create the replay buffer
-    if cfg.buffer.scratch_dir is None:
-        tempdir = tempfile.TemporaryDirectory()
-        scratch_dir = tempdir.name
+    if cfg.buffer.scratch_dir in ("", None):
+        storage_cls = LazyMemmapStorage
     else:
-        scratch_dir = cfg.buffer.scratch_dir
+        storage_cls = functools.partial(
+            LazyMemmapStorage, scratch_dir=cfg.buffer.scratch_dir
+        )
+
+    def transform(td):
+        return td.to(device)
+
     replay_buffer = TensorDictReplayBuffer(
         pin_memory=False,
-        prefetch=3,
-        storage=LazyMemmapStorage(
+        storage=storage_cls(
             max_size=cfg.buffer.buffer_size,
-            scratch_dir=scratch_dir,
         ),
         batch_size=cfg.buffer.batch_size,
     )
+    if transform is not None:
+        replay_buffer.append_transform(transform)
 
     # Create the loss module
     loss_module = DQNLoss(
@@ -86,7 +91,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         delay_value=True,
     )
     loss_module.set_keys(done="end-of-life", terminated="end-of-life")
-    loss_module.make_value_estimator(gamma=cfg.loss.gamma)
+    loss_module.make_value_estimator(gamma=cfg.loss.gamma, device=device)
     target_net_updater = HardUpdate(
         loss_module, value_network_update_interval=cfg.loss.hard_update_freq
     )
@@ -178,7 +183,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             data = next(c_iter)
-        log_info = {}
+        metrics_to_log = {}
         pbar.update(data.numel())
         data = data.reshape(-1)
         current_frames = data.numel() * frame_skip
@@ -193,7 +198,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             episode_reward_mean = episode_rewards.mean().item()
             episode_length = data["next", "step_count"][data["next", "done"]]
             episode_length_mean = episode_length.sum().item() / len(episode_length)
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/episode_reward": episode_reward_mean,
                     "train/episode_length": episode_length_mean,
@@ -202,7 +207,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         if collected_frames < init_random_frames:
             if logger:
-                for key, value in log_info.items():
+                for key, value in metrics_to_log.items():
                     logger.log_scalar(key, value, step=collected_frames)
             continue
 
@@ -210,13 +215,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for j in range(num_updates):
             with timeit("rb - sample"):
                 sampled_tensordict = replay_buffer.sample()
-                sampled_tensordict = sampled_tensordict.to(device)
             with timeit("update"):
                 q_loss = update(sampled_tensordict)
             q_losses[j].copy_(q_loss)
 
         # Get and log q-values, loss, epsilon, sampling time and training time
-        log_info.update(
+        metrics_to_log.update(
             {
                 "train/q_values": data["chosen_action_value"].sum() / frames_per_batch,
                 "train/q_loss": q_losses.mean(),
@@ -236,18 +240,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 test_rewards = eval_model(
                     model, test_env, num_episodes=num_test_episodes
                 )
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "eval/reward": test_rewards,
                     }
                 )
                 model.train()
 
-        log_info.update(timeit.todict(prefix="time"))
-
         # Log all the information
         if logger:
-            for key, value in log_info.items():
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            for key, value in metrics_to_log.items():
                 logger.log_scalar(key, value, step=collected_frames)
 
         # update weights of the inference policy

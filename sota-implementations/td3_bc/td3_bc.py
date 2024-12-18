@@ -151,11 +151,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
             torch.compiler.cudagraph_mark_step_begin()
             metadata = update(sampled_tensordict, update_actor).clone()
 
-        to_log = {}
+        metrics_to_log = {}
         if update_actor:
-            to_log.update(metadata.to_dict())
+            metrics_to_log.update(metadata.to_dict())
         else:
-            to_log.update(metadata.exclude("actor_loss").to_dict())
+            metrics_to_log.update(metadata.exclude("actor_loss").to_dict())
 
         # evaluation
         if update_counter % evaluation_interval == 0:
@@ -167,10 +167,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 eval_env.apply(dump_video)
             eval_reward = eval_td["next", "reward"].sum(1).mean().item()
-            to_log["evaluation_reward"] = eval_reward
+            metrics_to_log["evaluation_reward"] = eval_reward
         if logger is not None:
-            to_log.update(timeit.todict(prefix="time"))
-            log_metrics(logger, to_log, update_counter)
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            log_metrics(logger, metrics_to_log, update_counter)
 
     if not eval_env.is_closed:
         eval_env.close()

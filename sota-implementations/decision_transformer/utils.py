@@ -511,10 +511,10 @@ def make_odt_optimizer(optim_cfg, loss_module):
     return dt_optimizer, log_temp_optimizer, scheduler
 
 
-def make_dt_optimizer(optim_cfg, loss_module):
+def make_dt_optimizer(optim_cfg, loss_module, device):
     dt_optimizer = torch.optim.Adam(
         loss_module.actor_network_params.flatten_keys().values(),
-        lr=torch.as_tensor(optim_cfg.lr),
+        lr=torch.tensor(optim_cfg.lr, device=device),
         weight_decay=optim_cfg.weight_decay,
         eps=1.0e-8,
     )

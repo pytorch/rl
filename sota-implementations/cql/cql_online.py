@@ -220,7 +220,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "loss_alpha_prime"
             ).mean()
             metrics_to_log["train/entropy"] = log_loss_td.get("entropy").mean()
-            metrics_to_log.update(timeit.todict(prefix="time"))
 
         # Evaluation
         with timeit("eval"):
@@ -241,6 +240,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     eval_env.apply(dump_video)
                     metrics_to_log["eval/reward"] = eval_reward
 
+        metrics_to_log.update(timeit.todict(prefix="time"))
+        metrics_to_log["time/speed"] = pbar.format_dict["rate"]
         log_metrics(logger, metrics_to_log, collected_frames)
 
     collector.shutdown()

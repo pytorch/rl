@@ -7,7 +7,7 @@ env:
 # collector
 collector:
   total_frames: 40_000_100
-  frames_per_batch: 16
+  frames_per_batch: 1600
   eps_start: 1.0
   eps_end: 0.01
   annealing_frames: 4_000_000
@@ -38,9 +38,9 @@ optim:
 loss:
   gamma: 0.99
   hard_update_freq: 10_000
-  num_updates: 1
+  num_updates: 100
 
 compile:
   compile: False
-  compile_mode:
+  compile_mode: default
   cudagraphs: False

@@ -179,7 +179,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     sampled_tensordict = sampled_tensordict.to(device)
                 with timeit("update"):
                     torch.compiler.cudagraph_mark_step_begin()
-                    loss_dict = update(sampled_tensordict)
+                    loss_dict = update(sampled_tensordict).clone()
                 tds.append(loss_dict)
 
                 # Update priority
@@ -222,9 +222,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             tds = torch.stack(tds, dim=0).mean()
             metrics_to_log["train/q_loss"] = tds["loss_qvalue"]
             metrics_to_log["train/cql_loss"] = tds["loss_cql"]
-            metrics_to_log.update(timeit.todict(prefix="time"))
 
         if logger is not None:
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
             log_metrics(logger, metrics_to_log, collected_frames)
 
     collector.shutdown()
