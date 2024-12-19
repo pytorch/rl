@@ -4984,6 +4984,7 @@ class TensorDictPrimer(Transform):
         | Dict[NestedKey, float]
         | Dict[NestedKey, Callable] = None,
         reset_key: NestedKey | None = None,
+        expand_specs: bool = None,
         **kwargs,
     ):
         self.device = kwargs.pop("device", None)
@@ -4995,8 +4996,10 @@ class TensorDictPrimer(Transform):
                 )
             kwargs = primers
         if not isinstance(kwargs, Composite):
-            kwargs = Composite(kwargs)
+            kwargs = Composite(**kwargs)
         self.primers = kwargs
+        self.expand_specs = expand_specs
+
         if random and default_value:
             raise ValueError(
                 "Setting random to True and providing a default_value are incompatible."
@@ -5089,12 +5092,26 @@ class TensorDictPrimer(Transform):
             )
 
         if self.primers.shape != observation_spec.shape:
-            try:
-                # We try to set the primer shape to the observation spec shape
-                self.primers.shape = observation_spec.shape
-            except ValueError:
-                # If we fail, we expand them to that shape
+            if self.expand_specs:
                 self.primers = self._expand_shape(self.primers)
+            elif self.expand_specs is None:
+                warnings.warn(
+                    f"expand_specs wasn't specified in the {type(self).__name__} constructor. "
+                    f"The current behaviour is that the transform will attempt to set the shape of the composite "
+                    f"spec, and if this can't be done it will be expanded. "
+                    f"From v0.8, a mismatched shape between the spec of the transform and the env's batch_size "
+                    f"will raise an exception.",
+                    category=FutureWarning,
+                )
+                try:
+                    # We try to set the primer shape to the observation spec shape
+                    self.primers.shape = observation_spec.shape
+                except ValueError:
+                    # If we fail, we expand them to that shape
+                    self.primers = self._expand_shape(self.primers)
+            else:
+                self.primers.shape = observation_spec.shape
+
         device = observation_spec.device
         observation_spec.update(self.primers.clone().to(device))
         return observation_spec
