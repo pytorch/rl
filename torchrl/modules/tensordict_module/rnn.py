@@ -592,6 +592,10 @@ class LSTMModule(ModuleBase):
         inputs and outputs (recurrent states) during rollout execution. That way, the data can be shared across
         processes and dealt with properly.
 
+        When using batched environments such as :class:`~torchrl.envs.ParallelEnv`, the transform can be used at the
+        single env instance level (i.e., a batch of transformed envs with tensordict primers set within) or at the
+        batched env instance level (i.e., a transformed batch of regular envs).
+
         Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviors, for instance
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
@@ -1409,6 +1413,10 @@ class GRUModule(ModuleBase):
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
         are not registered within the environment specs.
+
+        When using batched environments such as :class:`~torchrl.envs.ParallelEnv`, the transform can be used at the
+        single env instance level (i.e., a batch of transformed envs with tensordict primers set within) or at the
+        batched env instance level (i.e., a transformed batch of regular envs).
 
         See :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given
         module.

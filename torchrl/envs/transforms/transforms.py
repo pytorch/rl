@@ -5089,12 +5089,16 @@ class TensorDictPrimer(Transform):
             )
 
         if self.primers.shape != observation_spec.shape:
-            try:
-                # We try to set the primer shape to the observation spec shape
-                self.primers.shape = observation_spec.shape
-            except ValueError:
-                # If we fail, we expand them to that shape
+            if self.primers.shape == () and self.parent.batch_size != ():
                 self.primers = self._expand_shape(self.primers)
+            else:
+                try:
+                    # We try to set the primer shape to the observation spec shape
+                    self.primers.shape = observation_spec.shape
+                except ValueError:
+                    # If we fail, we expand them to that shape
+                    self.primers = self._expand_shape(self.primers)
+
         device = observation_spec.device
         observation_spec.update(self.primers.clone().to(device))
         return observation_spec
