@@ -1034,3 +1034,11 @@ def tree_iter(pytree):  # noqa: F811
 def tree_iter(pytree):  # noqa: F811
     """A version-compatible wrapper around tree_iter."""
     yield from torch.utils._pytree.tree_iter(pytree)
+
+
+def _auto_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda:0")
+    elif torch.mps.is_available():
+        return torch.device("mps:0")
+    return torch.device("cpu")
