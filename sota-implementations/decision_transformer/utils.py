@@ -109,7 +109,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
         )
 
     # copy action from the input tensordict to the output
-    transformed_env.append_transform(TensorDictPrimer(action=base_env.action_spec))
+    transformed_env.append_transform(TensorDictPrimer(base_env.full_action_spec))
 
     transformed_env.append_transform(DoubleToFloat())
     obsnorm = ObservationNorm(
