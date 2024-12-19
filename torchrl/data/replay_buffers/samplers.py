@@ -1243,7 +1243,7 @@ class SliceSampler(Sampler):
                             "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                         )
                 vals = self._find_start_stop_traj(
-                    trajectory=trajectory.clone(),
+                    trajectory=trajectory,
                     at_capacity=storage._is_full,
                     cursor=getattr(storage, "_last_cursor", None),
                 )
