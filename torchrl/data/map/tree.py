@@ -798,6 +798,10 @@ class MCTSForest:
 
     @done_keys.setter
     def done_keys(self, value):
+        if isinstance(value, (str, tuple)):
+            value = [value]
+        if value is not None:
+            value = [unravel_key(val) for val in value]
         self._done_keys = _make_list_of_nestedkeys(value, "done_keys")
 
     @property
@@ -818,6 +822,10 @@ class MCTSForest:
 
     @reward_keys.setter
     def reward_keys(self, value):
+        if isinstance(value, (str, tuple)):
+            value = [value]
+        if value is not None:
+            value = [unravel_key(val) for val in value]
         self._reward_keys = _make_list_of_nestedkeys(value, "reward_keys")
 
     @property
@@ -838,6 +846,10 @@ class MCTSForest:
 
     @action_keys.setter
     def action_keys(self, value):
+        if isinstance(value, (str, tuple)):
+            value = [value]
+        if value is not None:
+            value = [unravel_key(val) for val in value]
         self._action_keys = _make_list_of_nestedkeys(value, "action_keys")
 
     @property
@@ -857,6 +869,10 @@ class MCTSForest:
 
     @observation_keys.setter
     def observation_keys(self, value):
+        if isinstance(value, (str, tuple)):
+            value = [value]
+        if value is not None:
+            value = [unravel_key(val) for val in value]
         self._observation_keys = _make_list_of_nestedkeys(value, "observation_keys")
 
     @property
@@ -1011,6 +1027,27 @@ class MCTSForest:
         self.node_map[source] = value
         if return_node:
             return self.get_tree(step)
+
+    def add(self, step):
+        source, dest = (
+            step.exclude("next").copy(),
+            step.select("next", *self.action_keys).copy(),
+        )
+
+        if self.data_map is None:
+            self._make_storage(source, dest)
+
+        # We need to set the action somewhere to keep track of what action lead to what child
+        # # Set the action in the 'next'
+        # dest[1:] = source[:-1].exclude(*self.done_keys)
+
+        # Add ('observation', 'action') -> ('next, observation')
+        self.data_map[source] = dest
+        value = source
+        if self.node_map is None:
+            self._make_storage_branches(source, dest)
+        # map ('observation',) -> ('indices',)
+        self.node_map[source] = value
 
     def get_child(self, root: TensorDictBase) -> TensorDictBase:
         return self.data_map[root]
