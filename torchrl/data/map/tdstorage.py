@@ -139,6 +139,10 @@ class TensorDictMap(
         self.write_fn = write_fn
 
     @property
+    def max_size(self):
+        return self.storage.max_size
+
+    @property
     def out_keys(self) -> List[NestedKey]:
         out_keys = self.__dict__.get("_out_keys_and_lazy")
         if out_keys is not None:
@@ -238,7 +242,13 @@ class TensorDictMap(
             n_feat = 0
             hash_module = []
             for in_key in in_keys:
-                n_feat = source[in_key].shape[-1]
+                entry = source[in_key]
+                if entry.ndim == source.ndim:
+                    # this is a good example of why td/tc are useful - carrying metadata
+                    # allows us to know if there's a feature dim or not
+                    n_feat = 0
+                else:
+                    n_feat = entry.shape[-1]
                 if n_feat > RandomProjectionHash._N_COMPONENTS_DEFAULT:
                     _hash_module = RandomProjectionHash()
                 else:

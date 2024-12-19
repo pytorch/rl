@@ -44,6 +44,11 @@ from tensordict.base import NO_DEFAULT
 from tensordict.utils import _getitem_batch_size, is_non_tensor, NestedKey
 from torchrl._utils import _make_ordinal_device, get_binary_env_var, implement_for
 
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
+
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
@@ -381,11 +386,17 @@ class ContinuousBox(Box):
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
     def low(self):
-        return self._low.to(self.device)
+        low = self._low
+        if self.device is not None and low.device != self.device:
+            low = low.to(self.device)
+        return low
 
     @property
     def high(self):
-        return self._high.to(self.device)
+        high = self._high
+        if self.device is not None and high.device != self.device:
+            high = high.to(self.device)
+        return high
 
     def unbind(self, dim: int = 0):
         return tuple(
@@ -396,12 +407,12 @@ class ContinuousBox(Box):
     @low.setter
     def low(self, value):
         self.device = value.device
-        self._low = value.cpu()
+        self._low = value
 
     @high.setter
     def high(self, value):
         self.device = value.device
-        self._high = value.cpu()
+        self._high = value
 
     def __post_init__(self):
         self.low = self.low.clone()
@@ -455,12 +466,17 @@ class ContinuousBox(Box):
         )
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class CategoricalBox(Box):
     """A box of discrete, categorical values."""
 
     n: int
     register = invertible_dict()
+
+    def __post_init__(self):
+        # n could be a numpy array or a tensor, making compile go a bit crazy
+        # We want to make sure we're working with a regular integer
+        self.__dict__["n"] = int(self.n)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CategoricalBox:
         return deepcopy(self)
@@ -502,7 +518,7 @@ class BoxList(Box):
             return BoxList([BoxList.from_nvec(n) for n in nvec.unbind(-1)])
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class BinaryBox(Box):
     """A box of n binary values."""
 
@@ -581,6 +597,16 @@ class TensorSpec:
         For :class:`Composite` specs, this method will erase the device.
         """
         return self
+
+    @abc.abstractmethod
+    def cardinality(self) -> int:
+        """The cardinality of the spec.
+
+        This refers to the number of possible outcomes in a spec. It is assumed that the cardinality of a composite
+        spec is the cartesian product of all possible outcomes.
+
+        """
+        ...
 
     def encode(
         self,
@@ -856,7 +882,7 @@ class TensorSpec:
             a torch.Tensor belonging to the TensorSpec box.
 
         """
-        if not self.is_in(val):
+        if is_compiling() or not self.is_in(val):
             return self._project(val)
         return val
 
@@ -1494,7 +1520,9 @@ class OneHot(TensorSpec):
         use_register: bool = False,
         mask: torch.Tensor | None = None,
     ):
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         self.use_register = use_register
         space = CategoricalBox(n)
         if shape is None:
@@ -1514,6 +1542,9 @@ class OneHot(TensorSpec):
     @property
     def n(self):
         return self.space.n
+
+    def cardinality(self) -> int:
+        return self.n
 
     def update_mask(self, mask):
         """Sets a mask to prevent some of the possible outcomes when a sample is taken.
@@ -1682,7 +1713,7 @@ class OneHot(TensorSpec):
             for i in range(self.shape[dim])
         )
 
-    @implement_for("torch", None, "2.1")
+    @implement_for("torch", None, "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
         if shape is None:
             shape = self.shape[:-1]
@@ -1705,7 +1736,7 @@ class OneHot(TensorSpec):
         # out.scatter_(-1, m, 1)
         return out
 
-    @implement_for("torch", "2.1")
+    @implement_for("torch", "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:  # noqa: F811
         if shape is None:
             shape = self.shape[:-1]
@@ -2017,7 +2048,9 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         if len(kwargs):
             raise TypeError(f"Got unrecognised kwargs {tuple(kwargs.keys())}.")
 
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if dtype is None:
             dtype = torch.get_default_dtype()
         if domain is None:
@@ -2106,6 +2139,9 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         raise NotImplementedError(
             f"enumerate is not implemented for spec of class {type(self).__name__}."
         )
+
+    def cardinality(self) -> int:
+        return float("inf")
 
     def __eq__(self, other):
         return (
@@ -2249,14 +2285,20 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             r = torch.rand(_size([*shape, *self._safe_shape]), device=interval.device)
             r = interval * r
             r = self.space.low + r
-            r = r.to(self.dtype).to(self.device)
+            if r.dtype != self.dtype:
+                r = r.to(self.dtype)
+            if self.dtype is not None and r.device != self.device:
+                r = r.to(self.device)
             return r
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        low = self.space.low.to(val.device)
-        high = self.space.high.to(val.device)
+        low = self.space.low
+        high = self.space.high
+        if self.device != val.device:
+            low = low.to(val.device)
+            high = high.to(val.device)
         try:
-            val = val.clamp_(low.item(), high.item())
+            val = torch.maximum(torch.minimum(val, high), low)
         except ValueError:
             low = low.expand_as(val)
             high = high.expand_as(val)
@@ -2426,8 +2468,11 @@ class NonTensor(TensorSpec):
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
         )
 
+    def cardinality(self) -> Any:
+        raise RuntimeError("Cannot enumerate a NonTensorSpec.")
+
     def enumerate(self) -> Any:
-        raise NotImplementedError("Cannot enumerate a NonTensorSpec.")
+        raise RuntimeError("Cannot enumerate a NonTensorSpec.")
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> NonTensor:
         if isinstance(dest, torch.dtype):
@@ -2606,7 +2651,9 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         if isinstance(shape, int):
             shape = _size([shape])
 
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if dtype == torch.bool:
             min_value = False
             max_value = True
@@ -2663,7 +2710,9 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         return val.shape == shape and val.dtype == self.dtype
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        return torch.as_tensor(val, dtype=self.dtype).reshape(self.shape)
+        return torch.as_tensor(val, dtype=self.dtype).reshape(
+            val.shape[: -self.ndim] + self.shape
+        )
 
     def enumerate(self) -> Any:
         raise NotImplementedError("enumerate cannot be called with continuous specs.")
@@ -2721,8 +2770,8 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         # those specs are equivalent to a discrete spec
         if isinstance(other, Bounded):
             minval, maxval = _minmax_dtype(self.dtype)
-            minval = torch.as_tensor(minval).to(self.device, self.dtype)
-            maxval = torch.as_tensor(maxval).to(self.device, self.dtype)
+            minval = torch.as_tensor(minval, device=self.device, dtype=self.dtype)
+            maxval = torch.as_tensor(maxval, device=self.device, dtype=self.dtype)
             return (
                 Bounded(
                     shape=self.shape,
@@ -2811,7 +2860,9 @@ class MultiOneHot(OneHot):
         mask: torch.Tensor | None = None,
     ):
         self.nvec = nvec
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if shape is None:
             shape = _size((sum(nvec),))
         else:
@@ -2831,6 +2882,9 @@ class MultiOneHot(OneHot):
             domain="discrete",
         )
         self.update_mask(mask)
+
+    def cardinality(self) -> int:
+        return torch.as_tensor(self.nvec).prod()
 
     def enumerate(self) -> torch.Tensor:
         nvec = self.nvec
@@ -3220,13 +3274,20 @@ class Categorical(TensorSpec):
     The spec will have the shape defined by the ``shape`` argument: if a singleton dimension is
     desired for the training dimension, one should specify it explicitly.
 
+    Attributes:
+        n (int): The number of possible outcomes.
+        shape (torch.Size): The shape of the variable.
+        device (torch.device): The device of the tensors.
+        dtype (torch.dtype): The dtype of the tensors.
+
     Args:
-        n (int): number of possible outcomes.
+        n (int): number of possible outcomes. If set to -1, the cardinality of the categorical spec is undefined,
+            and `set_provisional_n` must be called before sampling from this spec.
         shape: (torch.Size, optional): shape of the variable, default is "torch.Size([])".
-        device (str, int or torch.device, optional): device of the tensors.
-        dtype (str or torch.dtype, optional): dtype of the tensors.
-        mask (torch.Tensor or None): mask some of the possible outcomes when a
-            sample is taken. See :meth:`~.update_mask` for more information.
+        device (str, int or torch.device, optional): the device of the tensors.
+        dtype (str or torch.dtype, optional): the dtype of the tensors.
+        mask (torch.Tensor or None): A boolean mask to prevent some of the possible outcomes when a sample is taken.
+            See :meth:`~.update_mask` for more information.
 
     Examples:
         >>> categ = Categorical(3)
@@ -3249,6 +3310,13 @@ class Categorical(TensorSpec):
             domain=discrete)
         >>> categ.rand()
         tensor([1])
+        >>> categ = Categorical(-1)
+        >>> categ.set_provisional_n(5)
+        >>> categ.rand()
+        tensor(3)
+
+    .. note:: When n is set to -1, calling `rand` without first setting a provisional n using `set_provisional_n`
+        will raise a ``RuntimeError``.
 
     """
 
@@ -3270,22 +3338,43 @@ class Categorical(TensorSpec):
     ):
         if shape is None:
             shape = _size([])
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         space = CategoricalBox(n)
         super().__init__(
             shape=shape, space=space, device=device, dtype=dtype, domain="discrete"
         )
         self.update_mask(mask)
+        self._provisional_n = None
+
+    @property
+    def _undefined_n(self):
+        return self.space.n < 0
 
     def enumerate(self) -> torch.Tensor:
-        arange = torch.arange(self.n, dtype=self.dtype, device=self.device)
+        dtype = self.dtype
+        if dtype is torch.bool:
+            dtype = torch.uint8
+        arange = torch.arange(self.n, dtype=dtype, device=self.device)
         if self.ndim:
             arange = arange.view(-1, *(1,) * self.ndim)
         return arange.expand(self.n, *self.shape)
 
     @property
     def n(self):
-        return self.space.n
+        n = self.space.n
+        if n == -1:
+            n = self._provisional_n
+            if n is None:
+                raise RuntimeError(
+                    f"Undefined cardinality for {type(self)}. Please call "
+                    f"spec.set_provisional_n(int)."
+                )
+        return n
+
+    def cardinality(self) -> int:
+        return self.n
 
     def update_mask(self, mask):
         """Sets a mask to prevent some of the possible outcomes when a sample is taken.
@@ -3316,13 +3405,33 @@ class Categorical(TensorSpec):
                 raise ValueError("Only boolean masks are accepted.")
         self.mask = mask
 
+    def set_provisional_n(self, n: int):
+        """Set the cardinality of the Categorical spec temporarily.
+
+        This method is required to be called before sampling from the spec when n is -1.
+
+        Args:
+            n (int): The cardinality of the Categorical spec.
+
+        """
+        self._provisional_n = n
+
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
+        if self._undefined_n:
+            if self._provisional_n is None:
+                raise RuntimeError(
+                    "Cannot generate random categorical samples for undefined cardinality (n=-1). "
+                    "To sample from this class, first call Categorical.set_provisional_n(n) before calling rand()."
+                )
+            n = self._provisional_n
+        else:
+            n = self.space.n
         if shape is None:
             shape = _size([])
         if self.mask is None:
             return torch.randint(
                 0,
-                self.space.n,
+                n,
                 _size([*shape, *self.shape]),
                 device=self.device,
                 dtype=self.dtype,
@@ -3334,6 +3443,12 @@ class Categorical(TensorSpec):
         else:
             mask_flat = mask
         shape_out = mask.shape[:-1]
+        # Check that the mask has the right size
+        if mask_flat.shape[-1] != n:
+            raise ValueError(
+                "The last dimension of the mask must match the number of action allowed by the "
+                f"Categorical spec. Got mask.shape={self.mask.shape} and n={n}."
+            )
         out = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
         return out
 
@@ -3360,6 +3475,8 @@ class Categorical(TensorSpec):
             dtype_match = val.dtype == self.dtype
             if not dtype_match:
                 return False
+            if self.space.n == -1:
+                return True
             return (0 <= val).all() and (val < self.space.n).all()
         shape = self.mask.shape
         shape = _size([*torch.broadcast_shapes(shape[:-1], val.shape), shape[-1]])
@@ -3607,7 +3724,7 @@ class Binary(Categorical):
         device: Optional[DEVICE_TYPING] = None,
         dtype: Union[str, torch.dtype] = torch.int8,
     ):
-        if n is None and not shape:
+        if n is None and shape is None:
             raise TypeError("Must provide either n or shape.")
         if n is None:
             n = shape[-1]
@@ -3770,7 +3887,9 @@ class MultiCategorical(Categorical):
         if nvec.ndim < 1:
             nvec = nvec.unsqueeze(0)
         self.nvec = nvec
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if shape is None:
             shape = nvec.shape
         else:
@@ -3812,6 +3931,9 @@ class MultiCategorical(Categorical):
         arange = arange.view(arange.shape[0], *(1,) * (self.ndim - 1), self.shape[-1])
         arange = arange.expand(arange.shape[0], *self.shape)
         return arange
+
+    def cardinality(self) -> int:
+        return self.nvec._base.prod()
 
     def update_mask(self, mask):
         """Sets a mask to prevent some of the possible outcomes when a sample is taken.
@@ -4797,6 +4919,18 @@ class Composite(TensorSpec):
             device=device,
             shape=self.shape,
         )
+
+    def cardinality(self) -> int:
+        n = None
+        for spec in self.values():
+            if spec is None:
+                continue
+            if n is None:
+                n = 1
+            n = n * spec.cardinality()
+        if n is None:
+            n = 0
+        return n
 
     def enumerate(self) -> TensorDictBase:
         # We are going to use meshgrid to create samples of all the subspecs in here

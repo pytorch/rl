@@ -6,13 +6,18 @@
 This is a self-contained example of an offline Decision Transformer training script.
 The helper functions are coded in the utils.py associated with this script.
 """
-import time
+
+from __future__ import annotations
+
+import warnings
 
 import hydra
 import numpy as np
 import torch
 import tqdm
-from torchrl._utils import logger as torchrl_logger
+from tensordict import TensorDict
+from tensordict.nn import CudaGraphModule
+from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.libs.gym import set_gym_backend
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -65,58 +70,80 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create policy model
-    actor = make_dt_model(cfg)
-    policy = actor.to(model_device)
+    actor = make_dt_model(cfg, device=model_device)
 
     # Create loss
-    loss_module = make_dt_loss(cfg.loss, actor)
+    loss_module = make_dt_loss(cfg.loss, actor, device=model_device)
 
     # Create optimizer
-    transformer_optim, scheduler = make_dt_optimizer(cfg.optim, loss_module)
+    transformer_optim, scheduler = make_dt_optimizer(
+        cfg.optim, loss_module, model_device
+    )
 
     # Create inference policy
     inference_policy = DecisionTransformerInferenceWrapper(
-        policy=policy,
+        policy=actor,
         inference_context=cfg.env.inference_context,
-    ).to(model_device)
+        device=model_device,
+    )
     inference_policy.set_tensor_keys(
         observation="observation_cat",
         action="action_cat",
         return_to_go="return_to_go_cat",
     )
 
-    pbar = tqdm.tqdm(total=cfg.optim.pretrain_gradient_steps)
-
     pretrain_gradient_steps = cfg.optim.pretrain_gradient_steps
     clip_grad = cfg.optim.clip_grad
+
+    def update(data: TensorDict) -> TensorDict:
+        transformer_optim.zero_grad(set_to_none=True)
+        # Compute loss
+        loss_vals = loss_module(data)
+        transformer_loss = loss_vals["loss"]
+
+        transformer_loss.backward()
+        torch.nn.utils.clip_grad_norm_(actor.parameters(), clip_grad)
+        transformer_optim.step()
+
+        return loss_vals
+
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
+        if compile_mode in ("", None):
+            if cfg.compile.cudagraphs:
+                compile_mode = "default"
+            else:
+                compile_mode = "reduce-overhead"
+        update = torch.compile(update, mode=compile_mode, dynamic=True)
+    if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
+        update = CudaGraphModule(update, warmup=50)
+
     eval_steps = cfg.logger.eval_steps
     pretrain_log_interval = cfg.logger.pretrain_log_interval
     reward_scaling = cfg.env.reward_scaling
 
     torchrl_logger.info(" ***Pretraining*** ")
     # Pretraining
-    start_time = time.time()
-    for i in range(pretrain_gradient_steps):
-        pbar.update(1)
-
+    pbar = tqdm.tqdm(range(pretrain_gradient_steps))
+    for i in pbar:
+        timeit.printevery(1000, pretrain_gradient_steps, erase=True)
         # Sample data
-        data = offline_buffer.sample()
-        # Compute loss
-        loss_vals = loss_module(data.to(model_device))
-        transformer_loss = loss_vals["loss"]
-
-        transformer_optim.zero_grad()
-        torch.nn.utils.clip_grad_norm_(policy.parameters(), clip_grad)
-        transformer_loss.backward()
-        transformer_optim.step()
-
+        with timeit("rb - sample"):
+            data = offline_buffer.sample().to(model_device)
+        with timeit("update"):
+            loss_vals = update(data)
         scheduler.step()
-
         # Log metrics
-        to_log = {"train/loss": loss_vals["loss"]}
+        metrics_to_log = {"train/loss": loss_vals["loss"]}
 
         # Evaluation
-        with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+        with set_exploration_type(
+            ExplorationType.DETERMINISTIC
+        ), torch.no_grad(), timeit("eval"):
             if i % pretrain_log_interval == 0:
                 eval_td = test_env.rollout(
                     max_steps=eval_steps,
@@ -124,16 +151,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     auto_cast_to_device=True,
                 )
                 test_env.apply(dump_video)
-            to_log["eval/reward"] = (
+            metrics_to_log["eval/reward"] = (
                 eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
             )
+
         if logger is not None:
-            log_metrics(logger, to_log, i)
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            log_metrics(logger, metrics_to_log, i)
 
     pbar.close()
     if not test_env.is_closed:
         test_env.close()
-    torchrl_logger.info(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":

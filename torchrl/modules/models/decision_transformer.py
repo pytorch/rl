@@ -7,6 +7,7 @@ from __future__ import annotations
 import dataclasses
 
 import importlib
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any
 
@@ -92,9 +93,6 @@ class DecisionTransformer(nn.Module):
         config: dict | DTConfig = None,
         device: torch.device | None = None,
     ):
-        if device is not None:
-            with torch.device(device):
-                return self.__init__(state_dim, action_dim, config)
 
         if not _has_transformers:
             raise ImportError(
@@ -117,28 +115,29 @@ class DecisionTransformer(nn.Module):
 
         super(DecisionTransformer, self).__init__()
 
-        gpt_config = transformers.GPT2Config(
-            n_embd=config["n_embd"],
-            n_layer=config["n_layer"],
-            n_head=config["n_head"],
-            n_inner=config["n_inner"],
-            activation_function=config["activation"],
-            n_positions=config["n_positions"],
-            resid_pdrop=config["resid_pdrop"],
-            attn_pdrop=config["attn_pdrop"],
-            vocab_size=1,
-        )
-        self.state_dim = state_dim
-        self.action_dim = action_dim
-        self.hidden_size = config["n_embd"]
+        with torch.device(device) if device is not None else nullcontext():
+            gpt_config = transformers.GPT2Config(
+                n_embd=config["n_embd"],
+                n_layer=config["n_layer"],
+                n_head=config["n_head"],
+                n_inner=config["n_inner"],
+                activation_function=config["activation"],
+                n_positions=config["n_positions"],
+                resid_pdrop=config["resid_pdrop"],
+                attn_pdrop=config["attn_pdrop"],
+                vocab_size=1,
+            )
+            self.state_dim = state_dim
+            self.action_dim = action_dim
+            self.hidden_size = config["n_embd"]
 
-        self.transformer = GPT2Model(config=gpt_config)
+            self.transformer = GPT2Model(config=gpt_config)
 
-        self.embed_return = torch.nn.Linear(1, self.hidden_size)
-        self.embed_state = torch.nn.Linear(self.state_dim, self.hidden_size)
-        self.embed_action = torch.nn.Linear(self.action_dim, self.hidden_size)
+            self.embed_return = torch.nn.Linear(1, self.hidden_size)
+            self.embed_state = torch.nn.Linear(self.state_dim, self.hidden_size)
+            self.embed_action = torch.nn.Linear(self.action_dim, self.hidden_size)
 
-        self.embed_ln = nn.LayerNorm(self.hidden_size)
+            self.embed_ln = nn.LayerNorm(self.hidden_size)
 
     def forward(
         self,
@@ -162,13 +161,9 @@ class DecisionTransformer(nn.Module):
 
         # this makes the sequence look like (R_1, s_1, a_1, R_2, s_2, a_2, ...)
         # which works nice in an autoregressive sense since states predict actions
-        stacked_inputs = (
-            torch.stack(
-                (returns_embeddings, state_embeddings, action_embeddings), dim=-3
-            )
-            .permute(*range(len(batch_size)), -2, -3, -1)
-            .reshape(*batch_size, 3 * seq_length, self.hidden_size)
-        )
+        stacked_inputs = torch.stack(
+            (returns_embeddings, state_embeddings, action_embeddings), dim=-2
+        ).reshape(*batch_size, 3 * seq_length, self.hidden_size)
         stacked_inputs = self.embed_ln(stacked_inputs)
 
         # we feed in the input embeddings (not word indices as in NLP) to the model
@@ -179,9 +174,7 @@ class DecisionTransformer(nn.Module):
 
         # reshape x so that the second dimension corresponds to the original
         # returns (0), states (1), or actions (2); i.e. x[:,1,t] is the token for s_t
-        x = x.reshape(*batch_size, seq_length, 3, self.hidden_size).permute(
-            *range(len(batch_size)), -2, -3, -1
-        )
+        x = x.reshape(*batch_size, seq_length, 3, self.hidden_size).transpose(-3, -2)
         if batch_size_orig is batch_size:
             return x[..., 1, :, :]  # only state tokens
-        return x[..., 1, :, :].view(*batch_size_orig, *x.shape[-2:])
+        return x[..., 1, :, :].reshape(*batch_size_orig, *x.shape[-2:])

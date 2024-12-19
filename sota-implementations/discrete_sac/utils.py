@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import functools
 import tempfile
 from contextlib import nullcontext
@@ -111,7 +113,14 @@ def make_environment(cfg, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(
+    cfg,
+    train_env,
+    actor_model_explore,
+    compile=False,
+    compile_mode=None,
+    cudagraphs=False,
+):
     """Make collector."""
     device = cfg.collector.device
     if device in ("", None):
@@ -129,6 +138,8 @@ def make_collector(cfg, train_env, actor_model_explore):
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
         device=device,
         storing_device="cpu",
+        compile_policy=False if not compile else {"mode": compile_mode},
+        cudagraph_policy=cudagraphs,
     )
     collector.set_seed(cfg.env.seed)
     return collector

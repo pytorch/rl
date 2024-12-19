@@ -2,6 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import warnings
+
 import hydra
 import torch
 
@@ -149,6 +153,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         adv_module = torch.compile(adv_module, mode=compile_mode)
 
     if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
         update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
         adv_module = CudaGraphModule(adv_module)
 
@@ -174,11 +182,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     lr = cfg.optim.lr
 
     c_iter = iter(collector)
-    for i in range(len(collector)):
+    total_iter = len(collector)
+    for i in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
+
         with timeit("collecting"):
             data = next(c_iter)
 
-        log_info = {}
+        metrics_to_log = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
@@ -187,7 +198,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "terminated"]]
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
@@ -231,8 +242,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         losses = torch.stack(losses).float().mean()
 
         for key, value in losses.items():
-            log_info.update({f"train/{key}": value.item()})
-        log_info.update(
+            metrics_to_log.update({f"train/{key}": value.item()})
+        metrics_to_log.update(
             {
                 "train/lr": lr * alpha,
             }
@@ -248,18 +259,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 test_rewards = eval_model(
                     actor_eval, test_env, num_episodes=cfg.logger.num_test_episodes
                 )
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "test/reward": test_rewards.mean(),
                     }
                 )
-        if i % 200 == 0:
-            log_info.update(timeit.todict(prefix="time"))
-            timeit.print()
-            timeit.erase()
 
         if logger:
-            for key, value in log_info.items():
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            for key, value in metrics_to_log.items():
                 logger.log_scalar(key, value, collected_frames)
 
     collector.shutdown()

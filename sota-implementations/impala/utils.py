@@ -2,11 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
-from torchrl.data import Composite
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
@@ -69,7 +69,7 @@ def make_ppo_modules_pixels(proof_environment):
     input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs
-    num_outputs = proof_environment.action_spec.space.n
+    num_outputs = proof_environment.action_spec_unbatched.space.n
     distribution_class = OneHotCategorical
     distribution_kwargs = {}
 
@@ -117,7 +117,7 @@ def make_ppo_modules_pixels(proof_environment):
     policy_module = ProbabilisticActor(
         policy_module,
         in_keys=["logits"],
-        spec=Composite(action=proof_environment.action_spec),
+        spec=proof_environment.full_action_spec_unbatched,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,

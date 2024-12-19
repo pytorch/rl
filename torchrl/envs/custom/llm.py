@@ -2,10 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from typing import Callable, List, Union
 
 import torch
-from tensordict import NestedKey, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 
 from torchrl.data import (
@@ -79,7 +81,7 @@ class LLMHashingEnv(EnvBase):
 
     def __init__(
         self,
-        vocab_size: int | None=None,
+        vocab_size: int | None = None,
         *,
         hashing_module: Callable[[torch.Tensor], torch.Tensor] = None,
         observation_key: NestedKey = "observation",
@@ -90,7 +92,9 @@ class LLMHashingEnv(EnvBase):
         super().__init__()
         if vocab_size is None:
             if tokenizer is None:
-                raise TypeError("You must provide a vocab_size integer if tokenizer is `None`.")
+                raise TypeError(
+                    "You must provide a vocab_size integer if tokenizer is `None`."
+                )
             vocab_size = tokenizer.vocab_size
         self._batch_locked = False
         if hashing_module is None:
@@ -101,7 +105,7 @@ class LLMHashingEnv(EnvBase):
         self.observation_key = observation_key
         observation_spec = {
             observation_key: CategoricalSpec(n=vocab_size, shape=(-1,)),
-            "hash": Unbounded(shape=(1,), dtype=torch.int64),
+            "hashing": Unbounded(shape=(1,), dtype=torch.int64),
         }
         self.text_output = text_output
         if not text_output:
@@ -115,6 +119,16 @@ class LLMHashingEnv(EnvBase):
         self.action_spec = Composite(action=CategoricalSpec(vocab_size, shape=(1,)))
         _StepMDP(self)
 
+    def make_tensordict(self, input: str | List[str]) -> TensorDict:
+        """Converts a string or list of strings in a TensorDict with appropriate shape and device."""
+        list_len = len(input) if isinstance(input, list) else 0
+        tensordict = TensorDict(
+            {self.observation_key: self._tokenizer(input)}, device=self.device
+        )
+        if list_len:
+            tensordict.batch_size = [list_len]
+        return self.reset(tensordict)
+
     def _reset(self, tensordict: TensorDictBase):
         """Initializes the environment with a given observation.
 
@@ -126,7 +140,11 @@ class LLMHashingEnv(EnvBase):
 
         """
         out = tensordict.empty()
-        obs = tensordict.get(self.observation_key)
+        obs = tensordict.get(self.observation_key, None)
+        if obs is None:
+            raise RuntimeError(
+                f"Resetting the {type(self).__name__} environment requires a prompt."
+            )
         if self.text_output:
             if obs.ndim > 1:
                 text = self._tokenizer.batch_decode(obs)
@@ -137,9 +155,9 @@ class LLMHashingEnv(EnvBase):
             out.set(self.text_key, text)
 
         if obs.ndim > 1:
-            out.set("hash", self._hashing_module(obs).unsqueeze(-1))
+            out.set("hashing", self._hashing_module(obs).unsqueeze(-1))
         else:
-            out.set("hash", self._hashing_module(obs.unsqueeze(0)).transpose(0, -1))
+            out.set("hashing", self._hashing_module(obs.unsqueeze(0)).transpose(0, -1))
 
         if not self.full_done_spec.is_empty():
             out.update(self.full_done_spec.zero(tensordict.shape))
@@ -164,7 +182,7 @@ class LLMHashingEnv(EnvBase):
         obs = torch.cat([tensordict.get(self.observation_key), action], -1)
         kwargs = {self.observation_key: obs}
 
-        catval = torch.cat([tensordict.get("hash"), action], -1)
+        catval = torch.cat([tensordict.get("hashing"), action], -1)
         if obs.ndim > 1:
             new_hash = self._hashing_module(catval).unsqueeze(-1)
         else:
@@ -180,7 +198,7 @@ class LLMHashingEnv(EnvBase):
             kwargs[self.text_key] = text
         kwargs.update(
             {
-                "hash": new_hash,
+                "hashing": new_hash,
                 "done": torch.zeros((*tensordict.batch_size, 1), dtype=torch.bool),
                 "terminated": torch.zeros(
                     (*tensordict.batch_size, 1), dtype=torch.bool

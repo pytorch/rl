@@ -555,9 +555,30 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @wraps(check_env_specs_func)
     def check_env_specs(self, *args, **kwargs):
+        return_contiguous = kwargs.pop("return_contiguous", not self._has_dynamic_specs)
+        kwargs["return_contiguous"] = return_contiguous
         return check_env_specs_func(self, *args, **kwargs)
 
     check_env_specs.__doc__ = check_env_specs_func.__doc__
+
+    def cardinality(self, tensordict: TensorDictBase | None = None) -> int:
+        """The cardinality of the action space.
+
+        By default, this is just a wrapper around :meth:`env.action_space.cardinality <~torchrl.data.TensorSpec.cardinality>`.
+
+        This class is useful when the action spec is variable:
+
+        - The number of actions can be undefined, e.g., ``Categorical(n=-1)``;
+        - The action cardinality may depend on the action mask;
+        - The shape can be dynamic, as in ``Unbound(shape=(-1))``.
+
+        In these cases, the :meth:`~.cardinality` should be overwritten,
+
+        Args:
+            tensordict (TensorDictBase, optional): a tensordict containing the data required to compute the cardinality.
+
+        """
+        return self.full_action_spec.cardinality()
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -3266,7 +3287,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         if self._simple_done:
             done = tensordict._get_str("done", default=None)
-            any_done = done.any()
+            if done is not None:
+                any_done = done.any()
+            else:
+                any_done = False
             if any_done:
                 tensordict._set_str(
                     "_reset",

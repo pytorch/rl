@@ -1558,6 +1558,7 @@ class OnlineDTActor(nn.Module):
             state_dim=state_dim,
             action_dim=action_dim,
             config=transformer_config,
+            device=device,
         )
         self.action_layer_mean = nn.Linear(
             transformer_config["n_embd"], action_dim, device=device
@@ -1656,6 +1657,7 @@ class DTActor(nn.Module):
             state_dim=state_dim,
             action_dim=action_dim,
             config=transformer_config,
+            device=device,
         )
         self.action_layer = nn.Linear(
             transformer_config["n_embd"], action_dim, device=device
