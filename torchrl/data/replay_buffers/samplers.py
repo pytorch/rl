@@ -1095,9 +1095,8 @@ class SliceSampler(Sampler):
             f"strict_length={self.strict_length})"
         )
 
-    @classmethod
     def _find_start_stop_traj(
-        cls, *, trajectory=None, end=None, at_capacity: bool, cursor=None
+        self, *, trajectory=None, end=None, at_capacity: bool, cursor=None
     ):
         if trajectory is not None:
             # slower
@@ -1150,7 +1149,7 @@ class SliceSampler(Sampler):
             raise RuntimeError(
                 "Expected the end-of-trajectory signal to be at least 1-dimensional."
             )
-        return cls._end_to_start_stop(length=length, end=end)
+        return self._end_to_start_stop(length=length, end=end)
 
     def _end_to_start_stop(self, end, length):
         device = None
