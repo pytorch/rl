@@ -653,7 +653,8 @@ class LSTMModule(ModuleBase):
             {
                 in_key1: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
                 in_key2: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
-            }
+            },
+            expand_specs=True,
         )
 
     @property
@@ -1467,7 +1468,8 @@ class GRUModule(ModuleBase):
         return TensorDictPrimer(
             {
                 in_key1: Unbounded(shape=(self.gru.num_layers, self.gru.hidden_size)),
-            }
+            },
+            expand_specs=True,
         )
 
     @property
