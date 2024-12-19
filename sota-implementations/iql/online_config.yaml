@@ -15,7 +15,7 @@ collector:
   multi_step: 0
   init_random_frames: 5000
   env_per_collector: 1
-  device: cpu
+  device:
   max_frames_per_traj: 200
 
 # logger
@@ -61,3 +61,8 @@ loss:
 # IQL specific hyperparameter
   temperature: 3.0
   expectile: 0.7
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

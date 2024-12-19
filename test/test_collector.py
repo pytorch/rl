@@ -1345,7 +1345,7 @@ def test_excluded_keys(collector_class, exclude, out_key):
         functools.partial(MultiSyncDataCollector, cat_results="stack"),
     ],
 )
-@pytest.mark.parametrize("init_random_frames", [50])  # 1226: faster execution
+@pytest.mark.parametrize("init_random_frames", [0, 50])  # 1226: faster execution
 @pytest.mark.parametrize(
     "explicit_spec,split_trajs", [[True, True], [False, False]]
 )  # 1226: faster execution

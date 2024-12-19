@@ -75,7 +75,8 @@ class BinaryToDecimal(Module):
 class SipHash(Module):
     """A Module to Compute SipHash values for given tensors.
 
-    A hash function module based on SipHash implementation in python.
+    A hash function module based on SipHash implementation in python. Input tensors should have shape ``[batch_size, num_features]``
+    and the output shape will be ``[batch_size]``.
 
     Args:
         as_tensor (bool, optional): if ``True``, the bytes will be turned into integers
@@ -110,7 +111,7 @@ class SipHash(Module):
             hash_value = x_i.tobytes()
             hash_values.append(hash_value)
         if not self.as_tensor:
-            return hash_value
+            return hash_values
         result = torch.tensor([hash(x) for x in hash_values], dtype=torch.int64)
         return result
 

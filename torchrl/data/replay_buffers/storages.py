@@ -69,7 +69,7 @@ class Storage:
         self.max_size = int(max_size)
         self.checkpointer = checkpointer
         self._compilable = compilable
-        self._attached_entities_set = set()
+        self._attached_entities_list = []
 
     @property
     def checkpointer(self):
@@ -86,17 +86,17 @@ class Storage:
         return len(self) == self.max_size
 
     @property
-    def _attached_entities(self):
+    def _attached_entities(self) -> List:
         # RBs that use a given instance of Storage should add
         # themselves to this set.
-        _attached_entities_set = getattr(self, "_attached_entities_set", None)
-        if _attached_entities_set is None:
-            self._attached_entities_set = _attached_entities_set = set()
-        return _attached_entities_set
+        _attached_entities_list = getattr(self, "_attached_entities_list", None)
+        if _attached_entities_list is None:
+            self._attached_entities_list = _attached_entities_list = []
+        return _attached_entities_list
 
     @torch._dynamo.assume_constant_result
     def _attached_entities_iter(self):
-        return list(self._attached_entities)
+        return self._attached_entities
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any, *, set_cursor: bool = True):
@@ -123,7 +123,8 @@ class Storage:
         Args:
             buffer: the object that reads from this storage.
         """
-        self._attached_entities.add(buffer)
+        if buffer not in self._attached_entities:
+            self._attached_entities.append(buffer)
 
     def __getitem__(self, item):
         return self.get(item)
@@ -246,8 +247,8 @@ class ListStorage(Storage):
         set_cursor: bool = True,
     ):
         if not isinstance(cursor, INT_CLASSES):
-            if (isinstance(cursor, torch.Tensor) and cursor.numel() <= 1) or (
-                isinstance(cursor, np.ndarray) and cursor.size <= 1
+            if (isinstance(cursor, torch.Tensor) and cursor.ndim == 0) or (
+                isinstance(cursor, np.ndarray) and cursor.ndim == 0
             ):
                 self.set(int(cursor), data, set_cursor=set_cursor)
                 return

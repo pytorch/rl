@@ -103,7 +103,7 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix=None) -> str:  # noqa: T202
+    def print(prefix: str = None) -> str:  # noqa: T202
         """Prints the state of the timer.
 
         Returns:
@@ -122,6 +122,25 @@ class timeit:
             string.append(" -- ".join(strings))
             logger.info(string[-1])
         return "\n".join(string)
+
+    _printevery_count = 0
+
+    @classmethod
+    def printevery(
+        cls,
+        num_prints: int,
+        total_count: int,
+        *,
+        prefix: str = None,
+        erase: bool = False,
+    ) -> None:
+        """Prints the state of the timer at regular intervals."""
+        interval = max(1, total_count // num_prints)
+        if cls._printevery_count % interval == 0:
+            cls.print(prefix=prefix)
+            if erase:
+                cls.erase()
+        cls._printevery_count += 1
 
     @classmethod
     def todict(cls, percall=True, prefix=None):
@@ -829,6 +848,7 @@ def _can_be_pickled(obj):
 def _make_ordinal_device(device: torch.device):
     if device is None:
         return device
+    device = torch.device(device)
     if device.type == "cuda" and device.index is None:
         return torch.device("cuda", index=torch.cuda.current_device())
     if device.type == "mps" and device.index is None:
@@ -850,3 +870,53 @@ class _ContextManager:
         cm = self._lock if not is_compiling() else nullcontext()
         with cm:
             self._mode = type
+
+
+@wraps(torch.compile)
+def compile_with_warmup(*args, warmup: int = 1, **kwargs):
+    """Compile a model with warm-up.
+
+    This function wraps :func:`~torch.compile` to add a warm-up phase. During the warm-up phase,
+    the original model is used. After the warm-up phase, the model is compiled using
+    `torch.compile`.
+
+    Args:
+        *args: Arguments to be passed to `torch.compile`.
+        warmup (int): Number of calls to the model before compiling it. Defaults to 1.
+        **kwargs: Keyword arguments to be passed to `torch.compile`.
+
+    Returns:
+        A callable that wraps the original model. If no model is provided, returns a
+        lambda function that takes a model as input and returns the wrapped model.
+
+    Notes:
+        If no model is provided, this function returns a lambda function that can be
+        used to wrap a model later. This allows for delayed compilation of the model.
+
+    Example:
+        >>> model = torch.nn.Linear(5, 3)
+        >>> compiled_model = compile_with_warmup(model, warmup=10)
+        >>> # First 10 calls use the original model
+        >>> # After 10 calls, the model is compiled and used
+    """
+    if len(args):
+        model = args[0]
+        args = ()
+    else:
+        model = kwargs.pop("model", None)
+    if model is None:
+        return lambda model: compile_with_warmup(model, warmup=warmup, **kwargs)
+    else:
+        count = -1
+        compiled_model = model
+
+        @wraps(model)
+        def count_and_compile(*model_args, **model_kwargs):
+            nonlocal count
+            nonlocal compiled_model
+            count += 1
+            if count == warmup:
+                compiled_model = torch.compile(model, *args, **kwargs)
+            return compiled_model(*model_args, **model_kwargs)
+
+        return count_and_compile

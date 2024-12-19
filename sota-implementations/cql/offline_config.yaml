@@ -54,3 +54,8 @@ loss:
   num_random: 10
   with_lagrange: True
   lagrange_thresh: 5.0 # tau
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

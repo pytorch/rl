@@ -339,6 +339,44 @@ jobs:
         bash .github/unittest/linux_libs/scripts_open_spiel/run_test.sh
         bash .github/unittest/linux_libs/scripts_open_spiel/post_process.sh
 
+  unittests-chess:
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      docker-image: "pytorch/manylinux-cuda124"
+      timeout: 120
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="12.1"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_chess/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_chess/install.sh
+        bash .github/unittest/linux_libs/scripts_chess/run_test.sh
+        bash .github/unittest/linux_libs/scripts_chess/post_process.sh
+
   unittests-unity_mlagents:
     strategy:
       matrix:

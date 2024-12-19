@@ -46,6 +46,15 @@ class TestHash:
         hash_b = torch.tensor(hash_module(b))
         assert (hash_a == hash_b).all()
 
+    def test_sip_hash_nontensor(self):
+        a = torch.rand((3, 2))
+        b = a.clone()
+        hash_module = SipHash(as_tensor=False)
+        hash_a = hash_module(a)
+        hash_b = hash_module(b)
+        assert len(hash_a) == 3
+        assert hash_a == hash_b
+
     @pytest.mark.parametrize("n_components", [None, 14])
     @pytest.mark.parametrize("scale", [0.001, 0.01, 1, 100, 1000])
     def test_randomprojection_hash(self, n_components, scale):
@@ -301,6 +310,7 @@ class TestMCTSForest:
     def _make_td(state: torch.Tensor, action: torch.Tensor) -> TensorDict:
         done = torch.zeros_like(action, dtype=torch.bool).unsqueeze(-1)
         reward = action.clone()
+        action = action + torch.arange(action.shape[-1]) / action.shape[-1]
 
         return TensorDict(
             {
@@ -326,7 +336,7 @@ class TestMCTSForest:
         forest.extend(r4)
         return forest
 
-    def _make_forest_intersect(self) -> MCTSForest:
+    def _make_forest_rebranching(self) -> MCTSForest:
         """
         ├── 0
         │   ├── 16
@@ -449,7 +459,7 @@ class TestMCTSForest:
 
     def test_forest_intersect(self):
         state0 = self._state0()
-        forest = self._make_forest_intersect()
+        forest = self._make_forest_rebranching()
         tree = forest.get_tree(state0)
         subtree = forest.get_tree(TensorDict(observation=19))
 
@@ -467,12 +477,109 @@ class TestMCTSForest:
 
     def test_forest_intersect_vertices(self):
         state0 = self._state0()
-        forest = self._make_forest_intersect()
+        forest = self._make_forest_rebranching()
         tree = forest.get_tree(state0)
         assert len(tree.vertices(key_type="path")) > len(tree.vertices(key_type="hash"))
         assert len(tree.vertices(key_type="id")) == len(tree.vertices(key_type="hash"))
         with pytest.raises(ValueError, match="key_type must be"):
             tree.vertices(key_type="another key type")
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym")
+    def test_simple_tree(self):
+        from torchrl.envs import GymEnv
+
+        env = GymEnv("Pendulum-v1")
+        r = env.rollout(10)
+        state0 = r[0]
+        forest = MCTSForest()
+        forest.extend(r)
+        # forest = self._make_forest_intersect()
+        tree = forest.get_tree(state0, compact=False)
+        assert tree.max_length() == 9
+        for p in tree.valid_paths():
+            assert len(p) == 9
+
+    @pytest.mark.parametrize(
+        "tree_type,compact",
+        [
+            ["simple", False],
+            ["forest", False],
+            # parent of rebranching trees are still buggy
+            # ["rebranching", False],
+            # ["rebranching", True],
+        ],
+    )
+    def test_forest_parent(self, tree_type, compact):
+        if tree_type == "simple":
+            if not _has_gym:
+                pytest.skip("requires gym")
+            from torchrl.envs import GymEnv
+
+            env = GymEnv("Pendulum-v1")
+            r = env.rollout(10)
+            state0 = r[0]
+            forest = MCTSForest()
+            forest.extend(r)
+            tree = forest.get_tree(state0, compact=compact)
+        elif tree_type == "forest":
+            state0 = self._state0()
+            forest = self._make_forest()
+            tree = forest.get_tree(state0, compact=compact)
+        else:
+            state0 = self._state0()
+            forest = self._make_forest_rebranching()
+            tree = forest.get_tree(state0, compact=compact)
+        # Check access
+        tree.subtree.parent
+        tree.subtree.subtree.parent
+        tree.subtree.subtree.subtree.parent
+
+        # check present of weakref
+        assert tree.subtree[0]._parent is not None
+        assert tree.subtree[0].subtree[0]._parent is not None
+
+        # Check content
+        assert_close(tree.subtree.parent, tree)
+        for p in tree.valid_paths():
+            root = tree
+            for it in p:
+                node = root.subtree[it]
+                assert_close(node.parent, root)
+                root = node
+
+    def test_forest_action_attr(self):
+        state0 = self._state0()
+        forest = self._make_forest()
+        tree = forest.get_tree(state0)
+        assert tree.branching_action is None
+        assert (tree.subtree.branching_action != tree.subtree.prev_action).any()
+        assert (
+            tree.subtree[0].subtree.branching_action
+            != tree.subtree[0].subtree.prev_action
+        ).any()
+        assert tree.prev_action is None
+
+    @pytest.mark.parametrize("intersect", [False, True])
+    def test_forest_check_obs_match(self, intersect):
+        state0 = self._state0()
+        if intersect:
+            forest = self._make_forest_rebranching()
+        else:
+            forest = self._make_forest()
+        tree = forest.get_tree(state0)
+        for path in tree.valid_paths():
+            prev_tree = tree
+            for p in path:
+                subtree = prev_tree.subtree[p]
+                assert (
+                    subtree.node_data["observation"]
+                    == subtree.rollout[..., -1]["next", "observation"]
+                ).all()
+                assert (
+                    subtree.node_observation
+                    == subtree.rollout[..., -1]["next", "observation"]
+                ).all()
+                prev_tree = subtree
 
 
 if __name__ == "__main__":

@@ -307,7 +307,7 @@ def _process_action_space_spec(action_space, spec):
     return action_space, spec
 
 
-def _find_action_space(action_space):
+def _find_action_space(action_space) -> str:
     if isinstance(action_space, TensorSpec):
         if isinstance(action_space, Composite):
             if "action" in action_space.keys():
