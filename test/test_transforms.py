@@ -7408,7 +7408,7 @@ class TestTensorDictPrimer(TransformBase):
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
             maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
-            TensorDictPrimer(mykey=Unbounded([2, 4])),
+            TensorDictPrimer(mykey=Unbounded([4])),
         )
         try:
             check_env_specs(env)
@@ -7423,11 +7423,39 @@ class TestTensorDictPrimer(TransformBase):
                 pass
 
     @pytest.mark.parametrize("spec_shape", [[4], [2, 4]])
-    def test_trans_serial_env_check(self, spec_shape):
-        env = TransformedEnv(
-            SerialEnv(2, ContinuousActionVecMockEnv),
-            TensorDictPrimer(mykey=Unbounded(spec_shape)),
-        )
+    @pytest.mark.parametrize("expand_specs", [True, False, None])
+    def test_trans_serial_env_check(self, spec_shape, expand_specs):
+        if expand_specs is None:
+            with pytest.warns(FutureWarning, match=""):
+                env = TransformedEnv(
+                    SerialEnv(2, ContinuousActionVecMockEnv),
+                    TensorDictPrimer(
+                        mykey=Unbounded(spec_shape), expand_specs=expand_specs
+                    ),
+                )
+                env.observation_spec
+        elif expand_specs is True:
+            shape = spec_shape[:-1]
+            env = TransformedEnv(
+                SerialEnv(2, ContinuousActionVecMockEnv),
+                TensorDictPrimer(
+                    Composite(mykey=Unbounded(spec_shape), shape=shape),
+                    expand_specs=expand_specs,
+                ),
+            )
+        else:
+            # If we don't expand, we can't use [4]
+            env = TransformedEnv(
+                SerialEnv(2, ContinuousActionVecMockEnv),
+                TensorDictPrimer(
+                    mykey=Unbounded(spec_shape), expand_specs=expand_specs
+                ),
+            )
+            if spec_shape == [4]:
+                with pytest.raises(ValueError):
+                    env.observation_spec
+                return
+
         check_env_specs(env)
         assert "mykey" in env.reset().keys()
         r = env.rollout(3)
@@ -10310,9 +10338,8 @@ class TestKLRewardTransform(TransformBase):
         transform = KLRewardTransform(actor, out_keys=out_key)
         return Compose(
             TensorDictPrimer(
-                primers={
-                    "sample_log_prob": Unbounded(shape=base_env.action_spec.shape[:-1])
-                }
+                sample_log_prob=Unbounded(shape=base_env.action_spec.shape[:-1]),
+                shape=base_env.shape,
             ),
             transform,
         )

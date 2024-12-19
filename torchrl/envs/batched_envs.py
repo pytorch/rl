@@ -1744,14 +1744,39 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # We keep track of which keys are present to let the worker know what
             # should be passed to the env (we don't want to pass done states for instance)
             next_td_keys = list(next_td_passthrough.keys(True, True))
+            next_shared_tensordict_parent = shared_tensordict_parent.get("next")
+
+            # We separate keys that are and are not present in the buffer here and not in step_and_maybe_reset.
+            # The reason we do that is that the policy may write stuff in 'next' that is not part of the specs of
+            # the batched env but part of the specs of a transformed batched env.
+            # If that is the case, `update_` will fail to find the entries to update.
+            # What we do instead is keeping the tensors on the side and putting them back after completing _step.
+            keys_to_update, keys_to_copy = zip(
+                *[
+                    (key, None)
+                    if key in next_shared_tensordict_parent.keys(True, True)
+                    else (None, key)
+                    for key in next_td_keys
+                ]
+            )
+            keys_to_update = [key for key in keys_to_update if key is not None]
+            keys_to_copy = [key for key in keys_to_copy if key is not None]
             data = [
-                {"next_td_passthrough_keys": next_td_keys}
+                {"next_td_passthrough_keys": keys_to_update}
                 for _ in range(self.num_workers)
             ]
-            shared_tensordict_parent.get("next").update_(
-                next_td_passthrough, non_blocking=self.non_blocking
-            )
+            if keys_to_update:
+                next_shared_tensordict_parent.update_(
+                    next_td_passthrough,
+                    non_blocking=self.non_blocking,
+                    keys_to_update=keys_to_update,
+                )
+            if keys_to_copy:
+                next_td_passthrough = next_td_passthrough.select(*keys_to_copy)
+            else:
+                next_td_passthrough = None
         else:
+            next_td_passthrough = None
             data = [{} for _ in range(self.num_workers)]
 
         if self._non_tensor_keys:
@@ -1807,6 +1832,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 LazyStackedTensorDict(*non_tensor_tds),
                 keys_to_update=self._non_tensor_keys,
             )
+        if next_td_passthrough is not None:
+            out.update(next_td_passthrough)
+
         self._sync_w2m()
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
