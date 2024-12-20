@@ -1652,8 +1652,8 @@ class set_recurrent_mode(_DecoratorContextManager):
     """Context manager for setting RNNs recurrent mode.
 
     Args:
-        mode (bool, "recurrent" or "stateful"): the recurrent mode to be used within the context manager.
-            `"recurrent"` leads to `mode=True` and `"stateful"` leads to `mode=False`.
+        mode (bool, "recurrent" or "sequential"): the recurrent mode to be used within the context manager.
+            `"recurrent"` leads to `mode=True` and `"sequential"` leads to `mode=False`.
             An RNN executed with recurrent_mode "on" assumes that the data comes in time batches, otherwise
             it is assumed that each data element in a tensordict is independent of the others.
             The default value of this context manager is ``True``.
