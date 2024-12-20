@@ -592,6 +592,10 @@ class LSTMModule(ModuleBase):
         inputs and outputs (recurrent states) during rollout execution. That way, the data can be shared across
         processes and dealt with properly.
 
+        When using batched environments such as :class:`~torchrl.envs.ParallelEnv`, the transform can be used at the
+        single env instance level (i.e., a batch of transformed envs with tensordict primers set within) or at the
+        batched env instance level (i.e., a transformed batch of regular envs).
+
         Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviors, for instance
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
@@ -649,7 +653,8 @@ class LSTMModule(ModuleBase):
             {
                 in_key1: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
                 in_key2: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
-            }
+            },
+            expand_specs=True,
         )
 
     @property
@@ -1410,6 +1415,10 @@ class GRUModule(ModuleBase):
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
         are not registered within the environment specs.
 
+        When using batched environments such as :class:`~torchrl.envs.ParallelEnv`, the transform can be used at the
+        single env instance level (i.e., a batch of transformed envs with tensordict primers set within) or at the
+        batched env instance level (i.e., a transformed batch of regular envs).
+
         See :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given
         module.
 
@@ -1459,7 +1468,8 @@ class GRUModule(ModuleBase):
         return TensorDictPrimer(
             {
                 in_key1: Unbounded(shape=(self.gru.num_layers, self.gru.hidden_size)),
-            }
+            },
+            expand_specs=True,
         )
 
     @property
@@ -1642,8 +1652,8 @@ class set_recurrent_mode(_DecoratorContextManager):
     """Context manager for setting RNNs recurrent mode.
 
     Args:
-        mode (bool, "recurrent" or "stateful"): the recurrent mode to be used within the context manager.
-            `"recurrent"` leads to `mode=True` and `"stateful"` leads to `mode=False`.
+        mode (bool, "recurrent" or "sequential"): the recurrent mode to be used within the context manager.
+            `"recurrent"` leads to `mode=True` and `"sequential"` leads to `mode=False`.
             An RNN executed with recurrent_mode "on" assumes that the data comes in time batches, otherwise
             it is assumed that each data element in a tensordict is independent of the others.
             The default value of this context manager is ``True``.
