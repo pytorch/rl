@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import functools
 import os
 
 import pytest
@@ -12,6 +13,7 @@ import torch
 import torchrl.modules
 from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
+from tensordict.utils import assert_close
 from torch import nn
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs import (
@@ -938,10 +940,12 @@ class TestLSTMModule:
     @pytest.mark.parametrize("python_based", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
     @pytest.mark.parametrize("heterogeneous", [True, False])
-    def test_lstm_parallel_env(self, python_based, parallel, heterogeneous):
+    @pytest.mark.parametrize("within", [False, True])
+    def test_lstm_parallel_env(self, python_based, parallel, heterogeneous, within):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
         torch.manual_seed(0)
+        num_envs = 3
         device = "cuda" if torch.cuda.device_count() else "cpu"
         # tests that hidden states are carried over with parallel envs
         lstm_module = LSTMModule(
@@ -958,25 +962,36 @@ class TestLSTMModule:
         else:
             cls = SerialEnv
 
-        def create_transformed_env():
-            primer = lstm_module.make_tensordict_primer()
-            env = DiscreteActionVecMockEnv(
-                categorical_action_encoding=True, device=device
+        if within:
+
+            def create_transformed_env():
+                primer = lstm_module.make_tensordict_primer()
+                env = DiscreteActionVecMockEnv(
+                    categorical_action_encoding=True, device=device
+                )
+                env = TransformedEnv(env)
+                env.append_transform(InitTracker())
+                env.append_transform(primer)
+                return env
+
+        else:
+            create_transformed_env = functools.partial(
+                DiscreteActionVecMockEnv,
+                categorical_action_encoding=True,
+                device=device,
             )
-            env = TransformedEnv(env)
-            env.append_transform(InitTracker())
-            env.append_transform(primer)
-            return env
 
         if heterogeneous:
             create_transformed_env = [
-                EnvCreator(create_transformed_env),
-                EnvCreator(create_transformed_env),
+                EnvCreator(create_transformed_env) for _ in range(num_envs)
             ]
         env = cls(
             create_env_fn=create_transformed_env,
-            num_workers=2,
+            num_workers=num_envs,
         )
+        if not within:
+            env = env.append_transform(InitTracker())
+            env.append_transform(lstm_module.make_tensordict_primer())
 
         mlp = TensorDictModule(
             MLP(
@@ -1002,6 +1017,19 @@ class TestLSTMModule:
             data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
             assert (data.get(("next", "recurrent_state_c")) != 0.0).all()
             assert (data.get("recurrent_state_c") != 0.0).any()
+        return data
+
+    @pytest.mark.parametrize("python_based", [True, False])
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("heterogeneous", [True, False])
+    def test_lstm_parallel_within(self, python_based, parallel, heterogeneous):
+        out_within = self.test_lstm_parallel_env(
+            python_based, parallel, heterogeneous, within=True
+        )
+        out_not_within = self.test_lstm_parallel_env(
+            python_based, parallel, heterogeneous, within=False
+        )
+        assert_close(out_within, out_not_within)
 
     @pytest.mark.skipif(
         not _has_functorch, reason="vmap can only be used with functorch"
@@ -1330,10 +1358,12 @@ class TestGRUModule:
     @pytest.mark.parametrize("python_based", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
     @pytest.mark.parametrize("heterogeneous", [True, False])
-    def test_gru_parallel_env(self, python_based, parallel, heterogeneous):
+    @pytest.mark.parametrize("within", [False, True])
+    def test_gru_parallel_env(self, python_based, parallel, heterogeneous, within):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
         torch.manual_seed(0)
+        num_workers = 3
 
         device = "cuda" if torch.cuda.device_count() else "cpu"
         # tests that hidden states are carried over with parallel envs
@@ -1347,15 +1377,24 @@ class TestGRUModule:
             python_based=python_based,
         )
 
-        def create_transformed_env():
-            primer = gru_module.make_tensordict_primer()
-            env = DiscreteActionVecMockEnv(
-                categorical_action_encoding=True, device=device
+        if within:
+
+            def create_transformed_env():
+                primer = gru_module.make_tensordict_primer()
+                env = DiscreteActionVecMockEnv(
+                    categorical_action_encoding=True, device=device
+                )
+                env = TransformedEnv(env)
+                env.append_transform(InitTracker())
+                env.append_transform(primer)
+                return env
+
+        else:
+            create_transformed_env = functools.partial(
+                DiscreteActionVecMockEnv,
+                categorical_action_encoding=True,
+                device=device,
             )
-            env = TransformedEnv(env)
-            env.append_transform(InitTracker())
-            env.append_transform(primer)
-            return env
 
         if parallel:
             cls = ParallelEnv
@@ -1363,14 +1402,17 @@ class TestGRUModule:
             cls = SerialEnv
         if heterogeneous:
             create_transformed_env = [
-                EnvCreator(create_transformed_env),
-                EnvCreator(create_transformed_env),
+                EnvCreator(create_transformed_env) for _ in range(num_workers)
             ]
 
-        env = cls(
+        env: ParallelEnv | SerialEnv = cls(
             create_env_fn=create_transformed_env,
-            num_workers=2,
+            num_workers=num_workers,
         )
+        if not within:
+            primer = gru_module.make_tensordict_primer()
+            env = env.append_transform(InitTracker())
+            env.append_transform(primer)
 
         mlp = TensorDictModule(
             MLP(
@@ -1396,6 +1438,19 @@ class TestGRUModule:
             data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
             assert (data.get("recurrent_state") != 0.0).any()
             assert (data.get(("next", "recurrent_state")) != 0.0).all()
+        return data
+
+    @pytest.mark.parametrize("python_based", [True, False])
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("heterogeneous", [True, False])
+    def test_gru_parallel_within(self, python_based, parallel, heterogeneous):
+        out_within = self.test_gru_parallel_env(
+            python_based, parallel, heterogeneous, within=True
+        )
+        out_not_within = self.test_gru_parallel_env(
+            python_based, parallel, heterogeneous, within=False
+        )
+        assert_close(out_within, out_not_within)
 
     @pytest.mark.skipif(
         not _has_functorch, reason="vmap can only be used with functorch"
