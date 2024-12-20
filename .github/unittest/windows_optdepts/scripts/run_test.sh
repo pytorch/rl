@@ -2,8 +2,7 @@
 
 set -e
 
-eval "$(./conda/Scripts/conda.exe 'shell.bash' 'hook')"
-conda activate ./env
+conda activate torchrl
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 source "$this_dir/set_cuda_envs.sh"
