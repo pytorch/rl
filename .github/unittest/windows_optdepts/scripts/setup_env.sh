@@ -15,10 +15,10 @@ cd "${root_dir}"
 
 # 2. Create test environment at ./env
 printf "* Creating a test environment\n"
-conda create --prefix torchrl -y python="$PYTHON_VERSION"
+conda init bash
+conda create -n torchrl -y python="$PYTHON_VERSION"
 
 printf "* Activating the environment"
-conda deactivate
 conda activate torchrl
 
 printf "Python version"
