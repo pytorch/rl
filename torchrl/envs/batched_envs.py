@@ -730,18 +730,19 @@ class BatchedEnvBase(EnvBase):
                     )
                 )
             env_output_keys = env_output_keys.union(self.reward_keys + self.done_keys)
-            env_obs_keys = [
-                key for key in env_obs_keys if key not in self._non_tensor_keys
-            ]
-            env_input_keys = [
-                key for key in env_input_keys if key not in self._non_tensor_keys
-            ]
-            env_output_keys = [
-                key for key in env_output_keys if key not in self._non_tensor_keys
-            ]
             self._env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self._env_input_keys = sorted(env_input_keys, key=_sort_keys)
             self._env_output_keys = sorted(env_output_keys, key=_sort_keys)
+
+        self._env_obs_keys = [
+            key for key in self._env_obs_keys if key not in self._non_tensor_keys
+        ]
+        self._env_input_keys = [
+            key for key in self._env_input_keys if key not in self._non_tensor_keys
+        ]
+        self._env_output_keys = [
+            key for key in self._env_output_keys if key not in self._non_tensor_keys
+        ]
 
         reset_keys = self.reset_keys
         self._selected_keys = (
