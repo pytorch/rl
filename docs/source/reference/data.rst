@@ -188,6 +188,9 @@ were found from rough benchmarking in https://github.com/pytorch/rl/tree/main/be
 | :class:`LazyMemmapStorage`    | 3.44x     |
 +-------------------------------+-----------+
 
+You can also read more about distributed replay buffers in https://github.com/pytorch/rl/tree/main/knowledge_base/DISTRIBUTED_BUFFER.md
+and find examples of dummy training loops in https://github.com/pytorch/rl/tree/main/examples/replay-buffers/
+
 Sharing replay buffers across processes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
