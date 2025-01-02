@@ -92,6 +92,7 @@ from torchrl.data import (
     TensorSpec,
     TensorStorage,
     Unbounded,
+    UnboundedContinuous,
 )
 from torchrl.envs import (
     ActionMask,
@@ -117,6 +118,7 @@ from torchrl.envs import (
     GrayScale,
     gSDENoise,
     InitTracker,
+    LineariseRewards,
     MultiStepTransform,
     NoopResetEnv,
     ObservationNorm,
@@ -12401,6 +12403,179 @@ class TestActionDiscretizer(TransformBase):
 
     def test_transform_inverse(self):
         pytest.skip("Tested elsewhere")
+
+
+class TestLineariseRewards(TransformBase):
+    @pytest.mark.parametrize(
+        "weights, error_substring",
+        [
+            (torch.ones(size=(2, 4)), "Expected weights to be a unidimensional tensor"),
+            (-torch.ones(size=(2,)), "Expected all weights to be >0"),
+        ],
+        ids=["non-vec-weights", "non-positive-weights"],
+    )
+    def test_raise_error_for_invalid_weights(
+        self, weights: torch.Tensor, error_substring: str
+    ) -> None:
+        with pytest.raises(ValueError, match=error_substring):
+            LineariseRewards(in_keys=("reward",), weights=weights)
+
+    @pytest.mark.parametrize(
+        "weights, reward_spec, expected_spec",
+        [
+            (None, UnboundedContinuous(shape=3), UnboundedContinuous(shape=1)),
+            (
+                None,
+                Bounded(low=[0, 0, 0], high=[1, 1, 1], shape=3, domain="continuous"),
+                Bounded(low=0, high=3, shape=1, domain="continuous"),
+            ),
+            (
+                None,
+                Bounded(
+                    low=[-1.0, -2.0], high=[1.0, 2.0], shape=2, domain="continuous"
+                ),
+                Bounded(low=-3.0, high=3.0, shape=1, domain="continuous"),
+            ),
+            (
+                [1.0, 0.0],
+                Bounded(
+                    low=[-1.0, -2.0], high=[1.0, 2.0], shape=2, domain="continuous"
+                ),
+                Bounded(low=-1.0, high=1.0, shape=1, domain="continuous"),
+            ),
+            (
+                [-1.0, 0.0],
+                Bounded(
+                    low=[-1.0, -2.0], high=[1.0, 2.0], shape=2, domain="continuous"
+                ),
+                Bounded(low=-1.0, high=1.0, shape=1, domain="continuous"),
+            ),
+        ],
+    )
+    def test_reward_spec(
+        self,
+        weights: list[float] | None,
+        reward_spec: TensorSpec,
+        expected_spec: TensorSpec,
+    ) -> None:
+        context = contextlib.nullcontext()
+        if weights is not None and any(w < 0 for w in weights):
+            context = pytest.raises(ValueError, match="Expected all weights to be >0")  # type: ignore[assignment]
+
+        with context:
+            transform = LineariseRewards(in_keys=("reward",), weights=weights)
+            assert transform.transform_reward_spec(reward_spec) == expected_spec
+
+    @pytest.mark.parametrize(
+        "weights, reward_spec, expected_spec",
+        [
+            (
+                None,
+                Composite(
+                    agent_0=Composite(
+                        reward=Bounded(
+                            low=[0, 0, 0], high=[1, 1, 1], shape=3, domain="continuous"
+                        )
+                    ),
+                    agent_1=Composite(
+                        reward=Bounded(
+                            low=[-1, -1, -1],
+                            high=[1, 1, 1],
+                            shape=3,
+                            domain="continuous",
+                        )
+                    ),
+                ),
+                Composite(
+                    agent_0=Composite(
+                        reward=Bounded(low=0, high=3, shape=1, domain="continuous")
+                    ),
+                    agent_1=Composite(
+                        reward=Bounded(low=-3, high=3, shape=1, domain="continuous")
+                    ),
+                ),
+            )
+        ],
+    )
+    def test_composite_reward_spec(
+        self,
+        weights: list[float] | None,
+        reward_spec: TensorSpec,
+        expected_spec: TensorSpec,
+    ) -> None:
+        context = contextlib.nullcontext()
+        if weights is not None and any(w < 0 for w in weights):
+            context = pytest.raises(ValueError, match="Expected all weights to be >0")  # type: ignore[assignment]
+
+        with context:
+            transform = LineariseRewards(
+                in_keys=[("agent_0", "reward"), ("agent_1", "reward")], weights=weights
+            )
+            assert transform.transform_reward_spec(reward_spec) == expected_spec
+
+    class _DummyMultiObjectiveEnv(EnvBase):  # type: ignore[misc]
+        """A dummy multi-objective environment."""
+
+        def __init__(self, num_rewards: int) -> None:
+            super().__init__()
+            self._num_rewards = num_rewards
+
+            self.observation_spec = Composite(
+                observation=UnboundedContinuous((*self.batch_size, 3))
+            )
+            self.action_spec = Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+            self.done_spec = Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+            self.full_done_spec["truncated"] = self.full_done_spec["terminated"].clone()
+            self.reward_spec = UnboundedContinuous(*self.batch_size, num_rewards)
+
+        def _reset(self, tensordict: TensorDict) -> TensorDict:
+            return self.observation_spec.sample()
+
+        def _step(self, tensordict: TensorDict) -> TensorDict:
+            done, terminated = False, False
+            reward = torch.randn((self._num_rewards,))
+
+            return TensorDict(
+                {
+                    ("observation"): self.observation_spec["observation"].sample(),
+                    ("done"): done,
+                    ("terminated"): terminated,
+                    ("reward"): reward,
+                }
+            )
+
+        def _set_seed(self) -> None:
+            pass
+
+    @pytest.mark.parametrize(
+        "n_rewards, weights",
+        [(1, None), (3, None), (1, [1.0]), (2, [1.0, 2.0]), (2, [-1.0, -2.0])],
+    )
+    def test_reward_value(self, n_rewards: int, weights: list[float] | None) -> None:
+        weights = weights if weights is not None else [1.0 for _ in range(n_rewards)]
+
+        context = contextlib.nullcontext()
+        if any(w < 0 for w in weights):
+            context = pytest.raises(ValueError, match="Expected all weights to be >0")  # type: ignore[assignment]
+
+        with context:
+            transform = LineariseRewards(
+                in_keys=("reward",), out_keys=("scalar_reward",), weights=weights
+            )
+            env = TransformedEnv(self._DummyMultiObjectiveEnv(n_rewards), transform)
+            rollout = env.rollout(10)
+            scalar_reward = rollout.get(("next", "scalar_reward"))
+            assert scalar_reward.shape[-1] == 1
+
+            expected = sum(
+                w * r
+                for w, r in zip(
+                    weights,
+                    rollout.get(("next", "reward")).split(1, dim=-1),
+                    strict=False,
+                )
+            )
+            torch.testing.assert_close(scalar_reward, expected)
 
 
 if __name__ == "__main__":
