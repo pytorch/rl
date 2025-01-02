@@ -32,6 +32,7 @@ from .transforms import (
     GrayScale,
     gSDENoise,
     InitTracker,
+    LineariseRewards,
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
