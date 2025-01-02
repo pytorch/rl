@@ -4234,7 +4234,7 @@ class CatTensors(Transform):
         del_keys (bool, optional): if ``True``, the input values will be deleted after
             concatenation. Default is ``True``.
         unsqueeze_if_oor (bool, optional): if ``True``, CatTensor will check that
-            the dimension indicated exist for the tensors to concatenate. If not,
+            the indicated dimension exists for the tensors to concatenate. If not,
             the tensors will be unsqueezed along that dimension.
             Default is ``False``.
         sort (bool, optional): if ``True``, the keys will be sorted in the
@@ -7709,7 +7709,7 @@ class BurnInTransform(Transform):
 
     .. note::
         This transform expects as inputs TensorDicts with its last dimension being the
-        time dimension. It also  assumes that all provided modules can process
+        time dimension. It also assumes that all provided modules can process
         sequential data.
 
     Examples:
