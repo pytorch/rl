@@ -71,6 +71,7 @@ from torchrl.data.tensor_specs import (
     OneHot,
     TensorSpec,
     Unbounded,
+    UnboundedContinuous,
 )
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
@@ -9287,3 +9288,105 @@ class TrajCounter(Transform):
             high=torch.iinfo(torch.int64).max,
         )
         return super().transform_observation_spec(observation_spec)
+
+
+class LineariseRewards(Transform):
+    """Transforms a multi-objective reward signal to a single-objective one via a weighted sum.
+
+    Args:
+        in_keys: The keys under which the multi-objective rewards are found
+        out_keys: The keys under which single-objective rewards should be written. Defaults to `in_keys`.
+        weights: Dictates how to weight each reward when summing them. Defaults to `[1.0, 1.0, ...]`.
+
+    Warning:
+        If a sequence of `in_keys` of length strictly greater than one is passed (e.g. one group for each agent in a
+        multi-agent set-up), the same weights will be applied for each entry. If you need to aggregate rewards
+        differently for each group, use several `AggregateRewardsTransform` in a row.
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey] | None = None,
+        *,
+        weights: Sequence[float] | Tensor | None = None,
+    ) -> None:
+        out_keys = in_keys if out_keys is None else out_keys
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+
+        if weights is not None:
+            weights = weights if isinstance(weights, Tensor) else torch.tensor(weights)
+
+            # This transform should only receive vectorial weights (all batch dimensions will be aggregated similarly).
+            if weights.ndim >= 2:
+                raise ValueError(
+                    f"Expected weights to be a unidimensional tensor. Got {weights.ndim} dimension."
+                )
+
+            # Avoids switching from reward to costs.
+            if (weights < 0).any():
+                raise ValueError(f"Expected all weights to be >0. Got {weights}.")
+
+            self.register_buffer("weights", weights)
+        else:
+            self.weights = None
+
+    @_apply_to_composite
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        if not reward_spec.domain == "continuous":
+            raise NotImplementedError(
+                "Aggregation of rewards that take discrete values is not supported."
+            )
+
+        *batch_size, num_rewards = reward_spec.shape
+        weights = (
+            torch.ones(num_rewards, device=reward_spec.device)
+            if self.weights is None
+            else self.weights
+        )
+
+        num_weights = torch.numel(weights)
+        if num_weights != num_rewards:
+            raise ValueError(
+                "The number of rewards and weights should match."
+                f"Got: {num_rewards} and {num_weights}"
+            )
+
+        if isinstance(reward_spec, UnboundedContinuous):
+            reward_spec.shape = torch.Size([*batch_size, 1])
+            return reward_spec
+
+        # The lines below are correct only if all weights are positive.
+        low = (weights * reward_spec.space.low).sum(dim=-1)
+        high = (weights * reward_spec.space.high).sum(dim=-1)
+
+        return Bounded(
+            shape=torch.Size([*batch_size, 1]),
+            low=low,
+            high=high,
+            domain="continuous",
+            device=reward_spec.device,
+            dtype=reward_spec.dtype,
+        )
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        def _agg_reward(reward: Tensor) -> Tensor:
+            """Aggregates a reward Tensor according to a weighted sum."""
+            if self.weights is None:
+                return reward.sum(dim=-1)
+
+            *batch_size, num_rewards = reward.shape
+            num_weights = torch.numel(self.weights)
+            if num_weights != num_rewards:
+                raise ValueError(
+                    "The number of rewards and weights should match."
+                    f"Got: {num_rewards} and {num_weights}."
+                )
+
+            return (self.weights * reward).sum(dim=-1)
+
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
+            agg_reward = _agg_reward(tensordict.get(in_key))
+            tensordict.set(out_key, agg_reward)
+
+        return tensordict
