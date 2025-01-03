@@ -9303,6 +9303,29 @@ class LineariseRewards(Transform):
         If a sequence of `in_keys` of length strictly greater than one is passed (e.g. one group for each agent in a
         multi-agent set-up), the same weights will be applied for each entry. If you need to aggregate rewards
         differently for each group, use several `AggregateRewardsTransform` in a row.
+
+    Example:
+        >>> import mo_gymnasium as mo_gym
+        >>> from torchrl.envs import MOGymWrapper
+        >>> mo_env = MOGymWrapper(mo_gym.make("deep-sea-treasure-v0"))
+        >>> mo_env.reward_spec
+        BoundedContinuous(
+            shape=torch.Size([2]),
+            space=ContinuousBox(
+            low=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, contiguous=True),
+            high=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, contiguous=True)),
+            ...)
+        >>> so_env = TransformedEnv(mo_env, LineariseRewards(in_keys=("reward",)))
+        >>> so_env.reward_spec
+        BoundedContinuous(
+            shape=torch.Size([1]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+            ...)
+        >>> td = so_env.rollout(5)
+        >>> td["next", "reward"].shape
+        [5, 1]
     """
 
     def __init__(
