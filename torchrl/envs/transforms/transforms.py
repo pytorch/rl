@@ -9368,24 +9368,16 @@ class LineariseRewards(Transform):
             dtype=reward_spec.dtype,
         )
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        def _agg_reward(reward: Tensor) -> Tensor:
-            """Aggregates a reward Tensor according to a weighted sum."""
-            if self.weights is None:
-                return reward.sum(dim=-1)
+    def _apply_transform(self, reward: Tensor) -> TensorDictBase:
+        if self.weights is None:
+            return reward.sum(dim=-1)
 
-            *batch_size, num_rewards = reward.shape
-            num_weights = torch.numel(self.weights)
-            if num_weights != num_rewards:
-                raise ValueError(
-                    "The number of rewards and weights should match."
-                    f"Got: {num_rewards} and {num_weights}."
-                )
+        *batch_size, num_rewards = reward.shape
+        num_weights = torch.numel(self.weights)
+        if num_weights != num_rewards:
+            raise ValueError(
+                "The number of rewards and weights should match."
+                f"Got: {num_rewards} and {num_weights}."
+            )
 
-            return (self.weights * reward).sum(dim=-1)
-
-        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
-            agg_reward = _agg_reward(tensordict.get(in_key))
-            tensordict.set(out_key, agg_reward)
-
-        return tensordict
+        return (self.weights * reward).sum(dim=-1)
