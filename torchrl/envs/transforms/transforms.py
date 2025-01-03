@@ -63,6 +63,7 @@ from torchrl._utils import (
 from torchrl.data.tensor_specs import (
     Binary,
     Bounded,
+    BoundedContinuous,
     Categorical,
     Composite,
     ContinuousBox,
@@ -9357,14 +9358,12 @@ class LineariseRewards(Transform):
             return reward_spec
 
         # The lines below are correct only if all weights are positive.
-        low = (weights * reward_spec.space.low).sum(dim=-1)
-        high = (weights * reward_spec.space.high).sum(dim=-1)
+        low = (weights * reward_spec.space.low).sum(dim=-1, keepdim=True)
+        high = (weights * reward_spec.space.high).sum(dim=-1, keepdim=True)
 
-        return Bounded(
-            shape=torch.Size([*batch_size, 1]),
+        return BoundedContinuous(
             low=low,
             high=high,
-            domain="continuous",
             device=reward_spec.device,
             dtype=reward_spec.dtype,
         )
