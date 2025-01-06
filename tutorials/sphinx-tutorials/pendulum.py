@@ -188,7 +188,7 @@ DEFAULT_Y = 1.0
 #      at the corresponding entries in a new :class:`TensorDict`.
 #
 # Next, the :meth:`~torchrl.envs.EnvBase.step` method will merge the output
-# of :meth:`~torchrl.envs.EnvBase.step` in the input ``tensordict`` to enforce
+# of :meth:`~torchrl.envs.EnvBase._step` in the input ``tensordict`` to enforce
 # input/output consistency.
 #
 # Typically, for stateful environments, this will look like this:

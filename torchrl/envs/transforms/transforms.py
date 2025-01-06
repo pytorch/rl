@@ -3533,7 +3533,7 @@ class DTypeCastTransform(Transform):
         >>> print(td.get("not_transformed").dtype)
         torch.float32
 
-    The same behavior is the rule when environments are constructedw without
+    The same behavior is the rule when environments are constructed without
     specifying the transform keys:
 
     Examples:
@@ -3903,7 +3903,7 @@ class DoubleToFloat(DTypeCastTransform):
         >>> print(td.get("not_transformed").dtype)
         torch.float32
 
-    The same behavior is the rule when environments are constructedw without
+    The same behavior is the rule when environments are constructed without
     specifying the transform keys:
 
     Examples:
