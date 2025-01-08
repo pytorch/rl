@@ -9295,11 +9295,11 @@ class LineariseRewards(Transform):
     """Transforms a multi-objective reward signal to a single-objective one via a weighted sum.
 
     Args:
-        in_keys: The keys under which the multi-objective rewards are found
-        out_keys: The keys under which single-objective rewards should be written. Defaults to `in_keys`.
+        in_keys (List[NestedKey]): The keys under which the multi-objective rewards are found.
+        out_keys (List[NestedKey], optional): The keys under which single-objective rewards should be written. Defaults to :attr:`in_keys`.
         weights: Dictates how to weight each reward when summing them. Defaults to `[1.0, 1.0, ...]`.
 
-    Warning:
+    .. warning::
         If a sequence of `in_keys` of length strictly greater than one is passed (e.g. one group for each agent in a
         multi-agent set-up), the same weights will be applied for each entry. If you need to aggregate rewards
         differently for each group, use several `AggregateRewardsTransform` in a row.
@@ -9372,7 +9372,7 @@ class LineariseRewards(Transform):
         num_weights = torch.numel(weights)
         if num_weights != num_rewards:
             raise ValueError(
-                "The number of rewards and weights should match."
+                "The number of rewards and weights should match. "
                 f"Got: {num_rewards} and {num_weights}"
             )
 
@@ -9399,7 +9399,7 @@ class LineariseRewards(Transform):
         num_weights = torch.numel(self.weights)
         if num_weights != num_rewards:
             raise ValueError(
-                "The number of rewards and weights should match."
+                "The number of rewards and weights should match. "
                 f"Got: {num_rewards} and {num_weights}."
             )
 
