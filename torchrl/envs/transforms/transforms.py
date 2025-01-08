@@ -9297,7 +9297,7 @@ class LineariseRewards(Transform):
     Args:
         in_keys (List[NestedKey]): The keys under which the multi-objective rewards are found.
         out_keys (List[NestedKey], optional): The keys under which single-objective rewards should be written. Defaults to :attr:`in_keys`.
-        weights: Dictates how to weight each reward when summing them. Defaults to `[1.0, 1.0, ...]`.
+        weights (List[float], Tensor, optional): Dictates how to weight each reward when summing them. Defaults to `[1.0, 1.0, ...]`.
 
     .. warning::
         If a sequence of `in_keys` of length strictly greater than one is passed (e.g. one group for each agent in a
