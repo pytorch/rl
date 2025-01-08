@@ -9364,7 +9364,7 @@ class LineariseRewards(Transform):
 
         *batch_size, num_rewards = reward_spec.shape
         weights = (
-            torch.ones(num_rewards, device=reward_spec.device)
+            torch.ones(num_rewards, device=reward_spec.device, dtype=reward_spec.dtype)
             if self.weights is None
             else self.weights
         )
