@@ -84,6 +84,7 @@ from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod
 from torchrl.data import (
     Bounded,
+    BoundedContinuous,
     Categorical,
     Composite,
     LazyTensorStorage,
@@ -94,7 +95,6 @@ from torchrl.data import (
     Unbounded,
     UnboundedContinuous,
 )
-from torchrl.data.tensor_specs import BoundedContinuous
 from torchrl.envs import (
     ActionMask,
     BinarizeReward,
