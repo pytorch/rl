@@ -3,7 +3,7 @@ env:
   env_name: PongNoFrameskip-v4
 
 # Device for the forward and backward passes
-device: "cuda:0"
+device:
 
 # collector
 collector:

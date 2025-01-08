@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import functools
 import tempfile
 from contextlib import nullcontext
@@ -473,12 +475,12 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             spec=Composite(
                 **{
                     "loc": Unbounded(
-                        proof_environment.action_spec.shape,
-                        device=proof_environment.action_spec.device,
+                        proof_environment.action_spec_unbatched.shape,
+                        device=proof_environment.action_spec_unbatched.device,
                     ),
                     "scale": Unbounded(
-                        proof_environment.action_spec.shape,
-                        device=proof_environment.action_spec.device,
+                        proof_environment.action_spec_unbatched.shape,
+                        device=proof_environment.action_spec_unbatched.device,
                     ),
                 }
             ),
@@ -489,7 +491,7 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module):
             default_interaction_type=InteractionType.RANDOM,
             distribution_class=TanhNormal,
             distribution_kwargs={"tanh_loc": True},
-            spec=Composite(**{action_key: proof_environment.action_spec}),
+            spec=Composite(**{action_key: proof_environment.action_spec_unbatched}),
         ),
     )
     return actor_simulator
@@ -530,10 +532,10 @@ def _dreamer_make_actor_real(
                 spec=Composite(
                     **{
                         "loc": Unbounded(
-                            proof_environment.action_spec.shape,
+                            proof_environment.action_spec_unbatched.shape,
                         ),
                         "scale": Unbounded(
-                            proof_environment.action_spec.shape,
+                            proof_environment.action_spec_unbatched.shape,
                         ),
                     }
                 ),
@@ -544,7 +546,7 @@ def _dreamer_make_actor_real(
                 default_interaction_type=InteractionType.DETERMINISTIC,
                 distribution_class=TanhNormal,
                 distribution_kwargs={"tanh_loc": True},
-                spec=Composite(**{action_key: proof_environment.action_spec.to("cpu")}),
+                spec=proof_environment.full_action_spec_unbatched.to("cpu"),
             ),
         ),
         SafeModule(

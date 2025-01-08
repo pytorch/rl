@@ -695,10 +695,15 @@ class TanhDelta(FasterTransformedDistribution):
     ):
         minmax_msg = "high value has been found to be equal or less than low value"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
-            if not (high > low).all():
-                raise ValueError(minmax_msg)
+            if is_dynamo_compiling():
+                assert (high > low).all()
+            else:
+                if not (high > low).all():
+                    raise ValueError(minmax_msg)
         elif isinstance(high, Number) and isinstance(low, Number):
-            if high <= low:
+            if is_dynamo_compiling():
+                assert high > low
+            elif high <= low:
                 raise ValueError(minmax_msg)
         else:
             if not all(high > low):

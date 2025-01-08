@@ -47,6 +47,7 @@ from torchrl._utils import (
     _ProcessNoWarn,
     _replace_last,
     accept_remote_rref_udf_invocation,
+    compile_with_warmup,
     logger as torchrl_logger,
     prod,
     RL_WARNINGS,
@@ -660,7 +661,9 @@ class SyncDataCollector(DataCollectorBase):
             self.policy_weights = TensorDict()
 
         if self.compiled_policy:
-            self.policy = torch.compile(self.policy, **self.compiled_policy_kwargs)
+            self.policy = compile_with_warmup(
+                self.policy, **self.compiled_policy_kwargs
+            )
         if self.cudagraphed_policy:
             self.policy = CudaGraphModule(self.policy, **self.cudagraphed_policy_kwargs)
 

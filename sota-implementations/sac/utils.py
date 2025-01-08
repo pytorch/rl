@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import functools
 
 import torch
@@ -9,8 +11,12 @@ from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data import (
+    LazyMemmapStorage,
+    LazyTensorStorage,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.envs import (
     CatTensors,
     Compose,
@@ -103,15 +109,23 @@ def make_environment(cfg, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(cfg, train_env, actor_model_explore, compile_mode):
     """Make collector."""
+    device = cfg.collector.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        else:
+            device = torch.device("cpu")
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
         init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.device,
+        device=device,
+        compile_policy={"mode": compile_mode} if compile_mode else False,
+        cudagraph_policy=cfg.compile.cudagraphs,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -125,16 +139,19 @@ def make_replay_buffer(
     device="cpu",
     prefetch=3,
 ):
+    storage_cls = (
+        functools.partial(LazyTensorStorage, device=device)
+        if not scratch_dir
+        else functools.partial(LazyMemmapStorage, device="cpu", scratch_dir=scratch_dir)
+    )
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,
             beta=0.5,
             pin_memory=False,
             prefetch=prefetch,
-            storage=LazyMemmapStorage(
+            storage=storage_cls(
                 buffer_size,
-                scratch_dir=scratch_dir,
-                device=device,
             ),
             batch_size=batch_size,
         )
@@ -142,13 +159,13 @@ def make_replay_buffer(
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
             prefetch=prefetch,
-            storage=LazyMemmapStorage(
+            storage=storage_cls(
                 buffer_size,
-                scratch_dir=scratch_dir,
-                device=device,
             ),
             batch_size=batch_size,
         )
+    if scratch_dir:
+        replay_buffer.append_transform(lambda td: td.to(device))
     return replay_buffer
 
 
@@ -161,14 +178,14 @@ def make_sac_agent(cfg, train_env, eval_env, device):
     """Make SAC agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec_unbatched
-    actor_net_kwargs = {
-        "num_cells": cfg.network.hidden_sizes,
-        "out_features": 2 * action_spec.shape[-1],
-        "activation_class": get_activation(cfg),
-    }
+    action_spec = train_env.action_spec_unbatched.to(device)
 
-    actor_net = MLP(**actor_net_kwargs)
+    actor_net = MLP(
+        num_cells=cfg.network.hidden_sizes,
+        out_features=2 * action_spec.shape[-1],
+        activation_class=get_activation(cfg),
+        device=device,
+    )
 
     dist_class = TanhNormal
     dist_kwargs = {
@@ -180,7 +197,7 @@ def make_sac_agent(cfg, train_env, eval_env, device):
     actor_extractor = NormalParamExtractor(
         scale_mapping=f"biased_softplus_{cfg.network.default_policy_scale}",
         scale_lb=cfg.network.scale_lb,
-    )
+    ).to(device)
     actor_net = nn.Sequential(actor_net, actor_extractor)
 
     in_keys_actor = in_keys
@@ -203,14 +220,11 @@ def make_sac_agent(cfg, train_env, eval_env, device):
     )
 
     # Define Critic Network
-    qvalue_net_kwargs = {
-        "num_cells": cfg.network.hidden_sizes,
-        "out_features": 1,
-        "activation_class": get_activation(cfg),
-    }
-
     qvalue_net = MLP(
-        **qvalue_net_kwargs,
+        num_cells=cfg.network.hidden_sizes,
+        out_features=1,
+        activation_class=get_activation(cfg),
+        device=device,
     )
 
     qvalue = ValueOperator(
@@ -218,7 +232,7 @@ def make_sac_agent(cfg, train_env, eval_env, device):
         module=qvalue_net,
     )
 
-    model = nn.ModuleList([actor, qvalue]).to(device)
+    model = nn.ModuleList([actor, qvalue])
 
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):

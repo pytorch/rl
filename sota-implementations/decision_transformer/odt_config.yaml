@@ -42,6 +42,7 @@ replay_buffer:
 
 # optimizer
 optim:
+  optimizer: lamb
   device: null
   lr: 1.0e-4
   weight_decay: 5.0e-4
@@ -55,6 +56,11 @@ optim:
 loss: 
   alpha_init: 0.1
   target_entropy: auto
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
 
 # transformer model
 transformer:

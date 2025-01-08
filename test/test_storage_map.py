@@ -46,6 +46,15 @@ class TestHash:
         hash_b = torch.tensor(hash_module(b))
         assert (hash_a == hash_b).all()
 
+    def test_sip_hash_nontensor(self):
+        a = torch.rand((3, 2))
+        b = a.clone()
+        hash_module = SipHash(as_tensor=False)
+        hash_a = hash_module(a)
+        hash_b = hash_module(b)
+        assert len(hash_a) == 3
+        assert hash_a == hash_b
+
     @pytest.mark.parametrize("n_components", [None, 14])
     @pytest.mark.parametrize("scale", [0.001, 0.01, 1, 100, 1000])
     def test_randomprojection_hash(self, n_components, scale):

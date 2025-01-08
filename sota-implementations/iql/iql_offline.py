@@ -9,16 +9,21 @@ This is a self-contained example of an offline IQL training script.
 The helper functions are coded in the utils.py associated with this script.
 
 """
-import time
+from __future__ import annotations
+
+import warnings
 
 import hydra
 import numpy as np
 import torch
 import tqdm
-from torchrl._utils import logger as torchrl_logger
+from tensordict.nn import CudaGraphModule
+
+from torchrl._utils import timeit
 
 from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 from utils import (
@@ -30,6 +35,9 @@ from utils import (
     make_loss,
     make_offline_replay_buffer,
 )
+
+
+torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(config_path="", config_name="offline_config")
@@ -77,75 +85,87 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model = make_iql_model(cfg, train_env, eval_env, device)
 
     # Create loss
-    loss_module, target_net_updater = make_loss(cfg.loss, model)
+    loss_module, target_net_updater = make_loss(cfg.loss, model, device=device)
 
     # Create optimizer
     optimizer_actor, optimizer_critic, optimizer_value = make_iql_optimizer(
         cfg.optim, loss_module
     )
+    optimizer = group_optimizers(optimizer_actor, optimizer_critic, optimizer_value)
 
-    pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
-
-    gradient_steps = cfg.optim.gradient_steps
-    evaluation_interval = cfg.logger.eval_iter
-    eval_steps = cfg.logger.eval_steps
-
-    # Training loop
-    start_time = time.time()
-    for i in range(gradient_steps):
-        pbar.update(1)
-        # sample data
-        data = replay_buffer.sample()
-
-        if data.device != device:
-            data = data.to(device, non_blocking=True)
-
+    def update(data):
+        optimizer.zero_grad(set_to_none=True)
         # compute losses
         loss_info = loss_module(data)
         actor_loss = loss_info["loss_actor"]
         value_loss = loss_info["loss_value"]
         q_loss = loss_info["loss_qvalue"]
 
-        optimizer_actor.zero_grad()
-        actor_loss.backward()
-        optimizer_actor.step()
-
-        optimizer_value.zero_grad()
-        value_loss.backward()
-        optimizer_value.step()
-
-        optimizer_critic.zero_grad()
-        q_loss.backward()
-        optimizer_critic.step()
+        (actor_loss + value_loss + q_loss).backward()
+        optimizer.step()
 
         # update qnet_target params
         target_net_updater.step()
+        return loss_info.detach()
 
-        # log metrics
-        to_log = {
-            "loss_actor": actor_loss.item(),
-            "loss_qvalue": q_loss.item(),
-            "loss_value": value_loss.item(),
-        }
+    compile_mode = None
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
+        if compile_mode in ("", None):
+            if cfg.compile.cudagraphs:
+                compile_mode = "default"
+            else:
+                compile_mode = "reduce-overhead"
+
+    if cfg.compile.compile:
+        update = torch.compile(update, mode=compile_mode)
+    if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
+        update = CudaGraphModule(update, warmup=50)
+
+    pbar = tqdm.tqdm(range(cfg.optim.gradient_steps))
+
+    evaluation_interval = cfg.logger.eval_iter
+    eval_steps = cfg.logger.eval_steps
+
+    # Training loop
+    for i in pbar:
+        timeit.printevery(1000, cfg.optim.gradient_steps, erase=True)
+
+        # sample data
+        with timeit("sample"):
+            data = replay_buffer.sample()
+            data = data.to(device)
+
+        with timeit("update"):
+            torch.compiler.cudagraph_mark_step_begin()
+            loss_info = update(data)
 
         # evaluation
+        metrics_to_log = loss_info.to_dict()
         if i % evaluation_interval == 0:
-            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+            with set_exploration_type(
+                ExplorationType.DETERMINISTIC
+            ), torch.no_grad(), timeit("eval"):
                 eval_td = eval_env.rollout(
                     max_steps=eval_steps, policy=model[0], auto_cast_to_device=True
                 )
                 eval_env.apply(dump_video)
             eval_reward = eval_td["next", "reward"].sum(1).mean().item()
-            to_log["evaluation_reward"] = eval_reward
+            metrics_to_log["evaluation_reward"] = eval_reward
         if logger is not None:
-            log_metrics(logger, to_log, i)
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            log_metrics(logger, metrics_to_log, i)
 
     pbar.close()
     if not eval_env.is_closed:
         eval_env.close()
     if not train_env.is_closed:
         train_env.close()
-    torchrl_logger.info(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":
