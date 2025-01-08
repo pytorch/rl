@@ -2,10 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import functools
 
 import torch
-from tensordict.nn import TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictSequential
 
 from torch import nn, optim
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -24,14 +26,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import (
-    AdditiveGaussianModule,
-    MLP,
-    SafeModule,
-    SafeSequential,
-    TanhModule,
-    ValueOperator,
-)
+from torchrl.modules import AdditiveGaussianModule, MLP, TanhModule, ValueOperator
 
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.td3_bc import TD3BCLoss
@@ -96,17 +91,19 @@ def make_environment(cfg, logger=None):
 # ---------------------------
 
 
-def make_offline_replay_buffer(rb_cfg):
+def make_offline_replay_buffer(rb_cfg, device):
     data = D4RLExperienceReplay(
         dataset_id=rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
-        sampler=SamplerWithoutReplacement(drop_last=False),
+        # drop_last for compile
+        sampler=SamplerWithoutReplacement(drop_last=True),
         prefetch=4,
         direct_download=True,
     )
 
     data.append_transform(DoubleToFloat())
+    data.append_transform(lambda td: td.to(device))
 
     return data
 
@@ -120,26 +117,22 @@ def make_td3_agent(cfg, train_env, device):
     """Make TD3 agent."""
     # Define Actor Network
     in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    if train_env.batch_size:
-        action_spec = action_spec[(0,) * len(train_env.batch_size)]
-    actor_net_kwargs = {
-        "num_cells": cfg.network.hidden_sizes,
-        "out_features": action_spec.shape[-1],
-        "activation_class": get_activation(cfg),
-    }
+    action_spec = train_env.action_spec_unbatched.to(device)
 
-    actor_net = MLP(**actor_net_kwargs)
+    actor_net = MLP(
+        num_cells=cfg.network.hidden_sizes,
+        out_features=action_spec.shape[-1],
+        activation_class=get_activation(cfg),
+        device=device,
+    )
 
     in_keys_actor = in_keys
-    actor_module = SafeModule(
+    actor_module = TensorDictModule(
         actor_net,
         in_keys=in_keys_actor,
-        out_keys=[
-            "param",
-        ],
+        out_keys=["param"],
     )
-    actor = SafeSequential(
+    actor = TensorDictSequential(
         actor_module,
         TanhModule(
             in_keys=["param"],
@@ -149,14 +142,11 @@ def make_td3_agent(cfg, train_env, device):
     )
 
     # Define Critic Network
-    qvalue_net_kwargs = {
-        "num_cells": cfg.network.hidden_sizes,
-        "out_features": 1,
-        "activation_class": get_activation(cfg),
-    }
-
     qvalue_net = MLP(
-        **qvalue_net_kwargs,
+        num_cells=cfg.network.hidden_sizes,
+        out_features=1,
+        activation_class=get_activation(cfg),
+        device=device,
     )
 
     qvalue = ValueOperator(
@@ -164,7 +154,7 @@ def make_td3_agent(cfg, train_env, device):
         module=qvalue_net,
     )
 
-    model = nn.ModuleList([actor, qvalue]).to(device)
+    model = nn.ModuleList([actor, qvalue])
 
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):

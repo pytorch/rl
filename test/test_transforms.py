@@ -77,7 +77,7 @@ else:
         MultiKeyCountingEnvPolicy,
         NestedCountingEnv,
     )
-from tensordict import TensorDict, TensorDictBase, unravel_key
+from tensordict import NonTensorData, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import TensorDictSequential
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
@@ -2178,14 +2178,21 @@ class TestTrajCounter(TransformBase):
         pytest.skip("TrajCounter cannot be called without env")
 
 
-# TODO: Add tests that hash NonTensorStacks of strings
 class TestHash(TransformBase):
-    @pytest.mark.parametrize("datatype", ["tensor", "str"])
+    @pytest.mark.parametrize("datatype", ["tensor", "str", "NonTensorStack"])
     def test_transform_no_env(self, datatype):
         if datatype == "tensor":
             obs = torch.tensor(10)
         elif datatype == "str":
             obs = "abcdefg"
+        elif datatype == "NonTensorStack":
+            obs = torch.stack(
+                [
+                    NonTensorData(data="abcde"),
+                    NonTensorData(data="fghij"),
+                    NonTensorData(data="klmno"),
+                ]
+            )
         else:
             raise RuntimeError(f"please add a test case for datatype {datatype}")
 
@@ -2194,11 +2201,24 @@ class TestHash(TransformBase):
                 "observation": obs,
             }
         )
-        t = Hash(in_keys=["observation"], out_keys=["hash"])
+        if datatype == "NonTensorStack":
+
+            def fn0(x):
+                return torch.tensor([hash(x_.get("data")) for x_ in x])
+
+            hash_fn = fn0
+        else:
+            hash_fn = hash
+
+        t = Hash(in_keys=["observation"], out_keys=["hash"], fn=hash_fn)
         td_hashed = t(td)
 
-        assert td_hashed["observation"] is td["observation"]
-        assert td_hashed["hash"] == hash(td["observation"])
+        assert td_hashed.get("observation") is td.get("observation")
+
+        if datatype == "NonTensorStack":
+            assert all(td_hashed["hash"] == hash_fn(td.get("observation")))
+        else:
+            assert td_hashed["hash"] == hash_fn(td["observation"])
 
     def test_single_trans_env_check(self):
         t = Hash(in_keys=["observation"], out_keys=["hash"])
@@ -2234,6 +2254,8 @@ class TestHash(TransformBase):
         t = Hash(
             in_keys=["observation"],
             out_keys=["hash"],
+            fn=lambda x: [hash(x[0]), hash(x[1])],
+            output_spec=Unbounded(shape=(2,), dtype=torch.int64),
         )
 
         env = TransformedEnv(SerialEnv(2, CountingEnv), t)
@@ -2243,6 +2265,8 @@ class TestHash(TransformBase):
         t = Hash(
             in_keys=["observation"],
             out_keys=["hash"],
+            fn=lambda x: [hash(x[0]), hash(x[1])],
+            output_spec=Unbounded(shape=(2,), dtype=torch.int64),
         )
 
         env = TransformedEnv(maybe_fork_ParallelEnv(2, CountingEnv), t)
@@ -2307,6 +2331,7 @@ class TestHash(TransformBase):
         t = Hash(
             in_keys=[("next", "observation"), ("observation",)],
             out_keys=[("next", "hash"), ("hash",)],
+            fn=lambda x: [hash(x[0]), hash(x[1])],
         )
         rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
@@ -2322,9 +2347,9 @@ class TestHash(TransformBase):
         ).expand(10)
         rb.extend(td)
         td = rb.sample(2)
-        assert "observation_out" in td.keys()
-        assert "observation" not in td.keys()
-        assert ("next", "observation") not in td.keys(True)
+        assert "hash" in td.keys()
+        assert "observation" in td.keys()
+        assert ("next", "observation") in td.keys(True)
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for Hash")
@@ -7561,7 +7586,7 @@ class TestTensorDictPrimer(TransformBase):
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
             maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
-            TensorDictPrimer(mykey=Unbounded([2, 4])),
+            TensorDictPrimer(mykey=Unbounded([4])),
         )
         try:
             check_env_specs(env)
@@ -7576,11 +7601,39 @@ class TestTensorDictPrimer(TransformBase):
                 pass
 
     @pytest.mark.parametrize("spec_shape", [[4], [2, 4]])
-    def test_trans_serial_env_check(self, spec_shape):
-        env = TransformedEnv(
-            SerialEnv(2, ContinuousActionVecMockEnv),
-            TensorDictPrimer(mykey=Unbounded(spec_shape)),
-        )
+    @pytest.mark.parametrize("expand_specs", [True, False, None])
+    def test_trans_serial_env_check(self, spec_shape, expand_specs):
+        if expand_specs is None:
+            with pytest.warns(FutureWarning, match=""):
+                env = TransformedEnv(
+                    SerialEnv(2, ContinuousActionVecMockEnv),
+                    TensorDictPrimer(
+                        mykey=Unbounded(spec_shape), expand_specs=expand_specs
+                    ),
+                )
+                env.observation_spec
+        elif expand_specs is True:
+            shape = spec_shape[:-1]
+            env = TransformedEnv(
+                SerialEnv(2, ContinuousActionVecMockEnv),
+                TensorDictPrimer(
+                    Composite(mykey=Unbounded(spec_shape), shape=shape),
+                    expand_specs=expand_specs,
+                ),
+            )
+        else:
+            # If we don't expand, we can't use [4]
+            env = TransformedEnv(
+                SerialEnv(2, ContinuousActionVecMockEnv),
+                TensorDictPrimer(
+                    mykey=Unbounded(spec_shape), expand_specs=expand_specs
+                ),
+            )
+            if spec_shape == [4]:
+                with pytest.raises(ValueError):
+                    env.observation_spec
+                return
+
         check_env_specs(env)
         assert "mykey" in env.reset().keys()
         r = env.rollout(3)
@@ -10463,9 +10516,8 @@ class TestKLRewardTransform(TransformBase):
         transform = KLRewardTransform(actor, out_keys=out_key)
         return Compose(
             TensorDictPrimer(
-                primers={
-                    "sample_log_prob": Unbounded(shape=base_env.action_spec.shape[:-1])
-                }
+                sample_log_prob=Unbounded(shape=base_env.action_spec.shape[:-1]),
+                shape=base_env.shape,
             ),
             transform,
         )

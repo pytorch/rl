@@ -22,6 +22,7 @@ optim:
   lr: 3e-4
   weight_decay: 0.0
   anneal_lr: True
+  device:
 
 # loss
 loss:
@@ -34,3 +35,8 @@ loss:
   critic_coef: 0.25
   entropy_coef: 0.0
   loss_critic_type: l2
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

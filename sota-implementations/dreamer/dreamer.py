@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import contextlib
 import time
 
@@ -273,9 +275,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "t_sample": t_sample,
                 "t_preproc": t_preproc,
                 "t_collect": t_collect,
-                **timeit.todict(percall=False),
+                **timeit.todict(prefix="time"),
             }
-            timeit.erase()
             metrics_to_log.update(loss_metrics)
 
         if logger is not None:

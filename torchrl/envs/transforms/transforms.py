@@ -4400,33 +4400,31 @@ class CatTensors(Transform):
         )
 
 
-class Hash(Transform):
-    """Adds a hash value to a tensordict.
+class UnaryTransform(Transform):
+    """Applies a unary operation on the specified inputs.
 
     Args:
-        in_keys (sequence of NestedKey): the key of the data to create the hash from.
-        out_key (sequence of NestedKey): the key of the resulting hash.
+        in_keys (sequence of NestedKey): the keys of inputs to the unary operation.
+        out_keys (sequence of NestedKey): the keys of the outputs of the unary operation.
+        fn (Callable, optional): the function to use as the unary operation.
+        output_spec (TensorSpec, optional): the spec of the output of the operation.
     """
 
     def __init__(
         self,
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
+        fn: Callable,
+        output_spec: TensorSpec,
     ):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self._fn = fn
+        self._output_spec = output_spec
 
-    # TODO: If this transform is run on a tensordict like
-    # `TensorDict({"obs": # tensor.rand(2)}, batch_size=[2])`, then
-    # `_apply_transform` will create only one hash value for the tensor of size
-    # 2. Then, when `forward` tries to add the hash to the tensordict, an error
-    # is raised since the hash doesn't have a leading dimension of size 2.
-    # TODO: Add support for NonTensorStack inputs.
-    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        if isinstance(observation, NonTensorData):
-            obs = observation.get("data")
-        else:
-            obs = observation
-        return hash(obs)
+    def _apply_transform(self, value):
+        if isinstance(value, NonTensorData):
+            value = value.get("data")
+        return self._fn(value)
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
@@ -4435,15 +4433,51 @@ class Hash(Transform):
             tensordict_reset = self._call(tensordict_reset)
         return tensordict_reset
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if not isinstance(observation_spec, Composite):
+    def _transform_spec(self, spec: TensorSpec) -> TensorSpec:
+        if not isinstance(spec, Composite):
             raise TypeError(f"{self}: Only specs of type Composite can be transformed")
-        for out_key in self.out_keys:
-            observation_spec.set(
-                out_key,
-                Unbounded(shape=(), dtype=torch.int64),
-            )
-        return observation_spec
+
+        spec_keys = set(spec.keys(include_nested=True))
+
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key in spec_keys:
+                spec.set(out_key, self._output_spec)
+        return spec
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(observation_spec)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(reward_spec)
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(done_spec)
+
+
+class Hash(UnaryTransform):
+    """Adds a hash value to a tensordict.
+
+    Args:
+        in_keys (sequence of NestedKey): the keys of the values to hash.
+        out_keys (sequence of NestedKey): the keys of the resulting hashes.
+        fn (Callable, optional): the hash function to use. Default is Python's
+            builtin ``hash`` function.
+        output_spec (TensorSpec, optional): the spec of the hash output. Default
+            is ``Unbounded(shape=(), dtype=torch.int64)``.
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey],
+        fn: Callable = hash,
+        output_spec: TensorSpec | None = None,
+    ):
+        if output_spec is None:
+            output_spec = Unbounded(shape=(), dtype=torch.int64)
+        super().__init__(
+            in_keys=in_keys, out_keys=out_keys, fn=fn, output_spec=output_spec
+        )
 
 
 class Stack(Transform):
@@ -5030,6 +5064,7 @@ class TensorDictPrimer(Transform):
         | Dict[NestedKey, float]
         | Dict[NestedKey, Callable] = None,
         reset_key: NestedKey | None = None,
+        expand_specs: bool = None,
         **kwargs,
     ):
         self.device = kwargs.pop("device", None)
@@ -5041,8 +5076,16 @@ class TensorDictPrimer(Transform):
                 )
             kwargs = primers
         if not isinstance(kwargs, Composite):
-            kwargs = Composite(kwargs)
-        self.primers = kwargs
+            shape = kwargs.pop("shape", None)
+            device = kwargs.pop("device", None)
+            if "batch_size" in kwargs.keys():
+                extra_kwargs = {"batch_size": kwargs.pop("batch_size")}
+            else:
+                extra_kwargs = {}
+            primers = Composite(kwargs, device=device, shape=shape, **extra_kwargs)
+        self.primers = primers
+        self.expand_specs = expand_specs
+
         if random and default_value:
             raise ValueError(
                 "Setting random to True and providing a default_value are incompatible."
@@ -5135,12 +5178,26 @@ class TensorDictPrimer(Transform):
             )
 
         if self.primers.shape != observation_spec.shape:
-            try:
-                # We try to set the primer shape to the observation spec shape
-                self.primers.shape = observation_spec.shape
-            except ValueError:
-                # If we fail, we expand them to that shape
+            if self.expand_specs:
                 self.primers = self._expand_shape(self.primers)
+            elif self.expand_specs is None:
+                warnings.warn(
+                    f"expand_specs wasn't specified in the {type(self).__name__} constructor. "
+                    f"The current behaviour is that the transform will attempt to set the shape of the composite "
+                    f"spec, and if this can't be done it will be expanded. "
+                    f"From v0.8, a mismatched shape between the spec of the transform and the env's batch_size "
+                    f"will raise an exception.",
+                    category=FutureWarning,
+                )
+                try:
+                    # We try to set the primer shape to the observation spec shape
+                    self.primers.shape = observation_spec.shape
+                except ValueError:
+                    # If we fail, we expand them to that shape
+                    self.primers = self._expand_shape(self.primers)
+            else:
+                self.primers.shape = observation_spec.shape
+
         device = observation_spec.device
         observation_spec.update(self.primers.clone().to(device))
         return observation_spec

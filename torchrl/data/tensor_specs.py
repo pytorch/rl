@@ -44,6 +44,11 @@ from tensordict.base import NO_DEFAULT
 from tensordict.utils import _getitem_batch_size, is_non_tensor, NestedKey
 from torchrl._utils import _make_ordinal_device, get_binary_env_var, implement_for
 
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
+
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
@@ -381,11 +386,17 @@ class ContinuousBox(Box):
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
     def low(self):
-        return self._low.to(self.device)
+        low = self._low
+        if self.device is not None and low.device != self.device:
+            low = low.to(self.device)
+        return low
 
     @property
     def high(self):
-        return self._high.to(self.device)
+        high = self._high
+        if self.device is not None and high.device != self.device:
+            high = high.to(self.device)
+        return high
 
     def unbind(self, dim: int = 0):
         return tuple(
@@ -396,12 +407,12 @@ class ContinuousBox(Box):
     @low.setter
     def low(self, value):
         self.device = value.device
-        self._low = value.cpu()
+        self._low = value
 
     @high.setter
     def high(self, value):
         self.device = value.device
-        self._high = value.cpu()
+        self._high = value
 
     def __post_init__(self):
         self.low = self.low.clone()
@@ -455,12 +466,17 @@ class ContinuousBox(Box):
         )
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class CategoricalBox(Box):
     """A box of discrete, categorical values."""
 
     n: int
     register = invertible_dict()
+
+    def __post_init__(self):
+        # n could be a numpy array or a tensor, making compile go a bit crazy
+        # We want to make sure we're working with a regular integer
+        self.__dict__["n"] = int(self.n)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CategoricalBox:
         return deepcopy(self)
@@ -502,7 +518,7 @@ class BoxList(Box):
             return BoxList([BoxList.from_nvec(n) for n in nvec.unbind(-1)])
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class BinaryBox(Box):
     """A box of n binary values."""
 
@@ -866,7 +882,7 @@ class TensorSpec:
             a torch.Tensor belonging to the TensorSpec box.
 
         """
-        if not self.is_in(val):
+        if is_compiling() or not self.is_in(val):
             return self._project(val)
         return val
 
@@ -1504,7 +1520,9 @@ class OneHot(TensorSpec):
         use_register: bool = False,
         mask: torch.Tensor | None = None,
     ):
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         self.use_register = use_register
         space = CategoricalBox(n)
         if shape is None:
@@ -1695,7 +1713,7 @@ class OneHot(TensorSpec):
             for i in range(self.shape[dim])
         )
 
-    @implement_for("torch", None, "2.1")
+    @implement_for("torch", None, "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
         if shape is None:
             shape = self.shape[:-1]
@@ -1718,7 +1736,7 @@ class OneHot(TensorSpec):
         # out.scatter_(-1, m, 1)
         return out
 
-    @implement_for("torch", "2.1")
+    @implement_for("torch", "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:  # noqa: F811
         if shape is None:
             shape = self.shape[:-1]
@@ -2030,7 +2048,9 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         if len(kwargs):
             raise TypeError(f"Got unrecognised kwargs {tuple(kwargs.keys())}.")
 
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if dtype is None:
             dtype = torch.get_default_dtype()
         if domain is None:
@@ -2265,14 +2285,20 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             r = torch.rand(_size([*shape, *self._safe_shape]), device=interval.device)
             r = interval * r
             r = self.space.low + r
-            r = r.to(self.dtype).to(self.device)
+            if r.dtype != self.dtype:
+                r = r.to(self.dtype)
+            if self.dtype is not None and r.device != self.device:
+                r = r.to(self.device)
             return r
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        low = self.space.low.to(val.device)
-        high = self.space.high.to(val.device)
+        low = self.space.low
+        high = self.space.high
+        if self.device != val.device:
+            low = low.to(val.device)
+            high = high.to(val.device)
         try:
-            val = val.clamp_(low.item(), high.item())
+            val = torch.maximum(torch.minimum(val, high), low)
         except ValueError:
             low = low.expand_as(val)
             high = high.expand_as(val)
@@ -2625,7 +2651,9 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         if isinstance(shape, int):
             shape = _size([shape])
 
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if dtype == torch.bool:
             min_value = False
             max_value = True
@@ -2682,7 +2710,9 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         return val.shape == shape and val.dtype == self.dtype
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        return torch.as_tensor(val, dtype=self.dtype).reshape(self.shape)
+        return torch.as_tensor(val, dtype=self.dtype).reshape(
+            val.shape[: -self.ndim] + self.shape
+        )
 
     def enumerate(self) -> Any:
         raise NotImplementedError("enumerate cannot be called with continuous specs.")
@@ -2740,8 +2770,8 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         # those specs are equivalent to a discrete spec
         if isinstance(other, Bounded):
             minval, maxval = _minmax_dtype(self.dtype)
-            minval = torch.as_tensor(minval).to(self.device, self.dtype)
-            maxval = torch.as_tensor(maxval).to(self.device, self.dtype)
+            minval = torch.as_tensor(minval, device=self.device, dtype=self.dtype)
+            maxval = torch.as_tensor(maxval, device=self.device, dtype=self.dtype)
             return (
                 Bounded(
                     shape=self.shape,
@@ -2830,7 +2860,9 @@ class MultiOneHot(OneHot):
         mask: torch.Tensor | None = None,
     ):
         self.nvec = nvec
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if shape is None:
             shape = _size((sum(nvec),))
         else:
@@ -3306,13 +3338,19 @@ class Categorical(TensorSpec):
     ):
         if shape is None:
             shape = _size([])
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         space = CategoricalBox(n)
         super().__init__(
             shape=shape, space=space, device=device, dtype=dtype, domain="discrete"
         )
         self.update_mask(mask)
         self._provisional_n = None
+
+    @property
+    def _undefined_n(self):
+        return self.space.n < 0
 
     def enumerate(self) -> torch.Tensor:
         dtype = self.dtype
@@ -3379,7 +3417,7 @@ class Categorical(TensorSpec):
         self._provisional_n = n
 
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
-        if self.space.n < 0:
+        if self._undefined_n:
             if self._provisional_n is None:
                 raise RuntimeError(
                     "Cannot generate random categorical samples for undefined cardinality (n=-1). "
@@ -3849,7 +3887,9 @@ class MultiCategorical(Categorical):
         if nvec.ndim < 1:
             nvec = nvec.unsqueeze(0)
         self.nvec = nvec
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if shape is None:
             shape = nvec.shape
         else:

@@ -111,7 +111,7 @@ class SipHash(Module):
             hash_value = x_i.tobytes()
             hash_values.append(hash_value)
         if not self.as_tensor:
-            return hash_value
+            return hash_values
         result = torch.tensor([hash(x) for x in hash_values], dtype=torch.int64)
         return result
 

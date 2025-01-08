@@ -9,13 +9,18 @@ This is a self-contained example of an offline RL TD3+BC training script.
 The helper functions are coded in the utils.py associated with this script.
 
 """
-import time
+from __future__ import annotations
+
+import warnings
 
 import hydra
 import numpy as np
 import torch
 import tqdm
-from torchrl._utils import logger as torchrl_logger
+from tensordict import TensorDict
+from tensordict.nn import CudaGraphModule
+
+from torchrl._utils import compile_with_warmup, timeit
 
 from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -70,7 +75,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create replay buffer
-    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
+    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer, device=device)
+
+    compile_mode = None
+    if cfg.compile.compile:
+        compile_mode = cfg.compile.compile_mode
+        if compile_mode in ("", None):
+            if cfg.compile.cudagraphs:
+                compile_mode = "default"
+            else:
+                compile_mode = "reduce-overhead"
 
     # Create agent
     model, _ = make_td3_agent(cfg, eval_env, device)
@@ -81,67 +95,87 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create optimizer
     optimizer_actor, optimizer_critic = make_optimizer(cfg.optim, loss_module)
 
-    gradient_steps = cfg.optim.gradient_steps
-    evaluation_interval = cfg.logger.eval_iter
-    eval_steps = cfg.logger.eval_steps
-    delayed_updates = cfg.optim.policy_update_delay
-    update_counter = 0
-    pbar = tqdm.tqdm(range(gradient_steps))
-    # Training loop
-    start_time = time.time()
-    for i in pbar:
-        pbar.update(1)
-        # Update actor every delayed_updates
-        update_counter += 1
-        update_actor = update_counter % delayed_updates == 0
-
-        # Sample from replay buffer
-        sampled_tensordict = replay_buffer.sample()
-        if sampled_tensordict.device != device:
-            sampled_tensordict = sampled_tensordict.to(device)
-        else:
-            sampled_tensordict = sampled_tensordict.clone()
-
+    def update(sampled_tensordict, update_actor):
         # Compute loss
         q_loss, *_ = loss_module.qvalue_loss(sampled_tensordict)
 
         # Update critic
-        optimizer_critic.zero_grad()
         q_loss.backward()
         optimizer_critic.step()
-        q_loss.item()
-
-        to_log = {"q_loss": q_loss.item()}
+        optimizer_critic.zero_grad(set_to_none=True)
 
         # Update actor
         if update_actor:
             actor_loss, actorloss_metadata = loss_module.actor_loss(sampled_tensordict)
-            optimizer_actor.zero_grad()
             actor_loss.backward()
             optimizer_actor.step()
+            optimizer_actor.zero_grad(set_to_none=True)
 
             # Update target params
             target_net_updater.step()
+        else:
+            actorloss_metadata = {}
+            actor_loss = q_loss.new_zeros(())
+        metadata = TensorDict(actorloss_metadata)
+        metadata.set("q_loss", q_loss.detach())
+        metadata.set("actor_loss", actor_loss.detach())
+        return metadata
 
-            to_log["actor_loss"] = actor_loss.item()
-            to_log.update(actorloss_metadata)
+    if cfg.compile.compile:
+        update = compile_with_warmup(update, mode=compile_mode, warmup=1)
+
+    if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
+        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
+
+    gradient_steps = cfg.optim.gradient_steps
+    evaluation_interval = cfg.logger.eval_iter
+    eval_steps = cfg.logger.eval_steps
+    delayed_updates = cfg.optim.policy_update_delay
+    pbar = tqdm.tqdm(range(gradient_steps))
+    # Training loop
+    for update_counter in pbar:
+        timeit.printevery(num_prints=1000, total_count=gradient_steps, erase=True)
+
+        # Update actor every delayed_updates
+        update_actor = update_counter % delayed_updates == 0
+
+        with timeit("rb - sample"):
+            # Sample from replay buffer
+            sampled_tensordict = replay_buffer.sample()
+
+        with timeit("update"):
+            torch.compiler.cudagraph_mark_step_begin()
+            metadata = update(sampled_tensordict, update_actor).clone()
+
+        metrics_to_log = {}
+        if update_actor:
+            metrics_to_log.update(metadata.to_dict())
+        else:
+            metrics_to_log.update(metadata.exclude("actor_loss").to_dict())
 
         # evaluation
-        if i % evaluation_interval == 0:
-            with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+        if update_counter % evaluation_interval == 0:
+            with set_exploration_type(
+                ExplorationType.DETERMINISTIC
+            ), torch.no_grad(), timeit("eval"):
                 eval_td = eval_env.rollout(
                     max_steps=eval_steps, policy=model[0], auto_cast_to_device=True
                 )
                 eval_env.apply(dump_video)
             eval_reward = eval_td["next", "reward"].sum(1).mean().item()
-            to_log["evaluation_reward"] = eval_reward
+            metrics_to_log["evaluation_reward"] = eval_reward
         if logger is not None:
-            log_metrics(logger, to_log, i)
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            log_metrics(logger, metrics_to_log, update_counter)
 
     if not eval_env.is_closed:
         eval_env.close()
     pbar.close()
-    torchrl_logger.info(f"Training time: {time.time() - start_time}")
 
 
 if __name__ == "__main__":

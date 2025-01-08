@@ -24,7 +24,7 @@ ray_init_config:
   storage: null
 
 # Device for the forward and backward passes
-local_device: "cuda:0"
+local_device:
 
 # Resources assigned to each IMPALA rollout collection worker
 remote_worker_resources:
