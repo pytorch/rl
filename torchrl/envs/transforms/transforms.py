@@ -9302,7 +9302,7 @@ class LineariseRewards(Transform):
     .. warning::
         If a sequence of `in_keys` of length strictly greater than one is passed (e.g. one group for each agent in a
         multi-agent set-up), the same weights will be applied for each entry. If you need to aggregate rewards
-        differently for each group, use several `AggregateRewardsTransform` in a row.
+        differently for each group, use several :class:`~torchrl.envs.LineariseRewards` in a row.
 
     Example:
         >>> import mo_gymnasium as mo_gym
