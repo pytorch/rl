@@ -892,7 +892,7 @@ class CQLLoss(LossModule):
 
     @property
     def _alpha(self):
-        if self.min_log_alpha is not None:
+        if self.min_log_alpha is not None or self.max_log_alpha is not None:
             self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         alpha = self.log_alpha.data.exp()
         return alpha
