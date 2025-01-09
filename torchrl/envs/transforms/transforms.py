@@ -9325,7 +9325,7 @@ class LineariseRewards(Transform):
             ...)
         >>> td = so_env.rollout(5)
         >>> td["next", "reward"].shape
-        [5, 1]
+        torch.Size([5, 1])
     """
 
     def __init__(
