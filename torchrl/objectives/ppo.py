@@ -16,7 +16,6 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
     TensorDictParams,
-    unravel_key,
 )
 from tensordict.nn import (
     CompositeDistribution,
@@ -414,36 +413,15 @@ class PPOLoss(LossModule):
         return self._functional
 
     def _set_in_keys(self):
-        keys = [
-            *self.actor_network.in_keys,
-            *[("next", key) for key in self.actor_network.in_keys],
-            *self.critic_network.in_keys,
-        ]
-
-        if isinstance(self.tensor_keys.action, NestedKey):
-            keys.append(self.tensor_keys.action)
-        else:
-            keys.extend(self.tensor_keys.action)
-
-        if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
-            keys.append(self.tensor_keys.sample_log_prob)
-        else:
-            keys.extend(self.tensor_keys.sample_log_prob)
-
-        if isinstance(self.tensor_keys.reward, NestedKey):
-            keys.append(unravel_key(("next", self.tensor_keys.reward)))
-        else:
-            keys.extend([unravel_key(("next", k)) for k in self.tensor_keys.reward])
-
-        if isinstance(self.tensor_keys.done, NestedKey):
-            keys.append(unravel_key(("next", self.tensor_keys.done)))
-        else:
-            keys.extend([unravel_key(("next", k)) for k in self.tensor_keys.done])
-
-        if isinstance(self.tensor_keys.terminated, NestedKey):
-            keys.append(unravel_key(("next", self.tensor_keys.terminated)))
-        else:
-            keys.extend([unravel_key(("next", k)) for k in self.tensor_keys.terminated])
+        keys = []
+        _maybe_add_or_extend_key(keys, self.actor_network.in_keys)
+        _maybe_add_or_extend_key(keys, self.actor_network.in_keys, "next")
+        _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
+        _maybe_add_or_extend_key(keys, self.tensor_keys.action)
+        _maybe_add_or_extend_key(keys, self.tensor_keys.sample_log_prob)
+        _maybe_add_or_extend_key(keys, self.tensor_keys.reward, "next")
+        _maybe_add_or_extend_key(keys, self.tensor_keys.done, "next")
+        _maybe_add_or_extend_key(keys, self.tensor_keys.terminated, "next")
 
         self._in_keys = list(set(keys))
 
@@ -483,6 +461,7 @@ class PPOLoss(LossModule):
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
                 terminated=self.tensor_keys.terminated,
+                sample_log_prob=self.tensor_keys.sample_log_prob,
             )
         self._set_in_keys()
 
@@ -490,29 +469,34 @@ class PPOLoss(LossModule):
         pass
 
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
+        if isinstance(dist, CompositeDistribution):
+            aggregate = dist.aggregate_probabilities
+            if aggregate is None:
+                aggregate = False
+            include_sum = dist.include_sum
+            if include_sum is None:
+                include_sum = False
+            kwargs = {"aggregate_probabilities": aggregate, "include_sum": include_sum}
+        else:
+            kwargs = {}
         try:
-            if isinstance(dist, CompositeDistribution):
-                kwargs = {"aggregate_probabilities": False, "include_sum": False}
-            else:
-                kwargs = {}
             entropy = dist.entropy(**kwargs)
-            if is_tensor_collection(entropy):
-                entropy = _sum_td_features(entropy)
         except NotImplementedError:
             if getattr(dist, "has_rsample", False):
                 x = dist.rsample((self.samples_mc_entropy,))
             else:
                 x = dist.sample((self.samples_mc_entropy,))
-            log_prob = dist.log_prob(x)
+            log_prob = dist.log_prob(x, **kwargs)
 
-            if is_tensor_collection(log_prob) and isinstance(
-                self.tensor_keys.sample_log_prob, NestedKey
-            ):
-                log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
-            else:
-                log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
+            if is_tensor_collection(log_prob):
+                if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
+                    log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+                else:
+                    log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
 
             entropy = -log_prob.mean(0)
+        if is_tensor_collection(entropy):
+            entropy = _sum_td_features(entropy)
         return entropy.unsqueeze(-1)
 
     def _log_weight(
@@ -545,21 +529,33 @@ class PPOLoss(LossModule):
         else:
             if isinstance(dist, CompositeDistribution):
                 is_composite = True
+                aggregate = dist.aggregate_probabilities
+                if aggregate is None:
+                    aggregate = False
+                include_sum = dist.include_sum
+                if include_sum is None:
+                    include_sum = False
                 kwargs = {
                     "inplace": False,
-                    "aggregate_probabilities": False,
-                    "include_sum": False,
+                    "aggregate_probabilities": aggregate,
+                    "include_sum": include_sum,
                 }
             else:
                 is_composite = False
                 kwargs = {}
             log_prob: TensorDictBase = dist.log_prob(tensordict, **kwargs)
-            if is_composite and not is_tensor_collection(prev_log_prob):
+            if (
+                is_composite
+                and not is_tensor_collection(prev_log_prob)
+                and is_tensor_collection(log_prob)
+            ):
                 log_prob = _sum_td_features(log_prob)
                 log_prob.view_as(prev_log_prob)
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
+        if is_tensor_collection(kl_approx):
+            kl_approx = _sum_td_features(kl_approx)
 
         return log_weight, dist, kl_approx
 
@@ -933,6 +929,8 @@ class ClipPPOLoss(PPOLoss):
         gain2 = ratio * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
+        if is_tensor_collection(gain):
+            gain = gain.sum(reduce=True)
         td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
         td_out.set("clip_fraction", clip_fraction)
 
@@ -940,7 +938,7 @@ class ClipPPOLoss(PPOLoss):
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy)
+            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
         if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
@@ -1127,11 +1125,10 @@ class KLPENPPOLoss(PPOLoss):
         self.samples_mc_kl = samples_mc_kl
 
     def _set_in_keys(self):
-        keys = [
-            *self.actor_network.in_keys,
-            *[("next", key) for key in self.actor_network.in_keys],
-            *self.critic_network.in_keys,
-        ]
+        keys = []
+        _maybe_add_or_extend_key(keys, self.actor_network.in_keys)
+        _maybe_add_or_extend_key(keys, self.actor_network.in_keys, "next")
+        _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
         _maybe_add_or_extend_key(keys, self.tensor_keys.action)
         _maybe_add_or_extend_key(keys, self.tensor_keys.sample_log_prob)
         _maybe_add_or_extend_key(keys, self.tensor_keys.reward, "next")
@@ -1197,6 +1194,8 @@ class KLPENPPOLoss(PPOLoss):
             advantage = (advantage - loc) / scale
         log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
+        if is_tensor_collection(neg_loss):
+            neg_loss = _sum_td_features(neg_loss)
 
         with self.actor_network_params.to_module(
             self.actor_network
@@ -1207,16 +1206,22 @@ class KLPENPPOLoss(PPOLoss):
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
             if isinstance(previous_dist, CompositeDistribution):
+                aggregate = previous_dist.aggregate_probabilities
+                if aggregate is None:
+                    aggregate = False
+                include_sum = previous_dist.include_sum
+                if include_sum is None:
+                    include_sum = False
                 kwargs = {
-                    "aggregate_probabilities": False,
+                    "aggregate_probabilities": aggregate,
                     "inplace": False,
-                    "include_sum": False,
+                    "include_sum": include_sum,
                 }
             else:
                 kwargs = {}
             previous_log_prob = previous_dist.log_prob(x, **kwargs)
             current_log_prob = current_dist.log_prob(x, **kwargs)
-            if is_tensor_collection(current_log_prob):
+            if is_tensor_collection(previous_log_prob):
                 previous_log_prob = _sum_td_features(previous_log_prob)
                 current_log_prob = _sum_td_features(current_log_prob)
             kl = (previous_log_prob - current_log_prob).mean(0)
