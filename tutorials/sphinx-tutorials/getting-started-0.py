@@ -106,7 +106,7 @@ print(reset_with_action)
 print(reset_with_action["action"])
 
 ################################
-# We now need to pass this action tp the environment.
+# We now need to pass this action to the environment.
 # We'll be passing the entire tensordict to the ``step`` method, since there
 # might be more than one tensor to be read in more advanced cases like
 # Multi-Agent RL or stateless environments:

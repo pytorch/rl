@@ -218,7 +218,7 @@ The ``"_reset"`` key has two distinct functionalities:
    modification will be lost. After this masking operation, the ``"_reset"``
    entries will be erased from the :meth:`~.EnvBase.reset` outputs.
 
-It must be pointed that ``"_reset"`` is a private key, and it should only be
+It must be pointed out that ``"_reset"`` is a private key, and it should only be
 used when coding specific environment features that are internal facing.
 In other words, this should NOT be used outside of the library, and developers
 will keep the right to modify the logic of partial resets through ``"_reset"``
@@ -243,7 +243,7 @@ designing reset functionalities:
   ``any`` or ``all`` logic depending on the task).
 - When calling :meth:`env.reset(tensordict)` with a partial ``"_reset"`` entry
   that will reset some but not all the done sub-environments, the input data
-  should contain the data of the sub-environemtns that are __not__ being reset.
+  should contain the data of the sub-environments that are __not__ being reset.
   The reason for this constrain lies in the fact that the output of the
   ``env._reset(data)`` can only be predicted for the entries that are reset.
   For the others, TorchRL cannot know in advance if they will be meaningful or
@@ -267,7 +267,7 @@ have on an environment returning zeros after reset:
     >>> env.reset(data)
     >>> print(data.get(("agent0", "val")))  # only the second value is 0
     tensor([1, 0])
-    >>> print(data.get(("agent1", "val")))  # only the second value is 0
+    >>> print(data.get(("agent1", "val")))  # only the first value is 0
     tensor([0, 2])
     >>> # nested resets are overridden by a "_reset" at the root
     >>> data = TensorDict({
@@ -573,7 +573,7 @@ Dynamic Specs
 .. _dynamic_envs:
 
 Running environments in parallel is usually done via the creation of memory buffers used to pass information from one
-process to another. In some cases, it may be impossible to forecast whether and environment will or will not have
+process to another. In some cases, it may be impossible to forecast whether an environment will or will not have
 consistent inputs or outputs during a rollout, as their shape may be variable. We refer to this as dynamic specs.
 
 TorchRL is capable of handling dynamic specs, but the batched environments and collectors will need to be made
@@ -670,9 +670,12 @@ Here is a working example:
         is_shared=False,
         stack_dim=0)
 
-.. warning:: The absence of memory buffers in :class:`~torchrl.envs.ParallelEnv` and in data collectors can impact
-performance of these classes dramatically. Any such usage should be carefully benchmarked against a plain execution on
-a single process, as serializing and deserializing large numbers of tensors can be very expensive.
+.. warning::
+  The absence of memory buffers in :class:`~torchrl.envs.ParallelEnv` and in
+  data collectors can impact performance of these classes dramatically. Any
+  such usage should be carefully benchmarked against a plain execution on a
+  single process, as serializing and deserializing large numbers of tensors
+  can be very expensive.
 
 Currently, :func:`~torchrl.envs.utils.check_env_specs` will pass for dynamic specs where a shape varies along some
 dimensions, but not when a key is present during a step and absent during others, or when the number of dimensions
@@ -941,7 +944,7 @@ formatted images (WHC or CWH).
     >>> env.transform.dump()  # Save the video and clear cache
 
 Note that the cache of the transform will keep on growing until dump is called. It is the user responsibility to
-take care of calling dumpy when needed to avoid OOM issues.
+take care of calling `dump` when needed to avoid OOM issues.
 
 In some cases, creating a testing environment where images can be collected is tedious or expensive, or simply impossible
 (some libraries only allow one environment instance per workspace).
