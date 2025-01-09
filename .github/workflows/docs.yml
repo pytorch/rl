@@ -24,7 +24,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.1"]
-    uses: vmoens/test-infra/.github/workflows/linux_job_v2.yml@download-v4
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@pull/6151
     with:
       repository: pytorch/rl
       upload-artifact: docs
@@ -118,7 +118,7 @@ jobs:
         ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
-    uses: vmoens/test-infra/.github/workflows/linux_job.yml@download-v4
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@pull/6151
     with:
       repository: pytorch/rl
       download-artifact: docs

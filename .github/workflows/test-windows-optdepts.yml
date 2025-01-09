@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   unittests-cpu:
-    uses: vmoens/test-infra/.github/workflows/windows_job.yml@download-v4
+    uses: pytorch/test-infra/.github/workflows/windows_job.yml@pull/6151
     with:
       runner: "windows.4xlarge"
       repository: pytorch/rl
@@ -57,7 +57,7 @@ jobs:
         ./.github/unittest/windows_optdepts/scripts/post_process.sh
 
 #  unittests-gpu:
-#    uses: vmoens/test-infra/.github/workflows/windows_job.yml@download-v4
+#    uses: pytorch/test-infra/.github/workflows/windows_job.yml@pull/6151
 #    with:
 #      runner: "windows.g5.4xlarge.nvidia.gpu"
 #      repository: pytorch/rl

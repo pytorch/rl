@@ -22,7 +22,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
       fail-fast: false
-    uses: vmoens/test-infra/.github/workflows/linux_job_v2.yml@download-v4
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@pull/6151
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
