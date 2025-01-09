@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -405,20 +405,20 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 
-<span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">wraps</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">wraps</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
 <span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">torch.compiler</span> <span class="kn">import</span> <span class="n">is_dynamo_compiling</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.compiler</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_dynamo_compiling</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">torch._dynamo</span> <span class="kn">import</span> <span class="n">is_compiling</span> <span class="k">as</span> <span class="n">is_dynamo_compiling</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch._dynamo</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_compiling</span> <span class="k">as</span> <span class="n">is_dynamo_compiling</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;generalized_advantage_estimate&quot;</span><span class="p">,</span>
@@ -436,7 +436,7 @@
     <span class="s2">&quot;vtrace_advantage_estimate&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.objectives.value.utils</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.value.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_custom_conv1d</span><span class="p">,</span>
     <span class="n">_get_num_per_traj</span><span class="p">,</span>
     <span class="n">_inv_pad_sequence</span><span class="p">,</span>
@@ -449,7 +449,7 @@
 <span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_transpose_time</span><span class="p">(</span><span class="n">fun</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_transpose_time</span><span class="p">(</span><span class="n">fun</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Checks the time_dim argument of the function to allow for any dim.</span>
 
 <span class="sd">    If not -2, makes a transpose of all the multi-dim input tensors to bring</span>
@@ -461,10 +461,10 @@
     <span class="p">)</span>
 
     <span class="nd">@wraps</span><span class="p">(</span><span class="n">fun</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">transposed_fun</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">transposed_fun</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">time_dim</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;time_dim&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
 
-        <span class="k">def</span> <span class="nf">transpose_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">transpose_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">or</span> <span class="n">tensor</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">tensor</span><span class="p">,</span> <span class="kc">False</span>
             <span class="k">if</span> <span class="n">time_dim</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
@@ -522,7 +522,7 @@
 
 
 <div class="viewcode-block" id="generalized_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.generalized_advantage_estimate.html#torchrl.objectives.value.functional.generalized_advantage_estimate">[docs]</a><span class="nd">@_transpose_time</span>
-<span class="k">def</span> <span class="nf">generalized_advantage_estimate</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">generalized_advantage_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">lmbda</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -585,7 +585,7 @@
     <span class="k">return</span> <span class="n">advantage</span><span class="p">,</span> <span class="n">value_target</span></div>
 
 
-<span class="k">def</span> <span class="nf">_geom_series_like</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">thr</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_geom_series_like</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">thr</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Creates a geometric series of the form [1, gammalmbda, gammalmbda**2] with the shape of `t`.</span>
 
 <span class="sd">    Drops all elements which are smaller than `thr` (unless in compile mode).</span>
@@ -613,7 +613,7 @@
     <span class="k">return</span> <span class="n">rs</span>
 
 
-<span class="k">def</span> <span class="nf">_fast_vec_gae</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_fast_vec_gae</span><span class="p">(</span>
     <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -673,7 +673,7 @@
 
 
 <div class="viewcode-block" id="vec_generalized_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.vec_generalized_advantage_estimate.html#torchrl.objectives.value.functional.vec_generalized_advantage_estimate">[docs]</a><span class="nd">@_transpose_time</span>
-<span class="k">def</span> <span class="nf">vec_generalized_advantage_estimate</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">vec_generalized_advantage_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
     <span class="n">lmbda</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
     <span class="n">state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -778,7 +778,7 @@
 <span class="c1"># -----</span>
 
 
-<div class="viewcode-block" id="td0_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td0_advantage_estimate.html#torchrl.objectives.value.functional.td0_advantage_estimate">[docs]</a><span class="k">def</span> <span class="nf">td0_advantage_estimate</span><span class="p">(</span>
+<div class="viewcode-block" id="td0_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td0_advantage_estimate.html#torchrl.objectives.value.functional.td0_advantage_estimate">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">td0_advantage_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -818,7 +818,7 @@
     <span class="k">return</span> <span class="n">advantage</span></div>
 
 
-<div class="viewcode-block" id="td0_return_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td0_return_estimate.html#torchrl.objectives.value.functional.td0_return_estimate">[docs]</a><span class="k">def</span> <span class="nf">td0_return_estimate</span><span class="p">(</span>
+<div class="viewcode-block" id="td0_return_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td0_return_estimate.html#torchrl.objectives.value.functional.td0_return_estimate">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">td0_return_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -865,7 +865,7 @@
 
 
 <div class="viewcode-block" id="td1_return_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td1_return_estimate.html#torchrl.objectives.value.functional.td1_return_estimate">[docs]</a><span class="nd">@_transpose_time</span>
-<span class="k">def</span> <span class="nf">td1_return_estimate</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">td1_return_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -965,7 +965,7 @@
     <span class="k">return</span> <span class="n">returns</span></div>
 
 
-<div class="viewcode-block" id="td1_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td1_advantage_estimate.html#torchrl.objectives.value.functional.td1_advantage_estimate">[docs]</a><span class="k">def</span> <span class="nf">td1_advantage_estimate</span><span class="p">(</span>
+<div class="viewcode-block" id="td1_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td1_advantage_estimate.html#torchrl.objectives.value.functional.td1_advantage_estimate">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">td1_advantage_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -1042,7 +1042,7 @@
 
 
 <div class="viewcode-block" id="vec_td1_return_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.vec_td1_return_estimate.html#torchrl.objectives.value.functional.vec_td1_return_estimate">[docs]</a><span class="nd">@_transpose_time</span>
-<span class="k">def</span> <span class="nf">vec_td1_return_estimate</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">vec_td1_return_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">,</span>
     <span class="n">reward</span><span class="p">,</span>
@@ -1103,7 +1103,7 @@
     <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="vec_td1_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.vec_td1_advantage_estimate.html#torchrl.objectives.value.functional.vec_td1_advantage_estimate">[docs]</a><span class="k">def</span> <span class="nf">vec_td1_advantage_estimate</span><span class="p">(</span>
+<div class="viewcode-block" id="vec_td1_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.vec_td1_advantage_estimate.html#torchrl.objectives.value.functional.vec_td1_advantage_estimate">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">vec_td1_advantage_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">,</span>
     <span class="n">state_value</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">,</span>
@@ -1184,7 +1184,7 @@
 
 
 <div class="viewcode-block" id="td_lambda_return_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td_lambda_return_estimate.html#torchrl.objectives.value.functional.td_lambda_return_estimate">[docs]</a><span class="nd">@_transpose_time</span>
-<span class="k">def</span> <span class="nf">td_lambda_return_estimate</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">td_lambda_return_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">lmbda</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -1292,7 +1292,7 @@
     <span class="k">return</span> <span class="n">returns</span></div>
 
 
-<div class="viewcode-block" id="td_lambda_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td_lambda_advantage_estimate.html#torchrl.objectives.value.functional.td_lambda_advantage_estimate">[docs]</a><span class="k">def</span> <span class="nf">td_lambda_advantage_estimate</span><span class="p">(</span>
+<div class="viewcode-block" id="td_lambda_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.td_lambda_advantage_estimate.html#torchrl.objectives.value.functional.td_lambda_advantage_estimate">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">td_lambda_advantage_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">lmbda</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -1372,7 +1372,7 @@
     <span class="k">return</span> <span class="n">advantage</span></div>
 
 
-<span class="k">def</span> <span class="nf">_fast_td_lambda_return_estimate</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_fast_td_lambda_return_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
     <span class="n">lmbda</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -1431,7 +1431,7 @@
 
 
 <div class="viewcode-block" id="vec_td_lambda_return_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.vec_td_lambda_return_estimate.html#torchrl.objectives.value.functional.vec_td_lambda_return_estimate">[docs]</a><span class="nd">@_transpose_time</span>
-<span class="k">def</span> <span class="nf">vec_td_lambda_return_estimate</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">vec_td_lambda_return_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">,</span>
     <span class="n">lmbda</span><span class="p">,</span>
     <span class="n">next_state_value</span><span class="p">,</span>
@@ -1496,7 +1496,7 @@
 
     <span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">lastdim</span> <span class="o">=</span> <span class="n">shape</span>
 
-    <span class="k">def</span> <span class="nf">_is_scalar</span><span class="p">(</span><span class="n">tensor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_scalar</span><span class="p">(</span><span class="n">tensor</span><span class="p">):</span>
         <span class="k">return</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">or</span> <span class="n">tensor</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
 
     <span class="c1"># There are two use-cases: if gamma/lmbda are scalars we can use the</span>
@@ -1586,7 +1586,7 @@
         <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="vec_td_lambda_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate.html#torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate">[docs]</a><span class="k">def</span> <span class="nf">vec_td_lambda_advantage_estimate</span><span class="p">(</span>
+<div class="viewcode-block" id="vec_td_lambda_advantage_estimate"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate.html#torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">vec_td_lambda_advantage_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">,</span>
     <span class="n">lmbda</span><span class="p">,</span>
     <span class="n">state_value</span><span class="p">,</span>
@@ -1671,7 +1671,7 @@
 
 
 <span class="nd">@_transpose_time</span>
-<span class="k">def</span> <span class="nf">vtrace_advantage_estimate</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">vtrace_advantage_estimate</span><span class="p">(</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">log_pi</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">log_mu</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -1759,7 +1759,7 @@
 
 
 <div class="viewcode-block" id="reward2go"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.value.functional.reward2go.html#torchrl.objectives.value.functional.reward2go">[docs]</a><span class="nd">@_transpose_time</span>
-<span class="k">def</span> <span class="nf">reward2go</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">reward2go</span><span class="p">(</span>
     <span class="n">reward</span><span class="p">,</span>
     <span class="n">done</span><span class="p">,</span>
     <span class="n">gamma</span><span class="p">,</span>

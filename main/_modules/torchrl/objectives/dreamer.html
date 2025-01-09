@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -405,21 +405,21 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span>
-<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span>
 
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">timeit</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.model_based.dreamer</span> <span class="kn">import</span> <span class="n">DreamerEnv</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">ExplorationType</span><span class="p">,</span> <span class="n">set_exploration_type</span><span class="p">,</span> <span class="n">step_mdp</span>
-<span class="kn">from</span> <span class="nn">torchrl.objectives.common</span> <span class="kn">import</span> <span class="n">LossModule</span>
-<span class="kn">from</span> <span class="nn">torchrl.objectives.utils</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">timeit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.model_based.dreamer</span><span class="w"> </span><span class="kn">import</span> <span class="n">DreamerEnv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExplorationType</span><span class="p">,</span> <span class="n">set_exploration_type</span><span class="p">,</span> <span class="n">step_mdp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LossModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_GAMMA_LMBDA_DEPREC_ERROR</span><span class="p">,</span>
     <span class="n">default_value_kwargs</span><span class="p">,</span>
     <span class="n">distance_loss</span><span class="p">,</span>
@@ -427,10 +427,10 @@
     <span class="n">hold_out_net</span><span class="p">,</span>
     <span class="n">ValueEstimators</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.objectives.value</span> <span class="kn">import</span> <span class="n">TD0Estimator</span><span class="p">,</span> <span class="n">TD1Estimator</span><span class="p">,</span> <span class="n">TDLambdaEstimator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.value</span><span class="w"> </span><span class="kn">import</span> <span class="n">TD0Estimator</span><span class="p">,</span> <span class="n">TD1Estimator</span><span class="p">,</span> <span class="n">TDLambdaEstimator</span>
 
 
-<div class="viewcode-block" id="DreamerModelLoss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerModelLoss.html#torchrl.objectives.DreamerModelLoss">[docs]</a><span class="k">class</span> <span class="nc">DreamerModelLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
+<div class="viewcode-block" id="DreamerModelLoss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerModelLoss.html#torchrl.objectives.DreamerModelLoss">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DreamerModelLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Dreamer Model Loss.</span>
 
 <span class="sd">    Computes the loss of the dreamer world model. The loss is composed of the</span>
@@ -458,7 +458,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@dataclass</span>
-    <span class="k">class</span> <span class="nc">_AcceptedKeys</span><span class="p">:</span>
+    <span class="k">class</span><span class="w"> </span><span class="nc">_AcceptedKeys</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Maintains default values for all configurable tensordict keys.</span>
 
 <span class="sd">        This class defines which tensordict keys can be set using &#39;.set_keys(key_name=key_value)&#39; and their</span>
@@ -494,7 +494,7 @@
 
     <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">world_model</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
@@ -520,10 +520,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;decoder&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_model</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;reward_model&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_model</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 
-    <span class="k">def</span> <span class="nf">_forward_value_estimator_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_forward_value_estimator_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">pass</span>
 
-<div class="viewcode-block" id="DreamerModelLoss.forward"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerModelLoss.html#torchrl.objectives.DreamerModelLoss.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<div class="viewcode-block" id="DreamerModelLoss.forward"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerModelLoss.html#torchrl.objectives.DreamerModelLoss.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
         <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="n">tensordict</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span>
             <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">reward</span><span class="p">),</span>
@@ -569,12 +569,12 @@
         <span class="p">)</span></div>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">normal_log_probability</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">std</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">normal_log_probability</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">std</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">((</span><span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">mean</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span> <span class="o">/</span> <span class="n">std</span><span class="p">)</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">-</span> <span class="n">std</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
         <span class="p">)</span>  <span class="c1"># - 0.5 * math.log(2 * math.pi)</span>
 
-    <span class="k">def</span> <span class="nf">kl_loss</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">kl_loss</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">prior_mean</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
         <span class="n">prior_std</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -596,7 +596,7 @@
         <span class="k">return</span> <span class="n">kl</span></div>
 
 
-<div class="viewcode-block" id="DreamerActorLoss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerActorLoss.html#torchrl.objectives.DreamerActorLoss">[docs]</a><span class="k">class</span> <span class="nc">DreamerActorLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
+<div class="viewcode-block" id="DreamerActorLoss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerActorLoss.html#torchrl.objectives.DreamerActorLoss">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DreamerActorLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Dreamer Actor Loss.</span>
 
 <span class="sd">    Computes the loss of the dreamer actor. The actor loss is computed as the</span>
@@ -616,7 +616,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@dataclass</span>
-    <span class="k">class</span> <span class="nc">_AcceptedKeys</span><span class="p">:</span>
+    <span class="k">class</span><span class="w"> </span><span class="nc">_AcceptedKeys</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Maintains default values for all configurable tensordict keys.</span>
 
 <span class="sd">        This class defines which tensordict keys can be set using &#39;.set_keys(key_name=key_value)&#39; and their</span>
@@ -644,7 +644,7 @@
     <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span><span class="p">()</span>
     <span class="n">default_value_estimator</span> <span class="o">=</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TDLambda</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">actor_model</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
         <span class="n">value_model</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
@@ -666,13 +666,13 @@
         <span class="k">if</span> <span class="n">lmbda</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">_GAMMA_LMBDA_DEPREC_ERROR</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_forward_value_estimator_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_forward_value_estimator_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
                 <span class="n">value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
             <span class="p">)</span>
 
-<div class="viewcode-block" id="DreamerActorLoss.forward"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerActorLoss.html#torchrl.objectives.DreamerActorLoss.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">]:</span>
+<div class="viewcode-block" id="DreamerActorLoss.forward"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerActorLoss.html#torchrl.objectives.DreamerActorLoss.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">]:</span>
         <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">belief</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
 
         <span class="k">with</span> <span class="n">timeit</span><span class="p">(</span><span class="s2">&quot;actor_loss/time-rollout&quot;</span><span class="p">),</span> <span class="n">hold_out_net</span><span class="p">(</span>
@@ -706,7 +706,7 @@
         <span class="n">loss_tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;loss_actor&quot;</span><span class="p">:</span> <span class="n">actor_loss</span><span class="p">},</span> <span class="p">[])</span>
         <span class="k">return</span> <span class="n">loss_tensordict</span><span class="p">,</span> <span class="n">fake_data</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span></div>
 
-    <span class="k">def</span> <span class="nf">lambda_target</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lambda_target</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
         <span class="n">done</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">reward</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">reward</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="n">terminated</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">reward</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">reward</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="n">input_tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
@@ -720,7 +720,7 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value_estimator</span><span class="o">.</span><span class="n">value_estimate</span><span class="p">(</span><span class="n">input_tensordict</span><span class="p">)</span>
 
-<div class="viewcode-block" id="DreamerActorLoss.make_value_estimator"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerActorLoss.html#torchrl.objectives.DreamerActorLoss.make_value_estimator">[docs]</a>    <span class="k">def</span> <span class="nf">make_value_estimator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value_type</span><span class="p">:</span> <span class="n">ValueEstimators</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">hyperparams</span><span class="p">):</span>
+<div class="viewcode-block" id="DreamerActorLoss.make_value_estimator"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerActorLoss.html#torchrl.objectives.DreamerActorLoss.make_value_estimator">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">make_value_estimator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value_type</span><span class="p">:</span> <span class="n">ValueEstimators</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">hyperparams</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">value_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">value_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_value_estimator</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">value_type</span> <span class="o">=</span> <span class="n">value_type</span>
@@ -763,7 +763,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="o">**</span><span class="n">tensor_keys</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="DreamerValueLoss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerValueLoss.html#torchrl.objectives.DreamerValueLoss">[docs]</a><span class="k">class</span> <span class="nc">DreamerValueLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
+<div class="viewcode-block" id="DreamerValueLoss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerValueLoss.html#torchrl.objectives.DreamerValueLoss">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DreamerValueLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Dreamer Value Loss.</span>
 
 <span class="sd">    Computes the loss of the dreamer value model. The value loss is computed</span>
@@ -782,7 +782,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@dataclass</span>
-    <span class="k">class</span> <span class="nc">_AcceptedKeys</span><span class="p">:</span>
+    <span class="k">class</span><span class="w"> </span><span class="nc">_AcceptedKeys</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Maintains default values for all configurable tensordict keys.</span>
 
 <span class="sd">        This class defines which tensordict keys can be set using &#39;.set_keys(key_name=key_value)&#39; and their</span>
@@ -797,7 +797,7 @@
 
     <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">value_model</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
         <span class="n">value_loss</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -810,10 +810,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">=</span> <span class="n">gamma</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">discount_loss</span> <span class="o">=</span> <span class="n">discount_loss</span>
 
-    <span class="k">def</span> <span class="nf">_forward_value_estimator_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_forward_value_estimator_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">pass</span>
 
-<div class="viewcode-block" id="DreamerValueLoss.forward"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerValueLoss.html#torchrl.objectives.DreamerValueLoss.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fake_data</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<div class="viewcode-block" id="DreamerValueLoss.forward"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DreamerValueLoss.html#torchrl.objectives.DreamerValueLoss.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fake_data</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
         <span class="n">lambda_target</span> <span class="o">=</span> <span class="n">fake_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;lambda_target&quot;</span><span class="p">)</span>
         <span class="n">tensordict_select</span> <span class="o">=</span> <span class="n">fake_data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">value_model</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">value_model</span><span class="p">(</span><span class="n">tensordict_select</span><span class="p">)</span>

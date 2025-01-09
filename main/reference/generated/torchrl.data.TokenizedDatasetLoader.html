@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -454,8 +454,8 @@ should be gathered. Defaults to <code class="docutils literal notranslate"><span
 </dl>
 <p>The dataset will be stored in <code class="docutils literal notranslate"><span class="pre">&lt;root_dir&gt;/&lt;split&gt;/&lt;max_length&gt;/</span></code>.</p>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.rlhf</span> <span class="kn">import</span> <span class="n">TensorDictTokenizer</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.rlhf.reward</span> <span class="kn">import</span>  <span class="n">pre_tokenization_hook</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.rlhf</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictTokenizer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.rlhf.reward</span><span class="w"> </span><span class="kn">import</span>  <span class="n">pre_tokenization_hook</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">split</span> <span class="o">=</span> <span class="s2">&quot;train&quot;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">max_length</span> <span class="o">=</span> <span class="mi">550</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">dataset_name</span> <span class="o">=</span> <span class="s2">&quot;CarperAI/openai_summarize_comparisons&quot;</span>
@@ -511,8 +511,8 @@ tentatively gathered and used to filder the data. Defaults to
 </dl>
 <p>Returns: a TensorDict containing memory-mapped tensors with the dataset.</p>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">datasets</span> <span class="kn">import</span> <span class="n">Dataset</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">tempfile</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">Dataset</span><span class="o">.</span><span class="n">from_dict</span><span class="p">({</span><span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">11</span><span class="p">)),</span> <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">11</span><span class="p">)})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">data_memmap</span> <span class="o">=</span> <span class="n">TokenizedDatasetLoader</span><span class="o">.</span><span class="n">dataset_to_tensordict</span><span class="p">(</span>

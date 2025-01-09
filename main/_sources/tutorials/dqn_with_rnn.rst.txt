@@ -831,7 +831,7 @@ every 50 data collection, and plot the results after training.
         batch_size=torch.Size([50]),
         device=None,
         is_shared=False)
-     25%|██▌       | 50/200 [00:00<00:01, 137.46it/s]     25%|██▌       | 50/200 [00:15<00:01, 137.46it/s]    steps: 9, loss_val:  0.0006, action_spread: tensor([46,  4]):  25%|██▌       | 50/200 [00:34<00:01, 137.46it/s]    steps: 9, loss_val:  0.0006, action_spread: tensor([46,  4]):  50%|█████     | 100/200 [00:34<00:40,  2.45it/s]    steps: 12, loss_val:  0.0005, action_spread: tensor([44,  6]):  50%|█████     | 100/200 [01:08<00:40,  2.45it/s]    steps: 12, loss_val:  0.0005, action_spread: tensor([44,  6]):  75%|███████▌  | 150/200 [01:09<00:26,  1.86it/s]    steps: 20, loss_val:  0.0003, action_spread: tensor([13, 37]):  75%|███████▌  | 150/200 [01:42<00:26,  1.86it/s]    steps: 20, loss_val:  0.0003, action_spread: tensor([13, 37]): 100%|██████████| 200/200 [01:43<00:00,  1.68it/s]    steps: 20, loss_val:  0.0005, action_spread: tensor([43,  7]): 100%|██████████| 200/200 [02:16<00:00,  1.68it/s]
+     25%|██▌       | 50/200 [00:00<00:01, 129.62it/s]     25%|██▌       | 50/200 [00:11<00:01, 129.62it/s]    steps: 11, loss_val:  0.0005, action_spread: tensor([46,  4]):  25%|██▌       | 50/200 [00:33<00:01, 129.62it/s]    steps: 11, loss_val:  0.0005, action_spread: tensor([46,  4]):  50%|█████     | 100/200 [00:33<00:39,  2.51it/s]    steps: 12, loss_val:  0.0004, action_spread: tensor([44,  6]):  50%|█████     | 100/200 [01:07<00:39,  2.51it/s]    steps: 12, loss_val:  0.0004, action_spread: tensor([44,  6]):  75%|███████▌  | 150/200 [01:07<00:26,  1.91it/s]    steps: 14, loss_val:  0.0003, action_spread: tensor([11, 39]):  75%|███████▌  | 150/200 [01:41<00:26,  1.91it/s]    steps: 14, loss_val:  0.0003, action_spread: tensor([11, 39]): 100%|██████████| 200/200 [01:41<00:00,  1.71it/s]    steps: 14, loss_val:  0.0004, action_spread: tensor([42,  8]): 100%|██████████| 200/200 [02:15<00:00,  1.71it/s]
 
 
 
@@ -887,9 +887,9 @@ Further Reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 18.312 seconds)
+   **Total running time of the script:** (3 minutes 18.293 seconds)
 
-**Estimated memory usage:**  2191 MB
+**Estimated memory usage:**  2231 MB
 
 
 .. _sphx_glr_download_tutorials_dqn_with_rnn.py:

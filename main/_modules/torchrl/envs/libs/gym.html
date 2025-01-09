@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -406,25 +406,25 @@
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">collections</span>
-<span class="kn">import</span> <span class="nn">importlib</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
-<span class="kn">from</span> <span class="nn">types</span> <span class="kn">import</span> <span class="n">ModuleType</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span>
-<span class="kn">from</span> <span class="nn">warnings</span> <span class="kn">import</span> <span class="n">warn</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModuleType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">warnings</span><span class="w"> </span><span class="kn">import</span> <span class="n">warn</span>
 
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">packaging</span> <span class="kn">import</span> <span class="n">version</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">packaging</span><span class="w"> </span><span class="kn">import</span> <span class="n">version</span>
 
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span> <span class="nn">torch.utils._pytree</span> <span class="kn">import</span> <span class="n">tree_map</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">tree_map</span>
 
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">implement_for</span>
-<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">implement_for</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_minmax_dtype</span><span class="p">,</span>
     <span class="n">Binary</span><span class="p">,</span>
     <span class="n">Bounded</span><span class="p">,</span>
@@ -437,18 +437,18 @@
     <span class="n">TensorSpec</span><span class="p">,</span>
     <span class="n">Unbounded</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.data.utils</span> <span class="kn">import</span> <span class="n">numpy_to_torch_dtype_dict</span><span class="p">,</span> <span class="n">torch_to_numpy_dtype_dict</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.batched_envs</span> <span class="kn">import</span> <span class="n">CloudpickleWrapper</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_EnvPostInit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">numpy_to_torch_dtype_dict</span><span class="p">,</span> <span class="n">torch_to_numpy_dtype_dict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">CloudpickleWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_EnvPostInit</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.envs.gym_like</span> <span class="kn">import</span> <span class="n">default_info_dict_reader</span><span class="p">,</span> <span class="n">GymLikeEnv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.gym_like</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_info_dict_reader</span><span class="p">,</span> <span class="n">GymLikeEnv</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">_classproperty</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_classproperty</span>
 
 <span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">torch.utils._contextlib</span> <span class="kn">import</span> <span class="n">_DecoratorContextManager</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">_DecoratorContextManager</span>
 <span class="k">except</span> <span class="ne">ModuleNotFoundError</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_DecoratorContextManager</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_DecoratorContextManager</span>
 
 <span class="n">DEFAULT_GYM</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="n">IMPORT_ERROR</span> <span class="o">=</span> <span class="kc">None</span>
@@ -478,14 +478,14 @@
 <span class="s2">&quot;&quot;&quot;</span>
 
 
-<span class="k">def</span> <span class="nf">_minigrid_lib</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_minigrid_lib</span><span class="p">():</span>
     <span class="k">assert</span> <span class="n">_has_minigrid</span><span class="p">,</span> <span class="s2">&quot;minigrid not found&quot;</span>
-    <span class="kn">import</span> <span class="nn">minigrid</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">minigrid</span>
 
     <span class="k">return</span> <span class="n">minigrid</span>
 
 
-<div class="viewcode-block" id="set_gym_backend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.set_gym_backend.html#torchrl.envs.set_gym_backend">[docs]</a><span class="k">class</span> <span class="nc">set_gym_backend</span><span class="p">(</span><span class="n">_DecoratorContextManager</span><span class="p">):</span>
+<div class="viewcode-block" id="set_gym_backend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.set_gym_backend.html#torchrl.envs.set_gym_backend">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">set_gym_backend</span><span class="p">(</span><span class="n">_DecoratorContextManager</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sets the gym-backend to a certain value.</span>
 
 <span class="sd">    Args:</span>
@@ -528,10 +528,10 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">backend</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">backend</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">backend</span> <span class="o">=</span> <span class="n">backend</span>
 
-    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the backend as default.&quot;&quot;&quot;</span>
         <span class="k">global</span> <span class="n">DEFAULT_GYM</span>
         <span class="n">DEFAULT_GYM</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">backend</span>
@@ -564,27 +564,27 @@
                     <span class="sa">f</span><span class="s2">&quot;Check that the gym versions match!&quot;</span>
                 <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Irreversibly sets the gym backend in the script.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># we save a complete list of setters as well as whether they should be set.</span>
         <span class="c1"># we want the full list becasue we want to be able to nest the calls to set_gym_backend.</span>
         <span class="c1"># we also want to keep track of which ones are set to reproduce what was set before.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_setters_saved</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">implement_for</span><span class="o">.</span><span class="n">_implementations</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">):</span>
         <span class="n">implement_for</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">setters_dict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_setters_saved</span><span class="p">)</span>
         <span class="nb">delattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_setters_saved&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">clone</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clone</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># override this method if your children class takes __init__ parameters</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">backend</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">backend</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">):</span>
@@ -592,11 +592,11 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span>
 
     <span class="nd">@backend</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span> <span class="nf">backend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">backend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span> <span class="o">=</span> <span class="n">value</span></div>
 
 
-<div class="viewcode-block" id="gym_backend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.gym_backend.html#torchrl.envs.gym_backend">[docs]</a><span class="k">def</span> <span class="nf">gym_backend</span><span class="p">(</span><span class="n">submodule</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="gym_backend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.gym_backend.html#torchrl.envs.gym_backend">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">gym_backend</span><span class="p">(</span><span class="n">submodule</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns the gym backend, or a sumbodule of it.</span>
 
 <span class="sd">    Args:</span>
@@ -617,11 +617,11 @@
     <span class="k">if</span> <span class="n">DEFAULT_GYM</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="c1"># rule of thumbs: gymnasium precedes</span>
-            <span class="kn">import</span> <span class="nn">gymnasium</span> <span class="k">as</span> <span class="nn">gym</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">gymnasium</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gym</span>
         <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
             <span class="n">IMPORT_ERROR</span> <span class="o">=</span> <span class="n">err</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="kn">import</span> <span class="nn">gym</span> <span class="k">as</span> <span class="nn">gym</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">gym</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gym</span>
             <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                 <span class="n">IMPORT_ERROR</span> <span class="o">=</span> <span class="n">err</span>
                 <span class="n">gym</span> <span class="o">=</span> <span class="kc">None</span>
@@ -637,7 +637,7 @@
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;GymWrapper&quot;</span><span class="p">,</span> <span class="s2">&quot;GymEnv&quot;</span><span class="p">]</span>
 
 
-<span class="k">def</span> <span class="nf">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
     <span class="n">spec</span><span class="p">,</span>
     <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -806,56 +806,56 @@
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.18&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_box_convert</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_box_convert</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>
     <span class="n">low</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">low</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
     <span class="n">high</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">high</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">Box</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="n">high</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.18&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_box_convert</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_box_convert</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
     <span class="n">low</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">low</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
     <span class="n">high</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">high</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">Box</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="n">high</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_box_convert</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_box_convert</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
     <span class="n">low</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">low</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
     <span class="n">high</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">high</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">Box</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="n">high</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_box_convert</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_box_convert</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
     <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">GYMNASIUM_1_ERROR</span><span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.21&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_multidiscrete_convert</span><span class="p">(</span><span class="n">gym_spaces</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_multidiscrete_convert</span><span class="p">(</span><span class="n">gym_spaces</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">multi_discrete</span><span class="o">.</span><span class="n">MultiDiscrete</span><span class="p">(</span>
         <span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch_to_numpy_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
     <span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_multidiscrete_convert</span><span class="p">(</span><span class="n">gym_spaces</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_multidiscrete_convert</span><span class="p">(</span><span class="n">gym_spaces</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
     <span class="k">return</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">multi_discrete</span><span class="o">.</span><span class="n">MultiDiscrete</span><span class="p">(</span>
         <span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch_to_numpy_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
     <span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_multidiscrete_convert</span><span class="p">(</span><span class="n">gym_spaces</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_multidiscrete_convert</span><span class="p">(</span><span class="n">gym_spaces</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
     <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">GYMNASIUM_1_ERROR</span><span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.21&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_multidiscrete_convert</span><span class="p">(</span><span class="n">gym_spaces</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_multidiscrete_convert</span><span class="p">(</span><span class="n">gym_spaces</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
     <span class="k">return</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">multi_discrete</span><span class="o">.</span><span class="n">MultiDiscrete</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_torchrl_to_gym_spec_transform</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_torchrl_to_gym_spec_transform</span><span class="p">(</span>
     <span class="n">spec</span><span class="p">,</span>
     <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
@@ -927,7 +927,7 @@
         <span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_get_envs</span><span class="p">(</span><span class="n">to_dict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_envs</span><span class="p">(</span><span class="n">to_dict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">:</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_gym</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;Gym(nasium) could not be found in your virtual environment.&quot;</span><span class="p">)</span>
     <span class="n">envs</span> <span class="o">=</span> <span class="n">_get_gym_envs</span><span class="p">()</span>
@@ -937,29 +937,29 @@
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.26.0&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_get_gym_envs</span><span class="p">():</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_gym_envs</span><span class="p">():</span>  <span class="c1"># noqa: F811</span>
     <span class="n">gym</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">gym</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">registration</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">env_specs</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.26.0&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_get_gym_envs</span><span class="p">():</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_gym_envs</span><span class="p">():</span>  <span class="c1"># noqa: F811</span>
     <span class="n">gym</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">gym</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">registration</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_get_gym_envs</span><span class="p">():</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_gym_envs</span><span class="p">():</span>  <span class="c1"># noqa: F811</span>
     <span class="n">gym</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">gym</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">registration</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_get_gym_envs</span><span class="p">():</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_gym_envs</span><span class="p">():</span>  <span class="c1"># noqa: F811</span>
     <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">GYMNASIUM_1_ERROR</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_is_from_pixels</span><span class="p">(</span><span class="n">env</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_from_pixels</span><span class="p">(</span><span class="n">env</span><span class="p">):</span>
     <span class="n">observation_spec</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">observation_space</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">PixelObservationWrapper</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span>
@@ -967,10 +967,10 @@
         <span class="p">)</span><span class="o">.</span><span class="n">PixelObservationWrapper</span>
     <span class="k">except</span> <span class="ne">ModuleNotFoundError</span><span class="p">:</span>
 
-        <span class="k">class</span> <span class="nc">PixelObservationWrapper</span><span class="p">:</span>
+        <span class="k">class</span><span class="w"> </span><span class="nc">PixelObservationWrapper</span><span class="p">:</span>
             <span class="k">pass</span>
 
-    <span class="kn">from</span> <span class="nn">torchrl.envs.libs.utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
         <span class="n">GymPixelObservationWrapper</span> <span class="k">as</span> <span class="n">LegacyPixelObservationWrapper</span><span class="p">,</span>
     <span class="p">)</span>
 
@@ -1004,20 +1004,20 @@
     <span class="k">return</span> <span class="kc">False</span>
 
 
-<span class="k">class</span> <span class="nc">_AsyncMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_AsyncMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">instance</span><span class="p">:</span> <span class="n">GymWrapper</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="c1"># before gym 0.22, there was no final_observation</span>
         <span class="k">if</span> <span class="n">instance</span><span class="o">.</span><span class="n">_is_batched</span><span class="p">:</span>
             <span class="n">gym_backend</span> <span class="o">=</span> <span class="n">instance</span><span class="o">.</span><span class="n">get_library_name</span><span class="p">(</span><span class="n">instance</span><span class="o">.</span><span class="n">_env</span><span class="p">)</span>
-            <span class="kn">from</span> <span class="nn">torchrl.envs.transforms.transforms</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
                 <span class="n">TransformedEnv</span><span class="p">,</span>
                 <span class="n">VecGymEnvTransform</span><span class="p">,</span>
             <span class="p">)</span>
 
             <span class="k">if</span> <span class="n">_has_sb3</span><span class="p">:</span>
-                <span class="kn">from</span> <span class="nn">stable_baselines3.common.vec_env.base_vec_env</span> <span class="kn">import</span> <span class="n">VecEnv</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">stable_baselines3.common.vec_env.base_vec_env</span><span class="w"> </span><span class="kn">import</span> <span class="n">VecEnv</span>
 
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instance</span><span class="o">.</span><span class="n">_env</span><span class="p">,</span> <span class="n">VecEnv</span><span class="p">):</span>
                     <span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;sb3&quot;</span>
@@ -1030,7 +1030,7 @@
             <span class="c1"># it is gym and not gymnasium and the version is before 0.22.0</span>
             <span class="n">add_info_dict</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;gym&quot;</span> <span class="ow">and</span> <span class="n">gym_backend</span> <span class="o">==</span> <span class="s2">&quot;gym&quot;</span><span class="p">:</span>  <span class="c1"># check gym against gymnasium</span>
-                <span class="kn">import</span> <span class="nn">gym</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">gym</span>
 
                 <span class="k">if</span> <span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">gym</span><span class="o">.</span><span class="n">__version__</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">&quot;0.22.0&quot;</span><span class="p">):</span>
                     <span class="n">warn</span><span class="p">(</span>
@@ -1052,7 +1052,7 @@
         <span class="k">return</span> <span class="n">instance</span>
 
 
-<div class="viewcode-block" id="GymWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.GymWrapper.html#torchrl.envs.GymWrapper">[docs]</a><span class="k">class</span> <span class="nc">GymWrapper</span><span class="p">(</span><span class="n">GymLikeEnv</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_AsyncMeta</span><span class="p">):</span>
+<div class="viewcode-block" id="GymWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.GymWrapper.html#torchrl.envs.GymWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">GymWrapper</span><span class="p">(</span><span class="n">GymLikeEnv</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_AsyncMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;OpenAI Gym environment wrapper.</span>
 
 <span class="sd">    Works accross `gymnasium &lt;https://gymnasium.farama.org/&gt;`_ and `OpenAI/gym &lt;https://github.com/openai/gym&gt;`_.</span>
@@ -1169,13 +1169,13 @@
     <span class="n">libname</span> <span class="o">=</span> <span class="s2">&quot;gym&quot;</span>
 
     <span class="nd">@_classproperty</span>
-    <span class="k">def</span> <span class="nf">available_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">available_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_gym</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">[]</span>
         <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">_get_envs</span><span class="p">())</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">get_library_name</span><span class="p">(</span><span class="n">env</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_library_name</span><span class="p">(</span><span class="n">env</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Given a gym environment, returns the backend name (either gym or gymnasium).</span>
 
 <span class="sd">        This can be used to set the appropriate backend when needed:</span>
@@ -1190,14 +1190,14 @@
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="kn">import</span> <span class="nn">gym</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">gym</span>
 
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_space</span><span class="p">,</span> <span class="n">gym</span><span class="o">.</span><span class="n">spaces</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">Space</span><span class="p">):</span>
                 <span class="k">return</span> <span class="s2">&quot;gym&quot;</span>
         <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
             <span class="k">pass</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="kn">import</span> <span class="nn">gymnasium</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">gymnasium</span>
 
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_space</span><span class="p">,</span> <span class="n">gymnasium</span><span class="o">.</span><span class="n">spaces</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">Space</span><span class="p">):</span>
                 <span class="k">return</span> <span class="s2">&quot;gymnasium&quot;</span>
@@ -1207,7 +1207,7 @@
             <span class="sa">f</span><span class="s2">&quot;Could not find the library of env </span><span class="si">{</span><span class="n">env</span><span class="si">}</span><span class="s2">. Please file an issue on torchrl github repo.&quot;</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_seed_calls_reset</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_categorical_action_encoding</span> <span class="o">=</span> <span class="n">categorical_action_encoding</span>
         <span class="k">if</span> <span class="n">env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1233,7 +1233,7 @@
             <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_post_init</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">_post_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_post_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># writes the functions that are gym-version specific to the instance</span>
         <span class="c1"># once and for all. This is aimed at avoiding the need of decorating code</span>
         <span class="c1"># with set_gym_backend + allowing for parallel execution (which would</span>
@@ -1250,9 +1250,9 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_output_transform</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_transform</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_is_batched</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_batched</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">_has_sb3</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">stable_baselines3.common.vec_env.base_vec_env</span> <span class="kn">import</span> <span class="n">VecEnv</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">stable_baselines3.common.vec_env.base_vec_env</span><span class="w"> </span><span class="kn">import</span> <span class="n">VecEnv</span>
 
             <span class="n">tuple_of_classes</span> <span class="o">=</span> <span class="p">(</span><span class="n">VecEnv</span><span class="p">,)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -1262,7 +1262,7 @@
         <span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_get_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;num_envs&quot;</span><span class="p">):</span>
             <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="n">env</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">])</span>
         <span class="k">else</span><span class="p">:</span>
@@ -1270,7 +1270,7 @@
         <span class="k">return</span> <span class="n">batch_size</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>  <span class="c1"># gymnasium wants the unwrapped env</span>
-    <span class="k">def</span> <span class="nf">_get_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="n">env_unwrapped</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">unwrapped</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env_unwrapped</span><span class="p">,</span> <span class="s2">&quot;num_envs&quot;</span><span class="p">):</span>
             <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="n">env_unwrapped</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">])</span>
@@ -1279,17 +1279,17 @@
         <span class="k">return</span> <span class="n">batch_size</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_get_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">GYMNASIUM_1_ERROR</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
         <span class="k">if</span> <span class="s2">&quot;env&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Could not find environment key &#39;env&#39; in kwargs.&quot;</span><span class="p">)</span>
         <span class="n">env</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;action_space&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;observation_space&quot;</span><span class="p">)):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;env is not of type &#39;gym.Env&#39;.&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_build_env</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_env</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">env</span><span class="p">,</span>
         <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -1316,7 +1316,7 @@
             <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_gym_env</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">env</span>
 
-    <span class="k">def</span> <span class="nf">read_action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">read_action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
         <span class="n">action</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">read_action</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="p">,</span> <span class="p">(</span><span class="n">OneHot</span><span class="p">,</span> <span class="n">Categorical</span><span class="p">))</span> <span class="ow">and</span> <span class="n">action</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="c1"># some envs require an integer for indexing</span>
@@ -1324,18 +1324,18 @@
         <span class="k">return</span> <span class="n">action</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.19.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
-        <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">GymPixelObservationWrapper</span> <span class="k">as</span> <span class="n">PixelObservationWrapper</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymPixelObservationWrapper</span> <span class="k">as</span> <span class="n">PixelObservationWrapper</span>
 
         <span class="k">return</span> <span class="n">PixelObservationWrapper</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="o">=</span><span class="n">pixels_only</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.19.0&quot;</span><span class="p">,</span> <span class="s2">&quot;0.26.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="n">pixel_observation</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;wrappers.pixel_observation&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">pixel_observation</span><span class="o">.</span><span class="n">PixelObservationWrapper</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="o">=</span><span class="n">pixels_only</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.26.0&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="n">compatibility</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;wrappers.compatibility&quot;</span><span class="p">)</span>
         <span class="n">pixel_observation</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;wrappers.pixel_observation&quot;</span><span class="p">)</span>
 
@@ -1352,18 +1352,18 @@
         <span class="c1"># resetting as 0.26 comes with a very &#39;nice&#39; OrderEnforcing wrapper</span>
         <span class="n">env</span> <span class="o">=</span> <span class="n">compatibility</span><span class="o">.</span><span class="n">EnvCompatibility</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
         <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
-        <span class="kn">from</span> <span class="nn">torchrl.envs.libs.utils</span> <span class="kn">import</span> <span class="p">(</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
             <span class="n">GymPixelObservationWrapper</span> <span class="k">as</span> <span class="n">LegacyPixelObservationWrapper</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">LegacyPixelObservationWrapper</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="o">=</span><span class="n">pixels_only</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">GYMNASIUM_1_ERROR</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_gym_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="n">compatibility</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;wrappers.compatibility&quot;</span><span class="p">)</span>
         <span class="n">pixel_observation</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;wrappers.pixel_observation&quot;</span><span class="p">)</span>
 
@@ -1380,17 +1380,17 @@
         <span class="c1"># resetting as 0.26 comes with a very &#39;nice&#39; OrderEnforcing wrapper</span>
         <span class="n">env</span> <span class="o">=</span> <span class="n">compatibility</span><span class="o">.</span><span class="n">EnvCompatibility</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
         <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
-        <span class="kn">from</span> <span class="nn">torchrl.envs.libs.utils</span> <span class="kn">import</span> <span class="p">(</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
             <span class="n">GymPixelObservationWrapper</span> <span class="k">as</span> <span class="n">LegacyPixelObservationWrapper</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">LegacyPixelObservationWrapper</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">pixels_only</span><span class="o">=</span><span class="n">pixels_only</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">lib</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModuleType</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lib</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModuleType</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">gym_backend</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seed_calls_reset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Determine basing on gym version whether `reset` is called when setting seed.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_set_seed_initial</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
@@ -1402,17 +1402,17 @@
         <span class="k">return</span> <span class="n">seed</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.15.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_seed_calls_reset</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.15.0&quot;</span><span class="p">,</span> <span class="s2">&quot;0.19.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_seed_calls_reset</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.19.0&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_seed_calls_reset</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1425,14 +1425,14 @@
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">err2</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">err</span> <span class="kn">from</span> <span class="nn">err2</span>
+                <span class="k">raise</span> <span class="n">err</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err2</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">GYMNASIUM_1_ERROR</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed_initial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_seed_calls_reset</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1445,22 +1445,22 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_reward_space</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reward_space</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;reward_space&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">env</span><span class="o">.</span><span class="n">reward_space</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">env</span><span class="o">.</span><span class="n">reward_space</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_reward_space</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reward_space</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">GYMNASIUM_1_ERROR</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_reward_space</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reward_space</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">unwrapped</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;reward_space&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">env</span><span class="o">.</span><span class="n">reward_space</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">rs</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward_space</span>
             <span class="k">return</span> <span class="n">rs</span>
 
-    <span class="k">def</span> <span class="nf">_make_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="s2">&quot;gym.Env&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="s2">&quot;gym.Env&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
         <span class="c1"># If batch_size is provided, we se it to tell what batch size must be used</span>
         <span class="c1"># instead of self.batch_size</span>
         <span class="n">cur_batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([])</span>
@@ -1514,7 +1514,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">observation_spec</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.26&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_make_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;done&quot;</span><span class="p">:</span> <span class="n">Categorical</span><span class="p">(</span>
@@ -1531,7 +1531,7 @@
         <span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.26&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_make_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;done&quot;</span><span class="p">:</span> <span class="n">Categorical</span><span class="p">(</span>
@@ -1548,7 +1548,7 @@
         <span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;0.27&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_make_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;done&quot;</span><span class="p">:</span> <span class="n">Categorical</span><span class="p">(</span>
@@ -1565,7 +1565,7 @@
         <span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.26&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_reset_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="nb">isinstance</span><span class="p">(</span><span class="n">reset_data</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
             <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">reset_data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
@@ -1575,15 +1575,15 @@
         <span class="k">return</span> <span class="n">reset_data</span><span class="p">,</span> <span class="kc">None</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.26&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_reset_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">return</span> <span class="n">reset_data</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;0.27&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_reset_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">return</span> <span class="n">reset_data</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.24&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_outputs_tuple</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_outputs_tuple</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="n">observations</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">step_outputs_tuple</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_batched</span><span class="p">:</span>
             <span class="c1"># info needs to be flipped</span>
@@ -1612,7 +1612,7 @@
         <span class="k">return</span> <span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">terminated</span><span class="p">,</span> <span class="n">truncated</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.24&quot;</span><span class="p">,</span> <span class="s2">&quot;0.26&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_outputs_tuple</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_outputs_tuple</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="n">observations</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">step_outputs_tuple</span>
         <span class="c1"># The variable naming follows torchrl&#39;s convention here.</span>
         <span class="c1"># A done is interpreted the union of terminated and truncated.</span>
@@ -1638,7 +1638,7 @@
         <span class="k">return</span> <span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">terminated</span><span class="p">,</span> <span class="n">truncated</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.26&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_outputs_tuple</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_outputs_tuple</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="c1"># The variable naming follows torchrl&#39;s convention here.</span>
         <span class="n">observations</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">terminated</span><span class="p">,</span> <span class="n">truncated</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">step_outputs_tuple</span>
         <span class="k">return</span> <span class="p">(</span>
@@ -1651,7 +1651,7 @@
         <span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;0.27&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_outputs_tuple</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_outputs_tuple</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="c1"># The variable naming follows torchrl&#39;s convention here.</span>
         <span class="n">observations</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">terminated</span><span class="p">,</span> <span class="n">truncated</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">step_outputs_tuple</span>
         <span class="k">return</span> <span class="p">(</span>
@@ -1663,20 +1663,20 @@
             <span class="n">info</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_init_env</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_env</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(env=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="si">}</span><span class="s2">, batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">)&quot;</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">rebuild_with_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">new_kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rebuild_with_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">new_kwargs</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_constructor_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">new_kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_env</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_constructor_kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_make_specs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_batched</span><span class="p">:</span>
@@ -1704,7 +1704,7 @@
 <span class="p">}</span>
 
 
-<div class="viewcode-block" id="GymEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv">[docs]</a><span class="k">class</span> <span class="nc">GymEnv</span><span class="p">(</span><span class="n">GymWrapper</span><span class="p">):</span>
+<div class="viewcode-block" id="GymEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">GymEnv</span><span class="p">(</span><span class="n">GymWrapper</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;OpenAI Gym environment wrapper constructed by environment ID directly.</span>
 
 <span class="sd">    Works accross `gymnasium &lt;https://gymnasium.farama.org/&gt;`_ and `OpenAI/gym &lt;https://github.com/openai/gym&gt;`_.</span>
@@ -1827,13 +1827,13 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env_name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env_name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">env_name</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_set_gym_args</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.24.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_gym_args</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_gym_args</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="n">disable_env_checker</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;disable_env_checker&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">disable_env_checker</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1841,30 +1841,30 @@
             <span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.24.0&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_gym_args</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_gym_args</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;disable_env_checker&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_gym_args</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_gym_args</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">GYMNASIUM_1_ERROR</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_gym_args</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_gym_args</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;disable_env_checker&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_async_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_async_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;vector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">AsyncVectorEnv</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_build_env</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_env</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">env_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
@@ -1919,33 +1919,33 @@
         <span class="k">return</span> <span class="n">env</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.25.1&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_gym_default</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_gym_default</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="c1"># Do nothing for older gym versions.</span>
         <span class="k">pass</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.25.1&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_gym_default</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_gym_default</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="k">if</span> <span class="n">from_pixels</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;render_mode&quot;</span><span class="p">,</span> <span class="s2">&quot;rgb_array&quot;</span><span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="s2">&quot;0.27.0&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">_set_gym_default</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_gym_default</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="k">if</span> <span class="n">from_pixels</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;render_mode&quot;</span><span class="p">,</span> <span class="s2">&quot;rgb_array&quot;</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">env_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">env_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constructor_kwargs</span><span class="p">[</span><span class="s2">&quot;env_name&quot;</span><span class="p">]</span>
 
-    <span class="k">def</span> <span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
         <span class="k">if</span> <span class="s2">&quot;env_name&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Expected &#39;env_name&#39; to be part of kwargs&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(env=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">env_name</span><span class="si">}</span><span class="s2">, batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">, device=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">)&quot;</span></div>
 
 
-<div class="viewcode-block" id="MOGymWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.MOGymWrapper.html#torchrl.envs.MOGymWrapper">[docs]</a><span class="k">class</span> <span class="nc">MOGymWrapper</span><span class="p">(</span><span class="n">GymWrapper</span><span class="p">):</span>
+<div class="viewcode-block" id="MOGymWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.MOGymWrapper.html#torchrl.envs.MOGymWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MOGymWrapper</span><span class="p">(</span><span class="n">GymWrapper</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;FARAMA MO-Gymnasium environment wrapper.</span>
 
 <span class="sd">    Examples:</span>
@@ -1962,7 +1962,7 @@
     <span class="n">_make_specs</span> <span class="o">=</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">)(</span><span class="n">GymEnv</span><span class="o">.</span><span class="n">_make_specs</span><span class="p">)</span>
 
     <span class="nd">@_classproperty</span>
-    <span class="k">def</span> <span class="nf">available_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">available_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_mo</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">[]</span>
         <span class="k">return</span> <span class="p">[</span>
@@ -1987,7 +1987,7 @@
         <span class="p">]</span></div>
 
 
-<div class="viewcode-block" id="MOGymEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.MOGymEnv.html#torchrl.envs.MOGymEnv">[docs]</a><span class="k">class</span> <span class="nc">MOGymEnv</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">):</span>
+<div class="viewcode-block" id="MOGymEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.MOGymEnv.html#torchrl.envs.MOGymEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MOGymEnv</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;FARAMA MO-Gymnasium environment wrapper.</span>
 
 <span class="sd">    Examples:</span>
@@ -2004,21 +2004,21 @@
     <span class="n">available_envs</span> <span class="o">=</span> <span class="n">MOGymWrapper</span><span class="o">.</span><span class="n">available_envs</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">lib</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModuleType</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lib</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModuleType</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">_has_mo</span><span class="p">:</span>
-            <span class="kn">import</span> <span class="nn">mo_gymnasium</span> <span class="k">as</span> <span class="nn">mo_gym</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">mo_gymnasium</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mo_gym</span>
 
             <span class="k">return</span> <span class="n">mo_gym</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="kn">import</span> <span class="nn">mo_gymnasium</span>  <span class="c1"># noqa: F401</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">mo_gymnasium</span>  <span class="c1"># noqa: F401</span>
             <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;MO-gymnasium not found, check installation&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;MO-gymnasium not found, check installation&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
 
     <span class="n">_make_specs</span> <span class="o">=</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">)(</span><span class="n">GymEnv</span><span class="o">.</span><span class="n">_make_specs</span><span class="p">)</span></div>
 
 
-<span class="k">class</span> <span class="nc">terminal_obs_reader</span><span class="p">(</span><span class="n">default_info_dict_reader</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">terminal_obs_reader</span><span class="p">(</span><span class="n">default_info_dict_reader</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Terminal observation reader for &#39;vectorized&#39; gym environments.</span>
 
 <span class="sd">    When running envs in parallel, Gym(nasium) writes the result of the true call</span>
@@ -2054,7 +2054,7 @@
         <span class="s2">&quot;gym&quot;</span><span class="p">:</span> <span class="s2">&quot;final_info&quot;</span><span class="p">,</span>
     <span class="p">}</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">backend</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;final&quot;</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">backend</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;final&quot;</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_obs_spec</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
@@ -2062,10 +2062,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_final_validated</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">info_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">info_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_info_spec</span>
 
-    <span class="k">def</span> <span class="nf">_read_obs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_read_obs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">obs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
@@ -2100,8 +2100,8 @@
                 <span class="sa">f</span><span class="s2">&quot;Observations of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span><span class="si">}</span><span class="s2"> are not supported yet.&quot;</span>
             <span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">info_dict</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
-        <span class="k">def</span> <span class="nf">replace_none</span><span class="p">(</span><span class="n">nparray</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">info_dict</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">replace_none</span><span class="p">(</span><span class="n">nparray</span><span class="p">):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">nparray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="ow">or</span> <span class="n">nparray</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;O&quot;</span><span class="p">):</span>
                 <span class="k">return</span> <span class="n">nparray</span>
             <span class="n">is_none</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">info</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">nparray</span><span class="p">])</span>
@@ -2146,12 +2146,12 @@
             <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">key</span><span class="p">),</span> <span class="n">final_obs_buffer</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tensordict</span>
 
-    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_final_validated</span> <span class="o">=</span> <span class="kc">False</span>
 
 
-<span class="k">def</span> <span class="nf">_flip_info_tuple</span><span class="p">(</span><span class="n">info</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_flip_info_tuple</span><span class="p">(</span><span class="n">info</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">]:</span>
     <span class="c1"># In Gym &lt; 0.24, batched envs returned tuples of dict, and not dict of tuples.</span>
     <span class="c1"># We patch this by flipping the tuple -&gt; dict order.</span>
     <span class="n">info_example</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>

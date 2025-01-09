@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -407,15 +407,15 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 
 
-<span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">import</span> <span class="nn">pathlib</span>
-<span class="kn">import</span> <span class="nn">uuid</span>
-<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.record.loggers.common</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">Logger</span>
 
 
-<div class="viewcode-block" id="generate_exp_name"><a class="viewcode-back" href="../../../../reference/generated/torchrl.record.loggers.generate_exp_name.html#torchrl.record.loggers.generate_exp_name">[docs]</a><span class="k">def</span> <span class="nf">generate_exp_name</span><span class="p">(</span><span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">experiment_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<div class="viewcode-block" id="generate_exp_name"><a class="viewcode-back" href="../../../../reference/generated/torchrl.record.loggers.generate_exp_name.html#torchrl.record.loggers.generate_exp_name">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">generate_exp_name</span><span class="p">(</span><span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">experiment_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Generates an ID (str) for the described experiment using UUID and current date.&quot;&quot;&quot;</span>
     <span class="n">exp_name</span> <span class="o">=</span> <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
         <span class="p">(</span>
@@ -428,7 +428,7 @@
     <span class="k">return</span> <span class="n">exp_name</span></div>
 
 
-<div class="viewcode-block" id="get_logger"><a class="viewcode-back" href="../../../../reference/generated/torchrl.record.loggers.get_logger.html#torchrl.record.loggers.get_logger">[docs]</a><span class="k">def</span> <span class="nf">get_logger</span><span class="p">(</span>
+<div class="viewcode-block" id="get_logger"><a class="viewcode-back" href="../../../../reference/generated/torchrl.record.loggers.get_logger.html#torchrl.record.loggers.get_logger">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">get_logger</span><span class="p">(</span>
     <span class="n">logger_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">logger_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">experiment_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Logger</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a logger instance of the provided `logger_type`.</span>
@@ -441,24 +441,24 @@
 <span class="sd">        kwargs (dict[str]): might contain either `wandb_kwargs` or `mlflow_kwargs`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">logger_type</span> <span class="o">==</span> <span class="s2">&quot;tensorboard&quot;</span><span class="p">:</span>
-        <span class="kn">from</span> <span class="nn">torchrl.record.loggers.tensorboard</span> <span class="kn">import</span> <span class="n">TensorboardLogger</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers.tensorboard</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorboardLogger</span>
 
         <span class="n">logger</span> <span class="o">=</span> <span class="n">TensorboardLogger</span><span class="p">(</span><span class="n">log_dir</span><span class="o">=</span><span class="n">logger_name</span><span class="p">,</span> <span class="n">exp_name</span><span class="o">=</span><span class="n">experiment_name</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">logger_type</span> <span class="o">==</span> <span class="s2">&quot;csv&quot;</span><span class="p">:</span>
-        <span class="kn">from</span> <span class="nn">torchrl.record.loggers.csv</span> <span class="kn">import</span> <span class="n">CSVLogger</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers.csv</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSVLogger</span>
 
         <span class="n">logger</span> <span class="o">=</span> <span class="n">CSVLogger</span><span class="p">(</span>
             <span class="n">log_dir</span><span class="o">=</span><span class="n">logger_name</span><span class="p">,</span> <span class="n">exp_name</span><span class="o">=</span><span class="n">experiment_name</span><span class="p">,</span> <span class="n">video_format</span><span class="o">=</span><span class="s2">&quot;mp4&quot;</span>
         <span class="p">)</span>
     <span class="k">elif</span> <span class="n">logger_type</span> <span class="o">==</span> <span class="s2">&quot;wandb&quot;</span><span class="p">:</span>
-        <span class="kn">from</span> <span class="nn">torchrl.record.loggers.wandb</span> <span class="kn">import</span> <span class="n">WandbLogger</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers.wandb</span><span class="w"> </span><span class="kn">import</span> <span class="n">WandbLogger</span>
 
         <span class="n">wandb_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wandb_kwargs&quot;</span><span class="p">,</span> <span class="p">{})</span>
         <span class="n">logger</span> <span class="o">=</span> <span class="n">WandbLogger</span><span class="p">(</span>
             <span class="n">log_dir</span><span class="o">=</span><span class="n">logger_name</span><span class="p">,</span> <span class="n">exp_name</span><span class="o">=</span><span class="n">experiment_name</span><span class="p">,</span> <span class="o">**</span><span class="n">wandb_kwargs</span>
         <span class="p">)</span>
     <span class="k">elif</span> <span class="n">logger_type</span> <span class="o">==</span> <span class="s2">&quot;mlflow&quot;</span><span class="p">:</span>
-        <span class="kn">from</span> <span class="nn">torchrl.record.loggers.mlflow</span> <span class="kn">import</span> <span class="n">MLFlowLogger</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers.mlflow</span><span class="w"> </span><span class="kn">import</span> <span class="n">MLFlowLogger</span>
 
         <span class="n">mlflow_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mlflow_kwargs&quot;</span><span class="p">,</span> <span class="p">{})</span>
         <span class="n">logger</span> <span class="o">=</span> <span class="n">MLFlowLogger</span><span class="p">(</span>

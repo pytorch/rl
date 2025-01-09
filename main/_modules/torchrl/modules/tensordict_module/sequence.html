@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -406,16 +406,16 @@
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
-<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Composite</span>
-<span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module.common</span> <span class="kn">import</span> <span class="n">SafeModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.tensordict_module.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">SafeModule</span>
 
 
-<div class="viewcode-block" id="SafeSequential"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.tensordict_module.SafeSequential.html#torchrl.modules.tensordict_module.SafeSequential">[docs]</a><span class="k">class</span> <span class="nc">SafeSequential</span><span class="p">(</span><span class="n">TensorDictSequential</span><span class="p">,</span> <span class="n">SafeModule</span><span class="p">):</span>
+<div class="viewcode-block" id="SafeSequential"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.tensordict_module.SafeSequential.html#torchrl.modules.tensordict_module.SafeSequential">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">SafeSequential</span><span class="p">(</span><span class="n">TensorDictSequential</span><span class="p">,</span> <span class="n">SafeModule</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A safe sequence of TensorDictModules.</span>
 
 <span class="sd">    Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor</span>
@@ -426,7 +426,7 @@
 <span class="sd">    Args:</span>
 <span class="sd">         modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.</span>
 <span class="sd">         partial_tolerant (bool, optional): if ``True``, the input tensordict can miss some of the input keys.</span>
-<span class="sd">            If so, the only module that will be executed are those who can be executed given the keys that</span>
+<span class="sd">            If so, the only modules that will be executed are those which can be executed given the keys that</span>
 <span class="sd">            are present.</span>
 <span class="sd">            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is ``True`` AND if the</span>
 <span class="sd">            stack does not have the required keys, then SafeSequential will scan through the sub-tensordicts</span>
@@ -506,7 +506,7 @@
 
     <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">modules</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
         <span class="n">partial_tolerant</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>

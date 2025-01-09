@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -405,34 +405,34 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">functools</span>
-<span class="kn">import</span> <span class="nn">re</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span>
-<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span><span class="p">,</span> <span class="n">Tensor</span>
-<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
-<span class="kn">from</span> <span class="nn">torch.nn.modules</span> <span class="kn">import</span> <span class="n">dropout</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span><span class="p">,</span> <span class="n">Tensor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">dropout</span>
 
 <span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">vmap</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">vmap</span>
 <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="kn">from</span> <span class="nn">functorch</span> <span class="kn">import</span> <span class="n">vmap</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">functorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">vmap</span>
     <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">err_ft</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">err_ft</span> <span class="kn">from</span> <span class="nn">err</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">step_mdp</span>
+        <span class="k">raise</span> <span class="n">err_ft</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">step_mdp</span>
 
 <span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">torch.compiler</span> <span class="kn">import</span> <span class="n">is_dynamo_compiling</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.compiler</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_dynamo_compiling</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">torch._dynamo</span> <span class="kn">import</span> <span class="n">is_compiling</span> <span class="k">as</span> <span class="n">is_dynamo_compiling</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch._dynamo</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_compiling</span> <span class="k">as</span> <span class="n">is_dynamo_compiling</span>
 
 <span class="n">_GAMMA_LMBDA_DEPREC_ERROR</span> <span class="o">=</span> <span class="p">(</span>
     <span class="s2">&quot;Passing gamma / lambda parameters through the loss constructor &quot;</span>
@@ -443,7 +443,7 @@
 <span class="n">RANDOM_MODULE_LIST</span> <span class="o">=</span> <span class="p">(</span><span class="n">dropout</span><span class="o">.</span><span class="n">_DropoutNd</span><span class="p">,)</span>
 
 
-<div class="viewcode-block" id="ValueEstimators"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators">[docs]</a><span class="k">class</span> <span class="nc">ValueEstimators</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+<div class="viewcode-block" id="ValueEstimators"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ValueEstimators</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Value function enumerator for custom-built estimators.</span>
 
 <span class="sd">    Allows for a flexible usage of various value functions when the loss module</span>
@@ -462,7 +462,7 @@
     <span class="n">VTrace</span> <span class="o">=</span> <span class="s2">&quot;V-trace&quot;</span></div>
 
 
-<div class="viewcode-block" id="default_value_kwargs"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.default_value_kwargs.html#torchrl.objectives.default_value_kwargs">[docs]</a><span class="k">def</span> <span class="nf">default_value_kwargs</span><span class="p">(</span><span class="n">value_type</span><span class="p">:</span> <span class="n">ValueEstimators</span><span class="p">):</span>
+<div class="viewcode-block" id="default_value_kwargs"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.default_value_kwargs.html#torchrl.objectives.default_value_kwargs">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">default_value_kwargs</span><span class="p">(</span><span class="n">value_type</span><span class="p">:</span> <span class="n">ValueEstimators</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Default value function keyword argument generator.</span>
 
 <span class="sd">    Args:</span>
@@ -488,21 +488,21 @@
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown value type </span><span class="si">{</span><span class="n">value_type</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span></div>
 
 
-<span class="k">class</span> <span class="nc">_context_manager</span><span class="p">:</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_context_manager</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">value</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="p">[]</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">):</span>
         <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
-        <span class="k">def</span> <span class="nf">decorate_context</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">decorate_context</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
             <span class="k">with</span> <span class="bp">self</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">decorate_context</span>
 
 
-<div class="viewcode-block" id="distance_loss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.distance_loss.html#torchrl.objectives.distance_loss">[docs]</a><span class="k">def</span> <span class="nf">distance_loss</span><span class="p">(</span>
+<div class="viewcode-block" id="distance_loss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.distance_loss.html#torchrl.objectives.distance_loss">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">distance_loss</span><span class="p">(</span>
     <span class="n">v1</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">v2</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">loss_function</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -552,7 +552,7 @@
     <span class="k">return</span> <span class="n">value_loss</span></div>
 
 
-<span class="k">class</span> <span class="nc">TargetNetUpdater</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TargetNetUpdater</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;An abstract class for target network update in Double DQN/DDPG.</span>
 
 <span class="sd">    Args:</span>
@@ -560,11 +560,11 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">loss_module</span><span class="p">:</span> <span class="s2">&quot;LossModule&quot;</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
     <span class="p">):</span>
-        <span class="kn">from</span> <span class="nn">torchrl.objectives.common</span> <span class="kn">import</span> <span class="n">LossModule</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LossModule</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loss_module</span><span class="p">,</span> <span class="n">LossModule</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The loss_module must be a LossModule instance.&quot;</span><span class="p">)</span>
@@ -592,7 +592,7 @@
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;Incongruent target and source parameter lists: &quot;</span>
                         <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_source</span><span class="si">}</span><span class="s2"> is not an attribute of the loss_module&quot;</span>
-                    <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+                    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_target_names</span> <span class="o">=</span> <span class="n">_target_names</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_source_names</span> <span class="o">=</span> <span class="n">_source_names</span>
@@ -605,7 +605,7 @@
                 <span class="n">loss_module</span><span class="o">.</span><span class="n">_has_update_associated</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">_has_update_associated</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_targets</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_targets</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">targets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_targets_val&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">targets</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">targets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_targets_val&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
@@ -615,11 +615,11 @@
         <span class="k">return</span> <span class="n">targets</span>
 
     <span class="nd">@_targets</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span> <span class="nf">_targets</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">targets</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_targets</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">targets</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_targets_val&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">targets</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_sources_val&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">sources</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_sources_val&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
@@ -629,10 +629,10 @@
         <span class="k">return</span> <span class="n">sources</span>
 
     <span class="nd">@_sources</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span> <span class="nf">_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sources</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sources</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_sources_val&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sources</span>
 
-    <span class="k">def</span> <span class="nf">init_</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">init_</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Updated already initialized.&quot;</span><span class="p">)</span>
         <span class="n">found_distinct</span> <span class="o">=</span> <span class="kc">False</span>
@@ -662,7 +662,7 @@
             <span class="p">)</span>
 
         <span class="c1"># filter the target_ out</span>
-        <span class="k">def</span> <span class="nf">filter_target</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">filter_target</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
                 <span class="k">return</span> <span class="p">(</span><span class="n">filter_target</span><span class="p">(</span><span class="n">key</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="o">*</span><span class="n">key</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
             <span class="k">return</span> <span class="n">key</span><span class="p">[</span><span class="mi">7</span><span class="p">:]</span>
@@ -680,7 +680,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> must be &quot;</span>
@@ -692,10 +692,10 @@
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;the target parameter is part of a graph.&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p_source</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">p_target</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p_source</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">p_target</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
-    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="n">string</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(sources=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_sources</span><span class="si">}</span><span class="s2">, targets=&quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_targets</span><span class="si">}</span><span class="s2">)&quot;</span>
@@ -703,7 +703,7 @@
         <span class="k">return</span> <span class="n">string</span>
 
 
-<div class="viewcode-block" id="SoftUpdate"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.SoftUpdate.html#torchrl.objectives.SoftUpdate">[docs]</a><span class="k">class</span> <span class="nc">SoftUpdate</span><span class="p">(</span><span class="n">TargetNetUpdater</span><span class="p">):</span>
+<div class="viewcode-block" id="SoftUpdate"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.SoftUpdate.html#torchrl.objectives.SoftUpdate">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">SoftUpdate</span><span class="p">(</span><span class="n">TargetNetUpdater</span><span class="p">):</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A soft-update class for target network update in Double DQN/DDPG.</span>
 
 <span class="sd">    This was proposed in &quot;CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING&quot;, https://arxiv.org/pdf/1509.02971.pdf</span>
@@ -721,7 +721,7 @@
 <span class="sd">        tau (scalar): Polyak tau. It is equal to ``1-eps``, and exclusive with it.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">loss_module</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
             <span class="s2">&quot;DQNLoss&quot;</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
@@ -756,13 +756,13 @@
         <span class="nb">super</span><span class="p">(</span><span class="n">SoftUpdate</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">loss_module</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
 
-    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">p_source</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">p_target</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">p_target</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lerp_</span><span class="p">(</span><span class="n">p_source</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="HardUpdate"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.HardUpdate.html#torchrl.objectives.HardUpdate">[docs]</a><span class="k">class</span> <span class="nc">HardUpdate</span><span class="p">(</span><span class="n">TargetNetUpdater</span><span class="p">):</span>
+<div class="viewcode-block" id="HardUpdate"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.HardUpdate.html#torchrl.objectives.HardUpdate">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">HardUpdate</span><span class="p">(</span><span class="n">TargetNetUpdater</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A hard-update class for target network update in Double DQN/DDPG (by contrast with soft updates).</span>
 
 <span class="sd">    This was proposed in the original Double DQN paper: &quot;Deep Reinforcement Learning with Double Q-learning&quot;,</span>
@@ -776,7 +776,7 @@
 <span class="sd">            default: 1000</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">loss_module</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="s2">&quot;DQNLoss&quot;</span><span class="p">,</span> <span class="s2">&quot;DDPGLoss&quot;</span><span class="p">,</span> <span class="s2">&quot;SACLoss&quot;</span><span class="p">,</span> <span class="s2">&quot;TD3Loss&quot;</span><span class="p">],</span>  <span class="c1"># noqa: F821</span>
         <span class="o">*</span><span class="p">,</span>
@@ -786,11 +786,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">value_network_update_interval</span> <span class="o">=</span> <span class="n">value_network_update_interval</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
 
-    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p_source</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">p_target</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p_source</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">p_target</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">value_network_update_interval</span><span class="p">:</span>
             <span class="n">p_target</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">p_source</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">value_network_update_interval</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
@@ -798,10 +798,10 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span></div>
 
 
-<div class="viewcode-block" id="hold_out_net"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.hold_out_net.html#torchrl.objectives.hold_out_net">[docs]</a><span class="k">class</span> <span class="nc">hold_out_net</span><span class="p">(</span><span class="n">_context_manager</span><span class="p">):</span>
+<div class="viewcode-block" id="hold_out_net"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.hold_out_net.html#torchrl.objectives.hold_out_net">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">hold_out_net</span><span class="p">(</span><span class="n">_context_manager</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Context manager to hold a network out of a computational graph.&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">network</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">network</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">network</span> <span class="o">=</span> <span class="n">network</span>
         <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">network</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span>
@@ -809,7 +809,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">is_dynamo_compiling</span><span class="p">():</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">network</span><span class="p">)</span>
@@ -817,7 +817,7 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">network</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">is_dynamo_compiling</span><span class="p">():</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">network</span><span class="p">)</span>
@@ -825,24 +825,24 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">network</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="hold_out_params"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.hold_out_params.html#torchrl.objectives.hold_out_params">[docs]</a><span class="k">class</span> <span class="nc">hold_out_params</span><span class="p">(</span><span class="n">_context_manager</span><span class="p">):</span>
+<div class="viewcode-block" id="hold_out_params"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.hold_out_params.html#torchrl.objectives.hold_out_params">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">hold_out_params</span><span class="p">(</span><span class="n">_context_manager</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Context manager to hold a list of parameters out of a computational graph.&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">params</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span>
 
-    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">pass</span></div>
 
 
 <div class="viewcode-block" id="next_state_value"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.next_state_value.html#torchrl.objectives.next_state_value">[docs]</a><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
-<span class="k">def</span> <span class="nf">next_state_value</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">next_state_value</span><span class="p">(</span>
     <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">operator</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TensorDictModule</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">next_val_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;state_action_value&quot;</span><span class="p">,</span>
@@ -898,12 +898,12 @@
     <span class="k">return</span> <span class="n">target_value</span></div>
 
 
-<span class="k">def</span> <span class="nf">_cache_values</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_cache_values</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Caches the tensordict returned by a property.&quot;&quot;&quot;</span>
     <span class="n">name</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="vm">__name__</span>
 
     <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">new_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">netname</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">new_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">netname</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">is_dynamo_compiling</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">netname</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">netname</span><span class="p">)</span>
@@ -930,10 +930,10 @@
     <span class="k">return</span> <span class="n">new_func</span>
 
 
-<span class="k">def</span> <span class="nf">_vmap_func</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_vmap_func</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="k">try</span><span class="p">:</span>
 
-        <span class="k">def</span> <span class="nf">decorated_module</span><span class="p">(</span><span class="o">*</span><span class="n">module_args_params</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">decorated_module</span><span class="p">(</span><span class="o">*</span><span class="n">module_args_params</span><span class="p">):</span>
             <span class="n">params</span> <span class="o">=</span> <span class="n">module_args_params</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
             <span class="n">module_args</span> <span class="o">=</span> <span class="n">module_args_params</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
             <span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
@@ -950,10 +950,10 @@
         <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;Please use &lt;loss_module&gt;.set_vmap_randomness(&#39;different&#39;) to handle random operations during vmap.&quot;</span>
-            <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
 
 
-<span class="k">def</span> <span class="nf">_reduce</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_reduce</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Reduces a tensor given the reduction method.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">reduction</span> <span class="o">==</span> <span class="s2">&quot;none&quot;</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">tensor</span>
@@ -966,7 +966,7 @@
     <span class="k">return</span> <span class="n">result</span>
 
 
-<span class="k">def</span> <span class="nf">_clip_value_loss</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_clip_value_loss</span><span class="p">(</span>
     <span class="n">old_state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">state_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">clip_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -995,14 +995,14 @@
     <span class="k">return</span> <span class="n">loss_value</span><span class="p">,</span> <span class="n">clip_fraction</span>
 
 
-<span class="k">def</span> <span class="nf">_get_default_device</span><span class="p">(</span><span class="n">net</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_default_device</span><span class="p">(</span><span class="n">net</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">net</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
         <span class="k">return</span> <span class="n">p</span><span class="o">.</span><span class="n">device</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;get_default_device&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">))()</span>
 
 
-<div class="viewcode-block" id="group_optimizers"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.group_optimizers.html#torchrl.objectives.group_optimizers">[docs]</a><span class="k">def</span> <span class="nf">group_optimizers</span><span class="p">(</span><span class="o">*</span><span class="n">optimizers</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">:</span>
+<div class="viewcode-block" id="group_optimizers"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.group_optimizers.html#torchrl.objectives.group_optimizers">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">group_optimizers</span><span class="p">(</span><span class="o">*</span><span class="n">optimizers</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Groups multiple optimizers into a single one.</span>
 
 <span class="sd">    All optimizers are expected to have the same type.</span>
@@ -1020,7 +1020,7 @@
     <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">params</span><span class="p">)</span></div>
 
 
-<span class="k">def</span> <span class="nf">_sum_td_features</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_sum_td_features</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
     <span class="c1"># Sum all features and return a tensor</span>
     <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>

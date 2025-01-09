@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -405,26 +405,26 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">abc</span>
-<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
-<span class="kn">from</span> <span class="nn">textwrap</span> <span class="kn">import</span> <span class="n">indent</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">textwrap</span><span class="w"> </span><span class="kn">import</span> <span class="n">indent</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
-<span class="kn">from</span> <span class="nn">torchrl.data.utils</span> <span class="kn">import</span> <span class="n">DEVICE_TYPING</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEVICE_TYPING</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.modules.models</span> <span class="kn">import</span> <span class="n">ConvNet</span><span class="p">,</span> <span class="n">MLP</span>
-<span class="kn">from</span> <span class="nn">torchrl.modules.models.utils</span> <span class="kn">import</span> <span class="n">_reset_parameters_recursive</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvNet</span><span class="p">,</span> <span class="n">MLP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.models.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_reset_parameters_recursive</span>
 
 
-<div class="viewcode-block" id="MultiAgentNetBase"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase">[docs]</a><span class="k">class</span> <span class="nc">MultiAgentNetBase</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiAgentNetBase"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MultiAgentNetBase</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A base class for multi-agent networks.</span>
 
 <span class="sd">    .. note:: to initialize the MARL module parameters with the `torch.nn.init`</span>
@@ -435,7 +435,7 @@
 
     <span class="n">_empty_net</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">n_agents</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -497,7 +497,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_empty_net</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">vmap_randomness</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">vmap_randomness</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vmap_randomness</span>
         <span class="c1"># The class _BatchedUninitializedParameter and buffer are not batched</span>
@@ -506,7 +506,7 @@
         <span class="c1"># for every element (as one might expect from &quot;same&quot;).</span>
         <span class="k">return</span> <span class="s2">&quot;same&quot;</span>
 
-    <span class="k">def</span> <span class="nf">_make_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_networks</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_networks</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">share_params</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span>
                 <span class="n">agent_networks</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">as_module</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">use_td_params</span>
@@ -517,22 +517,22 @@
             <span class="p">)</span>
 
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
-    <span class="k">def</span> <span class="nf">_build_single_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_single_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="o">...</span>
 
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
-    <span class="k">def</span> <span class="nf">_pre_forward_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pre_forward_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
         <span class="o">...</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">vmap_func_module</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">def</span> <span class="nf">exec_module</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="o">*</span><span class="nb">input</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">vmap_func_module</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">exec_module</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="o">*</span><span class="nb">input</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
                 <span class="k">return</span> <span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="nb">input</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="n">exec_module</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-<div class="viewcode-block" id="MultiAgentNetBase.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<div class="viewcode-block" id="MultiAgentNetBase.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">inputs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="o">*</span><span class="n">inputs</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -576,7 +576,7 @@
 
         <span class="k">return</span> <span class="n">output</span></div>
 
-<div class="viewcode-block" id="MultiAgentNetBase.get_stateful_net"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.get_stateful_net">[docs]</a>    <span class="k">def</span> <span class="nf">get_stateful_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">copy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiAgentNetBase.get_stateful_net"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.get_stateful_net">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_stateful_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">copy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a stateful version of the network.</span>
 
 <span class="sd">        This can be used to initialize parameters.</span>
@@ -624,13 +624,13 @@
             <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="s2">&quot;Failed to deepcopy the module, consider using copy=False.&quot;</span>
-                <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">net</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_empty_net</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">net</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">net</span></div>
 
-<div class="viewcode-block" id="MultiAgentNetBase.from_stateful_net"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.from_stateful_net">[docs]</a>    <span class="k">def</span> <span class="nf">from_stateful_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stateful_net</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiAgentNetBase.from_stateful_net"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.from_stateful_net">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">from_stateful_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stateful_net</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Populates the parameters given a stateful version of the network.</span>
 
 <span class="sd">        See :meth:`~.get_stateful_net` for details on how to gather a stateful version of the network.</span>
@@ -651,7 +651,7 @@
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">empty_net</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_empty_net</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">empty_net</span><span class="p">):</span>
             <span class="n">module_repr</span> <span class="o">=</span> <span class="n">indent</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">empty_net</span><span class="p">),</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
@@ -661,11 +661,11 @@
         <span class="n">agent_dim</span> <span class="o">=</span> <span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;agent_dim=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">agent_dim</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="se">\n</span><span class="si">{</span><span class="n">module_repr</span><span class="si">}</span><span class="s2">,</span><span class="se">\n</span><span class="si">{</span><span class="n">n_agents</span><span class="si">}</span><span class="s2">,</span><span class="se">\n</span><span class="si">{</span><span class="n">share_params</span><span class="si">}</span><span class="s2">,</span><span class="se">\n</span><span class="si">{</span><span class="n">centralized</span><span class="si">}</span><span class="s2">,</span><span class="se">\n</span><span class="si">{</span><span class="n">agent_dim</span><span class="si">}</span><span class="s2">)&quot;</span>
 
-<div class="viewcode-block" id="MultiAgentNetBase.reset_parameters"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.reset_parameters">[docs]</a>    <span class="k">def</span> <span class="nf">reset_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiAgentNetBase.reset_parameters"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.reset_parameters">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">reset_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Resets the parameters of the model.&quot;&quot;&quot;</span>
 
-        <span class="k">def</span> <span class="nf">vmap_reset_module</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-            <span class="k">def</span> <span class="nf">reset_module</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">vmap_reset_module</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">reset_module</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
                 <span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
                     <span class="n">_reset_parameters_recursive</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
                     <span class="k">return</span> <span class="n">params</span>
@@ -679,7 +679,7 @@
                 <span class="n">_reset_parameters_recursive</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_empty_net</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="MultiAgentMLP"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentMLP.html#torchrl.modules.MultiAgentMLP">[docs]</a><span class="k">class</span> <span class="nc">MultiAgentMLP</span><span class="p">(</span><span class="n">MultiAgentNetBase</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiAgentMLP"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentMLP.html#torchrl.modules.MultiAgentMLP">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MultiAgentMLP</span><span class="p">(</span><span class="n">MultiAgentNetBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Mult-agent MLP.</span>
 
 <span class="sd">    This is an MLP that can be used in multi-agent contexts.</span>
@@ -813,7 +813,7 @@
 <span class="sd">        &gt;&gt;&gt; assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">n_agent_inputs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">n_agent_outputs</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -847,7 +847,7 @@
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_pre_forward_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pre_forward_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">inputs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_agents</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Multi-agent network expected input with shape[-2]=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_agents</span><span class="si">}</span><span class="s2">,&quot;</span>
@@ -858,7 +858,7 @@
             <span class="n">inputs</span> <span class="o">=</span> <span class="n">inputs</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">inputs</span>
 
-    <span class="k">def</span> <span class="nf">_build_single_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_single_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">n_agent_inputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_agent_inputs</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">centralized</span> <span class="ow">and</span> <span class="n">n_agent_inputs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">n_agent_inputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_agent_inputs</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_agents</span>
@@ -873,7 +873,7 @@
         <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="MultiAgentConvNet"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentConvNet.html#torchrl.modules.MultiAgentConvNet">[docs]</a><span class="k">class</span> <span class="nc">MultiAgentConvNet</span><span class="p">(</span><span class="n">MultiAgentNetBase</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiAgentConvNet"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MultiAgentConvNet.html#torchrl.modules.MultiAgentConvNet">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MultiAgentConvNet</span><span class="p">(</span><span class="n">MultiAgentNetBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Multi-agent CNN.</span>
 
 <span class="sd">    In MARL settings, agents may or may not share the same policy for their actions: we say that the parameters can be shared or not. Similarly, a network may take the entire observation space (across agents) or on a per-agent basis to compute its output, which we refer to as &quot;centralized&quot; and &quot;non-centralized&quot;, respectively.</span>
@@ -1025,7 +1025,7 @@
 <span class="sd">        False</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">n_agents</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">centralized</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1057,7 +1057,7 @@
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_build_single_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_single_net</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">in_features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">centralized</span> <span class="ow">and</span> <span class="n">in_features</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">in_features</span> <span class="o">=</span> <span class="n">in_features</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_agents</span>
@@ -1072,7 +1072,7 @@
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_pre_forward_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pre_forward_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
 <span class="w">                </span><span class="sd">&quot;&quot;&quot;Multi-agent network expects (*batch_size, agent_index, x, y, channels)&quot;&quot;&quot;</span>
@@ -1087,7 +1087,7 @@
         <span class="k">return</span> <span class="n">inputs</span></div>
 
 
-<span class="k">class</span> <span class="nc">Mixer</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Mixer</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A multi-agent value mixer.</span>
 
 <span class="sd">    It transforms the local value of each agent&#39;s chosen action of shape (*B, self.n_agents, 1),</span>
@@ -1188,7 +1188,7 @@
 <span class="sd">            is_shared=False)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">n_agents</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">needs_state</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
@@ -1202,7 +1202,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">needs_state</span> <span class="o">=</span> <span class="n">needs_state</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">state_shape</span> <span class="o">=</span> <span class="n">state_shape</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass of the mixer.</span>
 
 <span class="sd">        Args:</span>
@@ -1253,7 +1253,7 @@
 
         <span class="k">return</span> <span class="n">output</span>
 
-    <span class="k">def</span> <span class="nf">mix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chosen_action_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chosen_action_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass for the mixer.</span>
 
 <span class="sd">        Args:</span>
@@ -1265,7 +1265,7 @@
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
 
-<div class="viewcode-block" id="VDNMixer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.VDNMixer.html#torchrl.modules.VDNMixer">[docs]</a><span class="k">class</span> <span class="nc">VDNMixer</span><span class="p">(</span><span class="n">Mixer</span><span class="p">):</span>
+<div class="viewcode-block" id="VDNMixer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.VDNMixer.html#torchrl.modules.VDNMixer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VDNMixer</span><span class="p">(</span><span class="n">Mixer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Value-Decomposition Network mixer.</span>
 
 <span class="sd">    Mixes the local Q values of the agents into a global Q value by summing them together.</span>
@@ -1322,7 +1322,7 @@
 <span class="sd">            is_shared=False)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">n_agents</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span><span class="p">,</span>
@@ -1334,11 +1334,11 @@
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span>
 
-<div class="viewcode-block" id="VDNMixer.mix"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.VDNMixer.html#torchrl.modules.VDNMixer.mix">[docs]</a>    <span class="k">def</span> <span class="nf">mix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chosen_action_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+<div class="viewcode-block" id="VDNMixer.mix"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.VDNMixer.html#torchrl.modules.VDNMixer.mix">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">mix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chosen_action_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">chosen_action_value</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="QMixer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.QMixer.html#torchrl.modules.QMixer">[docs]</a><span class="k">class</span> <span class="nc">QMixer</span><span class="p">(</span><span class="n">Mixer</span><span class="p">):</span>
+<div class="viewcode-block" id="QMixer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.QMixer.html#torchrl.modules.QMixer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">QMixer</span><span class="p">(</span><span class="n">Mixer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;QMix mixer.</span>
 
 <span class="sd">    Mixes the local Q values of the agents into a global Q value through a monotonic</span>
@@ -1402,7 +1402,7 @@
 <span class="sd">            is_shared=False)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">state_shape</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">],</span>
         <span class="n">mixing_embed_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -1433,7 +1433,7 @@
             <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embed_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
         <span class="p">)</span>
 
-<div class="viewcode-block" id="QMixer.mix"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.QMixer.html#torchrl.modules.QMixer.mix">[docs]</a>    <span class="k">def</span> <span class="nf">mix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chosen_action_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+<div class="viewcode-block" id="QMixer.mix"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.QMixer.html#torchrl.modules.QMixer.mix">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">mix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chosen_action_value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
         <span class="n">bs</span> <span class="o">=</span> <span class="n">chosen_action_value</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
         <span class="n">state</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_dim</span><span class="p">)</span>
         <span class="n">chosen_action_value</span> <span class="o">=</span> <span class="n">chosen_action_value</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_agents</span><span class="p">)</span>

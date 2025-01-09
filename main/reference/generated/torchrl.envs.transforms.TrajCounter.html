@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -426,7 +426,7 @@ accepted as long as their prefix matches the prefix of the counter key.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">StepCounter</span><span class="p">,</span> <span class="n">TrajCounter</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">StepCounter</span><span class="p">,</span> <span class="n">TrajCounter</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">StepCounter</span><span class="p">(</span><span class="mi">6</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">TrajCounter</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">r</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">18</span><span class="p">,</span> <span class="n">break_when_any_done</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># 18 // 6 = 3 trajectories</span>
@@ -458,7 +458,7 @@ Here are examples of valid ways of sharing a <code class="docutils literal notra
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Option 1: Create the trajectory counter outside the environment.</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1">#  This requires the counter to be cloned within the transformed env, as a single transform object cannot have two parents.</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">t</span> <span class="o">=</span> <span class="n">TrajCounter</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">make_env</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">make_env</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="c1"># See CountingEnv in torchrl.test.mocking_classes</span>
 <span class="gp">... </span>    <span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">CountingEnv</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="n">max_steps</span><span class="p">),</span> <span class="n">t</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
 <span class="gp">... </span>    <span class="n">env</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">transform_observation_spec</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">base_env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">)</span>
@@ -471,7 +471,7 @@ Here are examples of valid ways of sharing a <code class="docutils literal notra
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Option 2: Create the transform within the constructor.</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1">#  In this scenario, we still need to tell each sub-env what kwarg has to be used.</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1">#  Both EnvCreator and ParallelEnv offer that possibility.</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">make_env</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">make_env</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">t</span> <span class="o">=</span> <span class="n">TrajCounter</span><span class="p">()</span>
 <span class="gp">... </span>    <span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">CountingEnv</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="n">max_steps</span><span class="p">),</span> <span class="n">t</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="n">env</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">transform_observation_spec</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">base_env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">)</span>

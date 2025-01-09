@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -406,25 +406,25 @@
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 
-<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
 
-<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">TensorDictModuleWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">TensorDictModuleWrapper</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.collectors.collectors</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DataCollectorBase</span><span class="p">,</span>
     <span class="n">MultiaSyncDataCollector</span><span class="p">,</span>
     <span class="n">MultiSyncDataCollector</span><span class="p">,</span>
     <span class="n">SyncDataCollector</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.data.postprocs</span> <span class="kn">import</span> <span class="n">MultiStep</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.batched_envs</span> <span class="kn">import</span> <span class="n">ParallelEnv</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.postprocs</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiStep</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ParallelEnv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 
 
-<div class="viewcode-block" id="sync_async_collector"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.sync_async_collector.html#torchrl.trainers.helpers.sync_async_collector">[docs]</a><span class="k">def</span> <span class="nf">sync_async_collector</span><span class="p">(</span>
+<div class="viewcode-block" id="sync_async_collector"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.sync_async_collector.html#torchrl.trainers.helpers.sync_async_collector">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">sync_async_collector</span><span class="p">(</span>
     <span class="n">env_fns</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Callable</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Callable</span><span class="p">]],</span>
     <span class="n">env_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]],</span>
     <span class="n">num_env_per_collector</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -484,7 +484,7 @@
     <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="sync_sync_collector"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.sync_sync_collector.html#torchrl.trainers.helpers.sync_sync_collector">[docs]</a><span class="k">def</span> <span class="nf">sync_sync_collector</span><span class="p">(</span>
+<div class="viewcode-block" id="sync_sync_collector"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.sync_sync_collector.html#torchrl.trainers.helpers.sync_sync_collector">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">sync_sync_collector</span><span class="p">(</span>
     <span class="n">env_fns</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Callable</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Callable</span><span class="p">]],</span>
     <span class="n">env_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]],</span>
     <span class="n">num_env_per_collector</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -566,7 +566,7 @@
     <span class="p">)</span></div>
 
 
-<span class="k">def</span> <span class="nf">_make_collector</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_make_collector</span><span class="p">(</span>
     <span class="n">collector_class</span><span class="p">:</span> <span class="n">Type</span><span class="p">,</span>
     <span class="n">env_fns</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Callable</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Callable</span><span class="p">]],</span>
     <span class="n">env_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]],</span>
@@ -650,7 +650,7 @@
     <span class="p">)</span>
 
 
-<div class="viewcode-block" id="make_collector_offpolicy"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_collector_offpolicy.html#torchrl.trainers.helpers.make_collector_offpolicy">[docs]</a><span class="k">def</span> <span class="nf">make_collector_offpolicy</span><span class="p">(</span>
+<div class="viewcode-block" id="make_collector_offpolicy"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_collector_offpolicy.html#torchrl.trainers.helpers.make_collector_offpolicy">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_collector_offpolicy</span><span class="p">(</span>
     <span class="n">make_env</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">],</span>
     <span class="n">actor_model_explore</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
         <span class="n">TensorDictModuleWrapper</span><span class="p">,</span> <span class="n">ProbabilisticTensorDictSequential</span>
@@ -714,7 +714,7 @@
     <span class="k">return</span> <span class="n">collector</span></div>
 
 
-<div class="viewcode-block" id="make_collector_onpolicy"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_collector_onpolicy.html#torchrl.trainers.helpers.make_collector_onpolicy">[docs]</a><span class="k">def</span> <span class="nf">make_collector_onpolicy</span><span class="p">(</span>
+<div class="viewcode-block" id="make_collector_onpolicy"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_collector_onpolicy.html#torchrl.trainers.helpers.make_collector_onpolicy">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_collector_onpolicy</span><span class="p">(</span>
     <span class="n">make_env</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">],</span>
     <span class="n">actor_model_explore</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
         <span class="n">TensorDictModuleWrapper</span><span class="p">,</span> <span class="n">ProbabilisticTensorDictSequential</span>
@@ -769,7 +769,7 @@
 
 
 <span class="nd">@dataclass</span>
-<span class="k">class</span> <span class="nc">OnPolicyCollectorConfig</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OnPolicyCollectorConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;On-policy collector config struct.&quot;&quot;&quot;</span>
 
     <span class="n">collector_device</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">])</span>
@@ -810,7 +810,7 @@
 
 
 <span class="nd">@dataclass</span>
-<span class="k">class</span> <span class="nc">OffPolicyCollectorConfig</span><span class="p">(</span><span class="n">OnPolicyCollectorConfig</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OffPolicyCollectorConfig</span><span class="p">(</span><span class="n">OnPolicyCollectorConfig</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Off-policy collector config struct.&quot;&quot;&quot;</span>
 
     <span class="n">multi_step</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>

@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -405,23 +405,23 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">abc</span>
-<span class="kn">import</span> <span class="nn">contextlib</span>
-<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 
-<span class="kn">import</span> <span class="nn">importlib.util</span>
-<span class="kn">import</span> <span class="nn">inspect</span>
-<span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">import</span> <span class="nn">re</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">is_tensor_collection</span><span class="p">,</span>
     <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
     <span class="n">NonTensorData</span><span class="p">,</span>
@@ -430,25 +430,25 @@
     <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">unravel_key</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">tensordict.base</span> <span class="kn">import</span> <span class="n">_default_is_leaf</span><span class="p">,</span> <span class="n">_is_leaf_nontensor</span>
-<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
-<span class="kn">from</span> <span class="nn">tensordict.nn.probabilistic</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_default_is_leaf</span><span class="p">,</span> <span class="n">_is_leaf_nontensor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.probabilistic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa</span>
     <span class="n">interaction_type</span> <span class="k">as</span> <span class="n">exploration_type</span><span class="p">,</span>
     <span class="n">InteractionType</span> <span class="k">as</span> <span class="n">ExplorationType</span><span class="p">,</span>
     <span class="n">set_interaction_type</span> <span class="k">as</span> <span class="n">set_exploration_type</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">is_non_tensor</span><span class="p">,</span> <span class="n">NestedKey</span>
-<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span> <span class="k">as</span> <span class="n">nn</span>
-<span class="kn">from</span> <span class="nn">torch.utils._pytree</span> <span class="kn">import</span> <span class="n">tree_map</span>
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_replace_last</span><span class="p">,</span> <span class="n">_rng_decorator</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_non_tensor</span><span class="p">,</span> <span class="n">NestedKey</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span> <span class="k">as</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">tree_map</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_replace_last</span><span class="p">,</span> <span class="n">_rng_decorator</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Composite</span><span class="p">,</span>
     <span class="n">NO_DEFAULT_RL</span> <span class="k">as</span> <span class="n">NO_DEFAULT</span><span class="p">,</span>
     <span class="n">TensorSpec</span><span class="p">,</span>
     <span class="n">Unbounded</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.data.utils</span> <span class="kn">import</span> <span class="n">check_no_exclusive_keys</span><span class="p">,</span> <span class="n">CloudpickleWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_no_exclusive_keys</span><span class="p">,</span> <span class="n">CloudpickleWrapper</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;exploration_type&quot;</span><span class="p">,</span>
@@ -473,12 +473,12 @@
 <span class="p">)</span>
 
 
-<span class="k">class</span> <span class="nc">_classproperty</span><span class="p">(</span><span class="nb">property</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__get__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">cls</span><span class="p">,</span> <span class="n">owner</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_classproperty</span><span class="p">(</span><span class="nb">property</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__get__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">cls</span><span class="p">,</span> <span class="n">owner</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">classmethod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fget</span><span class="p">)</span><span class="o">.</span><span class="fm">__get__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">owner</span><span class="p">)()</span>
 
 
-<span class="k">class</span> <span class="nc">_StepMDP</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_StepMDP</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Stateful version of :func:`~torchrl.envs.step_mdp`.</span>
 
 <span class="sd">    Precomputes the list of keys to include and exclude during a call to step_mdp</span>
@@ -486,7 +486,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">env</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
@@ -556,7 +556,7 @@
         <span class="c1"># TODO: do we want to always allow this? check_env_specs should catch these or downstream ops</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_allow_absent_keys</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="k">def</span> <span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">validated</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">True</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">validated</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -571,7 +571,7 @@
                 <span class="o">+</span> <span class="p">[</span><span class="n">unravel_key</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_keys</span><span class="p">]</span>
             <span class="p">)</span>
 
-            <span class="k">def</span> <span class="nf">_is_reset</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">):</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">_is_reset</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">):</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
                     <span class="k">return</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;_reset&quot;</span>
                 <span class="k">return</span> <span class="n">key</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;_reset&quot;</span>
@@ -595,7 +595,7 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">validated</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_repr_key_list_as_tree</span><span class="p">(</span><span class="n">key_list</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_repr_key_list_as_tree</span><span class="p">(</span><span class="n">key_list</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Represents the keys as a tree to facilitate iteration.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">key_list</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">{}</span>
@@ -604,7 +604,7 @@
         <span class="k">return</span> <span class="n">tree_map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="n">td</span><span class="o">.</span><span class="n">to_dict</span><span class="p">())</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">_grab_and_place</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_grab_and_place</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">nested_key_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="n">data_in</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
@@ -650,7 +650,7 @@
         <span class="k">return</span> <span class="n">data_out</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">_exclude</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_exclude</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span> <span class="n">nested_key_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">data_in</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Copies the entries if they&#39;re not part of the list of keys to exclude.&quot;&quot;&quot;</span>
@@ -679,7 +679,7 @@
         <span class="k">if</span> <span class="n">has_set</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">out</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">lazy_stack</span><span class="p">(</span>
                 <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="n">td</span><span class="p">)</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">tensordicts</span><span class="p">],</span>
@@ -735,7 +735,7 @@
             <span class="k">return</span> <span class="n">out</span>
 
 
-<div class="viewcode-block" id="step_mdp"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.step_mdp.html#torchrl.envs.step_mdp">[docs]</a><span class="k">def</span> <span class="nf">step_mdp</span><span class="p">(</span>
+<div class="viewcode-block" id="step_mdp"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.step_mdp.html#torchrl.envs.step_mdp">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">step_mdp</span><span class="p">(</span>
     <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">keep_other</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -910,7 +910,7 @@
         <span class="k">return</span> <span class="n">out</span></div>
 
 
-<span class="k">def</span> <span class="nf">_set_single_key</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_set_single_key</span><span class="p">(</span>
     <span class="n">source</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">dest</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">,</span>
@@ -950,7 +950,7 @@
                 <span class="k">raise</span> <span class="n">err</span>
 
 
-<span class="k">def</span> <span class="nf">_set</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">total_key</span><span class="p">,</span> <span class="n">excluded</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_set</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">total_key</span><span class="p">,</span> <span class="n">excluded</span><span class="p">):</span>
     <span class="n">total_key</span> <span class="o">=</span> <span class="n">total_key</span> <span class="o">+</span> <span class="p">(</span><span class="n">key</span><span class="p">,)</span>
     <span class="n">non_empty</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="k">if</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">total_key</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">excluded</span><span class="p">:</span>
@@ -998,34 +998,34 @@
     <span class="k">return</span> <span class="n">non_empty</span>
 
 
-<div class="viewcode-block" id="get_available_libraries"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.get_available_libraries.html#torchrl.envs.get_available_libraries">[docs]</a><span class="k">def</span> <span class="nf">get_available_libraries</span><span class="p">():</span>
+<div class="viewcode-block" id="get_available_libraries"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.get_available_libraries.html#torchrl.envs.get_available_libraries">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">get_available_libraries</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns all the supported libraries.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">SUPPORTED_LIBRARIES</span></div>
 
 
-<span class="k">def</span> <span class="nf">_check_gym</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_gym</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns True if the gym library is installed.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
 
-<span class="k">def</span> <span class="nf">_check_gym_atari</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_gym_atari</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns True if the gym library is installed and atari envs can be found.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_check_gym</span><span class="p">():</span>
         <span class="k">return</span> <span class="kc">False</span>
     <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;atari-py&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
 
-<span class="k">def</span> <span class="nf">_check_mario</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_mario</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns True if the &quot;gym-super-mario-bros&quot; library is installed.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;gym-super-mario-bros&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
 
-<span class="k">def</span> <span class="nf">_check_dmcontrol</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_dmcontrol</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns True if the &quot;dm-control&quot; library is installed.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;dm_control&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
 
-<span class="k">def</span> <span class="nf">_check_dmlab</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_dmlab</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns True if the &quot;deepmind-lab&quot; library is installed.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;deepmind_lab&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
@@ -1059,7 +1059,7 @@
 <span class="p">}</span>
 
 
-<span class="k">def</span> <span class="nf">_per_level_env_check</span><span class="p">(</span><span class="n">data0</span><span class="p">,</span> <span class="n">data1</span><span class="p">,</span> <span class="n">check_dtype</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_per_level_env_check</span><span class="p">(</span><span class="n">data0</span><span class="p">,</span> <span class="n">data1</span><span class="p">,</span> <span class="n">check_dtype</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Checks shape and dtype of two tensordicts, accounting for lazy stacks.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data0</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">_data0</span><span class="p">,</span> <span class="n">_data1</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">data0</span><span class="o">.</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">data1</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">data0</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">)):</span>
@@ -1092,7 +1092,7 @@
                     <span class="p">)</span>
 
 
-<div class="viewcode-block" id="check_env_specs"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.check_env_specs.html#torchrl.envs.check_env_specs">[docs]</a><span class="k">def</span> <span class="nf">check_env_specs</span><span class="p">(</span>
+<div class="viewcode-block" id="check_env_specs"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.check_env_specs.html#torchrl.envs.check_env_specs">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">check_env_specs</span><span class="p">(</span>
     <span class="n">env</span><span class="p">,</span>
     <span class="n">return_contiguous</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">check_dtype</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -1182,7 +1182,7 @@
         <span class="s2">&quot;zeroing the two tensordicts did not make them identical. &quot;</span>
         <span class="sa">f</span><span class="s2">&quot;Check for discrepancies:</span><span class="se">\n</span><span class="s2">Fake=</span><span class="se">\n</span><span class="si">{</span><span class="n">fake_tensordict</span><span class="si">}</span><span class="se">\n</span><span class="s2">Real=</span><span class="se">\n</span><span class="si">{</span><span class="n">real_tensordict</span><span class="si">}</span><span class="s2">&quot;</span>
     <span class="p">)</span>
-    <span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_has_dynamic_specs</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_has_dynamic_specs</span>
 
     <span class="k">if</span> <span class="n">_has_dynamic_specs</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">specs</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">real</span><span class="p">,</span> <span class="n">fake</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
@@ -1251,7 +1251,7 @@
     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;check_env_specs succeeded!&quot;</span><span class="p">)</span></div>
 
 
-<span class="k">def</span> <span class="nf">_selective_unsqueeze</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_selective_unsqueeze</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
     <span class="n">shape_len</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">shape_len</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
@@ -1268,14 +1268,14 @@
     <span class="k">return</span> <span class="n">tensor</span>
 
 
-<span class="k">def</span> <span class="nf">_sort_keys</span><span class="p">(</span><span class="n">element</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_sort_keys</span><span class="p">(</span><span class="n">element</span><span class="p">):</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">element</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
         <span class="n">element</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">element</span><span class="p">)</span>
         <span class="k">return</span> <span class="s2">&quot;_-|-_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">element</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">element</span>
 
 
-<div class="viewcode-block" id="make_composite_from_td"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.make_composite_from_td.html#torchrl.envs.make_composite_from_td">[docs]</a><span class="k">def</span> <span class="nf">make_composite_from_td</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">unsqueeze_null_shapes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<div class="viewcode-block" id="make_composite_from_td"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.make_composite_from_td.html#torchrl.envs.make_composite_from_td">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_composite_from_td</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">unsqueeze_null_shapes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Creates a Composite instance from a tensordict, assuming all values are unbounded.</span>
 
 <span class="sd">    Args:</span>
@@ -1325,7 +1325,7 @@
 
 
 <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-<span class="k">def</span> <span class="nf">clear_mpi_env_vars</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">clear_mpi_env_vars</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Clears the MPI of environment variables.</span>
 
 <span class="sd">    `from mpi4py import MPI` will call `MPI_Init` by default.</span>
@@ -1350,7 +1350,7 @@
         <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">removed_environment</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="MarlGroupMapType"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.MarlGroupMapType.html#torchrl.envs.MarlGroupMapType">[docs]</a><span class="k">class</span> <span class="nc">MarlGroupMapType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+<div class="viewcode-block" id="MarlGroupMapType"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.MarlGroupMapType.html#torchrl.envs.MarlGroupMapType">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MarlGroupMapType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Marl Group Map Type.</span>
 
 <span class="sd">    As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.</span>
@@ -1418,14 +1418,14 @@
     <span class="n">ALL_IN_ONE_GROUP</span> <span class="o">=</span> <span class="mi">1</span>
     <span class="n">ONE_GROUP_PER_AGENT</span> <span class="o">=</span> <span class="mi">2</span>
 
-    <span class="k">def</span> <span class="nf">get_group_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_group_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
         <span class="k">if</span> <span class="bp">self</span> <span class="o">==</span> <span class="n">MarlGroupMapType</span><span class="o">.</span><span class="n">ALL_IN_ONE_GROUP</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;agents&quot;</span><span class="p">:</span> <span class="n">agent_names</span><span class="p">}</span>
         <span class="k">elif</span> <span class="bp">self</span> <span class="o">==</span> <span class="n">MarlGroupMapType</span><span class="o">.</span><span class="n">ONE_GROUP_PER_AGENT</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">{</span><span class="n">agent_name</span><span class="p">:</span> <span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="k">for</span> <span class="n">agent_name</span> <span class="ow">in</span> <span class="n">agent_names</span><span class="p">}</span></div>
 
 
-<div class="viewcode-block" id="check_marl_grouping"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.check_marl_grouping.html#torchrl.envs.check_marl_grouping">[docs]</a><span class="k">def</span> <span class="nf">check_marl_grouping</span><span class="p">(</span><span class="n">group_map</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span> <span class="n">agent_names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+<div class="viewcode-block" id="check_marl_grouping"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.check_marl_grouping.html#torchrl.envs.check_marl_grouping">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">check_marl_grouping</span><span class="p">(</span><span class="n">group_map</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span> <span class="n">agent_names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Check MARL group map.</span>
 
 <span class="sd">    Performs checks on the group map of a marl environment to assess its validity.</span>
@@ -1466,7 +1466,7 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Agent </span><span class="si">{</span><span class="n">agent_name</span><span class="si">}</span><span class="s2"> not found in any group&quot;</span><span class="p">)</span></div>
 
 
-<span class="k">def</span> <span class="nf">_terminated_or_truncated</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_terminated_or_truncated</span><span class="p">(</span>
     <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">full_done_spec</span><span class="p">:</span> <span class="n">TensorSpec</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;_reset&quot;</span><span class="p">,</span>
@@ -1523,7 +1523,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">list_of_keys</span> <span class="o">=</span> <span class="p">[]</span>
 
-    <span class="k">def</span> <span class="nf">inner_terminated_or_truncated</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">full_done_spec</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">curr_done_key</span><span class="o">=</span><span class="p">()):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">inner_terminated_or_truncated</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">full_done_spec</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">curr_done_key</span><span class="o">=</span><span class="p">()):</span>
         <span class="n">any_eot</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">aggregate</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">full_done_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1591,7 +1591,7 @@
     <span class="k">return</span> <span class="n">any_eot</span>
 
 
-<div class="viewcode-block" id="terminated_or_truncated"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.terminated_or_truncated.html#torchrl.envs.terminated_or_truncated">[docs]</a><span class="k">def</span> <span class="nf">terminated_or_truncated</span><span class="p">(</span>
+<div class="viewcode-block" id="terminated_or_truncated"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.terminated_or_truncated.html#torchrl.envs.terminated_or_truncated">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">terminated_or_truncated</span><span class="p">(</span>
     <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">full_done_spec</span><span class="p">:</span> <span class="n">TensorSpec</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;_reset&quot;</span><span class="p">,</span>
@@ -1648,7 +1648,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">list_of_keys</span> <span class="o">=</span> <span class="p">[]</span>
 
-    <span class="k">def</span> <span class="nf">inner_terminated_or_truncated</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">full_done_spec</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">curr_done_key</span><span class="o">=</span><span class="p">()):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">inner_terminated_or_truncated</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">full_done_spec</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">curr_done_key</span><span class="o">=</span><span class="p">()):</span>
         <span class="n">any_eot</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">aggregate</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">full_done_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1713,7 +1713,7 @@
 <span class="n">PARTIAL_MISSING_ERR</span> <span class="o">=</span> <span class="s2">&quot;Some reset keys were present but not all. Either all the `&#39;_reset&#39;` entries must be present, or none.&quot;</span>
 
 
-<span class="k">def</span> <span class="nf">_aggregate_end_of_traj</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_aggregate_end_of_traj</span><span class="p">(</span>
     <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">reset_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">done_keys</span><span class="o">=</span><span class="kc">None</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
     <span class="c1"># goes through the tensordict and brings the _reset information to</span>
@@ -1745,7 +1745,7 @@
 
     <span class="n">reset</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">skim_through</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">reset</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">skim_through</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">reset</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;_reset&quot;</span><span class="p">:</span>
                 <span class="n">local_reset</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
@@ -1766,7 +1766,7 @@
     <span class="k">return</span> <span class="n">reset</span>
 
 
-<span class="k">def</span> <span class="nf">_update_during_reset</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_update_during_reset</span><span class="p">(</span>
     <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">reset_keys</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
@@ -1826,7 +1826,7 @@
     <span class="k">return</span> <span class="n">tensordict</span>
 
 
-<span class="k">def</span> <span class="nf">_repr_by_depth</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_repr_by_depth</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Used to sort keys based on nesting level.&quot;&quot;&quot;</span>
     <span class="n">key</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
@@ -1835,7 +1835,7 @@
         <span class="k">return</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;.&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
 
 
-<span class="k">def</span> <span class="nf">_make_compatible_policy</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_make_compatible_policy</span><span class="p">(</span>
     <span class="n">policy</span><span class="p">,</span>
     <span class="n">observation_spec</span><span class="p">,</span>
     <span class="n">env</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -1849,7 +1849,7 @@
     <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">input_spec</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">env_maker</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span>
 
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_maker</span><span class="p">,</span> <span class="n">EnvBase</span><span class="p">):</span>
                 <span class="n">env</span> <span class="o">=</span> <span class="n">env_maker</span>
@@ -1881,7 +1881,7 @@
             <span class="k">if</span> <span class="n">env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">observation_spec</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span>
             <span class="k">elif</span> <span class="n">env_maker</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span>
 
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_maker</span><span class="p">,</span> <span class="n">EnvBase</span><span class="p">):</span>
                     <span class="n">observation_spec</span> <span class="o">=</span> <span class="n">env_maker</span><span class="o">.</span><span class="n">observation_spec</span>
@@ -1968,8 +1968,8 @@
     <span class="k">return</span> <span class="n">policy</span>
 
 
-<span class="k">def</span> <span class="nf">_policy_is_tensordict_compatible</span><span class="p">(</span><span class="n">policy</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">is_compatible</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_policy_is_tensordict_compatible</span><span class="p">(</span><span class="n">policy</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_compatible</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="p">(</span><span class="n">RandomPolicy</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span><span class="p">))</span>
 
     <span class="k">if</span> <span class="p">(</span>
@@ -2014,7 +2014,7 @@
     <span class="p">)</span>
 
 
-<div class="viewcode-block" id="RandomPolicy"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.RandomPolicy.html#torchrl.envs.RandomPolicy">[docs]</a><span class="k">class</span> <span class="nc">RandomPolicy</span><span class="p">:</span>
+<div class="viewcode-block" id="RandomPolicy"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.utils.RandomPolicy.html#torchrl.envs.RandomPolicy">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RandomPolicy</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A random policy for data collectors.</span>
 
 <span class="sd">    This is a wrapper around the action_spec.rand method.</span>
@@ -2030,37 +2030,37 @@
 <span class="sd">        &gt;&gt;&gt; td = actor(TensorDict()) # selects a random action in the cube [-1; 1]</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">action_key</span> <span class="o">=</span> <span class="n">action_key</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">rand</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">rand</span><span class="p">())</span></div>
 
 
-<span class="k">class</span> <span class="nc">_PolicyMetaClass</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_PolicyMetaClass</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="c1"># no kwargs</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
 
 
-<span class="k">class</span> <span class="nc">_NonParametricPolicyWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_PolicyMetaClass</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_NonParametricPolicyWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_PolicyMetaClass</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A wrapper for non-parametric policies.&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="n">functools</span><span class="o">.</span><span class="n">update_wrapper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;forward&quot;</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">forward</span>
 
-    <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">attr</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__dir__</span><span class="p">():</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="p">(</span>
                 <span class="n">attr</span>

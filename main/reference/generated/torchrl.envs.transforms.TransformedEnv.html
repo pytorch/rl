@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -429,7 +429,7 @@ and output a tensordict as well. The callable will be called at <code class="doc
 and <code class="docutils literal notranslate"><span class="pre">reset</span></code> time: if it acts on the reward (which is absent at
 reset time), a check needs to be implemented to ensure that
 the transform will run smoothly:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">add_1</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">add_1</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">if</span> <span class="s2">&quot;reward&quot;</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="k">return</span> <span class="n">data</span>

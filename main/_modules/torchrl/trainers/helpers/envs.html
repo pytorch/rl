@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -405,19 +405,19 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
-<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
-<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span> <span class="k">as</span> <span class="n">dataclass_field</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span> <span class="k">as</span> <span class="n">dataclass_field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">ParallelEnv</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.env_creator</span> <span class="kn">import</span> <span class="n">env_creator</span><span class="p">,</span> <span class="n">EnvCreator</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.libs.dm_control</span> <span class="kn">import</span> <span class="n">DMControlEnv</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <span class="n">GymEnv</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ParallelEnv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">env_creator</span><span class="p">,</span> <span class="n">EnvCreator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.dm_control</span><span class="w"> </span><span class="kn">import</span> <span class="n">DMControlEnv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.gym</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CatFrames</span><span class="p">,</span>
     <span class="n">CatTensors</span><span class="p">,</span>
     <span class="n">CenterCrop</span><span class="p">,</span>
@@ -432,14 +432,14 @@
     <span class="n">TransformedEnv</span><span class="p">,</span>
     <span class="n">VecNorm</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.transforms.transforms</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">FlattenObservation</span><span class="p">,</span>
     <span class="n">gSDENoise</span><span class="p">,</span>
     <span class="n">InitTracker</span><span class="p">,</span>
     <span class="n">StepCounter</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.record.loggers</span> <span class="kn">import</span> <span class="n">Logger</span>
-<span class="kn">from</span> <span class="nn">torchrl.record.recorder</span> <span class="kn">import</span> <span class="n">VideoRecorder</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.recorder</span><span class="w"> </span><span class="kn">import</span> <span class="n">VideoRecorder</span>
 
 <span class="n">LIBS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">&quot;gym&quot;</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">,</span>
@@ -447,7 +447,7 @@
 <span class="p">}</span>
 
 
-<div class="viewcode-block" id="correct_for_frame_skip"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.correct_for_frame_skip.html#torchrl.trainers.helpers.correct_for_frame_skip">[docs]</a><span class="k">def</span> <span class="nf">correct_for_frame_skip</span><span class="p">(</span><span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+<div class="viewcode-block" id="correct_for_frame_skip"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.correct_for_frame_skip.html#torchrl.trainers.helpers.correct_for_frame_skip">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">correct_for_frame_skip</span><span class="p">(</span><span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.</span>
 
 <span class="sd">    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames</span>
@@ -480,7 +480,7 @@
     <span class="k">return</span> <span class="n">cfg</span></div>
 
 
-<span class="k">def</span> <span class="nf">make_env_transforms</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">make_env_transforms</span><span class="p">(</span>
     <span class="n">env</span><span class="p">,</span>
     <span class="n">cfg</span><span class="p">,</span>
     <span class="n">video_tag</span><span class="p">,</span>
@@ -599,7 +599,7 @@
     <span class="k">return</span> <span class="n">env</span>
 
 
-<span class="k">def</span> <span class="nf">get_norm_state_dict</span><span class="p">(</span><span class="n">env</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_norm_state_dict</span><span class="p">(</span><span class="n">env</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Gets the normalization loc and scale from the env state_dict.&quot;&quot;&quot;</span>
     <span class="n">sd</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
     <span class="n">sd</span> <span class="o">=</span> <span class="p">{</span>
@@ -610,7 +610,7 @@
     <span class="k">return</span> <span class="n">sd</span>
 
 
-<div class="viewcode-block" id="transformed_env_constructor"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.transformed_env_constructor.html#torchrl.trainers.helpers.transformed_env_constructor">[docs]</a><span class="k">def</span> <span class="nf">transformed_env_constructor</span><span class="p">(</span>
+<div class="viewcode-block" id="transformed_env_constructor"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.transformed_env_constructor.html#torchrl.trainers.helpers.transformed_env_constructor">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">transformed_env_constructor</span><span class="p">(</span>
     <span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
     <span class="n">video_tag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
     <span class="n">logger</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Logger</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -657,7 +657,7 @@
 <span class="sd">            environment</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">make_transformed_env</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransformedEnv</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_transformed_env</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransformedEnv</span><span class="p">:</span>
         <span class="n">env_name</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">env_name</span>
         <span class="n">env_task</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">env_task</span>
         <span class="n">env_library</span> <span class="o">=</span> <span class="n">LIBS</span><span class="p">[</span><span class="n">cfg</span><span class="o">.</span><span class="n">env_library</span><span class="p">]</span>
@@ -728,7 +728,7 @@
     <span class="k">return</span> <span class="n">make_transformed_env</span></div>
 
 
-<div class="viewcode-block" id="parallel_env_constructor"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.parallel_env_constructor.html#torchrl.trainers.helpers.parallel_env_constructor">[docs]</a><span class="k">def</span> <span class="nf">parallel_env_constructor</span><span class="p">(</span>
+<div class="viewcode-block" id="parallel_env_constructor"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.parallel_env_constructor.html#torchrl.trainers.helpers.parallel_env_constructor">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">parallel_env_constructor</span><span class="p">(</span>
     <span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>  <span class="c1"># noqa: F821</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ParallelEnv</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.</span>
@@ -772,7 +772,7 @@
 
 
 <div class="viewcode-block" id="get_stats_random_rollout"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.get_stats_random_rollout.html#torchrl.trainers.helpers.get_stats_random_rollout">[docs]</a><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
-<span class="k">def</span> <span class="nf">get_stats_random_rollout</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_stats_random_rollout</span><span class="p">(</span>
     <span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
     <span class="n">proof_environment</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -850,7 +850,7 @@
     <span class="k">return</span> <span class="n">stats</span></div>
 
 
-<span class="k">def</span> <span class="nf">initialize_observation_norm_transforms</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">initialize_observation_norm_transforms</span><span class="p">(</span>
     <span class="n">proof_environment</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>
     <span class="n">num_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
     <span class="n">key</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -893,7 +893,7 @@
         <span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">init_stats</span><span class="p">(</span><span class="n">num_iter</span><span class="o">=</span><span class="n">num_iter</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">retrieve_observation_norms_state_dict</span><span class="p">(</span><span class="n">proof_environment</span><span class="p">:</span> <span class="n">TransformedEnv</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">retrieve_observation_norms_state_dict</span><span class="p">(</span><span class="n">proof_environment</span><span class="p">:</span> <span class="n">TransformedEnv</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Traverses the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.</span>
 
 <span class="sd">    Returns a list of tuple (idx, state_dict) for each :obj:`ObservationNorm` transform in proof_environment</span>
@@ -917,7 +917,7 @@
 
 
 <span class="nd">@dataclass</span>
-<span class="k">class</span> <span class="nc">EnvConfig</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">EnvConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Environment config struct.&quot;&quot;&quot;</span>
 
     <span class="n">env_library</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;gym&quot;</span>

@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -435,11 +435,11 @@ render method. This enables rendering for stateless environments. Defaults to <c
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">check_env_specs</span><span class="p">,</span> <span class="n">ParallelEnv</span><span class="p">,</span> <span class="n">EnvCreator</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.record.loggers</span> <span class="kn">import</span> <span class="n">CSVLogger</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.record.recorder</span> <span class="kn">import</span> <span class="n">PixelRenderTransform</span><span class="p">,</span> <span class="n">VideoRecorder</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">check_env_specs</span><span class="p">,</span> <span class="n">ParallelEnv</span><span class="p">,</span> <span class="n">EnvCreator</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSVLogger</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.recorder</span><span class="w"> </span><span class="kn">import</span> <span class="n">PixelRenderTransform</span><span class="p">,</span> <span class="n">VideoRecorder</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">make_env</span><span class="p">():</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">make_env</span><span class="p">():</span>
 <span class="gp">&gt;&gt;&gt; </span>    <span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">,</span> <span class="n">render_mode</span><span class="o">=</span><span class="s2">&quot;rgb_array&quot;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span>    <span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">PixelRenderTransform</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span>    <span class="k">return</span> <span class="n">env</span>
@@ -462,10 +462,10 @@ render method. This enables rendering for stateless environments. Defaults to <c
 </div>
 <p>This transform can also be used whenever a batched environment <code class="docutils literal notranslate"><span class="pre">render()</span></code> returns a single image:</p>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">check_env_specs</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.libs.vmas</span> <span class="kn">import</span> <span class="n">VmasEnv</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.record.loggers</span> <span class="kn">import</span> <span class="n">CSVLogger</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.record.recorder</span> <span class="kn">import</span> <span class="n">PixelRenderTransform</span><span class="p">,</span> <span class="n">VideoRecorder</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_env_specs</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.vmas</span><span class="w"> </span><span class="kn">import</span> <span class="n">VmasEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSVLogger</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.recorder</span><span class="w"> </span><span class="kn">import</span> <span class="n">PixelRenderTransform</span><span class="p">,</span> <span class="n">VideoRecorder</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">VmasEnv</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">scenario</span><span class="o">=</span><span class="s2">&quot;flocking&quot;</span><span class="p">,</span>
@@ -493,7 +493,7 @@ render method. This enables rendering for stateless environments. Defaults to <c
 turn the rendering on if it’s off or off if it’s on (an argument can also be passed to control this behavior).
 Since transforms are <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> instances, <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.apply" title="(in PyTorch v2.5)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a> can be used to control
 this behavior:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">switch</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">switch</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">PixelRenderTransform</span><span class="p">):</span>
 <span class="gp">... </span>        <span class="n">module</span><span class="o">.</span><span class="n">switch</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">switch</span><span class="p">)</span>

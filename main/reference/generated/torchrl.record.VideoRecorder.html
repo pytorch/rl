@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -440,9 +440,9 @@ to <code class="docutils literal notranslate"><span class="pre">in_keys</span></
 </dl>
 <p class="rubric">Examples</p>
 <p>The following example shows how to save a rollout under a video. First a few imports:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.record</span> <span class="kn">import</span> <span class="n">VideoRecorder</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.record.loggers.csv</span> <span class="kn">import</span> <span class="n">CSVLogger</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">DMControlEnv</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record</span><span class="w"> </span><span class="kn">import</span> <span class="n">VideoRecorder</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers.csv</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSVLogger</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">DMControlEnv</span>
 </pre></div>
 </div>
 <p>The video format is chosen in the logger. Wandb and tensorboard will take care of that
@@ -465,9 +465,9 @@ which will dispatch the <cite>dumps</cite> to all its members.</p>
 </div>
 <p>The transform can also be used within a dataset to save the video collected. Unlike in the environment case,
 images will come in a batch. The <code class="docutils literal notranslate"><span class="pre">skip</span></code> argument will enable to save the images only at specific intervals.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.datasets</span> <span class="kn">import</span> <span class="n">OpenXExperienceReplay</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">Compose</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.record</span> <span class="kn">import</span> <span class="n">VideoRecorder</span><span class="p">,</span> <span class="n">CSVLogger</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenXExperienceReplay</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Compose</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record</span><span class="w"> </span><span class="kn">import</span> <span class="n">VideoRecorder</span><span class="p">,</span> <span class="n">CSVLogger</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a logger that saves videos as mp4</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">logger</span> <span class="o">=</span> <span class="n">CSVLogger</span><span class="p">(</span><span class="s2">&quot;./dump&quot;</span><span class="p">,</span> <span class="n">video_format</span><span class="o">=</span><span class="s2">&quot;mp4&quot;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># We use the VideoRecorder transform to save register the images coming from the batch.</span>

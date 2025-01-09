@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -405,21 +405,21 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">importlib.util</span>
-<span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Type</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Type</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
-<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-<span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">SamplerWithoutReplacement</span><span class="p">,</span>
     <span class="n">TensorDictReplayBuffer</span><span class="p">,</span>
     <span class="n">TensorStorage</span><span class="p">,</span>
@@ -429,7 +429,7 @@
 <span class="n">_has_datasets</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;datasets&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
 
-<div class="viewcode-block" id="TokenizedDatasetLoader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader">[docs]</a><span class="k">class</span> <span class="nc">TokenizedDatasetLoader</span><span class="p">:</span>
+<div class="viewcode-block" id="TokenizedDatasetLoader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">TokenizedDatasetLoader</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Loads a tokenizes dataset, and caches a memory-mapped copy of it.</span>
 
 <span class="sd">    Args:</span>
@@ -492,7 +492,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">split</span><span class="p">,</span>
         <span class="n">max_length</span><span class="p">,</span>
@@ -518,7 +518,7 @@
             <span class="n">num_workers</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">num_workers</span>
         <span class="k">if</span> <span class="n">tokenizer_class</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">transformers</span> <span class="kn">import</span> <span class="n">AutoTokenizer</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
 
             <span class="n">tokenizer_class</span> <span class="o">=</span> <span class="n">AutoTokenizer</span>
         <span class="k">if</span> <span class="n">tokenizer_model_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -527,12 +527,12 @@
             <span class="n">tokenizer_class</span><span class="o">=</span><span class="n">AutoTokenizer</span><span class="p">,</span> <span class="n">tokenizer_model_name</span><span class="o">=</span><span class="n">tokenizer_model_name</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">make_tokenizer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">tokenizer_class</span><span class="p">,</span> <span class="n">tokenizer_model_name</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_tokenizer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">tokenizer_class</span><span class="p">,</span> <span class="n">tokenizer_model_name</span><span class="p">):</span>
         <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer_class</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">tokenizer_model_name</span><span class="p">)</span>
         <span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">eos_token</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
 
-<div class="viewcode-block" id="TokenizedDatasetLoader.load"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader.load">[docs]</a>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="TokenizedDatasetLoader.load"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader.load">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads a pre-processed, memory-mapped dataset if it exists, and creates it otherwise.&quot;&quot;&quot;</span>
         <span class="n">root_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root_dir</span>
         <span class="n">max_length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span>
@@ -555,7 +555,7 @@
             <span class="n">dataset</span><span class="p">,</span> <span class="n">data_dir</span><span class="o">=</span><span class="n">data_dir</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="n">prefix</span><span class="p">,</span> <span class="n">valid_mask_key</span><span class="o">=</span><span class="s2">&quot;valid_sample&quot;</span>
         <span class="p">)[</span><span class="n">prefix</span><span class="p">]</span></div>
 
-    <span class="k">def</span> <span class="nf">_load_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads a text dataset from ``datasets``.</span>
 
 <span class="sd">        Returns: a dataset of type ``datasets.Dataset``.</span>
@@ -564,7 +564,7 @@
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;preproc_data requires the datasets package to be installed.&quot;</span>
             <span class="p">)</span>
-        <span class="kn">from</span> <span class="nn">datasets</span> <span class="kn">import</span> <span class="n">load_dataset</span><span class="p">,</span> <span class="n">load_from_disk</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_dataset</span><span class="p">,</span> <span class="n">load_from_disk</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_disk</span><span class="p">:</span>
             <span class="n">dataset</span> <span class="o">=</span> <span class="n">load_from_disk</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_name</span><span class="p">))[</span><span class="bp">self</span><span class="o">.</span><span class="n">split</span><span class="p">]</span>
@@ -577,7 +577,7 @@
             <span class="n">dataset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pre_tokenization_hook</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">dataset</span>
 
-    <span class="k">def</span> <span class="nf">_tokenize</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_tokenize</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">dataset</span><span class="p">,</span>
         <span class="n">excluded_features</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -626,7 +626,7 @@
         <span class="k">return</span> <span class="n">dataset</span>
 
 <div class="viewcode-block" id="TokenizedDatasetLoader.dataset_to_tensordict"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader.dataset_to_tensordict">[docs]</a>    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">dataset_to_tensordict</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dataset_to_tensordict</span><span class="p">(</span>
         <span class="n">dataset</span><span class="p">:</span> <span class="s2">&quot;datasets.Dataset&quot;</span> <span class="o">|</span> <span class="n">TensorDict</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
         <span class="n">data_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
         <span class="n">prefix</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -709,13 +709,13 @@
         <span class="k">return</span> <span class="n">out</span></div></div>
 
 
-<div class="viewcode-block" id="create_infinite_iterator"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.create_infinite_iterator.html#torchrl.data.create_infinite_iterator">[docs]</a><span class="k">def</span> <span class="nf">create_infinite_iterator</span><span class="p">(</span><span class="n">iterator</span><span class="p">):</span>
+<div class="viewcode-block" id="create_infinite_iterator"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.create_infinite_iterator.html#torchrl.data.create_infinite_iterator">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">create_infinite_iterator</span><span class="p">(</span><span class="n">iterator</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Iterates indefinitely over an iterator.&quot;&quot;&quot;</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="k">yield from</span> <span class="n">iterator</span></div>
 
 
-<div class="viewcode-block" id="get_dataloader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.get_dataloader.html#torchrl.data.get_dataloader">[docs]</a><span class="k">def</span> <span class="nf">get_dataloader</span><span class="p">(</span>
+<div class="viewcode-block" id="get_dataloader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.get_dataloader.html#torchrl.data.get_dataloader">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">get_dataloader</span><span class="p">(</span>
     <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">block_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">tensorclass_type</span><span class="p">:</span> <span class="n">Type</span><span class="p">,</span>
@@ -807,7 +807,7 @@
     <span class="k">return</span> <span class="n">out</span></div>
 
 
-<div class="viewcode-block" id="TensorDictTokenizer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictTokenizer.html#torchrl.data.TensorDictTokenizer">[docs]</a><span class="k">class</span> <span class="nc">TensorDictTokenizer</span><span class="p">:</span>
+<div class="viewcode-block" id="TensorDictTokenizer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictTokenizer.html#torchrl.data.TensorDictTokenizer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">TensorDictTokenizer</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Factory for a process function that applies a tokenizer over a text example.</span>
 
 <span class="sd">    Args:</span>
@@ -855,7 +855,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tokenizer</span><span class="p">,</span>
         <span class="n">max_length</span><span class="p">,</span>
@@ -873,7 +873,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">return_tensordict</span> <span class="o">=</span> <span class="n">return_tensordict</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample</span><span class="p">):</span>
         <span class="nb">input</span> <span class="o">=</span> <span class="n">sample</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">]</span>
         <span class="n">tokenized_sample</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">(</span>
             <span class="nb">input</span><span class="p">,</span>

@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -405,16 +405,16 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">importlib</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">tensorclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">tensorclass</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.data.rlhf.dataset</span> <span class="kn">import</span> <span class="n">TensorDictTokenizer</span><span class="p">,</span> <span class="n">TokenizedDatasetLoader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.rlhf.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictTokenizer</span><span class="p">,</span> <span class="n">TokenizedDatasetLoader</span>
 
 <span class="n">DEFAULT_DATASET</span> <span class="o">=</span> <span class="s2">&quot;CarperAI/openai_summarize_comparisons&quot;</span>
 <span class="n">_has_datasets</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;datasets&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -422,7 +422,7 @@
 
 
 <div class="viewcode-block" id="RewardData"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RewardData.html#torchrl.data.RewardData">[docs]</a><span class="nd">@tensorclass</span>
-<span class="k">class</span> <span class="nc">RewardData</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RewardData</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A dataclass for reward model training.&quot;&quot;&quot;</span>
 
     <span class="n">input_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
@@ -432,7 +432,7 @@
 
 
 <div class="viewcode-block" id="PairwiseDataset"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset">[docs]</a><span class="nd">@tensorclass</span>
-<span class="k">class</span> <span class="nc">PairwiseDataset</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PairwiseDataset</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Represents a dataset in a pairwise manner (chosen vs rejected).</span>
 
 <span class="sd">    Attributes:</span>
@@ -469,7 +469,7 @@
     <span class="n">rejected_data</span><span class="p">:</span> <span class="n">RewardData</span>
 
 <div class="viewcode-block" id="PairwiseDataset.from_dataset"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.from_dataset">[docs]</a>    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">from_dataset</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_dataset</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">split</span><span class="p">,</span>
         <span class="n">dataset_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -554,7 +554,7 @@
         <span class="p">)</span></div></div>
 
 
-<span class="k">def</span> <span class="nf">pre_tokenization_hook</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">min_length</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">pre_tokenization_hook</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">min_length</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Pre-tokenizer for the reward model (comparison) dataset.</span>
 
 <span class="sd">    This function selects all samples where the length of the prompt is</span>
@@ -604,12 +604,12 @@
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
             <span class="s2">&quot;datasets module couldn&#39;t be found. Make sure it is installed in your environment.&quot;</span>
         <span class="p">)</span>
-    <span class="kn">from</span> <span class="nn">datasets</span> <span class="kn">import</span> <span class="n">Dataset</span> <span class="k">as</span> <span class="n">HFDataset</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span> <span class="k">as</span> <span class="n">HFDataset</span>
 
     <span class="n">chosen</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">rejected</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">if</span> <span class="n">_has_tqdm</span><span class="p">:</span>
-        <span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">tqdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
 
         <span class="n">pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>

@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -406,15 +406,15 @@
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">tensordict.nn.utils</span> <span class="kn">import</span> <span class="n">biased_softplus</span><span class="p">,</span> <span class="n">inv_softplus</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">biased_softplus</span><span class="p">,</span> <span class="n">inv_softplus</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;biased_softplus&quot;</span><span class="p">,</span> <span class="s2">&quot;expln&quot;</span><span class="p">,</span> <span class="s2">&quot;inv_softplus&quot;</span><span class="p">,</span> <span class="s2">&quot;mappings&quot;</span><span class="p">]</span>
 
 
-<span class="k">def</span> <span class="nf">expln</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">expln</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A smooth, continuous positive mapping presented in &quot;State-Dependent Exploration for Policy Gradient Methods&quot;.</span>
 
 <span class="sd">    https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf</span>
@@ -427,7 +427,7 @@
     <span class="k">return</span> <span class="n">out</span>
 
 
-<div class="viewcode-block" id="mappings"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.utils.mappings.html#torchrl.modules.utils.mappings">[docs]</a><span class="k">def</span> <span class="nf">mappings</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
+<div class="viewcode-block" id="mappings"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.utils.mappings.html#torchrl.modules.utils.mappings">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">mappings</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Given an input string, returns a surjective function f(x): R -&gt; R^+.</span>
 
 <span class="sd">    Args:</span>

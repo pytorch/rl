@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -425,8 +425,8 @@ method to recover the distribution object from the <code class="docutils literal
 instances, terminating in ProbabilisticTensorDictModule, to be run
 sequentially.</p></li>
 <li><p><strong>partial_tolerant</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the input tensordict can miss some
-of the input keys. If so, the only module that will be executed are those
-who can be executed given the keys that are present. Also, if the input
+of the input keys. If so, the only modules that will be executed are those
+which can be executed given the keys that are present. Also, if the input
 tensordict is a lazy stack of tensordicts AND if partial_tolerant is
 <code class="docutils literal notranslate"><span class="pre">True</span></code> AND if the stack does not have the required keys, then
 TensorDictSequential will scan through the sub-tensordicts looking for those

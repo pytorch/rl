@@ -202,14 +202,14 @@ dictionary:
 
  .. code-block:: none
 
-    tensor([0.5004])
+    tensor([0.0246])
 
 
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 109-113
 
-We now need to pass this action tp the environment.
+We now need to pass this action to the environment.
 We'll be passing the entire tensordict to the ``step`` method, since there
 might be more than one tensor to be read in more advanced cases like
 Multi-Agent RL or stateless environments:
@@ -565,7 +565,7 @@ To explore further what TorchRL's environments can do, go and check:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 49.147 seconds)
+   **Total running time of the script:** (0 minutes 51.017 seconds)
 
 **Estimated memory usage:**  316 MB
 

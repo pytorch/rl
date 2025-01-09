@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -401,20 +401,20 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torchrl.collectors.distributed.utils</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">subprocess</span>
-<span class="kn">import</span> <span class="nn">time</span>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors.distributed.default_configs</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.distributed.default_configs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DEFAULT_SLURM_CONF</span><span class="p">,</span>
     <span class="n">DEFAULT_SLURM_CONF_MAIN</span><span class="p">,</span>
     <span class="n">TCP_PORT</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors.distributed.generic</span> <span class="kn">import</span> <span class="n">_distributed_init_delayed</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors.distributed.rpc</span> <span class="kn">import</span> <span class="n">_rpc_init_collection_node</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.distributed.generic</span><span class="w"> </span><span class="kn">import</span> <span class="n">_distributed_init_delayed</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.distributed.rpc</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rpc_init_collection_node</span>
 
 <span class="k">try</span><span class="p">:</span>
-    <span class="kn">import</span> <span class="nn">submitit</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">submitit</span>
 
     <span class="n">_has_submitit</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="k">except</span> <span class="ne">ModuleNotFoundError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
@@ -422,7 +422,7 @@
     <span class="n">SUBMITIT_ERR</span> <span class="o">=</span> <span class="n">err</span>
 
 
-<div class="viewcode-block" id="submitit_delayed_launcher"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.submitit_delayed_launcher.html#torchrl.collectors.distributed.submitit_delayed_launcher">[docs]</a><span class="k">class</span> <span class="nc">submitit_delayed_launcher</span><span class="p">:</span>
+<div class="viewcode-block" id="submitit_delayed_launcher"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.submitit_delayed_launcher.html#torchrl.collectors.distributed.submitit_delayed_launcher">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">submitit_delayed_launcher</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Delayed launcher for submitit.</span>
 
 <span class="sd">    In some cases, launched jobs cannot spawn other jobs on their own and this</span>
@@ -472,7 +472,7 @@
 
     <span class="n">_VERBOSE</span> <span class="o">=</span> <span class="n">VERBOSE</span>  <span class="c1"># for debugging</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">num_jobs</span><span class="p">,</span>
         <span class="n">framework</span><span class="o">=</span><span class="s2">&quot;distributed&quot;</span><span class="p">,</span>
@@ -488,12 +488,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">submitit_main_conf</span> <span class="o">=</span> <span class="n">submitit_main_conf</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tcpport</span> <span class="o">=</span> <span class="n">tcpport</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">main_func</span><span class="p">):</span>
-        <span class="k">def</span> <span class="nf">exec_fun</span><span class="p">():</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">main_func</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">exec_fun</span><span class="p">():</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_submitit</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span>
                     <span class="s2">&quot;Failed to import submitit. Check installation of the library.&quot;</span>
-                <span class="p">)</span> <span class="kn">from</span> <span class="nn">SUBMITIT_ERR</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">SUBMITIT_ERR</span>
             <span class="c1"># submit main</span>
             <span class="n">executor</span> <span class="o">=</span> <span class="n">submitit</span><span class="o">.</span><span class="n">AutoExecutor</span><span class="p">(</span><span class="n">folder</span><span class="o">=</span><span class="s2">&quot;log_test&quot;</span><span class="p">)</span>
             <span class="n">executor</span><span class="o">.</span><span class="n">update_parameters</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">submitit_main_conf</span><span class="p">)</span>
@@ -522,7 +522,7 @@
             <span class="n">executor</span><span class="o">.</span><span class="n">update_parameters</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">submitit_collection_conf</span><span class="p">)</span>
             <span class="n">jobs</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">framework</span> <span class="o">==</span> <span class="s2">&quot;rpc&quot;</span><span class="p">:</span>
-                <span class="kn">from</span> <span class="nn">.rpc</span> <span class="kn">import</span> <span class="n">DEFAULT_TENSORPIPE_OPTIONS</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">.rpc</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_TENSORPIPE_OPTIONS</span>
 
                 <span class="n">tensorpipe_options</span> <span class="o">=</span> <span class="n">DEFAULT_TENSORPIPE_OPTIONS</span>
             <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_jobs</span><span class="p">):</span>

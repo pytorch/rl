@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -406,21 +406,21 @@
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="c1"># import tree</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">contextlib</span>
-<span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
 
-<span class="kn">import</span> <span class="nn">math</span>
-<span class="kn">import</span> <span class="nn">operator</span>
-<span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">import</span> <span class="nn">typing</span>
-<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">operator</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">typing</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
     <span class="n">MemoryMappedTensor</span><span class="p">,</span>
     <span class="n">NonTensorData</span><span class="p">,</span>
@@ -428,10 +428,10 @@
     <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">unravel_key</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
-<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
-<span class="kn">from</span> <span class="nn">torch.utils._pytree</span> <span class="kn">import</span> <span class="n">LeafSpec</span><span class="p">,</span> <span class="n">tree_flatten</span><span class="p">,</span> <span class="n">tree_unflatten</span>
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">implement_for</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">LeafSpec</span><span class="p">,</span> <span class="n">tree_flatten</span><span class="p">,</span> <span class="n">tree_unflatten</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">implement_for</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
 <span class="n">SINGLE_TENSOR_BUFFER_NAME</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
     <span class="s2">&quot;SINGLE_TENSOR_BUFFER_NAME&quot;</span><span class="p">,</span> <span class="s2">&quot;_-single-tensor-_&quot;</span>
@@ -446,11 +446,11 @@
     <span class="n">INT_CLASSES</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_to_numpy</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_to_numpy</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">data</span>
 
 
-<span class="k">def</span> <span class="nf">_to_torch</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_to_torch</span><span class="p">(</span>
     <span class="n">data</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">pin_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">non_blocking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">generic</span><span class="p">):</span>
@@ -468,10 +468,10 @@
     <span class="k">return</span> <span class="n">data</span>
 
 
-<span class="k">def</span> <span class="nf">pin_memory_output</span><span class="p">(</span><span class="n">fun</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">pin_memory_output</span><span class="p">(</span><span class="n">fun</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Calls pin_memory on outputs of decorated function if they have such method.&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">decorated_fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">decorated_fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">output</span> <span class="o">=</span> <span class="n">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pin_memory</span><span class="p">:</span>
             <span class="n">_tuple_out</span> <span class="o">=</span> <span class="kc">True</span>
@@ -487,14 +487,14 @@
     <span class="k">return</span> <span class="n">decorated_fun</span>
 
 
-<span class="k">def</span> <span class="nf">_pin_memory</span><span class="p">(</span><span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_pin_memory</span><span class="p">(</span><span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
     <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="s2">&quot;pin_memory&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">output</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">output</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">output</span>
 
 
-<span class="k">def</span> <span class="nf">_reduce</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_reduce</span><span class="p">(</span>
     <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Reduces a tensor given the reduction method.&quot;&quot;&quot;</span>
@@ -515,7 +515,7 @@
     <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="k">if</span> <span class="n">dim</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">result</span>
 
 
-<span class="k">def</span> <span class="nf">_is_int</span><span class="p">(</span><span class="n">index</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_int</span><span class="p">(</span><span class="n">index</span><span class="p">):</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">INT_CLASSES</span><span class="p">):</span>
         <span class="k">return</span> <span class="kc">True</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)):</span>
@@ -523,7 +523,7 @@
     <span class="k">return</span> <span class="kc">False</span>
 
 
-<div class="viewcode-block" id="TED2Flat"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TED2Flat.html#torchrl.data.TED2Flat">[docs]</a><span class="k">class</span> <span class="nc">TED2Flat</span><span class="p">:</span>
+<div class="viewcode-block" id="TED2Flat"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TED2Flat.html#torchrl.data.TED2Flat">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">TED2Flat</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A storage saving hook to serialize TED data in a compact format.</span>
 
 <span class="sd">    Args:</span>
@@ -585,7 +585,7 @@
     <span class="n">_shift</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_is_full</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">done_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
         <span class="n">shift_key</span><span class="o">=</span><span class="s2">&quot;shift&quot;</span><span class="p">,</span>
@@ -600,22 +600,22 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">reward_keys</span> <span class="o">=</span> <span class="p">{</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">reward_keys</span><span class="p">}</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">shift</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shift</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shift</span>
 
     <span class="nd">@shift</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span> <span class="nf">shift</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shift</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_shift</span> <span class="o">=</span> <span class="n">value</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">is_full</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_full</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_full</span>
 
     <span class="nd">@is_full</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span> <span class="nf">is_full</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_full</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_is_full</span> <span class="o">=</span> <span class="n">value</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
         <span class="c1"># Get the done state</span>
         <span class="n">shift</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shift</span>
         <span class="n">is_full</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_full</span>
@@ -694,7 +694,7 @@
                 <span class="n">cur_slice</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span>
                 <span class="n">start</span> <span class="o">=</span> <span class="n">stop</span>
 
-                <span class="k">def</span> <span class="nf">_index</span><span class="p">(</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">_index</span><span class="p">(</span>
                     <span class="n">key</span><span class="p">,</span>
                     <span class="n">val</span><span class="p">,</span>
                     <span class="n">keys_to_expand</span><span class="o">=</span><span class="n">keys_to_expand</span><span class="p">,</span>
@@ -717,7 +717,7 @@
                 <span class="p">)</span>
         <span class="k">return</span> <span class="n">output</span>
 
-    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">is_full</span><span class="p">,</span> <span class="n">shift</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">total_keys</span><span class="p">,</span> <span class="n">keys_to_expand</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">is_full</span><span class="p">,</span> <span class="n">shift</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">total_keys</span><span class="p">,</span> <span class="n">keys_to_expand</span><span class="p">):</span>
         <span class="c1"># capture for each item in data where the observation should be written</span>
         <span class="n">idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
         <span class="n">idx_done</span> <span class="o">=</span> <span class="p">(</span><span class="n">idx</span> <span class="o">+</span> <span class="n">done</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">))[</span><span class="n">done</span><span class="p">]</span>
@@ -753,7 +753,7 @@
         <span class="k">return</span> <span class="n">output</span></div>
 
 
-<div class="viewcode-block" id="Flat2TED"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.Flat2TED.html#torchrl.data.Flat2TED">[docs]</a><span class="k">class</span> <span class="nc">Flat2TED</span><span class="p">:</span>
+<div class="viewcode-block" id="Flat2TED"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.Flat2TED.html#torchrl.data.Flat2TED">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Flat2TED</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A storage loading hook to deserialize flattened TED data to TED format.</span>
 
 <span class="sd">    Args:</span>
@@ -826,7 +826,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">done_key</span><span class="o">=</span><span class="s2">&quot;done&quot;</span><span class="p">,</span>
         <span class="n">shift_key</span><span class="o">=</span><span class="s2">&quot;shift&quot;</span><span class="p">,</span>
@@ -840,7 +840,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span> <span class="o">=</span> <span class="p">{</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">done_keys</span><span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reward_keys</span> <span class="o">=</span> <span class="p">{</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">reward_keys</span><span class="p">}</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
         <span class="n">_storage_shape</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get_non_tensor</span><span class="p">(</span><span class="s2">&quot;_storage_shape&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">_storage_shape</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
             <span class="n">_storage_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="n">_storage_shape</span><span class="p">])</span>
@@ -910,7 +910,7 @@
                     <span class="n">cur_slice</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span>
                     <span class="n">start</span> <span class="o">=</span> <span class="n">stop</span>
 
-                    <span class="k">def</span> <span class="nf">_index</span><span class="p">(</span>
+                    <span class="k">def</span><span class="w"> </span><span class="nf">_index</span><span class="p">(</span>
                         <span class="n">key</span><span class="p">,</span>
                         <span class="n">val</span><span class="p">,</span>
                         <span class="n">cur_slice</span><span class="o">=</span><span class="n">cur_slice</span><span class="p">,</span>
@@ -941,7 +941,7 @@
             <span class="n">_storage_shape</span><span class="o">=</span><span class="n">_storage_shape</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">_storage_shape</span><span class="p">,</span> <span class="n">shift</span><span class="p">,</span> <span class="n">is_full</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">_storage_shape</span><span class="p">,</span> <span class="n">shift</span><span class="p">,</span> <span class="n">is_full</span><span class="p">):</span>
         <span class="n">done</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">)</span>
         <span class="n">done</span> <span class="o">=</span> <span class="n">done</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 
@@ -956,7 +956,7 @@
         <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">nsteps</span><span class="p">])</span>
 
-        <span class="k">def</span> <span class="nf">maybe_roll</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">maybe_roll</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">is_full</span> <span class="ow">and</span> <span class="n">shift</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">_roll_inplace</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">shift</span><span class="o">=</span><span class="n">shift</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">out</span><span class="p">)</span>
@@ -1010,13 +1010,13 @@
         <span class="k">return</span> <span class="n">out</span></div>
 
 
-<div class="viewcode-block" id="TED2Nested"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TED2Nested.html#torchrl.data.TED2Nested">[docs]</a><span class="k">class</span> <span class="nc">TED2Nested</span><span class="p">(</span><span class="n">TED2Flat</span><span class="p">):</span>
+<div class="viewcode-block" id="TED2Nested"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TED2Nested.html#torchrl.data.TED2Nested">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">TED2Nested</span><span class="p">(</span><span class="n">TED2Flat</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory.&quot;&quot;&quot;</span>
 
     <span class="n">_shift</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_is_full</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;_nested_compute_contiguous_strides_offsets&quot;</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Unsupported torch version </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2">. &quot;</span>
@@ -1024,7 +1024,7 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
         <span class="n">data</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
 
         <span class="n">shift</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shift</span>
@@ -1104,12 +1104,12 @@
         <span class="k">return</span> <span class="n">out</span></div>
 
 
-<div class="viewcode-block" id="Nested2TED"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.Nested2TED.html#torchrl.data.Nested2TED">[docs]</a><span class="k">class</span> <span class="nc">Nested2TED</span><span class="p">(</span><span class="n">Flat2TED</span><span class="p">):</span>
+<div class="viewcode-block" id="Nested2TED"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.Nested2TED.html#torchrl.data.Nested2TED">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Nested2TED</span><span class="p">(</span><span class="n">Flat2TED</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Converts a nested tensordict where each row is a trajectory into the TED format.&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
         <span class="c1"># Get a flat representation of data</span>
-        <span class="k">def</span> <span class="nf">flatten_het_dim</span><span class="p">(</span><span class="n">tensor</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">flatten_het_dim</span><span class="p">(</span><span class="n">tensor</span><span class="p">):</span>
             <span class="n">shape</span> <span class="o">=</span> <span class="p">[</span><span class="n">tensor</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">tensor</span><span class="o">.</span><span class="n">ndim</span><span class="p">)]</span>
             <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">untyped_storage</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span>
                 <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">shape</span>
@@ -1121,13 +1121,13 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">out</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="H5Split"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.H5Split.html#torchrl.data.H5Split">[docs]</a><span class="k">class</span> <span class="nc">H5Split</span><span class="p">(</span><span class="n">TED2Flat</span><span class="p">):</span>
+<div class="viewcode-block" id="H5Split"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.H5Split.html#torchrl.data.H5Split">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">H5Split</span><span class="p">(</span><span class="n">TED2Flat</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Splits a dataset prepared with TED2Nested into a TensorDict where each trajectory is stored as views on their parent nested tensors.&quot;&quot;&quot;</span>
 
     <span class="n">_shift</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_is_full</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
         <span class="n">nzeros</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])))</span>
 
         <span class="n">result</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
@@ -1140,10 +1140,10 @@
         <span class="k">return</span> <span class="n">result</span></div>
 
 
-<div class="viewcode-block" id="H5Combine"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.H5Combine.html#torchrl.data.H5Combine">[docs]</a><span class="k">class</span> <span class="nc">H5Combine</span><span class="p">:</span>
+<div class="viewcode-block" id="H5Combine"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.H5Combine.html#torchrl.data.H5Combine">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">H5Combine</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Combines trajectories in a persistent tensordict into a single standing tensordict stored in filesystem.&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="c1"># TODO: this load the entire H5 in memory, which can be problematic</span>
         <span class="c1"># Ideally we would want to load it on a memmap tensordict</span>
         <span class="c1"># We currently ignore out in this call but we should leverage that</span>
@@ -1155,7 +1155,7 @@
         <span class="n">result</span><span class="o">.</span><span class="n">memmap_</span><span class="p">()</span>
 
         <span class="c1"># Create each entry</span>
-        <span class="k">def</span> <span class="nf">initialize</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">initialize</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
             <span class="n">result</span><span class="o">.</span><span class="n">make_memmap</span><span class="p">(</span>
                 <span class="n">key</span><span class="p">,</span>
                 <span class="n">shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">_x</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">_x</span> <span class="ow">in</span> <span class="n">x</span><span class="p">]),</span>
@@ -1172,7 +1172,7 @@
         <span class="p">)</span>
 
         <span class="c1"># Populate the entries</span>
-        <span class="k">def</span> <span class="nf">populate</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">populate</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
             <span class="n">dest</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_x</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
                 <span class="n">dest</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">_x</span><span class="p">)</span>
@@ -1188,9 +1188,9 @@
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_path2str</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">default_name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_path2str</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">default_name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="c1"># Uses the Keys defined in pytree to build a path</span>
-    <span class="kn">from</span> <span class="nn">torch.utils._pytree</span> <span class="kn">import</span> <span class="n">MappingKey</span><span class="p">,</span> <span class="n">SequenceKey</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">MappingKey</span><span class="p">,</span> <span class="n">SequenceKey</span>
 
     <span class="k">if</span> <span class="n">default_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">default_name</span> <span class="o">=</span> <span class="n">SINGLE_TENSOR_BUFFER_NAME</span>
@@ -1214,11 +1214,11 @@
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_path2str</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">default_name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_path2str</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">default_name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
     <span class="k">raise</span> <span class="ne">RuntimeError</span>
 
 
-<span class="k">def</span> <span class="nf">_save_pytree_common</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">metadata</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_save_pytree_common</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">metadata</span><span class="p">):</span>
     <span class="k">if</span> <span class="s2">&quot;.&quot;</span> <span class="ow">in</span> <span class="n">tensor_path</span><span class="p">:</span>
         <span class="n">tensor_path</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;_&lt;dot&gt;_&quot;</span><span class="p">)</span>
     <span class="n">total_tensor_path</span> <span class="o">=</span> <span class="n">path</span> <span class="o">/</span> <span class="p">(</span><span class="n">tensor_path</span> <span class="o">+</span> <span class="s2">&quot;.memmap&quot;</span><span class="p">)</span>
@@ -1249,10 +1249,10 @@
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_save_pytree</span><span class="p">(</span><span class="n">_storage</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
-    <span class="kn">from</span> <span class="nn">torch.utils._pytree</span> <span class="kn">import</span> <span class="n">tree_map_with_path</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_save_pytree</span><span class="p">(</span><span class="n">_storage</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">tree_map_with_path</span>
 
-    <span class="k">def</span> <span class="nf">save_tensor</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_tensor</span><span class="p">(</span>
         <span class="n">tensor_path</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span>
     <span class="p">):</span>
         <span class="n">tensor_path</span> <span class="o">=</span> <span class="n">_path2str</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">)</span>
@@ -1262,12 +1262,12 @@
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_save_pytree</span><span class="p">(</span><span class="n">_storage</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_save_pytree</span><span class="p">(</span><span class="n">_storage</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
 
     <span class="n">flat_storage</span><span class="p">,</span> <span class="n">storage_specs</span> <span class="o">=</span> <span class="n">tree_flatten</span><span class="p">(</span><span class="n">_storage</span><span class="p">)</span>
     <span class="n">storage_paths</span> <span class="o">=</span> <span class="n">_get_paths</span><span class="p">(</span><span class="n">storage_specs</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">save_tensor</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_tensor</span><span class="p">(</span>
         <span class="n">tensor_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span>
     <span class="p">):</span>
         <span class="n">_save_pytree_common</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span>
@@ -1276,7 +1276,7 @@
         <span class="n">save_tensor</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">,</span> <span class="n">tensor</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_get_paths</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">cumulpath</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_paths</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">cumulpath</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
     <span class="c1"># alternative way to build a path without the keys</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">LeafSpec</span><span class="p">):</span>
         <span class="k">yield</span> <span class="n">cumulpath</span> <span class="k">if</span> <span class="n">cumulpath</span> <span class="k">else</span> <span class="n">SINGLE_TENSOR_BUFFER_NAME</span>
@@ -1291,7 +1291,7 @@
         <span class="k">yield from</span> <span class="n">_get_paths</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">cpath</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_init_pytree_common</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">,</span> <span class="n">scratch_dir</span><span class="p">,</span> <span class="n">max_size_fn</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_init_pytree_common</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">,</span> <span class="n">scratch_dir</span><span class="p">,</span> <span class="n">max_size_fn</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
     <span class="k">if</span> <span class="s2">&quot;.&quot;</span> <span class="ow">in</span> <span class="n">tensor_path</span><span class="p">:</span>
         <span class="n">tensor_path</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;_&lt;dot&gt;_&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">scratch_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1321,12 +1321,12 @@
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_init_pytree</span><span class="p">(</span><span class="n">scratch_dir</span><span class="p">,</span> <span class="n">max_size_fn</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
-    <span class="kn">from</span> <span class="nn">torch.utils._pytree</span> <span class="kn">import</span> <span class="n">tree_map_with_path</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_init_pytree</span><span class="p">(</span><span class="n">scratch_dir</span><span class="p">,</span> <span class="n">max_size_fn</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">tree_map_with_path</span>
 
     <span class="c1"># If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree</span>
     <span class="c1"># if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype</span>
-    <span class="k">def</span> <span class="nf">save_tensor</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_tensor</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
         <span class="n">tensor_path</span> <span class="o">=</span> <span class="n">_path2str</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">_init_pytree_common</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">,</span> <span class="n">scratch_dir</span><span class="p">,</span> <span class="n">max_size_fn</span><span class="p">,</span> <span class="n">tensor</span><span class="p">)</span>
 
@@ -1335,7 +1335,7 @@
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">_init_pytree</span><span class="p">(</span><span class="n">scratch_dir</span><span class="p">,</span> <span class="n">max_size</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_init_pytree</span><span class="p">(</span><span class="n">scratch_dir</span><span class="p">,</span> <span class="n">max_size</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
 
     <span class="n">flat_data</span><span class="p">,</span> <span class="n">data_specs</span> <span class="o">=</span> <span class="n">tree_flatten</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
     <span class="n">data_paths</span> <span class="o">=</span> <span class="n">_get_paths</span><span class="p">(</span><span class="n">data_specs</span><span class="p">)</span>
@@ -1343,7 +1343,7 @@
 
     <span class="c1"># If not a tensorclass/tensordict, it must be a tensor(-like) or a PyTree</span>
     <span class="c1"># if Tensor, we just create a MemoryMappedTensor of the desired shape, device and dtype</span>
-    <span class="k">def</span> <span class="nf">save_tensor</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_tensor</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">_init_pytree_common</span><span class="p">(</span><span class="n">tensor_path</span><span class="p">,</span> <span class="n">scratch_dir</span><span class="p">,</span> <span class="n">max_size</span><span class="p">,</span> <span class="n">tensor</span><span class="p">)</span>
 
     <span class="n">out</span> <span class="o">=</span> <span class="p">[]</span>
@@ -1353,7 +1353,7 @@
     <span class="k">return</span> <span class="n">tree_unflatten</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">data_specs</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_roll_inplace</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">shift</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">index_dest</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">index_source</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_roll_inplace</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">shift</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">index_dest</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">index_source</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="c1"># slice 0</span>
     <span class="n">source0</span> <span class="o">=</span> <span class="n">tensor</span><span class="p">[:</span><span class="o">-</span><span class="n">shift</span><span class="p">]</span>
     <span class="k">if</span> <span class="n">index_source</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1379,14 +1379,14 @@
 
 
 <span class="c1"># Copy-paste of unravel-index for PT 2.0</span>
-<span class="k">def</span> <span class="nf">_unravel_index</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_unravel_index</span><span class="p">(</span>
     <span class="n">indices</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">typing</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">typing</span><span class="o">.</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
     <span class="n">res_tensor</span> <span class="o">=</span> <span class="n">_unravel_index_impl</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">res_tensor</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_unravel_index_impl</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_unravel_index_impl</span><span class="p">(</span>
     <span class="n">indices</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">typing</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">SymInt</span><span class="p">)):</span>
@@ -1409,37 +1409,37 @@
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.2&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">unravel_index</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">unravel_index</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A version-compatible wrapper around torch.unravel_index.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">_unravel_index</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;2.2&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">unravel_index</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">unravel_index</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A version-compatible wrapper around torch.unravel_index.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">unravel_index</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">tree_iter</span><span class="p">(</span><span class="n">pytree</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">tree_iter</span><span class="p">(</span><span class="n">pytree</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A version-compatible wrapper around tree_iter.&quot;&quot;&quot;</span>
     <span class="n">flat_tree</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">_pytree</span><span class="o">.</span><span class="n">tree_flatten</span><span class="p">(</span><span class="n">pytree</span><span class="p">)</span>
     <span class="k">yield from</span> <span class="n">flat_tree</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">,</span> <span class="s2">&quot;2.4&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">tree_iter</span><span class="p">(</span><span class="n">pytree</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">tree_iter</span><span class="p">(</span><span class="n">pytree</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A version-compatible wrapper around tree_iter.&quot;&quot;&quot;</span>
     <span class="k">yield from</span> <span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">_pytree</span><span class="o">.</span><span class="n">tree_leaves</span><span class="p">(</span><span class="n">pytree</span><span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;2.4&quot;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">tree_iter</span><span class="p">(</span><span class="n">pytree</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">tree_iter</span><span class="p">(</span><span class="n">pytree</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A version-compatible wrapper around tree_iter.&quot;&quot;&quot;</span>
     <span class="k">yield from</span> <span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">_pytree</span><span class="o">.</span><span class="n">tree_iter</span><span class="p">(</span><span class="n">pytree</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_auto_device</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_auto_device</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">torch</span><span class="o">.</span><span class="n">mps</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>

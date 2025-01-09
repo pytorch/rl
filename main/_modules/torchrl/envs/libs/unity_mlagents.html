@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -406,15 +406,15 @@
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">importlib.util</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">BoundedContinuous</span><span class="p">,</span>
     <span class="n">Categorical</span><span class="p">,</span>
     <span class="n">Composite</span><span class="p">,</span>
@@ -422,25 +422,25 @@
     <span class="n">MultiOneHot</span><span class="p">,</span>
     <span class="n">Unbounded</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_EnvWrapper</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">_classproperty</span><span class="p">,</span> <span class="n">check_marl_grouping</span><span class="p">,</span> <span class="n">MarlGroupMapType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_EnvWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_classproperty</span><span class="p">,</span> <span class="n">check_marl_grouping</span><span class="p">,</span> <span class="n">MarlGroupMapType</span>
 
 <span class="n">_has_unity_mlagents</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;mlagents_envs&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
 
-<span class="k">def</span> <span class="nf">_get_registered_envs</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_registered_envs</span><span class="p">():</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_unity_mlagents</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
             <span class="s2">&quot;mlagents_envs not found. Consider downloading and installing &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;mlagents from </span><span class="si">{</span><span class="n">UnityMLAgentsWrapper</span><span class="o">.</span><span class="n">git_url</span><span class="si">}</span><span class="s2">.&quot;</span>
         <span class="p">)</span>
 
-    <span class="kn">from</span> <span class="nn">mlagents_envs.registry</span> <span class="kn">import</span> <span class="n">default_registry</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">mlagents_envs.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_registry</span>
 
     <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">default_registry</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 
 
-<div class="viewcode-block" id="UnityMLAgentsWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.UnityMLAgentsWrapper.html#torchrl.envs.UnityMLAgentsWrapper">[docs]</a><span class="k">class</span> <span class="nc">UnityMLAgentsWrapper</span><span class="p">(</span><span class="n">_EnvWrapper</span><span class="p">):</span>
+<div class="viewcode-block" id="UnityMLAgentsWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.UnityMLAgentsWrapper.html#torchrl.envs.UnityMLAgentsWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">UnityMLAgentsWrapper</span><span class="p">(</span><span class="n">_EnvWrapper</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Unity ML-Agents environment wrapper.</span>
 
 <span class="sd">    GitHub: https://github.com/Unity-Technologies/ml-agents</span>
@@ -486,17 +486,17 @@
     <span class="n">_lib</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@_classproperty</span>
-    <span class="k">def</span> <span class="nf">lib</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lib</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_lib</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_lib</span>
 
-        <span class="kn">import</span> <span class="nn">mlagents_envs</span>
-        <span class="kn">import</span> <span class="nn">mlagents_envs.environment</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">mlagents_envs</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">mlagents_envs.environment</span>
 
         <span class="bp">cls</span><span class="o">.</span><span class="n">_lib</span> <span class="o">=</span> <span class="n">mlagents_envs</span>
         <span class="k">return</span> <span class="n">mlagents_envs</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">env</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
@@ -511,7 +511,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">categorical_actions</span> <span class="o">=</span> <span class="n">categorical_actions</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
         <span class="n">mlagents_envs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span>
         <span class="k">if</span> <span class="s2">&quot;env&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Could not find environment key &#39;env&#39; in kwargs.&quot;</span><span class="p">)</span>
@@ -521,16 +521,16 @@
                 <span class="s2">&quot;env is not of type &#39;mlagents_envs.environment.UnityEnvironment&#39;&quot;</span>
             <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_build_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">requires_grad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">requires_grad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">requires_grad</span>
         <span class="k">return</span> <span class="n">env</span>
 
-    <span class="k">def</span> <span class="nf">_init_env</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_env</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_update_action_mask</span><span class="p">()</span>
 
     <span class="c1"># Creates a group map where agents are grouped by the group_id given by the</span>
     <span class="c1"># Unity environment.</span>
-    <span class="k">def</span> <span class="nf">_collect_agents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_collect_agents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>
         <span class="n">agent_name_to_behavior_map</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">agent_name_to_group_id_map</span> <span class="o">=</span> <span class="p">{}</span>
 
@@ -558,7 +558,7 @@
         <span class="p">)</span>
 
     <span class="c1"># Creates a group map where agents are grouped by their group_id.</span>
-    <span class="k">def</span> <span class="nf">_make_default_group_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_name_to_group_id_map</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_default_group_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_name_to_group_id_map</span><span class="p">):</span>
         <span class="n">group_map</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">agent_name</span><span class="p">,</span> <span class="n">group_id</span> <span class="ow">in</span> <span class="n">agent_name_to_group_id_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">group_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;group_</span><span class="si">{</span><span class="n">group_id</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -567,7 +567,7 @@
             <span class="n">group_map</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">agent_name</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">group_map</span>
 
-    <span class="k">def</span> <span class="nf">_make_group_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">group_map</span><span class="p">,</span> <span class="n">agent_name_to_group_id_map</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_group_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">group_map</span><span class="p">,</span> <span class="n">agent_name_to_group_id_map</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">group_map</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">group_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_default_group_map</span><span class="p">(</span><span class="n">agent_name_to_group_id_map</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">group_map</span><span class="p">,</span> <span class="n">MarlGroupMapType</span><span class="p">):</span>
@@ -579,7 +579,7 @@
                 <span class="n">agent_name_to_group_name_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
         <span class="k">return</span> <span class="n">group_map</span><span class="p">,</span> <span class="n">agent_name_to_group_name_map</span>
 
-    <span class="k">def</span> <span class="nf">_make_specs</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_specs</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="s2">&quot;mlagents_envs.environment.UnityEnvironment&quot;</span>  <span class="c1"># noqa: F821</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># NOTE: We need to reset here because mlagents only initializes the</span>
@@ -684,11 +684,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">done_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">done_spec</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;This environment has no seed.&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_check_agent_exists</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_name</span><span class="p">,</span> <span class="n">group_id</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_agent_exists</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_name</span><span class="p">,</span> <span class="n">group_id</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">agent_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_group_id_map</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="p">(</span>
@@ -704,7 +704,7 @@
                 <span class="p">)</span>
             <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_update_action_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_action_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">behavior</span><span class="p">,</span> <span class="n">behavior_spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">env_action_spec</span> <span class="o">=</span> <span class="n">behavior_spec</span><span class="o">.</span><span class="n">action_spec</span>
             <span class="n">discrete_branches</span> <span class="o">=</span> <span class="n">env_action_spec</span><span class="o">.</span><span class="n">discrete_branches</span>
@@ -731,7 +731,7 @@
                             <span class="n">group_name</span><span class="p">,</span> <span class="n">agent_name</span><span class="p">,</span> <span class="s2">&quot;discrete_action&quot;</span>
                         <span class="p">]</span><span class="o">.</span><span class="n">update_mask</span><span class="p">(</span><span class="n">agent_action_mask</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_make_td_out</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict_in</span><span class="p">,</span> <span class="n">is_reset</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_td_out</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict_in</span><span class="p">,</span> <span class="n">is_reset</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="n">source</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">behavior</span><span class="p">,</span> <span class="n">behavior_spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">steps</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">get_steps</span><span class="p">(</span><span class="n">behavior</span><span class="p">)):</span>
@@ -847,14 +847,14 @@
 
         <span class="k">return</span> <span class="n">tensordict_out</span>
 
-    <span class="k">def</span> <span class="nf">_get_action_from_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_action_from_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">categorical_actions</span><span class="p">:</span>
             <span class="n">action</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">action</span> <span class="o">=</span> <span class="n">tensor</span>
         <span class="k">return</span> <span class="n">action</span>
 
-    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="c1"># Apply actions</span>
         <span class="k">for</span> <span class="n">behavior</span><span class="p">,</span> <span class="n">behavior_spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">env_action_spec</span> <span class="o">=</span> <span class="n">behavior_spec</span><span class="o">.</span><span class="n">action_spec</span>
@@ -891,26 +891,26 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_update_action_mask</span><span class="p">()</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_td_out</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_to_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_to_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_td_out</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">is_reset</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
     <span class="nd">@_classproperty</span>
-    <span class="k">def</span> <span class="nf">available_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">available_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_unity_mlagents</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">[]</span>
         <span class="k">return</span> <span class="n">_get_registered_envs</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="UnityMLAgentsEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.UnityMLAgentsEnv.html#torchrl.envs.UnityMLAgentsEnv">[docs]</a><span class="k">class</span> <span class="nc">UnityMLAgentsEnv</span><span class="p">(</span><span class="n">UnityMLAgentsWrapper</span><span class="p">):</span>
+<div class="viewcode-block" id="UnityMLAgentsEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.UnityMLAgentsEnv.html#torchrl.envs.UnityMLAgentsEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">UnityMLAgentsEnv</span><span class="p">(</span><span class="n">UnityMLAgentsWrapper</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Unity ML-Agents environment wrapper.</span>
 
 <span class="sd">    GitHub: https://github.com/Unity-Technologies/ml-agents</span>
@@ -1237,7 +1237,7 @@
 <span class="sd">            is_shared=False)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">file_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">registered_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1254,7 +1254,7 @@
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_build_env</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_env</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">file_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">registered_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
@@ -1272,7 +1272,7 @@
                 <span class="s2">&quot;is not allowed. Specify one of them or neither.&quot;</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">registered_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">mlagents_envs.registry</span> <span class="kn">import</span> <span class="n">default_registry</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">mlagents_envs.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_registry</span>
 
             <span class="n">env</span> <span class="o">=</span> <span class="n">default_registry</span><span class="p">[</span><span class="n">registered_name</span><span class="p">]</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -1284,17 +1284,17 @@
         <span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">file_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">file_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constructor_kwargs</span><span class="p">[</span><span class="s2">&quot;file_name&quot;</span><span class="p">]</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">registered_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">registered_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constructor_kwargs</span><span class="p">[</span><span class="s2">&quot;registered_name&quot;</span><span class="p">]</span>
 
-    <span class="k">def</span> <span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
         <span class="k">pass</span>
 
-    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">registered_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">env_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">registered_name</span>
         <span class="k">else</span><span class="p">:</span>

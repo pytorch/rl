@@ -11,8 +11,6 @@ This tutorial details how multi-task policies and batched environments can be us
 # sphinx_gallery_start_ignore
 import warnings
 
-from tensordict import LazyStackedTensorDict
-
 warnings.filterwarnings("ignore")
 
 from torch import multiprocessing
@@ -32,6 +30,7 @@ except RuntimeError:
 
 # sphinx_gallery_end_ignore
 
+from tensordict import LazyStackedTensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 
@@ -91,7 +90,7 @@ print(tdreset[0])
 # ^^^^^^
 #
 # We will design a policy where a backbone reads the "observation" key.
-# Then specific sub-components will ready the "observation_stand" and
+# Then specific sub-components will read the "observation_stand" and
 # "observation_walk" keys of the stacked tensordicts, if they are present,
 # and pass them through the dedicated sub-network.
 
@@ -138,7 +137,7 @@ seq(tdreset)
 # Executing diverse tasks in parallel
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# We can parallelize the operations if the common keys-value pairs share the
+# We can parallelize the operations if the common key-value pairs share the
 # same specs (in particular their shape and dtype must match: you can't do the
 # following if the observation shapes are different but are pointed to by the
 # same key).

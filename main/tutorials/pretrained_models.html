@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -441,12 +441,12 @@ for efficient image representation, and fine-tune them.</p>
 components of the policy. As the sematic is the same, they can be used interchangeably
 in one or the other context. In this tutorial, we will be using R3M (<a class="reference external" href="https://arxiv.org/abs/2203.12601">https://arxiv.org/abs/2203.12601</a>),
 but other models (e.g. VIP) will work equally well.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch.cuda</span>
-<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a>
-<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
-<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">R3MTransform</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a>
-<span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a>
-<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Actor</span></a>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.cuda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">R3MTransform</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.gym</span><span class="w"> </span><span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Actor</span></a>
 
 <span class="n">is_fork</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;fork&quot;</span>
 <a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a> <span class="o">=</span> <span class="p">(</span>
@@ -485,42 +485,37 @@ the corresponding action.</p>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Downloading: &quot;https://pytorch.s3.amazonaws.com/models/rl/r3m/r3m_50.pt&quot; to /root/.cache/torch/hub/checkpoints/r3m_50.pt
 
   0%|          | 0.00/374M [00:00&lt;?, ?B/s]
-  4%|▍         | 16.2M/374M [00:00&lt;00:02, 170MB/s]
-  9%|▊         | 32.5M/374M [00:00&lt;00:03, 98.9MB/s]
- 12%|█▏        | 43.5M/374M [00:00&lt;00:03, 87.6MB/s]
- 14%|█▍        | 52.8M/374M [00:00&lt;00:05, 65.4MB/s]
- 17%|█▋        | 64.0M/374M [00:00&lt;00:04, 70.1MB/s]
- 19%|█▉        | 71.4M/374M [00:00&lt;00:04, 71.4MB/s]
- 22%|██▏       | 82.0M/374M [00:01&lt;00:04, 68.7MB/s]
- 26%|██▌       | 97.8M/374M [00:01&lt;00:03, 76.9MB/s]
- 28%|██▊       | 105M/374M [00:01&lt;00:03, 73.2MB/s]
- 31%|███       | 115M/374M [00:01&lt;00:03, 71.1MB/s]
- 35%|███▌      | 131M/374M [00:01&lt;00:03, 79.1MB/s]
- 39%|███▉      | 148M/374M [00:01&lt;00:02, 82.9MB/s]
- 43%|████▎     | 162M/374M [00:02&lt;00:02, 92.9MB/s]
- 46%|████▌     | 172M/374M [00:02&lt;00:02, 84.4MB/s]
- 48%|████▊     | 180M/374M [00:02&lt;00:02, 81.6MB/s]
- 50%|█████     | 188M/374M [00:02&lt;00:02, 69.9MB/s]
- 52%|█████▏    | 195M/374M [00:02&lt;00:03, 58.3MB/s]
- 54%|█████▎    | 201M/374M [00:02&lt;00:03, 52.6MB/s]
- 57%|█████▋    | 213M/374M [00:03&lt;00:02, 58.5MB/s]
- 61%|██████▏   | 229M/374M [00:03&lt;00:02, 65.8MB/s]
- 66%|██████▌   | 246M/374M [00:03&lt;00:01, 72.7MB/s]
- 70%|██████▉   | 262M/374M [00:03&lt;00:01, 63.4MB/s]
- 72%|███████▏  | 268M/374M [00:04&lt;00:02, 53.6MB/s]
- 74%|███████▍  | 277M/374M [00:04&lt;00:01, 55.5MB/s]
- 75%|███████▌  | 282M/374M [00:04&lt;00:01, 52.0MB/s]
- 78%|███████▊  | 293M/374M [00:04&lt;00:01, 58.9MB/s]
- 80%|███████▉  | 299M/374M [00:04&lt;00:01, 54.9MB/s]
- 83%|████████▎ | 310M/374M [00:04&lt;00:01, 63.3MB/s]
- 84%|████████▍ | 316M/374M [00:04&lt;00:01, 55.4MB/s]
- 87%|████████▋ | 326M/374M [00:05&lt;00:01, 50.1MB/s]
- 89%|████████▊ | 331M/374M [00:05&lt;00:00, 45.4MB/s]
- 92%|█████████▏| 342M/374M [00:05&lt;00:00, 45.7MB/s]
- 93%|█████████▎| 347M/374M [00:05&lt;00:00, 42.6MB/s]
- 96%|█████████▌| 359M/374M [00:05&lt;00:00, 45.3MB/s]
- 97%|█████████▋| 363M/374M [00:06&lt;00:00, 41.3MB/s]
-100%|██████████| 374M/374M [00:06&lt;00:00, 63.4MB/s]
+  4%|▍         | 14.9M/374M [00:00&lt;00:04, 91.1MB/s]
+  6%|▋         | 23.6M/374M [00:00&lt;00:04, 88.5MB/s]
+  9%|▉         | 32.9M/374M [00:00&lt;00:04, 85.9MB/s]
+ 13%|█▎        | 49.2M/374M [00:00&lt;00:03, 102MB/s]
+ 17%|█▋        | 64.0M/374M [00:00&lt;00:03, 91.5MB/s]
+ 19%|█▉        | 72.9M/374M [00:00&lt;00:03, 85.5MB/s]
+ 22%|██▏       | 82.0M/374M [00:01&lt;00:04, 71.7MB/s]
+ 26%|██▌       | 97.8M/374M [00:01&lt;00:03, 80.0MB/s]
+ 28%|██▊       | 106M/374M [00:01&lt;00:03, 73.7MB/s]
+ 31%|███       | 115M/374M [00:01&lt;00:03, 76.9MB/s]
+ 35%|███▌      | 131M/374M [00:01&lt;00:03, 80.3MB/s]
+ 39%|███▉      | 148M/374M [00:01&lt;00:02, 91.6MB/s]
+ 44%|████▍     | 164M/374M [00:01&lt;00:02, 105MB/s]
+ 48%|████▊     | 180M/374M [00:02&lt;00:01, 109MB/s]
+ 52%|█████▏    | 195M/374M [00:02&lt;00:01, 98.5MB/s]
+ 55%|█████▍    | 205M/374M [00:02&lt;00:01, 88.9MB/s]
+ 57%|█████▋    | 214M/374M [00:02&lt;00:01, 87.5MB/s]
+ 61%|██████▏   | 229M/374M [00:02&lt;00:01, 94.0MB/s]
+ 66%|██████▌   | 246M/374M [00:02&lt;00:01, 103MB/s]
+ 70%|██████▉   | 262M/374M [00:02&lt;00:01, 108MB/s]
+ 73%|███████▎  | 272M/374M [00:03&lt;00:01, 95.3MB/s]
+ 75%|███████▌  | 281M/374M [00:03&lt;00:01, 83.7MB/s]
+ 78%|███████▊  | 293M/374M [00:03&lt;00:00, 92.3MB/s]
+ 81%|████████  | 303M/374M [00:03&lt;00:01, 75.0MB/s]
+ 83%|████████▎ | 311M/374M [00:03&lt;00:00, 74.0MB/s]
+ 87%|████████▋ | 326M/374M [00:03&lt;00:00, 92.6MB/s]
+ 90%|████████▉ | 336M/374M [00:04&lt;00:00, 77.7MB/s]
+ 92%|█████████▏| 344M/374M [00:04&lt;00:00, 65.6MB/s]
+ 96%|█████████▌| 359M/374M [00:04&lt;00:00, 82.2MB/s]
+ 98%|█████████▊| 368M/374M [00:04&lt;00:00, 76.9MB/s]
+100%|██████████| 374M/374M [00:04&lt;00:00, 87.1MB/s]
 </pre></div>
 </div>
 <p>Let’s check the number of parameters of the policy:</p>
@@ -602,7 +597,7 @@ is due to the fact that both behave like TensorDictModule: they have a set of <c
 <cite>“out_keys”</cite> that make it easy to read and write output in different context.</p>
 <p>To conclude this tutorial, let’s have a look at how we could use R3M to read
 images stored in a replay buffer (e.g. in an offline RL context). First, let’s build our dataset:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyMemmapStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyMemmapStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
 
 <span class="n">storage</span> <span class="o">=</span> <span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
 <span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">storage</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">r3m</span><span class="p">)</span>
@@ -672,8 +667,8 @@ In this way, we can train an algorithm offline on a dataset made of images:</p>
     is_shared=False)
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (1 minutes 33.842 seconds)</p>
-<p><strong>Estimated memory usage:</strong>  4016 MB</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (1 minutes 19.588 seconds)</p>
+<p><strong>Estimated memory usage:</strong>  2526 MB</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-pretrained-models-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/3ba23a9a93590a43a3046afd5406df88/pretrained_models.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">pretrained_models.ipynb</span></code></a></p>

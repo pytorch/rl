@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -466,8 +466,8 @@ parameters back into the MARL module.
 See <a class="reference internal" href="#torchrl.modules.MultiAgentNetBase.from_stateful_net" title="torchrl.modules.MultiAgentNetBase.from_stateful_net"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_stateful_net()</span></code></a> for details on how to re-populate the MARL model with
 parameters that have been re-initialized out-of-place.</p>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">MultiAgentMLP</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiAgentMLP</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">n_agents</span> <span class="o">=</span> <span class="mi">6</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">n_agent_inputs</span><span class="o">=</span><span class="mi">3</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">n_agent_outputs</span><span class="o">=</span><span class="mi">2</span>
@@ -482,7 +482,7 @@ parameters that have been re-initialized out-of-place.</p>
 <span class="gp">... </span>    <span class="n">depth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">snet</span> <span class="o">=</span> <span class="n">mlp</span><span class="o">.</span><span class="n">get_stateful_net</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">init</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;weight&quot;</span><span class="p">):</span>
 <span class="gp">... </span>        <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">kaiming_normal_</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">snet</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">init</span><span class="p">)</span>

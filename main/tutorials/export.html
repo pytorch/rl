@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -474,26 +474,26 @@ to be exported on hardware.</p>
 with Atari games as they are rendered by the gymnasium library.
 We will stick to the DQN example, and show how a policy that outputs a distribution over values can be used instead
 later.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">time</span>
-<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="p">(</span>
-    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a> <span class="k">as</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">,</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TensorDictModule</span> <span class="k">as</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">,</span>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">,</span>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a> <span class="k">as</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">torch.optim</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">Adam</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim</span><span class="w"> </span><span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">Adam</span></a>
 
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">timeit</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
-<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">timeit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <a href="https://pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Compose</span></a><span class="p">,</span>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GrayScale</span></a><span class="p">,</span>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a><span class="p">,</span>
@@ -504,9 +504,9 @@ later.</p>
     <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">ConvNet</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EGreedyModule</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">QValueModule</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvNet</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EGreedyModule</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">QValueModule</span></a>
 
-<span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DQNLoss</span></a><span class="p">,</span> <span class="n">SoftUpdate</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives</span><span class="w"> </span><span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DQNLoss</span></a><span class="p">,</span> <span class="n">SoftUpdate</span>
 
 <a href="https://pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 
@@ -599,7 +599,7 @@ we only want a certain set of outputs (in case the policy returns more than one 
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">fake_td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">base_env</span><span class="o">.</span><span class="n">fake_tensordict</span><span class="p">()</span>
 <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a> <span class="o">=</span> <span class="n">fake_td</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span>
 <span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="s2">&quot;DETERMINISTIC&quot;</span><span class="p">):</span>
-    <a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">exported_policy</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">export</span></a><span class="p">(</span>
+    <span class="n">exported_policy</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">export</span></a><span class="p">(</span>
         <span class="c1"># Select only the &quot;action&quot; output key</span>
         <span class="n">policy_transform</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">),</span>
         <span class="n">args</span><span class="o">=</span><span class="p">(),</span>
@@ -608,84 +608,50 @@ we only want a certain set of outputs (in case the policy returns more than one 
     <span class="p">)</span>
 </pre></div>
 </div>
+<div class="sphx-glr-script-out highlight-pytb notranslate"><div class="highlight"><pre><span></span><span class="gt">Traceback (most recent call last):</span>
+  File <span class="nb">&quot;/pytorch/rl/docs/source/reference/generated/tutorials/export.py&quot;</span>, line <span class="m">180</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="n">exported_policy</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">export</span></a><span class="p">(</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/export/__init__.py&quot;</span>, line <span class="m">356</span>, in <span class="n">export</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">._trace</span><span class="w"> </span><span class="kn">import</span> <span class="n">_export</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/export/_trace.py&quot;</span>, line <span class="m">25</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch._export.non_strict_utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_export/non_strict_utils.py&quot;</span>, line <span class="m">18</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch._export.passes.add_runtime_assertions_for_constraints_pass</span><span class="w"> </span><span class="kn">import</span> <span class="n">InputDim</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_export/passes/__init__.py&quot;</span>, line <span class="m">1</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">.replace_view_ops_with_view_copy_ops_pass</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplaceViewOpsWithViewCopyOpsPass</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_export/passes/replace_view_ops_with_view_copy_ops_pass.py&quot;</span>, line <span class="m">6</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch._export.pass_base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_ExportPassBaseDeprecatedDoNotUse</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_export/pass_base.py&quot;</span>, line <span class="m">9</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">functorch.experimental.control_flow</span><span class="w"> </span><span class="kn">import</span> <span class="n">_unstack_pytree</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/functorch/experimental/control_flow.py&quot;</span>, line <span class="m">3</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch._higher_order_ops.map</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: F401</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_higher_order_ops/map.py&quot;</span>, line <span class="m">6</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch._functorch.aot_autograd</span><span class="w"> </span><span class="kn">import</span> <span class="n">AOTConfig</span><span class="p">,</span> <span class="n">create_joint</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_functorch/aot_autograd.py&quot;</span>, line <span class="m">147</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">.partitioners</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_partition</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_functorch/partitioners.py&quot;</span>, line <span class="m">31</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">._activation_checkpointing.graph_info_provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">GraphInfoProvider</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_functorch/_activation_checkpointing/graph_info_provider.py&quot;</span>, line <span class="m">3</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/networkx/__init__.py&quot;</span>, line <span class="m">100</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">import</span><span class="w"> </span><span class="nn">networkx.classes.filters</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/networkx/classes/__init__.py&quot;</span>, line <span class="m">1</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">.graph</span><span class="w"> </span><span class="kn">import</span> <span class="n">Graph</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/networkx/classes/graph.py&quot;</span>, line <span class="m">23</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="gr">ImportError</span>: <span class="n">cannot import name &#39;Mapping&#39; from &#39;collections&#39; (/pytorch/rl/env/lib/python3.10/collections/__init__.py)</span>
+</pre></div>
+</div>
 <p>Representing the policy can be quite insightful: we can see that the first operations are a permute, a div, unsqueeze,
 resize followed by the convolutional and MLP layers.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Deterministic policy&quot;</span><span class="p">)</span>
-<a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">exported_policy</span></a><span class="o">.</span><span class="n">graph_module</span><span class="o">.</span><span class="n">print_readable</span><span class="p">()</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Deterministic policy
-class GraphModule(torch.nn.Module):
-    def forward(self, p_module_1_module_0_module_0_module_0_0_weight: &quot;f32[32, 1, 8, 8]&quot;, p_module_1_module_0_module_0_module_0_0_bias: &quot;f32[32]&quot;, p_module_1_module_0_module_0_module_0_2_weight: &quot;f32[64, 32, 4, 4]&quot;, p_module_1_module_0_module_0_module_0_2_bias: &quot;f32[64]&quot;, p_module_1_module_0_module_0_module_0_4_weight: &quot;f32[64, 64, 3, 3]&quot;, p_module_1_module_0_module_0_module_0_4_bias: &quot;f32[64]&quot;, p_module_1_module_0_module_0_module_1_0_weight: &quot;f32[512, 3136]&quot;, p_module_1_module_0_module_0_module_1_0_bias: &quot;f32[512]&quot;, p_module_1_module_0_module_0_module_1_2_weight: &quot;f32[6, 512]&quot;, p_module_1_module_0_module_0_module_1_2_bias: &quot;f32[6]&quot;, b_module_1_module_1_eps_init: &quot;f32[]&quot;, b_module_1_module_1_eps_end: &quot;f32[]&quot;, b_module_1_module_1_eps: &quot;f32[]&quot;, kwargs_pixels: &quot;u8[210, 160, 3]&quot;):
-         # File: /pytorch/rl/torchrl/envs/transforms/transforms.py:308 in forward, code: data = self._apply_transform(data)
-        permute: &quot;u8[3, 210, 160]&quot; = torch.ops.aten.permute.default(kwargs_pixels, [-1, -3, -2]);  kwargs_pixels = None
-        div: &quot;f32[3, 210, 160]&quot; = torch.ops.aten.div.Tensor(permute, 255);  permute = None
-        to: &quot;f32[3, 210, 160]&quot; = torch.ops.aten.to.dtype(div, torch.float32);  div = None
-        unsqueeze: &quot;f32[1, 3, 210, 160]&quot; = torch.ops.aten.unsqueeze.default(to, 0);  to = None
-        upsample_nearest2d: &quot;f32[1, 3, 84, 84]&quot; = torch.ops.aten.upsample_nearest2d.vec(unsqueeze, [84, 84], None);  unsqueeze = None
-        squeeze: &quot;f32[3, 84, 84]&quot; = torch.ops.aten.squeeze.dim(upsample_nearest2d, 0);  upsample_nearest2d = None
-        unbind = torch.ops.aten.unbind.int(squeeze, -3);  squeeze = None
-        getitem: &quot;f32[84, 84]&quot; = unbind[0]
-        getitem_1: &quot;f32[84, 84]&quot; = unbind[1]
-        getitem_2: &quot;f32[84, 84]&quot; = unbind[2];  unbind = None
-        mul: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem, 0.2989);  getitem = None
-        mul_1: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem_1, 0.587);  getitem_1 = None
-        add: &quot;f32[84, 84]&quot; = torch.ops.aten.add.Tensor(mul, mul_1);  mul = mul_1 = None
-        mul_2: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem_2, 0.114);  getitem_2 = None
-        add_1: &quot;f32[84, 84]&quot; = torch.ops.aten.add.Tensor(add, mul_2);  add = mul_2 = None
-        to_1: &quot;f32[84, 84]&quot; = torch.ops.aten.to.dtype(add_1, torch.float32);  add_1 = None
-        unsqueeze_1: &quot;f32[1, 84, 84]&quot; = torch.ops.aten.unsqueeze.default(to_1, -3);  to_1 = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)
-        conv2d: &quot;f32[32, 20, 20]&quot; = torch.ops.aten.conv2d.default(unsqueeze_1, p_module_1_module_0_module_0_module_0_0_weight, p_module_1_module_0_module_0_module_0_0_bias, [4, 4]);  unsqueeze_1 = p_module_1_module_0_module_0_module_0_0_weight = p_module_1_module_0_module_0_module_0_0_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)
-        relu: &quot;f32[32, 20, 20]&quot; = torch.ops.aten.relu.default(conv2d);  conv2d = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)
-        conv2d_1: &quot;f32[64, 9, 9]&quot; = torch.ops.aten.conv2d.default(relu, p_module_1_module_0_module_0_module_0_2_weight, p_module_1_module_0_module_0_module_0_2_bias, [2, 2]);  relu = p_module_1_module_0_module_0_module_0_2_weight = p_module_1_module_0_module_0_module_0_2_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)
-        relu_1: &quot;f32[64, 9, 9]&quot; = torch.ops.aten.relu.default(conv2d_1);  conv2d_1 = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)
-        conv2d_2: &quot;f32[64, 7, 7]&quot; = torch.ops.aten.conv2d.default(relu_1, p_module_1_module_0_module_0_module_0_4_weight, p_module_1_module_0_module_0_module_0_4_bias);  relu_1 = p_module_1_module_0_module_0_module_0_4_weight = p_module_1_module_0_module_0_module_0_4_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)
-        relu_2: &quot;f32[64, 7, 7]&quot; = torch.ops.aten.relu.default(conv2d_2);  conv2d_2 = None
-
-         # File: /pytorch/rl/torchrl/modules/models/utils.py:86 in forward, code: value = value.flatten(-self.ndims_in, -1)
-        flatten: &quot;f32[3136]&quot; = torch.ops.aten.flatten.using_ints(relu_2, -3);  relu_2 = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)
-        linear: &quot;f32[512]&quot; = torch.ops.aten.linear.default(flatten, p_module_1_module_0_module_0_module_1_0_weight, p_module_1_module_0_module_0_module_1_0_bias);  flatten = p_module_1_module_0_module_0_module_1_0_weight = p_module_1_module_0_module_0_module_1_0_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)
-        relu_3: &quot;f32[512]&quot; = torch.ops.aten.relu.default(linear);  linear = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)
-        linear_1: &quot;f32[6]&quot; = torch.ops.aten.linear.default(relu_3, p_module_1_module_0_module_0_module_1_2_weight, p_module_1_module_0_module_0_module_1_2_bias);  relu_3 = p_module_1_module_0_module_0_module_1_2_weight = p_module_1_module_0_module_0_module_1_2_bias = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/actors.py:616 in forward, code: action = self.action_func_mapping[self.action_space](action_values)
-        argmax: &quot;i64[]&quot; = torch.ops.aten.argmax.default(linear_1, -1)
-        to_2: &quot;i64[]&quot; = torch.ops.aten.to.dtype(argmax, torch.int64);  argmax = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/actors.py:621 in forward, code: chosen_action_value = action_value_func(action_values, action)
-        unsqueeze_2: &quot;i64[1]&quot; = torch.ops.aten.unsqueeze.default(to_2, -1)
-        gather: &quot;f32[1]&quot; = torch.ops.aten.gather.default(linear_1, -1, unsqueeze_2);  linear_1 = unsqueeze_2 = gather = None
-        return (to_2,)
-
-
-&#39;class GraphModule(torch.nn.Module):\n    def forward(self, p_module_1_module_0_module_0_module_0_0_weight: &quot;f32[32, 1, 8, 8]&quot;, p_module_1_module_0_module_0_module_0_0_bias: &quot;f32[32]&quot;, p_module_1_module_0_module_0_module_0_2_weight: &quot;f32[64, 32, 4, 4]&quot;, p_module_1_module_0_module_0_module_0_2_bias: &quot;f32[64]&quot;, p_module_1_module_0_module_0_module_0_4_weight: &quot;f32[64, 64, 3, 3]&quot;, p_module_1_module_0_module_0_module_0_4_bias: &quot;f32[64]&quot;, p_module_1_module_0_module_0_module_1_0_weight: &quot;f32[512, 3136]&quot;, p_module_1_module_0_module_0_module_1_0_bias: &quot;f32[512]&quot;, p_module_1_module_0_module_0_module_1_2_weight: &quot;f32[6, 512]&quot;, p_module_1_module_0_module_0_module_1_2_bias: &quot;f32[6]&quot;, b_module_1_module_1_eps_init: &quot;f32[]&quot;, b_module_1_module_1_eps_end: &quot;f32[]&quot;, b_module_1_module_1_eps: &quot;f32[]&quot;, kwargs_pixels: &quot;u8[210, 160, 3]&quot;):\n         # File: /pytorch/rl/torchrl/envs/transforms/transforms.py:308 in forward, code: data = self._apply_transform(data)\n        permute: &quot;u8[3, 210, 160]&quot; = torch.ops.aten.permute.default(kwargs_pixels, [-1, -3, -2]);  kwargs_pixels = None\n        div: &quot;f32[3, 210, 160]&quot; = torch.ops.aten.div.Tensor(permute, 255);  permute = None\n        to: &quot;f32[3, 210, 160]&quot; = torch.ops.aten.to.dtype(div, torch.float32);  div = None\n        unsqueeze: &quot;f32[1, 3, 210, 160]&quot; = torch.ops.aten.unsqueeze.default(to, 0);  to = None\n        upsample_nearest2d: &quot;f32[1, 3, 84, 84]&quot; = torch.ops.aten.upsample_nearest2d.vec(unsqueeze, [84, 84], None);  unsqueeze = None\n        squeeze: &quot;f32[3, 84, 84]&quot; = torch.ops.aten.squeeze.dim(upsample_nearest2d, 0);  upsample_nearest2d = None\n        unbind = torch.ops.aten.unbind.int(squeeze, -3);  squeeze = None\n        getitem: &quot;f32[84, 84]&quot; = unbind[0]\n        getitem_1: &quot;f32[84, 84]&quot; = unbind[1]\n        getitem_2: &quot;f32[84, 84]&quot; = unbind[2];  unbind = None\n        mul: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem, 0.2989);  getitem = None\n        mul_1: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem_1, 0.587);  getitem_1 = None\n        add: &quot;f32[84, 84]&quot; = torch.ops.aten.add.Tensor(mul, mul_1);  mul = mul_1 = None\n        mul_2: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem_2, 0.114);  getitem_2 = None\n        add_1: &quot;f32[84, 84]&quot; = torch.ops.aten.add.Tensor(add, mul_2);  add = mul_2 = None\n        to_1: &quot;f32[84, 84]&quot; = torch.ops.aten.to.dtype(add_1, torch.float32);  add_1 = None\n        unsqueeze_1: &quot;f32[1, 84, 84]&quot; = torch.ops.aten.unsqueeze.default(to_1, -3);  to_1 = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)\n        conv2d: &quot;f32[32, 20, 20]&quot; = torch.ops.aten.conv2d.default(unsqueeze_1, p_module_1_module_0_module_0_module_0_0_weight, p_module_1_module_0_module_0_module_0_0_bias, [4, 4]);  unsqueeze_1 = p_module_1_module_0_module_0_module_0_0_weight = p_module_1_module_0_module_0_module_0_0_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)\n        relu: &quot;f32[32, 20, 20]&quot; = torch.ops.aten.relu.default(conv2d);  conv2d = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)\n        conv2d_1: &quot;f32[64, 9, 9]&quot; = torch.ops.aten.conv2d.default(relu, p_module_1_module_0_module_0_module_0_2_weight, p_module_1_module_0_module_0_module_0_2_bias, [2, 2]);  relu = p_module_1_module_0_module_0_module_0_2_weight = p_module_1_module_0_module_0_module_0_2_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)\n        relu_1: &quot;f32[64, 9, 9]&quot; = torch.ops.aten.relu.default(conv2d_1);  conv2d_1 = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)\n        conv2d_2: &quot;f32[64, 7, 7]&quot; = torch.ops.aten.conv2d.default(relu_1, p_module_1_module_0_module_0_module_0_4_weight, p_module_1_module_0_module_0_module_0_4_bias);  relu_1 = p_module_1_module_0_module_0_module_0_4_weight = p_module_1_module_0_module_0_module_0_4_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)\n        relu_2: &quot;f32[64, 7, 7]&quot; = torch.ops.aten.relu.default(conv2d_2);  conv2d_2 = None\n        \n         # File: /pytorch/rl/torchrl/modules/models/utils.py:86 in forward, code: value = value.flatten(-self.ndims_in, -1)\n        flatten: &quot;f32[3136]&quot; = torch.ops.aten.flatten.using_ints(relu_2, -3);  relu_2 = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)\n        linear: &quot;f32[512]&quot; = torch.ops.aten.linear.default(flatten, p_module_1_module_0_module_0_module_1_0_weight, p_module_1_module_0_module_0_module_1_0_bias);  flatten = p_module_1_module_0_module_0_module_1_0_weight = p_module_1_module_0_module_0_module_1_0_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)\n        relu_3: &quot;f32[512]&quot; = torch.ops.aten.relu.default(linear);  linear = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)\n        linear_1: &quot;f32[6]&quot; = torch.ops.aten.linear.default(relu_3, p_module_1_module_0_module_0_module_1_2_weight, p_module_1_module_0_module_0_module_1_2_bias);  relu_3 = p_module_1_module_0_module_0_module_1_2_weight = p_module_1_module_0_module_0_module_1_2_bias = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/actors.py:616 in forward, code: action = self.action_func_mapping[self.action_space](action_values)\n        argmax: &quot;i64[]&quot; = torch.ops.aten.argmax.default(linear_1, -1)\n        to_2: &quot;i64[]&quot; = torch.ops.aten.to.dtype(argmax, torch.int64);  argmax = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/actors.py:621 in forward, code: chosen_action_value = action_value_func(action_values, action)\n        unsqueeze_2: &quot;i64[1]&quot; = torch.ops.aten.unsqueeze.default(to_2, -1)\n        gather: &quot;f32[1]&quot; = torch.ops.aten.gather.default(linear_1, -1, unsqueeze_2);  linear_1 = unsqueeze_2 = gather = None\n        return (to_2,)\n        &#39;
+<span class="n">exported_policy</span><span class="o">.</span><span class="n">graph_module</span><span class="o">.</span><span class="n">print_readable</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>As a final check, we can execute the policy with a dummy input. The output (for a single image) should be an integer
 from 0 to 6 representing the action to be executed in the game.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">output</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram.module" title="torch.export.ExportedProgram.module" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-method"><span class="n">exported_policy</span><span class="o">.</span><span class="n">module</span></a><span class="p">()(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Exported module output&quot;</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">output</span></a><span class="p">)</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Exported module output tensor(1)
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">output</span> <span class="o">=</span> <span class="n">exported_policy</span><span class="o">.</span><span class="n">module</span><span class="p">()(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Exported module output&quot;</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Further details on exporting <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code> instances can be found in the tensordict
@@ -714,7 +680,7 @@ Fortunately, export utils can understand that context manager and as long as the
 context manager, the behaviour of the policy should match what is indicated. To demonstrate this, let us try with
 another exploration type:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="s2">&quot;RANDOM&quot;</span><span class="p">):</span>
-    <a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">exported_stochastic_policy</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">export</span></a><span class="p">(</span>
+    <span class="n">exported_stochastic_policy</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">export</span></a><span class="p">(</span>
         <span class="n">policy_transform</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">),</span>
         <span class="n">args</span><span class="o">=</span><span class="p">(),</span>
         <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;pixels&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a><span class="p">},</span>
@@ -726,85 +692,7 @@ another exploration type:</p>
 Indeed, the last three operations are: generate a random integer between 0 and 6, use a random mask and select
 the network output or the random action based on the value in the mask.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Stochastic policy&quot;</span><span class="p">)</span>
-<a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">exported_stochastic_policy</span></a><span class="o">.</span><span class="n">graph_module</span><span class="o">.</span><span class="n">print_readable</span><span class="p">()</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Stochastic policy
-class GraphModule(torch.nn.Module):
-    def forward(self, p_module_1_module_0_module_0_module_0_0_weight: &quot;f32[32, 1, 8, 8]&quot;, p_module_1_module_0_module_0_module_0_0_bias: &quot;f32[32]&quot;, p_module_1_module_0_module_0_module_0_2_weight: &quot;f32[64, 32, 4, 4]&quot;, p_module_1_module_0_module_0_module_0_2_bias: &quot;f32[64]&quot;, p_module_1_module_0_module_0_module_0_4_weight: &quot;f32[64, 64, 3, 3]&quot;, p_module_1_module_0_module_0_module_0_4_bias: &quot;f32[64]&quot;, p_module_1_module_0_module_0_module_1_0_weight: &quot;f32[512, 3136]&quot;, p_module_1_module_0_module_0_module_1_0_bias: &quot;f32[512]&quot;, p_module_1_module_0_module_0_module_1_2_weight: &quot;f32[6, 512]&quot;, p_module_1_module_0_module_0_module_1_2_bias: &quot;f32[6]&quot;, b_module_1_module_1_eps_init: &quot;f32[]&quot;, b_module_1_module_1_eps_end: &quot;f32[]&quot;, b_module_1_module_1_eps: &quot;f32[]&quot;, kwargs_pixels: &quot;u8[210, 160, 3]&quot;):
-         # File: /pytorch/rl/torchrl/envs/transforms/transforms.py:308 in forward, code: data = self._apply_transform(data)
-        permute: &quot;u8[3, 210, 160]&quot; = torch.ops.aten.permute.default(kwargs_pixels, [-1, -3, -2]);  kwargs_pixels = None
-        div: &quot;f32[3, 210, 160]&quot; = torch.ops.aten.div.Tensor(permute, 255);  permute = None
-        to: &quot;f32[3, 210, 160]&quot; = torch.ops.aten.to.dtype(div, torch.float32);  div = None
-        unsqueeze: &quot;f32[1, 3, 210, 160]&quot; = torch.ops.aten.unsqueeze.default(to, 0);  to = None
-        upsample_nearest2d: &quot;f32[1, 3, 84, 84]&quot; = torch.ops.aten.upsample_nearest2d.vec(unsqueeze, [84, 84], None);  unsqueeze = None
-        squeeze: &quot;f32[3, 84, 84]&quot; = torch.ops.aten.squeeze.dim(upsample_nearest2d, 0);  upsample_nearest2d = None
-        unbind = torch.ops.aten.unbind.int(squeeze, -3);  squeeze = None
-        getitem: &quot;f32[84, 84]&quot; = unbind[0]
-        getitem_1: &quot;f32[84, 84]&quot; = unbind[1]
-        getitem_2: &quot;f32[84, 84]&quot; = unbind[2];  unbind = None
-        mul: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem, 0.2989);  getitem = None
-        mul_1: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem_1, 0.587);  getitem_1 = None
-        add: &quot;f32[84, 84]&quot; = torch.ops.aten.add.Tensor(mul, mul_1);  mul = mul_1 = None
-        mul_2: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem_2, 0.114);  getitem_2 = None
-        add_1: &quot;f32[84, 84]&quot; = torch.ops.aten.add.Tensor(add, mul_2);  add = mul_2 = None
-        to_1: &quot;f32[84, 84]&quot; = torch.ops.aten.to.dtype(add_1, torch.float32);  add_1 = None
-        unsqueeze_1: &quot;f32[1, 84, 84]&quot; = torch.ops.aten.unsqueeze.default(to_1, -3);  to_1 = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)
-        conv2d: &quot;f32[32, 20, 20]&quot; = torch.ops.aten.conv2d.default(unsqueeze_1, p_module_1_module_0_module_0_module_0_0_weight, p_module_1_module_0_module_0_module_0_0_bias, [4, 4]);  unsqueeze_1 = p_module_1_module_0_module_0_module_0_0_weight = p_module_1_module_0_module_0_module_0_0_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)
-        relu: &quot;f32[32, 20, 20]&quot; = torch.ops.aten.relu.default(conv2d);  conv2d = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)
-        conv2d_1: &quot;f32[64, 9, 9]&quot; = torch.ops.aten.conv2d.default(relu, p_module_1_module_0_module_0_module_0_2_weight, p_module_1_module_0_module_0_module_0_2_bias, [2, 2]);  relu = p_module_1_module_0_module_0_module_0_2_weight = p_module_1_module_0_module_0_module_0_2_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)
-        relu_1: &quot;f32[64, 9, 9]&quot; = torch.ops.aten.relu.default(conv2d_1);  conv2d_1 = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)
-        conv2d_2: &quot;f32[64, 7, 7]&quot; = torch.ops.aten.conv2d.default(relu_1, p_module_1_module_0_module_0_module_0_4_weight, p_module_1_module_0_module_0_module_0_4_bias);  relu_1 = p_module_1_module_0_module_0_module_0_4_weight = p_module_1_module_0_module_0_module_0_4_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)
-        relu_2: &quot;f32[64, 7, 7]&quot; = torch.ops.aten.relu.default(conv2d_2);  conv2d_2 = None
-
-         # File: /pytorch/rl/torchrl/modules/models/utils.py:86 in forward, code: value = value.flatten(-self.ndims_in, -1)
-        flatten: &quot;f32[3136]&quot; = torch.ops.aten.flatten.using_ints(relu_2, -3);  relu_2 = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)
-        linear: &quot;f32[512]&quot; = torch.ops.aten.linear.default(flatten, p_module_1_module_0_module_0_module_1_0_weight, p_module_1_module_0_module_0_module_1_0_bias);  flatten = p_module_1_module_0_module_0_module_1_0_weight = p_module_1_module_0_module_0_module_1_0_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)
-        relu_3: &quot;f32[512]&quot; = torch.ops.aten.relu.default(linear);  linear = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)
-        linear_1: &quot;f32[6]&quot; = torch.ops.aten.linear.default(relu_3, p_module_1_module_0_module_0_module_1_2_weight, p_module_1_module_0_module_0_module_1_2_bias);  relu_3 = p_module_1_module_0_module_0_module_1_2_weight = p_module_1_module_0_module_0_module_1_2_bias = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/actors.py:616 in forward, code: action = self.action_func_mapping[self.action_space](action_values)
-        argmax: &quot;i64[]&quot; = torch.ops.aten.argmax.default(linear_1, -1)
-        to_2: &quot;i64[]&quot; = torch.ops.aten.to.dtype(argmax, torch.int64);  argmax = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/actors.py:621 in forward, code: chosen_action_value = action_value_func(action_values, action)
-        unsqueeze_2: &quot;i64[1]&quot; = torch.ops.aten.unsqueeze.default(to_2, -1)
-        gather: &quot;f32[1]&quot; = torch.ops.aten.gather.default(linear_1, -1, unsqueeze_2);  linear_1 = unsqueeze_2 = gather = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/exploration.py:167 in forward, code: cond = torch.rand(action_tensordict.shape, device=out.device) &lt; eps
-        rand: &quot;f32[]&quot; = torch.ops.aten.rand.default([], device = device(type=&#39;cpu&#39;), pin_memory = False)
-        lt: &quot;b8[]&quot; = torch.ops.aten.lt.Tensor(rand, b_module_1_module_1_eps);  rand = b_module_1_module_1_eps = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/exploration.py:169 in forward, code: cond = expand_as_right(cond, out)
-        expand: &quot;b8[]&quot; = torch.ops.aten.expand.default(lt, []);  lt = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/exploration.py:193 in forward, code: r = spec.rand()
-        randint: &quot;i64[]&quot; = torch.ops.aten.randint.low(0, 6, [], device = device(type=&#39;cpu&#39;), pin_memory = False)
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/exploration.py:196 in forward, code: out = torch.where(cond, r, out)
-        where: &quot;i64[]&quot; = torch.ops.aten.where.self(expand, randint, to_2);  expand = randint = to_2 = None
-        return (where,)
-
-
-&#39;class GraphModule(torch.nn.Module):\n    def forward(self, p_module_1_module_0_module_0_module_0_0_weight: &quot;f32[32, 1, 8, 8]&quot;, p_module_1_module_0_module_0_module_0_0_bias: &quot;f32[32]&quot;, p_module_1_module_0_module_0_module_0_2_weight: &quot;f32[64, 32, 4, 4]&quot;, p_module_1_module_0_module_0_module_0_2_bias: &quot;f32[64]&quot;, p_module_1_module_0_module_0_module_0_4_weight: &quot;f32[64, 64, 3, 3]&quot;, p_module_1_module_0_module_0_module_0_4_bias: &quot;f32[64]&quot;, p_module_1_module_0_module_0_module_1_0_weight: &quot;f32[512, 3136]&quot;, p_module_1_module_0_module_0_module_1_0_bias: &quot;f32[512]&quot;, p_module_1_module_0_module_0_module_1_2_weight: &quot;f32[6, 512]&quot;, p_module_1_module_0_module_0_module_1_2_bias: &quot;f32[6]&quot;, b_module_1_module_1_eps_init: &quot;f32[]&quot;, b_module_1_module_1_eps_end: &quot;f32[]&quot;, b_module_1_module_1_eps: &quot;f32[]&quot;, kwargs_pixels: &quot;u8[210, 160, 3]&quot;):\n         # File: /pytorch/rl/torchrl/envs/transforms/transforms.py:308 in forward, code: data = self._apply_transform(data)\n        permute: &quot;u8[3, 210, 160]&quot; = torch.ops.aten.permute.default(kwargs_pixels, [-1, -3, -2]);  kwargs_pixels = None\n        div: &quot;f32[3, 210, 160]&quot; = torch.ops.aten.div.Tensor(permute, 255);  permute = None\n        to: &quot;f32[3, 210, 160]&quot; = torch.ops.aten.to.dtype(div, torch.float32);  div = None\n        unsqueeze: &quot;f32[1, 3, 210, 160]&quot; = torch.ops.aten.unsqueeze.default(to, 0);  to = None\n        upsample_nearest2d: &quot;f32[1, 3, 84, 84]&quot; = torch.ops.aten.upsample_nearest2d.vec(unsqueeze, [84, 84], None);  unsqueeze = None\n        squeeze: &quot;f32[3, 84, 84]&quot; = torch.ops.aten.squeeze.dim(upsample_nearest2d, 0);  upsample_nearest2d = None\n        unbind = torch.ops.aten.unbind.int(squeeze, -3);  squeeze = None\n        getitem: &quot;f32[84, 84]&quot; = unbind[0]\n        getitem_1: &quot;f32[84, 84]&quot; = unbind[1]\n        getitem_2: &quot;f32[84, 84]&quot; = unbind[2];  unbind = None\n        mul: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem, 0.2989);  getitem = None\n        mul_1: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem_1, 0.587);  getitem_1 = None\n        add: &quot;f32[84, 84]&quot; = torch.ops.aten.add.Tensor(mul, mul_1);  mul = mul_1 = None\n        mul_2: &quot;f32[84, 84]&quot; = torch.ops.aten.mul.Tensor(getitem_2, 0.114);  getitem_2 = None\n        add_1: &quot;f32[84, 84]&quot; = torch.ops.aten.add.Tensor(add, mul_2);  add = mul_2 = None\n        to_1: &quot;f32[84, 84]&quot; = torch.ops.aten.to.dtype(add_1, torch.float32);  add_1 = None\n        unsqueeze_1: &quot;f32[1, 84, 84]&quot; = torch.ops.aten.unsqueeze.default(to_1, -3);  to_1 = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)\n        conv2d: &quot;f32[32, 20, 20]&quot; = torch.ops.aten.conv2d.default(unsqueeze_1, p_module_1_module_0_module_0_module_0_0_weight, p_module_1_module_0_module_0_module_0_0_bias, [4, 4]);  unsqueeze_1 = p_module_1_module_0_module_0_module_0_0_weight = p_module_1_module_0_module_0_module_0_0_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)\n        relu: &quot;f32[32, 20, 20]&quot; = torch.ops.aten.relu.default(conv2d);  conv2d = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)\n        conv2d_1: &quot;f32[64, 9, 9]&quot; = torch.ops.aten.conv2d.default(relu, p_module_1_module_0_module_0_module_0_2_weight, p_module_1_module_0_module_0_module_0_2_bias, [2, 2]);  relu = p_module_1_module_0_module_0_module_0_2_weight = p_module_1_module_0_module_0_module_0_2_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)\n        relu_1: &quot;f32[64, 9, 9]&quot; = torch.ops.aten.relu.default(conv2d_1);  conv2d_1 = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/conv.py:554 in forward, code: return self._conv_forward(input, self.weight, self.bias)\n        conv2d_2: &quot;f32[64, 7, 7]&quot; = torch.ops.aten.conv2d.default(relu_1, p_module_1_module_0_module_0_module_0_4_weight, p_module_1_module_0_module_0_module_0_4_bias);  relu_1 = p_module_1_module_0_module_0_module_0_4_weight = p_module_1_module_0_module_0_module_0_4_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)\n        relu_2: &quot;f32[64, 7, 7]&quot; = torch.ops.aten.relu.default(conv2d_2);  conv2d_2 = None\n        \n         # File: /pytorch/rl/torchrl/modules/models/utils.py:86 in forward, code: value = value.flatten(-self.ndims_in, -1)\n        flatten: &quot;f32[3136]&quot; = torch.ops.aten.flatten.using_ints(relu_2, -3);  relu_2 = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)\n        linear: &quot;f32[512]&quot; = torch.ops.aten.linear.default(flatten, p_module_1_module_0_module_0_module_1_0_weight, p_module_1_module_0_module_0_module_1_0_bias);  flatten = p_module_1_module_0_module_0_module_1_0_weight = p_module_1_module_0_module_0_module_1_0_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:133 in forward, code: return F.relu(input, inplace=self.inplace)\n        relu_3: &quot;f32[512]&quot; = torch.ops.aten.relu.default(linear);  linear = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)\n        linear_1: &quot;f32[6]&quot; = torch.ops.aten.linear.default(relu_3, p_module_1_module_0_module_0_module_1_2_weight, p_module_1_module_0_module_0_module_1_2_bias);  relu_3 = p_module_1_module_0_module_0_module_1_2_weight = p_module_1_module_0_module_0_module_1_2_bias = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/actors.py:616 in forward, code: action = self.action_func_mapping[self.action_space](action_values)\n        argmax: &quot;i64[]&quot; = torch.ops.aten.argmax.default(linear_1, -1)\n        to_2: &quot;i64[]&quot; = torch.ops.aten.to.dtype(argmax, torch.int64);  argmax = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/actors.py:621 in forward, code: chosen_action_value = action_value_func(action_values, action)\n        unsqueeze_2: &quot;i64[1]&quot; = torch.ops.aten.unsqueeze.default(to_2, -1)\n        gather: &quot;f32[1]&quot; = torch.ops.aten.gather.default(linear_1, -1, unsqueeze_2);  linear_1 = unsqueeze_2 = gather = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/exploration.py:167 in forward, code: cond = torch.rand(action_tensordict.shape, device=out.device) &lt; eps\n        rand: &quot;f32[]&quot; = torch.ops.aten.rand.default([], device = device(type=\&#39;cpu\&#39;), pin_memory = False)\n        lt: &quot;b8[]&quot; = torch.ops.aten.lt.Tensor(rand, b_module_1_module_1_eps);  rand = b_module_1_module_1_eps = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/exploration.py:169 in forward, code: cond = expand_as_right(cond, out)\n        expand: &quot;b8[]&quot; = torch.ops.aten.expand.default(lt, []);  lt = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/exploration.py:193 in forward, code: r = spec.rand()\n        randint: &quot;i64[]&quot; = torch.ops.aten.randint.low(0, 6, [], device = device(type=\&#39;cpu\&#39;), pin_memory = False)\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/exploration.py:196 in forward, code: out = torch.where(cond, r, out)\n        where: &quot;i64[]&quot; = torch.ops.aten.where.self(expand, randint, to_2);  expand = randint = to_2 = None\n        return (where,)\n        &#39;
+<span class="n">exported_stochastic_policy</span><span class="o">.</span><span class="n">graph_module</span><span class="o">.</span><span class="n">print_readable</span><span class="p">()</span>
 </pre></div>
 </div>
 </section>
@@ -815,11 +703,11 @@ LSTM and GRU are CuDNN-based modules, which means that they will behave differen
 <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> instances (export utils may not trace them well). Fortunately, TorchRL provides a python
 implementation of these modules that can be swapped with the CuDNN version when desired.</p>
 <p>To show this, let us write a prototypical policy that relies on an RNN:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a>
-<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">BatchSizeTransform</span></a>
-<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">LSTMModule</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MLP</span></a>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchSizeTransform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">LSTMModule</span><span class="p">,</span> <span class="n">MLP</span>
 
-<span class="n">lstm</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">LSTMModule</span></a><span class="p">(</span>
+<span class="n">lstm</span> <span class="o">=</span> <span class="n">LSTMModule</span><span class="p">(</span>
     <span class="n">input_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
     <span class="n">num_layers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
     <span class="n">hidden_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
@@ -837,15 +725,15 @@ method can be used to use the python version.</p>
 with the LSTM and an MLP.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">recurrent_policy</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span>
     <span class="c1"># Unsqueeze the first dim of all tensors to make LSTMCell happy</span>
-    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">BatchSizeTransform</span></a><span class="p">(</span><span class="n">reshape_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)),</span>
+    <span class="n">BatchSizeTransform</span><span class="p">(</span><span class="n">reshape_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)),</span>
     <span class="n">lstm</span><span class="p">,</span>
-    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span>
-        <a href="https://pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MLP</span></a><span class="p">(</span><span class="n">in_features</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span> <span class="n">out_features</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">num_cells</span><span class="o">=</span><span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">]),</span>
+    <span class="n">TensorDictModule</span><span class="p">(</span>
+        <span class="n">MLP</span><span class="p">(</span><span class="n">in_features</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span> <span class="n">out_features</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">num_cells</span><span class="o">=</span><span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">]),</span>
         <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;intermediate&quot;</span><span class="p">],</span>
         <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
     <span class="p">),</span>
     <span class="c1"># Squeeze the first dim of all tensors to get the original shape back</span>
-    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">BatchSizeTransform</span></a><span class="p">(</span><span class="n">reshape_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)),</span>
+    <span class="n">BatchSizeTransform</span><span class="p">(</span><span class="n">reshape_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)),</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -855,157 +743,27 @@ with the LSTM and an MLP.</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;recurrent policy output keys:&quot;</span><span class="p">,</span> <span class="n">recurrent_policy</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>recurrent policy input keys: [&#39;observation&#39;, &#39;hidden0&#39;, &#39;hidden1&#39;, &#39;is_init&#39;]
-recurrent policy output keys: [&#39;action&#39;, &#39;hidden0&#39;, &#39;hidden1&#39;]
-</pre></div>
-</div>
 <p>We are now ready to export. To do this, we build fake inputs and pass them to <a class="reference external" href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a>:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_obs</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">32</span><span class="p">)</span>
-<a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_hidden0</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
-<a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_hidden1</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">fake_obs</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">32</span><span class="p">)</span>
+<span class="n">fake_hidden0</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
+<span class="n">fake_hidden1</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
 
 <span class="c1"># Tensor indicating whether the state is the first of a sequence</span>
-<a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_is_init</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">bool</span></a><span class="p">)</span>
+<span class="n">fake_is_init</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">bool</span></a><span class="p">)</span>
 
-<a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">exported_recurrent_policy</span></a> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">export</span></a><span class="p">(</span>
+<span class="n">exported_recurrent_policy</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/export.html#torch.export.export" title="torch.export.export" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">export</span><span class="o">.</span><span class="n">export</span></a><span class="p">(</span>
     <span class="n">recurrent_policy</span><span class="p">,</span>
     <span class="n">args</span><span class="o">=</span><span class="p">(),</span>
     <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_obs</span></a><span class="p">,</span>
-        <span class="s2">&quot;hidden0&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_hidden0</span></a><span class="p">,</span>
-        <span class="s2">&quot;hidden1&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_hidden1</span></a><span class="p">,</span>
-        <span class="s2">&quot;is_init&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_is_init</span></a><span class="p">,</span>
+        <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">fake_obs</span><span class="p">,</span>
+        <span class="s2">&quot;hidden0&quot;</span><span class="p">:</span> <span class="n">fake_hidden0</span><span class="p">,</span>
+        <span class="s2">&quot;hidden1&quot;</span><span class="p">:</span> <span class="n">fake_hidden1</span><span class="p">,</span>
+        <span class="s2">&quot;is_init&quot;</span><span class="p">:</span> <span class="n">fake_is_init</span><span class="p">,</span>
     <span class="p">},</span>
     <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Recurrent policy graph:&quot;</span><span class="p">)</span>
-<a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">exported_recurrent_policy</span></a><span class="o">.</span><span class="n">graph_module</span><span class="o">.</span><span class="n">print_readable</span><span class="p">()</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Recurrent policy graph:
-class GraphModule(torch.nn.Module):
-    def forward(self, p_module_1_lstm_weight_ih_l0: &quot;f32[1024, 32]&quot;, p_module_1_lstm_weight_hh_l0: &quot;f32[1024, 256]&quot;, p_module_1_lstm_bias_ih_l0: &quot;f32[1024]&quot;, p_module_1_lstm_bias_hh_l0: &quot;f32[1024]&quot;, p_module_1_lstm_weight_ih_l1: &quot;f32[1024, 256]&quot;, p_module_1_lstm_weight_hh_l1: &quot;f32[1024, 256]&quot;, p_module_1_lstm_bias_ih_l1: &quot;f32[1024]&quot;, p_module_1_lstm_bias_hh_l1: &quot;f32[1024]&quot;, p_module_2_module_0_weight: &quot;f32[64, 256]&quot;, p_module_2_module_0_bias: &quot;f32[64]&quot;, p_module_2_module_2_weight: &quot;f32[64, 64]&quot;, p_module_2_module_2_bias: &quot;f32[64]&quot;, p_module_2_module_4_weight: &quot;f32[5, 64]&quot;, p_module_2_module_4_bias: &quot;f32[5]&quot;, kwargs_observation: &quot;f32[32]&quot;, kwargs_hidden0: &quot;f32[2, 256]&quot;, kwargs_hidden1: &quot;f32[2, 256]&quot;, kwargs_is_init: &quot;b8[]&quot;):
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/tensordict/nn/sequence.py:540 in forward, code: tensordict_exec = self._run_module(module, tensordict_exec, **kwargs)
-        unsqueeze: &quot;f32[1, 32]&quot; = torch.ops.aten.unsqueeze.default(kwargs_observation, 0);  kwargs_observation = None
-        unsqueeze_1: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.unsqueeze.default(kwargs_hidden0, 0);  kwargs_hidden0 = None
-        unsqueeze_2: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.unsqueeze.default(kwargs_hidden1, 0);  kwargs_hidden1 = None
-        unsqueeze_3: &quot;b8[1]&quot; = torch.ops.aten.unsqueeze.default(kwargs_is_init, 0);  kwargs_is_init = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:743 in forward, code: tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
-        unsqueeze_4: &quot;f32[1, 1, 32]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze, 1);  unsqueeze = None
-        unsqueeze_5: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_1, 1);  unsqueeze_1 = None
-        unsqueeze_6: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_2, 1);  unsqueeze_2 = None
-        unsqueeze_7: &quot;b8[1, 1]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_3, 1);  unsqueeze_3 = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:745 in forward, code: is_init = tensordict_shaped[&quot;is_init&quot;].squeeze(-1)
-        squeeze: &quot;b8[1]&quot; = torch.ops.aten.squeeze.dim(unsqueeze_7, -1)
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:772 in forward, code: is_init_expand = expand_as_right(is_init, hidden0)
-        unsqueeze_8: &quot;b8[1, 1]&quot; = torch.ops.aten.unsqueeze.default(squeeze, -1);  squeeze = None
-        unsqueeze_9: &quot;b8[1, 1, 1]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_8, -1);  unsqueeze_8 = None
-        unsqueeze_10: &quot;b8[1, 1, 1, 1]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_9, -1);  unsqueeze_9 = None
-        expand: &quot;b8[1, 1, 2, 256]&quot; = torch.ops.aten.expand.default(unsqueeze_10, [1, 1, 2, 256]);  unsqueeze_10 = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:773 in forward, code: hidden0 = torch.where(is_init_expand, 0, hidden0)
-        where: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.where.ScalarSelf(expand, 0, unsqueeze_5);  unsqueeze_5 = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:774 in forward, code: hidden1 = torch.where(is_init_expand, 0, hidden1)
-        where_1: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.where.ScalarSelf(expand, 0, unsqueeze_6);  expand = unsqueeze_6 = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:775 in forward, code: val, hidden0, hidden1 = self._lstm(
-        slice_1: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.slice.Tensor(where, 0, 0, 9223372036854775807);  where = None
-        select: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.select.int(slice_1, 1, 0);  slice_1 = None
-        slice_2: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.slice.Tensor(where_1, 0, 0, 9223372036854775807);  where_1 = None
-        select_1: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.select.int(slice_2, 1, 0);  slice_2 = None
-        transpose: &quot;f32[2, 1, 256]&quot; = torch.ops.aten.transpose.int(select, -3, -2);  select = None
-        transpose_1: &quot;f32[2, 1, 256]&quot; = torch.ops.aten.transpose.int(select_1, -3, -2);  select_1 = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:317 in forward, code: return self._lstm(input, hx)
-        unbind = torch.ops.aten.unbind.int(transpose);  transpose = None
-        getitem: &quot;f32[1, 256]&quot; = unbind[0]
-        getitem_1: &quot;f32[1, 256]&quot; = unbind[1];  unbind = None
-        unbind_1 = torch.ops.aten.unbind.int(transpose_1);  transpose_1 = None
-        getitem_2: &quot;f32[1, 256]&quot; = unbind_1[0]
-        getitem_3: &quot;f32[1, 256]&quot; = unbind_1[1];  unbind_1 = None
-        unbind_2 = torch.ops.aten.unbind.int(unsqueeze_4, 1)
-        getitem_4: &quot;f32[1, 32]&quot; = unbind_2[0];  unbind_2 = None
-        linear: &quot;f32[1, 1024]&quot; = torch.ops.aten.linear.default(getitem_4, p_module_1_lstm_weight_ih_l0, p_module_1_lstm_bias_ih_l0);  getitem_4 = p_module_1_lstm_weight_ih_l0 = p_module_1_lstm_bias_ih_l0 = None
-        linear_1: &quot;f32[1, 1024]&quot; = torch.ops.aten.linear.default(getitem, p_module_1_lstm_weight_hh_l0, p_module_1_lstm_bias_hh_l0);  getitem = p_module_1_lstm_weight_hh_l0 = p_module_1_lstm_bias_hh_l0 = None
-        add: &quot;f32[1, 1024]&quot; = torch.ops.aten.add.Tensor(linear, linear_1);  linear = linear_1 = None
-        chunk = torch.ops.aten.chunk.default(add, 4, 1);  add = None
-        getitem_5: &quot;f32[1, 256]&quot; = chunk[0]
-        getitem_6: &quot;f32[1, 256]&quot; = chunk[1]
-        getitem_7: &quot;f32[1, 256]&quot; = chunk[2]
-        getitem_8: &quot;f32[1, 256]&quot; = chunk[3];  chunk = None
-        sigmoid: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_5);  getitem_5 = None
-        sigmoid_1: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_6);  getitem_6 = None
-        tanh: &quot;f32[1, 256]&quot; = torch.ops.aten.tanh.default(getitem_7);  getitem_7 = None
-        sigmoid_2: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_8);  getitem_8 = None
-        mul: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(getitem_2, sigmoid_1);  getitem_2 = sigmoid_1 = None
-        mul_1: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(sigmoid, tanh);  sigmoid = tanh = None
-        add_1: &quot;f32[1, 256]&quot; = torch.ops.aten.add.Tensor(mul, mul_1);  mul = mul_1 = None
-        tanh_1: &quot;f32[1, 256]&quot; = torch.ops.aten.tanh.default(add_1)
-        mul_2: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(sigmoid_2, tanh_1);  sigmoid_2 = tanh_1 = None
-        linear_2: &quot;f32[1, 1024]&quot; = torch.ops.aten.linear.default(mul_2, p_module_1_lstm_weight_ih_l1, p_module_1_lstm_bias_ih_l1);  p_module_1_lstm_weight_ih_l1 = p_module_1_lstm_bias_ih_l1 = None
-        linear_3: &quot;f32[1, 1024]&quot; = torch.ops.aten.linear.default(getitem_1, p_module_1_lstm_weight_hh_l1, p_module_1_lstm_bias_hh_l1);  getitem_1 = p_module_1_lstm_weight_hh_l1 = p_module_1_lstm_bias_hh_l1 = None
-        add_2: &quot;f32[1, 1024]&quot; = torch.ops.aten.add.Tensor(linear_2, linear_3);  linear_2 = linear_3 = None
-        chunk_1 = torch.ops.aten.chunk.default(add_2, 4, 1);  add_2 = None
-        getitem_9: &quot;f32[1, 256]&quot; = chunk_1[0]
-        getitem_10: &quot;f32[1, 256]&quot; = chunk_1[1]
-        getitem_11: &quot;f32[1, 256]&quot; = chunk_1[2]
-        getitem_12: &quot;f32[1, 256]&quot; = chunk_1[3];  chunk_1 = None
-        sigmoid_3: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_9);  getitem_9 = None
-        sigmoid_4: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_10);  getitem_10 = None
-        tanh_2: &quot;f32[1, 256]&quot; = torch.ops.aten.tanh.default(getitem_11);  getitem_11 = None
-        sigmoid_5: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_12);  getitem_12 = None
-        mul_3: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(getitem_3, sigmoid_4);  getitem_3 = sigmoid_4 = None
-        mul_4: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(sigmoid_3, tanh_2);  sigmoid_3 = tanh_2 = None
-        add_3: &quot;f32[1, 256]&quot; = torch.ops.aten.add.Tensor(mul_3, mul_4);  mul_3 = mul_4 = None
-        tanh_3: &quot;f32[1, 256]&quot; = torch.ops.aten.tanh.default(add_3)
-        mul_5: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(sigmoid_5, tanh_3);  sigmoid_5 = tanh_3 = None
-        stack: &quot;f32[1, 1, 256]&quot; = torch.ops.aten.stack.default([mul_5], 1)
-        stack_1: &quot;f32[2, 1, 256]&quot; = torch.ops.aten.stack.default([mul_2, mul_5]);  mul_2 = mul_5 = None
-        stack_2: &quot;f32[2, 1, 256]&quot; = torch.ops.aten.stack.default([add_1, add_3]);  add_1 = add_3 = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:775 in forward, code: val, hidden0, hidden1 = self._lstm(
-        transpose_2: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.transpose.int(stack_1, 0, 1);  stack_1 = None
-        transpose_3: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.transpose.int(stack_2, 0, 1);  stack_2 = None
-        stack_3: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.stack.default([transpose_2], 1);  transpose_2 = None
-        stack_4: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.stack.default([transpose_3], 1);  transpose_3 = None
-
-         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:788 in forward, code: tensordict.update(tensordict_shaped.reshape(shape))
-        reshape: &quot;f32[1, 32]&quot; = torch.ops.aten.reshape.default(unsqueeze_4, [1, 32]);  unsqueeze_4 = None
-        reshape_1: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.reshape.default(stack_3, [1, 2, 256]);  stack_3 = None
-        reshape_2: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.reshape.default(stack_4, [1, 2, 256]);  stack_4 = None
-        reshape_3: &quot;b8[1]&quot; = torch.ops.aten.reshape.default(unsqueeze_7, [1]);  unsqueeze_7 = None
-        reshape_4: &quot;f32[1, 256]&quot; = torch.ops.aten.reshape.default(stack, [1, 256]);  stack = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)
-        linear_4: &quot;f32[1, 64]&quot; = torch.ops.aten.linear.default(reshape_4, p_module_2_module_0_weight, p_module_2_module_0_bias);  p_module_2_module_0_weight = p_module_2_module_0_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:392 in forward, code: return torch.tanh(input)
-        tanh_4: &quot;f32[1, 64]&quot; = torch.ops.aten.tanh.default(linear_4);  linear_4 = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)
-        linear_5: &quot;f32[1, 64]&quot; = torch.ops.aten.linear.default(tanh_4, p_module_2_module_2_weight, p_module_2_module_2_bias);  tanh_4 = p_module_2_module_2_weight = p_module_2_module_2_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:392 in forward, code: return torch.tanh(input)
-        tanh_5: &quot;f32[1, 64]&quot; = torch.ops.aten.tanh.default(linear_5);  linear_5 = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)
-        linear_6: &quot;f32[1, 5]&quot; = torch.ops.aten.linear.default(tanh_5, p_module_2_module_4_weight, p_module_2_module_4_bias);  tanh_5 = p_module_2_module_4_weight = p_module_2_module_4_bias = None
-
-         # File: /pytorch/rl/env/lib/python3.10/site-packages/tensordict/nn/sequence.py:540 in forward, code: tensordict_exec = self._run_module(module, tensordict_exec, **kwargs)
-        squeeze_1: &quot;f32[32]&quot; = torch.ops.aten.squeeze.dim(reshape, 0);  reshape = squeeze_1 = None
-        squeeze_2: &quot;f32[2, 256]&quot; = torch.ops.aten.squeeze.dim(reshape_1, 0);  reshape_1 = None
-        squeeze_3: &quot;f32[2, 256]&quot; = torch.ops.aten.squeeze.dim(reshape_2, 0);  reshape_2 = None
-        squeeze_4: &quot;b8[]&quot; = torch.ops.aten.squeeze.dim(reshape_3, 0);  reshape_3 = squeeze_4 = None
-        squeeze_5: &quot;f32[256]&quot; = torch.ops.aten.squeeze.dim(reshape_4, 0);  reshape_4 = squeeze_5 = None
-        squeeze_6: &quot;f32[5]&quot; = torch.ops.aten.squeeze.dim(linear_6, 0);  linear_6 = None
-        return (squeeze_6, squeeze_2, squeeze_3)
-
-
-&#39;class GraphModule(torch.nn.Module):\n    def forward(self, p_module_1_lstm_weight_ih_l0: &quot;f32[1024, 32]&quot;, p_module_1_lstm_weight_hh_l0: &quot;f32[1024, 256]&quot;, p_module_1_lstm_bias_ih_l0: &quot;f32[1024]&quot;, p_module_1_lstm_bias_hh_l0: &quot;f32[1024]&quot;, p_module_1_lstm_weight_ih_l1: &quot;f32[1024, 256]&quot;, p_module_1_lstm_weight_hh_l1: &quot;f32[1024, 256]&quot;, p_module_1_lstm_bias_ih_l1: &quot;f32[1024]&quot;, p_module_1_lstm_bias_hh_l1: &quot;f32[1024]&quot;, p_module_2_module_0_weight: &quot;f32[64, 256]&quot;, p_module_2_module_0_bias: &quot;f32[64]&quot;, p_module_2_module_2_weight: &quot;f32[64, 64]&quot;, p_module_2_module_2_bias: &quot;f32[64]&quot;, p_module_2_module_4_weight: &quot;f32[5, 64]&quot;, p_module_2_module_4_bias: &quot;f32[5]&quot;, kwargs_observation: &quot;f32[32]&quot;, kwargs_hidden0: &quot;f32[2, 256]&quot;, kwargs_hidden1: &quot;f32[2, 256]&quot;, kwargs_is_init: &quot;b8[]&quot;):\n         # File: /pytorch/rl/env/lib/python3.10/site-packages/tensordict/nn/sequence.py:540 in forward, code: tensordict_exec = self._run_module(module, tensordict_exec, **kwargs)\n        unsqueeze: &quot;f32[1, 32]&quot; = torch.ops.aten.unsqueeze.default(kwargs_observation, 0);  kwargs_observation = None\n        unsqueeze_1: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.unsqueeze.default(kwargs_hidden0, 0);  kwargs_hidden0 = None\n        unsqueeze_2: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.unsqueeze.default(kwargs_hidden1, 0);  kwargs_hidden1 = None\n        unsqueeze_3: &quot;b8[1]&quot; = torch.ops.aten.unsqueeze.default(kwargs_is_init, 0);  kwargs_is_init = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:743 in forward, code: tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)\n        unsqueeze_4: &quot;f32[1, 1, 32]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze, 1);  unsqueeze = None\n        unsqueeze_5: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_1, 1);  unsqueeze_1 = None\n        unsqueeze_6: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_2, 1);  unsqueeze_2 = None\n        unsqueeze_7: &quot;b8[1, 1]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_3, 1);  unsqueeze_3 = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:745 in forward, code: is_init = tensordict_shaped[&quot;is_init&quot;].squeeze(-1)\n        squeeze: &quot;b8[1]&quot; = torch.ops.aten.squeeze.dim(unsqueeze_7, -1)\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:772 in forward, code: is_init_expand = expand_as_right(is_init, hidden0)\n        unsqueeze_8: &quot;b8[1, 1]&quot; = torch.ops.aten.unsqueeze.default(squeeze, -1);  squeeze = None\n        unsqueeze_9: &quot;b8[1, 1, 1]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_8, -1);  unsqueeze_8 = None\n        unsqueeze_10: &quot;b8[1, 1, 1, 1]&quot; = torch.ops.aten.unsqueeze.default(unsqueeze_9, -1);  unsqueeze_9 = None\n        expand: &quot;b8[1, 1, 2, 256]&quot; = torch.ops.aten.expand.default(unsqueeze_10, [1, 1, 2, 256]);  unsqueeze_10 = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:773 in forward, code: hidden0 = torch.where(is_init_expand, 0, hidden0)\n        where: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.where.ScalarSelf(expand, 0, unsqueeze_5);  unsqueeze_5 = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:774 in forward, code: hidden1 = torch.where(is_init_expand, 0, hidden1)\n        where_1: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.where.ScalarSelf(expand, 0, unsqueeze_6);  expand = unsqueeze_6 = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:775 in forward, code: val, hidden0, hidden1 = self._lstm(\n        slice_1: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.slice.Tensor(where, 0, 0, 9223372036854775807);  where = None\n        select: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.select.int(slice_1, 1, 0);  slice_1 = None\n        slice_2: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.slice.Tensor(where_1, 0, 0, 9223372036854775807);  where_1 = None\n        select_1: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.select.int(slice_2, 1, 0);  slice_2 = None\n        transpose: &quot;f32[2, 1, 256]&quot; = torch.ops.aten.transpose.int(select, -3, -2);  select = None\n        transpose_1: &quot;f32[2, 1, 256]&quot; = torch.ops.aten.transpose.int(select_1, -3, -2);  select_1 = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:317 in forward, code: return self._lstm(input, hx)\n        unbind = torch.ops.aten.unbind.int(transpose);  transpose = None\n        getitem: &quot;f32[1, 256]&quot; = unbind[0]\n        getitem_1: &quot;f32[1, 256]&quot; = unbind[1];  unbind = None\n        unbind_1 = torch.ops.aten.unbind.int(transpose_1);  transpose_1 = None\n        getitem_2: &quot;f32[1, 256]&quot; = unbind_1[0]\n        getitem_3: &quot;f32[1, 256]&quot; = unbind_1[1];  unbind_1 = None\n        unbind_2 = torch.ops.aten.unbind.int(unsqueeze_4, 1)\n        getitem_4: &quot;f32[1, 32]&quot; = unbind_2[0];  unbind_2 = None\n        linear: &quot;f32[1, 1024]&quot; = torch.ops.aten.linear.default(getitem_4, p_module_1_lstm_weight_ih_l0, p_module_1_lstm_bias_ih_l0);  getitem_4 = p_module_1_lstm_weight_ih_l0 = p_module_1_lstm_bias_ih_l0 = None\n        linear_1: &quot;f32[1, 1024]&quot; = torch.ops.aten.linear.default(getitem, p_module_1_lstm_weight_hh_l0, p_module_1_lstm_bias_hh_l0);  getitem = p_module_1_lstm_weight_hh_l0 = p_module_1_lstm_bias_hh_l0 = None\n        add: &quot;f32[1, 1024]&quot; = torch.ops.aten.add.Tensor(linear, linear_1);  linear = linear_1 = None\n        chunk = torch.ops.aten.chunk.default(add, 4, 1);  add = None\n        getitem_5: &quot;f32[1, 256]&quot; = chunk[0]\n        getitem_6: &quot;f32[1, 256]&quot; = chunk[1]\n        getitem_7: &quot;f32[1, 256]&quot; = chunk[2]\n        getitem_8: &quot;f32[1, 256]&quot; = chunk[3];  chunk = None\n        sigmoid: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_5);  getitem_5 = None\n        sigmoid_1: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_6);  getitem_6 = None\n        tanh: &quot;f32[1, 256]&quot; = torch.ops.aten.tanh.default(getitem_7);  getitem_7 = None\n        sigmoid_2: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_8);  getitem_8 = None\n        mul: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(getitem_2, sigmoid_1);  getitem_2 = sigmoid_1 = None\n        mul_1: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(sigmoid, tanh);  sigmoid = tanh = None\n        add_1: &quot;f32[1, 256]&quot; = torch.ops.aten.add.Tensor(mul, mul_1);  mul = mul_1 = None\n        tanh_1: &quot;f32[1, 256]&quot; = torch.ops.aten.tanh.default(add_1)\n        mul_2: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(sigmoid_2, tanh_1);  sigmoid_2 = tanh_1 = None\n        linear_2: &quot;f32[1, 1024]&quot; = torch.ops.aten.linear.default(mul_2, p_module_1_lstm_weight_ih_l1, p_module_1_lstm_bias_ih_l1);  p_module_1_lstm_weight_ih_l1 = p_module_1_lstm_bias_ih_l1 = None\n        linear_3: &quot;f32[1, 1024]&quot; = torch.ops.aten.linear.default(getitem_1, p_module_1_lstm_weight_hh_l1, p_module_1_lstm_bias_hh_l1);  getitem_1 = p_module_1_lstm_weight_hh_l1 = p_module_1_lstm_bias_hh_l1 = None\n        add_2: &quot;f32[1, 1024]&quot; = torch.ops.aten.add.Tensor(linear_2, linear_3);  linear_2 = linear_3 = None\n        chunk_1 = torch.ops.aten.chunk.default(add_2, 4, 1);  add_2 = None\n        getitem_9: &quot;f32[1, 256]&quot; = chunk_1[0]\n        getitem_10: &quot;f32[1, 256]&quot; = chunk_1[1]\n        getitem_11: &quot;f32[1, 256]&quot; = chunk_1[2]\n        getitem_12: &quot;f32[1, 256]&quot; = chunk_1[3];  chunk_1 = None\n        sigmoid_3: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_9);  getitem_9 = None\n        sigmoid_4: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_10);  getitem_10 = None\n        tanh_2: &quot;f32[1, 256]&quot; = torch.ops.aten.tanh.default(getitem_11);  getitem_11 = None\n        sigmoid_5: &quot;f32[1, 256]&quot; = torch.ops.aten.sigmoid.default(getitem_12);  getitem_12 = None\n        mul_3: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(getitem_3, sigmoid_4);  getitem_3 = sigmoid_4 = None\n        mul_4: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(sigmoid_3, tanh_2);  sigmoid_3 = tanh_2 = None\n        add_3: &quot;f32[1, 256]&quot; = torch.ops.aten.add.Tensor(mul_3, mul_4);  mul_3 = mul_4 = None\n        tanh_3: &quot;f32[1, 256]&quot; = torch.ops.aten.tanh.default(add_3)\n        mul_5: &quot;f32[1, 256]&quot; = torch.ops.aten.mul.Tensor(sigmoid_5, tanh_3);  sigmoid_5 = tanh_3 = None\n        stack: &quot;f32[1, 1, 256]&quot; = torch.ops.aten.stack.default([mul_5], 1)\n        stack_1: &quot;f32[2, 1, 256]&quot; = torch.ops.aten.stack.default([mul_2, mul_5]);  mul_2 = mul_5 = None\n        stack_2: &quot;f32[2, 1, 256]&quot; = torch.ops.aten.stack.default([add_1, add_3]);  add_1 = add_3 = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:775 in forward, code: val, hidden0, hidden1 = self._lstm(\n        transpose_2: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.transpose.int(stack_1, 0, 1);  stack_1 = None\n        transpose_3: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.transpose.int(stack_2, 0, 1);  stack_2 = None\n        stack_3: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.stack.default([transpose_2], 1);  transpose_2 = None\n        stack_4: &quot;f32[1, 1, 2, 256]&quot; = torch.ops.aten.stack.default([transpose_3], 1);  transpose_3 = None\n        \n         # File: /pytorch/rl/torchrl/modules/tensordict_module/rnn.py:788 in forward, code: tensordict.update(tensordict_shaped.reshape(shape))\n        reshape: &quot;f32[1, 32]&quot; = torch.ops.aten.reshape.default(unsqueeze_4, [1, 32]);  unsqueeze_4 = None\n        reshape_1: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.reshape.default(stack_3, [1, 2, 256]);  stack_3 = None\n        reshape_2: &quot;f32[1, 2, 256]&quot; = torch.ops.aten.reshape.default(stack_4, [1, 2, 256]);  stack_4 = None\n        reshape_3: &quot;b8[1]&quot; = torch.ops.aten.reshape.default(unsqueeze_7, [1]);  unsqueeze_7 = None\n        reshape_4: &quot;f32[1, 256]&quot; = torch.ops.aten.reshape.default(stack, [1, 256]);  stack = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)\n        linear_4: &quot;f32[1, 64]&quot; = torch.ops.aten.linear.default(reshape_4, p_module_2_module_0_weight, p_module_2_module_0_bias);  p_module_2_module_0_weight = p_module_2_module_0_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:392 in forward, code: return torch.tanh(input)\n        tanh_4: &quot;f32[1, 64]&quot; = torch.ops.aten.tanh.default(linear_4);  linear_4 = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)\n        linear_5: &quot;f32[1, 64]&quot; = torch.ops.aten.linear.default(tanh_4, p_module_2_module_2_weight, p_module_2_module_2_bias);  tanh_4 = p_module_2_module_2_weight = p_module_2_module_2_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/activation.py:392 in forward, code: return torch.tanh(input)\n        tanh_5: &quot;f32[1, 64]&quot; = torch.ops.aten.tanh.default(linear_5);  linear_5 = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/torch/nn/modules/linear.py:125 in forward, code: return F.linear(input, self.weight, self.bias)\n        linear_6: &quot;f32[1, 5]&quot; = torch.ops.aten.linear.default(tanh_5, p_module_2_module_4_weight, p_module_2_module_4_bias);  tanh_5 = p_module_2_module_4_weight = p_module_2_module_4_bias = None\n        \n         # File: /pytorch/rl/env/lib/python3.10/site-packages/tensordict/nn/sequence.py:540 in forward, code: tensordict_exec = self._run_module(module, tensordict_exec, **kwargs)\n        squeeze_1: &quot;f32[32]&quot; = torch.ops.aten.squeeze.dim(reshape, 0);  reshape = squeeze_1 = None\n        squeeze_2: &quot;f32[2, 256]&quot; = torch.ops.aten.squeeze.dim(reshape_1, 0);  reshape_1 = None\n        squeeze_3: &quot;f32[2, 256]&quot; = torch.ops.aten.squeeze.dim(reshape_2, 0);  reshape_2 = None\n        squeeze_4: &quot;b8[]&quot; = torch.ops.aten.squeeze.dim(reshape_3, 0);  reshape_3 = squeeze_4 = None\n        squeeze_5: &quot;f32[256]&quot; = torch.ops.aten.squeeze.dim(reshape_4, 0);  reshape_4 = squeeze_5 = None\n        squeeze_6: &quot;f32[5]&quot; = torch.ops.aten.squeeze.dim(linear_6, 0);  linear_6 = None\n        return (squeeze_6, squeeze_2, squeeze_3)\n        &#39;
+<span class="n">exported_recurrent_policy</span><span class="o">.</span><span class="n">graph_module</span><span class="o">.</span><span class="n">print_readable</span><span class="p">()</span>
 </pre></div>
 </div>
 </section>
@@ -1015,15 +773,15 @@ class GraphModule(torch.nn.Module):
 This is particularly useful when you need to deploy your model on devices or platforms where PyTorch is not available.</p>
 <p>Here’s an example of how you can use AOTInductor to export your policy, inspired by the
 <a class="reference external" href="https://pytorch.org/docs/main/torch.compiler_aot_inductor.html">AOTI documentation</a>:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tempfile</span> <span class="kn">import</span> <span class="n">TemporaryDirectory</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tempfile</span><span class="w"> </span><span class="kn">import</span> <span class="n">TemporaryDirectory</span>
 
-<span class="kn">from</span> <span class="nn">torch._inductor</span> <span class="kn">import</span> <span class="n">aoti_compile_and_package</span><span class="p">,</span> <span class="n">aoti_load_package</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch._inductor</span><span class="w"> </span><span class="kn">import</span> <span class="n">aoti_compile_and_package</span><span class="p">,</span> <span class="n">aoti_load_package</span>
 
 <span class="k">with</span> <span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
     <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;model.pt2&quot;</span><span class="p">)</span>
     <span class="k">with</span> <a href="https://pytorch.org/docs/stable/generated/torch.no_grad.html#torch.no_grad" title="torch.no_grad" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span></a><span class="p">():</span>
         <span class="n">pkg_path</span> <span class="o">=</span> <span class="n">aoti_compile_and_package</span><span class="p">(</span>
-            <a href="https://pytorch.org/docs/stable/export.html#torch.export.ExportedProgram" title="torch.export.ExportedProgram" class="sphx-glr-backref-module-torch-export sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">exported_policy</span></a><span class="p">,</span>
+            <span class="n">exported_policy</span><span class="p">,</span>
             <span class="c1"># Specify the generated shared library path</span>
             <span class="n">package_path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
         <span class="p">)</span>
@@ -1032,16 +790,6 @@ This is particularly useful when you need to deploy your model on devices or pla
     <span class="n">compiled_module</span> <span class="o">=</span> <span class="n">aoti_load_package</span><span class="p">(</span><span class="n">pkg_path</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="n">compiled_module</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a><span class="p">))</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-pytb notranslate"><div class="highlight"><pre><span></span><span class="gt">Traceback (most recent call last):</span>
-  File <span class="nb">&quot;/pytorch/rl/docs/source/reference/generated/tutorials/export.py&quot;</span>, line <span class="m">351</span>, in <span class="n">&lt;module&gt;</span>
-<span class="w">    </span><span class="n">compiled_module</span> <span class="o">=</span> <span class="n">aoti_load_package</span><span class="p">(</span><span class="n">pkg_path</span><span class="p">)</span>
-  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_inductor/__init__.py&quot;</span>, line <span class="m">196</span>, in <span class="n">aoti_load_package</span>
-<span class="w">    </span><span class="k">return</span> <span class="n">load_package</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
-  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.10/site-packages/torch/_inductor/package/package.py&quot;</span>, line <span class="m">287</span>, in <span class="n">load_package</span>
-<span class="w">    </span><span class="n">loader</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_aoti</span><span class="o">.</span><span class="n">AOTIModelPackageLoader</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">model_name</span><span class="p">)</span>  <span class="c1"># type: ignore[call-arg]</span>
-<span class="gr">RuntimeError</span>: <span class="n">Error in dlopen: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.29&#39; not found (required by /tmp/DB4zgV/data/aotinductor/model/cpzj3tnsfucylu2xqny7ltsfgtvx3w226y6duqknjgtewcbybcre.so)</span>
 </pre></div>
 </div>
 </section>
@@ -1069,7 +817,7 @@ hardwares and devices, including <a class="reference external" href="https://qen
 <a class="reference external" href="https://github.com/Farama-Foundation/Arcade-Learning-Environment">ALE library</a> and therefore provides us with
 a good example of what we can achieve with ONNX.</p>
 <p>Let us see what this API looks like:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">ale_py</span> <span class="kn">import</span> <span class="n">ALEInterface</span><span class="p">,</span> <span class="n">roms</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">ale_py</span><span class="w"> </span><span class="kn">import</span> <span class="n">ALEInterface</span><span class="p">,</span> <span class="n">roms</span>
 
 <span class="c1"># Create the interface</span>
 <span class="n">ale</span> <span class="o">=</span> <span class="n">ALEInterface</span><span class="p">()</span>
@@ -1083,7 +831,7 @@ a good example of what we can achieve with ONNX.</p>
 <span class="n">screen_obs</span> <span class="o">=</span> <span class="n">ale</span><span class="o">.</span><span class="n">getScreenRGB</span><span class="p">()</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Observation from ALE simulator:&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">screen_obs</span><span class="p">),</span> <span class="n">screen_obs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">pyplot</span> <span class="k">as</span> <span class="n">plt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">pyplot</span> <span class="k">as</span> <span class="n">plt</span>
 
 <span class="n">plt</span><span class="o">.</span><span class="n">tick_params</span><span class="p">(</span><span class="n">left</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bottom</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">labelleft</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">labelbottom</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">screen_obs</span><span class="p">)</span>
@@ -1091,7 +839,7 @@ a good example of what we can achieve with ONNX.</p>
 </pre></div>
 </div>
 <p>Exporting to ONNX is quite similar the Export/AOTI above:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">onnxruntime</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">onnxruntime</span>
 
 <span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="s2">&quot;DETERMINISTIC&quot;</span><span class="p">):</span>
     <span class="c1"># We use torch.onnx.dynamo_export to capture the computation graph from our policy_explore model</span>
@@ -1116,7 +864,7 @@ a good example of what we can achieve with ONNX.</p>
 <h3>Running a rollout with ONNX<a class="headerlink" href="#running-a-rollout-with-onnx" title="Permalink to this heading">¶</a></h3>
 <p>We now have an ONNX model that runs our policy. Let’s compare it to the original TorchRL instance: because it is
 more lightweight, the ONNX version should be faster than the TorchRL one.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">onnx_policy</span><span class="p">(</span><span class="n">screen_obs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">onnx_policy</span><span class="p">(</span><span class="n">screen_obs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
     <span class="n">onnxruntime_input</span> <span class="o">=</span> <span class="p">{</span><span class="n">ort_session</span><span class="o">.</span><span class="n">get_inputs</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">screen_obs</span><span class="p">}</span>
     <span class="n">onnxruntime_outputs</span> <span class="o">=</span> <span class="n">ort_session</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">onnxruntime_input</span><span class="p">)</span>
     <span class="n">action</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">onnxruntime_outputs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
@@ -1162,8 +910,8 @@ information.</p></li>
 <li><p>Experiment with deploying exported models on different devices.</p></li>
 <li><p>Explore optimization techniques for ONNX models to improve performance.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 58.085 seconds)</p>
-<p><strong>Estimated memory usage:</strong>  4641 MB</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.195 seconds)</p>
+<p><strong>Estimated memory usage:</strong>  2948 MB</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-export-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">export.ipynb</span></code></a></p>

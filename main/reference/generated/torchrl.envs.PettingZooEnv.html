@@ -271,7 +271,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+d009835) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
     </div>
     
 
@@ -501,7 +501,7 @@ parallel environments and <code class="docutils literal notranslate"><span class
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Parallel env</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.libs.pettingzoo</span> <span class="kn">import</span> <span class="n">PettingZooEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.pettingzoo</span><span class="w"> </span><span class="kn">import</span> <span class="n">PettingZooEnv</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;n_pistons&quot;</span><span class="p">:</span> <span class="mi">21</span><span class="p">,</span> <span class="s2">&quot;continuous&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">PettingZooEnv</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">task</span><span class="o">=</span><span class="s2">&quot;pistonball_v6&quot;</span><span class="p">,</span>
@@ -514,8 +514,8 @@ parallel environments and <code class="docutils literal notranslate"><span class
 <span class="gp">... </span><span class="p">{</span><span class="s1">&#39;piston&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;piston_0&#39;</span><span class="p">,</span> <span class="s1">&#39;piston_1&#39;</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="s1">&#39;piston_20&#39;</span><span class="p">]}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># AEC env</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.libs.pettingzoo</span> <span class="kn">import</span> <span class="n">PettingZooEnv</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">MarlGroupMapType</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.pettingzoo</span><span class="w"> </span><span class="kn">import</span> <span class="n">PettingZooEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">MarlGroupMapType</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">PettingZooEnv</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">task</span><span class="o">=</span><span class="s2">&quot;tictactoe_v3&quot;</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">parallel</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
