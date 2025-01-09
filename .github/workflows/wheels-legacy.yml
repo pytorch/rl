@@ -37,12 +37,12 @@ jobs:
             python3 -mpip install wheel
             TORCHRL_BUILD_VERSION=0.6.1 python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: torchrl-win-${{ matrix.python_version[0] }}.whl
           path: dist/torchrl-*.whl
       - name: Upload wheel for download
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: torchrl-batch.whl
           path: dist/*.whl
@@ -77,7 +77,7 @@ jobs:
         run: |
           python3 -mpip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml
       - name: Download built wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: torchrl-win-${{ matrix.python_version }}.whl
           path: wheels
