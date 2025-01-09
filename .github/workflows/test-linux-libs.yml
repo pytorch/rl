@@ -23,7 +23,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -57,7 +57,7 @@ jobs:
         python_version: ["3.11"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -94,7 +94,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -129,7 +129,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -164,7 +164,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -197,7 +197,7 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -233,7 +233,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -267,7 +267,7 @@ jobs:
         bash .github/unittest/linux_libs/scripts_jumanji/post_process.sh
 
   unittests-meltingpot:
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     with:
       repository: pytorch/rl
@@ -307,7 +307,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -345,7 +345,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -383,7 +383,7 @@ jobs:
         python_version: ["3.10.12"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -421,7 +421,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -456,7 +456,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -487,7 +487,7 @@ jobs:
 
   unittests-pettingzoo:
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -526,7 +526,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -560,7 +560,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -594,7 +594,7 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -631,7 +631,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -670,7 +670,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -705,7 +705,7 @@ jobs:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"

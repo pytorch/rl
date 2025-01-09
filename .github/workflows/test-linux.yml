@@ -24,7 +24,7 @@ jobs:
       matrix:
         python_version: ["3.9", "3.10", "3.11", "3.12"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.12xlarge
       repository: pytorch/rl
@@ -55,7 +55,7 @@ jobs:
       matrix:
         python_version: ["3.12"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.12xlarge
       repository: pytorch/rl
@@ -87,7 +87,7 @@ jobs:
         python_version: ["3.11"]
         cuda_arch_version: ["12.1"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
@@ -124,7 +124,7 @@ jobs:
       matrix:
         python_version: ["3.8"]
         cuda_arch_version: ["11.6"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
@@ -156,7 +156,7 @@ jobs:
         python_version: ["3.11"]
         cuda_arch_version: ["12.1"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
@@ -191,7 +191,7 @@ jobs:
         python_version: ["3.10"] # "3.9", "3.10", "3.11"
         cuda_arch_version: ["11.8"] # "11.6", "11.7"
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl

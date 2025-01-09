@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   python-source-and-configs:
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       script: |
@@ -45,7 +45,7 @@ jobs:
         echo '::endgroup::'
 
   c-source:
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       script: |

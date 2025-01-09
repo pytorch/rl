@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   generate-matrix:
-    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/generate_binary_build_matrix.yml@main
     with:
       package-type: wheel
       os: linux
@@ -35,7 +35,7 @@ jobs:
             smoke-test-script: test/smoke_test.py
             package-name: torchrl
     name: pytorch/rl
-    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
+    uses: vmoens/test-infra/blob/download-v4/.github/workflows/build_wheels_linux.yml@main
     with:
       repository: ${{ matrix.repository }}
       ref: ""
