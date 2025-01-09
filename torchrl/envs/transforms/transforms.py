@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import importlib.util
 import multiprocessing as mp
 import warnings
@@ -3533,7 +3534,7 @@ class DTypeCastTransform(Transform):
         >>> print(td.get("not_transformed").dtype)
         torch.float32
 
-    The same behavior is the rule when environments are constructedw without
+    The same behavior is the rule when environments are constructed without
     specifying the transform keys:
 
     Examples:
@@ -3903,7 +3904,7 @@ class DoubleToFloat(DTypeCastTransform):
         >>> print(td.get("not_transformed").dtype)
         torch.float32
 
-    The same behavior is the rule when environments are constructedw without
+    The same behavior is the rule when environments are constructed without
     specifying the transform keys:
 
     Examples:
@@ -4460,23 +4461,83 @@ class Hash(UnaryTransform):
     Args:
         in_keys (sequence of NestedKey): the keys of the values to hash.
         out_keys (sequence of NestedKey): the keys of the resulting hashes.
-        fn (Callable, optional): the hash function to use. Default is Python's
-            builtin ``hash`` function.
+        hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,
+            the hash function must accept it as its second argument. Default is
+            Python's builtin ``hash`` function.
         output_spec (TensorSpec, optional): the spec of the hash output. Default
             is ``Unbounded(shape=(), dtype=torch.int64)``.
+        seed (optional): seed to use for the hash function, if it requires one.
     """
 
     def __init__(
         self,
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
-        fn: Callable = hash,
+        hash_fn: Callable = None,
         output_spec: TensorSpec | None = None,
+        seed: Any | None = None,
     ):
+        if hash_fn is None:
+            hash_fn = Hash.reproducible_hash_parts
+
         if output_spec is None:
-            output_spec = Unbounded(shape=(), dtype=torch.int64)
+            output_spec = Unbounded(shape=(4,), dtype=torch.int64)
+
+        self._seed = seed
+        self._hash_fn = hash_fn
         super().__init__(
-            in_keys=in_keys, out_keys=out_keys, fn=fn, output_spec=output_spec
+            in_keys=in_keys,
+            out_keys=out_keys,
+            fn=self.call_hash_fn,
+            output_spec=output_spec,
+        )
+
+    def call_hash_fn(self, value):
+        if self._seed is None:
+            return self._hash_fn(value)
+        else:
+            return self._hash_fn(value, self._seed)
+
+    @classmethod
+    def reproducible_hash_parts(cls, string, seed=None):
+        """Creates a reproducible 256-bit hash from a string using a seed.
+
+        Args:
+            string (str): The input string.
+            seed (str, optional): The seed value. Default is ``None``.
+
+        Returns:
+            tuple: Four 64-bit integers representing the parts of the 256-bit hash value.
+        """
+        # Prepend the seed to the string
+        if seed is not None:
+            seeded_string = seed + string
+        else:
+            seeded_string = string
+
+        # Create a new SHA-256 hash object
+        hash_object = hashlib.sha256()
+
+        # Update the hash object with the seeded string
+        hash_object.update(seeded_string.encode("utf-8"))
+
+        # Get the hash value as bytes
+        hash_bytes = hash_object.digest()
+
+        # Split the hash bytes into four parts
+        part1 = hash_bytes[:8]
+        part2 = hash_bytes[8:16]
+        part3 = hash_bytes[16:24]
+        part4 = hash_bytes[24:]
+
+        # Convert each part to a 64-bit integer
+        part1_value = int.from_bytes(part1, "big", signed=True)
+        part2_value = int.from_bytes(part2, "big", signed=True)
+        part3_value = int.from_bytes(part3, "big", signed=True)
+        part4_value = int.from_bytes(part4, "big", signed=True)
+
+        return torch.tensor(
+            [part1_value, part2_value, part3_value, part4_value], dtype=torch.int64
         )
 
 
