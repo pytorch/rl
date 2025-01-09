@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   unittests-cpu:
-    uses: vmoens/test-infra/blob/download-v4/.github/workflows/windows_job.yml@main
+    uses: vmoens/test-infra/.github/workflows/windows_job.yml@download-v4
     with:
       runner: "windows.4xlarge"
       repository: pytorch/rl
@@ -29,7 +29,7 @@ jobs:
         export CU_VERSION="cpu"
         export torch_cuda="False"
 
-        # TODO: Port this to vmoens/test-infra/blob/download-v4/.github/workflows/windows_job.yml
+        # TODO: Port this to vmoens/test-infra/.github/workflows/windows_job.yml
         export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
@@ -57,7 +57,7 @@ jobs:
         ./.github/unittest/windows_optdepts/scripts/post_process.sh
 
 #  unittests-gpu:
-#    uses: vmoens/test-infra/blob/download-v4/.github/workflows/windows_job.yml@main
+#    uses: vmoens/test-infra/.github/workflows/windows_job.yml@download-v4
 #    with:
 #      runner: "windows.g5.4xlarge.nvidia.gpu"
 #      repository: pytorch/rl
@@ -70,7 +70,7 @@ jobs:
 #        export CU_VERSION="cu116"
 #        export torch_cuda="True"
 #
-#        # TODO: Port this to vmoens/test-infra/blob/download-v4/.github/workflows/windows_job.yml
+#        # TODO: Port this to vmoens/test-infra/.github/workflows/windows_job.yml
 #        export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
 #
 #        echo "PYTHON_VERSION: $PYTHON_VERSION"

@@ -21,7 +21,7 @@ jobs:
       matrix:
         python_version: ["3.9"]
         cuda_arch_version: ["12.1"]
-    uses: vmoens/test-infra/blob/download-v4/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/.github/workflows/linux_job_v2.yml@download-v4
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
