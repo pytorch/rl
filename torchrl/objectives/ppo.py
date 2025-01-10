@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import warnings
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -556,6 +557,7 @@ class PPOLoss(LossModule):
                 log_prob = _sum_td_features(log_prob)
                 log_prob.view_as(prev_log_prob)
 
+        print(log_prob , prev_log_prob)
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
         if is_tensor_collection(kl_approx):

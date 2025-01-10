@@ -7908,11 +7908,11 @@ class TestPPO(LossModuleTestBase):
         obs_dim=3,
         action_dim=4,
         device="cpu",
-        action_key="action",
+        action_key=None,
         observation_key="observation",
         sample_log_prob_key="sample_log_prob",
         composite_action_dist=False,
-        aggregate_probabilities=True,
+        aggregate_probabilities=None,
     ):
         # Actor
         action_spec = Bounded(
@@ -7922,13 +7922,17 @@ class TestPPO(LossModuleTestBase):
             action_spec = Composite({action_key: {"action1": action_spec}})
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         if composite_action_dist:
+            if action_key is None:
+                action_key = ("action", "action1")
+            else:
+                action_key = (action_key, "action1")
             distribution_class = functools.partial(
                 CompositeDistribution,
                 distribution_map={
                     "action1": TanhNormal,
                 },
                 name_map={
-                    "action1": (action_key, "action1"),
+                    "action1": action_key,
                 },
                 log_prob_key=sample_log_prob_key,
                 aggregate_probabilities=aggregate_probabilities,
@@ -7939,6 +7943,8 @@ class TestPPO(LossModuleTestBase):
             ]
             actor_in_keys = ["params"]
         else:
+            if action_key is None:
+                action_key = "action"
             distribution_class = TanhNormal
             module_out_keys = actor_in_keys = ["loc", "scale"]
         module = TensorDictModule(
@@ -8149,8 +8155,8 @@ class TestPPO(LossModuleTestBase):
         action_dim=4,
         atoms=None,
         device="cpu",
-        sample_log_prob_key="sample_log_prob",
-        action_key="action",
+        sample_log_prob_key=None,
+        action_key=None,
         composite_action_dist=False,
     ):
         # create a tensordict
@@ -8173,6 +8179,17 @@ class TestPPO(LossModuleTestBase):
         action = action.masked_fill_(~mask.unsqueeze(-1), 0.0)
         loc = params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0)
         scale = params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0)
+        if sample_log_prob_key is None:
+            if composite_action_dist:
+                sample_log_prob_key = ("action", "action1_log_prob")
+            else:
+                sample_log_prob_key = "sample_log_prob"
+
+        if action_key is None:
+            if composite_action_dist:
+                action_key = ("action", "action1")
+            else:
+                action_key = "action"
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -8184,7 +8201,7 @@ class TestPPO(LossModuleTestBase):
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
-                action_key: {"action1": action} if composite_action_dist else action,
+                action_key: action,
             },
             device=device,
             names=[None, "time"],
@@ -8261,6 +8278,13 @@ class TestPPO(LossModuleTestBase):
             loss_critic_type="l2",
             functional=functional,
         )
+        if composite_action_dist:
+            loss_fn.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
+            if advantage is not None:
+                advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
         if advantage is not None:
             advantage(td)
         else:
@@ -8354,7 +8378,9 @@ class TestPPO(LossModuleTestBase):
             loss_critic_type="l2",
             functional=functional,
         )
+        loss_fn.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
         if advantage is not None:
+            advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
             advantage(td)
         else:
             if td_est is not None:
@@ -8462,7 +8488,12 @@ class TestPPO(LossModuleTestBase):
         )
 
         if advantage is not None:
+            if composite_action_dist:
+                advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
             advantage(td)
+
+        if composite_action_dist:
+            loss_fn.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
         loss = loss_fn(td)
 
         loss_critic = loss["loss_critic"]
@@ -8569,7 +8600,14 @@ class TestPPO(LossModuleTestBase):
         )
 
         if advantage is not None:
+            if composite_action_dist:
+                advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
             advantage(td)
+
+        if composite_action_dist:
+            loss_fn.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
+            loss_fn2.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
+
         loss = loss_fn(td).exclude("entropy")
 
         sum(val for key, val in loss.items() if key.startswith("loss_")).backward()
@@ -8657,7 +8695,11 @@ class TestPPO(LossModuleTestBase):
         # assert len(list(floss_fn.parameters())) == 0
         with params.to_module(loss_fn):
             if advantage is not None:
+                if composite_action_dist:
+                    advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
                 advantage(td)
+            if composite_action_dist:
+                loss_fn.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
             loss = loss_fn(td)
 
         loss_critic = loss["loss_critic"]
@@ -8758,8 +8800,8 @@ class TestPPO(LossModuleTestBase):
             "advantage": "advantage_test",
             "value_target": "value_target_test",
             "value": "state_value_test",
-            "sample_log_prob": "sample_log_prob_test",
-            "action": "action_test",
+            "sample_log_prob": ('action_test', 'action1_log_prob') if composite_action_dist else "sample_log_prob_test",
+            "action": ("action_test", "action") if composite_action_dist else "action_test",
         }
 
         td = self._create_seq_mock_data_ppo(
@@ -8807,6 +8849,8 @@ class TestPPO(LossModuleTestBase):
             raise NotImplementedError
 
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        if composite_action_dist:
+            tensor_keys["sample_log_prob"] = [tensor_keys["sample_log_prob"]]
         loss_fn.set_keys(**tensor_keys)
         if advantage is not None:
             # collect tensordict key names for the advantage module

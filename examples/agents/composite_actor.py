@@ -50,3 +50,9 @@ print(actor.out_keys)
 data = TensorDict({"x": torch.rand(10)}, [])
 module(data)
 print(actor(data))
+
+
+# TODO:
+#  1. Use ("action", "action0") + ("action", "action1") vs ("agent0", "action") + ("agent1", "action")
+#  2. Must multi-head require an action_key to be a list of keys (I guess so)
+#  3. Using maps in the Actor
