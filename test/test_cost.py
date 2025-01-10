@@ -34,6 +34,7 @@ from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictSequential,
     TensorDictSequential as Seq,
+    WrapModule,
 )
 from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
@@ -8864,9 +8865,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
     @pytest.mark.parametrize(
         "composite_action_dist",
-        [
-            False,
-        ],
+        [False],
     )
     def test_ppo_notensordict(
         self,
@@ -9059,6 +9058,110 @@ class TestPPO(LossModuleTestBase):
             # Test it works with value key
             loss = loss_fn(td)
             assert "loss_critic" in loss.keys()
+
+    def test_ppo_composite_dists(self):
+        d = torch.distributions
+
+        make_params = TensorDictModule(
+            lambda: (
+                torch.ones(4),
+                torch.ones(4),
+                torch.ones(4, 2),
+                torch.ones(4, 2),
+                torch.ones(4, 10) / 10,
+                torch.zeros(4, 10),
+                torch.ones(4, 10),
+            ),
+            in_keys=[],
+            out_keys=[
+                ("params", "gamma", "concentration"),
+                ("params", "gamma", "rate"),
+                ("params", "Kumaraswamy", "concentration0"),
+                ("params", "Kumaraswamy", "concentration1"),
+                ("params", "mixture", "logits"),
+                ("params", "mixture", "loc"),
+                ("params", "mixture", "scale"),
+            ],
+        )
+
+        def mixture_constructor(logits, loc, scale):
+            return d.MixtureSameFamily(
+                d.Categorical(logits=logits), d.Normal(loc=loc, scale=scale)
+            )
+
+        dist_constructor = functools.partial(
+            CompositeDistribution,
+            distribution_map={
+                "gamma": d.Gamma,
+                "Kumaraswamy": d.Kumaraswamy,
+                "mixture": mixture_constructor,
+            },
+            name_map={
+                "gamma": ("agent0", "action"),
+                "Kumaraswamy": ("agent1", "action"),
+                "mixture": ("agent2", "action"),
+            },
+            aggregate_probabilities=False,
+            include_sum=False,
+            inplace=True,
+        )
+        policy = ProbSeq(
+            make_params,
+            ProbabilisticTensorDictModule(
+                in_keys=["params"],
+                out_keys=[
+                    ("agent0", "action"),
+                    ("agent1", "action"),
+                    ("agent2", "action"),
+                ],
+                distribution_class=dist_constructor,
+                return_log_prob=True,
+                default_interaction_type=InteractionType.RANDOM,
+            ),
+        )
+        # We want to make sure there is no warning
+        td = policy(TensorDict(batch_size=[4]))
+        assert isinstance(
+            policy.get_dist(td).log_prob(
+                td, aggregate_probabilities=False, inplace=False, include_sum=False
+            ),
+            TensorDict,
+        )
+        assert isinstance(
+            policy.log_prob(
+                td, aggregate_probabilities=False, inplace=False, include_sum=False
+            ),
+            TensorDict,
+        )
+        value_operator = Seq(
+            WrapModule(
+                lambda td: td.set("state_value", torch.ones((*td.shape, 1))),
+                out_keys=["state_value"],
+            )
+        )
+        for cls in (PPOLoss, ClipPPOLoss, KLPENPPOLoss):
+            data = policy(TensorDict(batch_size=[4]))
+            data.set(
+                "next",
+                TensorDict(
+                    reward=torch.randn(4, 1), done=torch.zeros(4, 1, dtype=torch.bool)
+                ),
+            )
+            ppo = cls(policy, value_operator)
+            ppo.set_keys(
+                action=[
+                    ("agent0", "action"),
+                    ("agent1", "action"),
+                    ("agent2", "action"),
+                ],
+                sample_log_prob=[
+                    ("agent0", "action_log_prob"),
+                    ("agent1", "action_log_prob"),
+                    ("agent2", "action_log_prob"),
+                ],
+            )
+            loss = ppo(data)
+            loss.sum(reduce=True)
 
 
 class TestA2C(LossModuleTestBase):
