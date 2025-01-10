@@ -24,7 +24,7 @@ from copy import copy
 from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
-from typing import Any, Callable, cast, Dict, Sequence, TypeVar, Union
+from typing import Any, Callable, cast, Dict, Tuple, TypeVar, Union
 
 import numpy as np
 import torch
@@ -872,7 +872,9 @@ class _ContextManager:
             self._mode = type
 
 
-def _standardize(input, exclude_dims: Sequence[int] = (), mean=None, std=None):
+def _standardize(
+    input, exclude_dims: Tuple[int] = (), mean=None, std=None, eps: float = None
+):
     """Standardizes the input tensor with the possibility of excluding specific dims from the statistics.
 
     Useful when processing multi-agent data to keep the agent dimensions independent.
@@ -882,8 +884,12 @@ def _standardize(input, exclude_dims: Sequence[int] = (), mean=None, std=None):
         exclude_dims (Sequence[int]): dimensions to exclude from the statistics, can be negative. Default: ().
         mean (Tensor): a mean to be used for standardization. Must be of shape broadcastable to input. Default: None.
         std (Tensor): a standard deviation to be used for standardization. Must be of shape broadcastable to input. Default: None.
+        eps (float): epsilon to be used for numerical stability. Default: float32 resolution.
 
     """
+    if eps is None:
+        eps = torch.finfo(torch.float.dtype).resolution
+
     input_shape = input.shape
     exclude_dims = [
         d if d >= 0 else d + len(input_shape) for d in exclude_dims
@@ -893,7 +899,7 @@ def _standardize(input, exclude_dims: Sequence[int] = (), mean=None, std=None):
         raise ValueError("Exclude dims has repeating elements")
     if any(dim < 0 or dim >= len(input_shape) for dim in exclude_dims):
         raise ValueError(
-            f"exclude_dims provided outside bounds for input of shape={input_shape}"
+            f"exclude_dims={exclude_dims} provided outside bounds for input of shape={input_shape}"
         )
     if len(exclude_dims) == len(input_shape):
         warnings.warn(
@@ -901,11 +907,14 @@ def _standardize(input, exclude_dims: Sequence[int] = (), mean=None, std=None):
         )
         return input
 
-    # Put all excluded dims in the beginning
-    permutation = list(range(len(input_shape)))
-    for dim in exclude_dims:
-        permutation.insert(0, permutation.pop(permutation.index(dim)))
-    permuted_input = input.permute(*permutation)
+    if len(exclude_dims):
+        # Put all excluded dims in the beginning
+        permutation = list(range(len(input_shape)))
+        for dim in exclude_dims:
+            permutation.insert(0, permutation.pop(permutation.index(dim)))
+        permuted_input = input.permute(*permutation)
+    else:
+        permuted_input = input
     normalized_shape_len = len(input_shape) - len(exclude_dims)
 
     if mean is None:
@@ -916,11 +925,15 @@ def _standardize(input, exclude_dims: Sequence[int] = (), mean=None, std=None):
         std = torch.std(
             permuted_input, keepdim=True, dim=tuple(range(-normalized_shape_len, 0))
         )
-    output = (permuted_input - mean) / std.clamp_min(1e-6)
+    output = (permuted_input - mean) / std.clamp_min(eps)
 
     # Reverse permutation
-    inv_permutation = torch.argsort(torch.LongTensor(permutation)).tolist()
-    output = torch.permute(output, inv_permutation)
+    if len(exclude_dims):
+        inv_permutation = torch.argsort(
+            torch.tensor(permutation, dtype=torch.long, device=input.device)
+        ).tolist()
+        output = torch.permute(output, inv_permutation)
+
     return output
 
 

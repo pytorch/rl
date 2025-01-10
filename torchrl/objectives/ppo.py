@@ -8,7 +8,7 @@ import contextlib
 
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Sequence, Tuple
+from typing import Tuple
 
 import torch
 from tensordict import (
@@ -88,8 +88,9 @@ class PPOLoss(LossModule):
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
-        normalize_advantage_exclude_dims (Sequence[int], optional): dimensions to exclude from the advantage
-            standardization, can be negative. Useful in multiagent settings to exlude the agent dimension. Default: ().
+        normalize_advantage_exclude_dims (Tuple[int], optional): dimensions to exclude from the advantage
+            standardization. Negative dimensions are valid. This is useful in multiagent (or multiobjective) settings
+            where the agent (or objective) dimension may be excluded from the reductions. Default: ().
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -314,7 +315,7 @@ class PPOLoss(LossModule):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
-        normalize_advantage_exclude_dims: Sequence[int] = (),
+        normalize_advantage_exclude_dims: Tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         advantage_key: str = None,
@@ -715,8 +716,9 @@ class ClipPPOLoss(PPOLoss):
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
-        normalize_advantage_exclude_dims (Sequence[int], optional): dimensions to exclude from the advantage
-            standardization, can be negative. Useful in multiagent settings to exlude the agent dimension. Default: ().
+        normalize_advantage_exclude_dims (Tuple[int], optional): dimensions to exclude from the advantage
+            standardization. Negative dimensions are valid. This is useful in multiagent (or multiobjective) settings
+            where the agent (or objective) dimension may be excluded from the reductions. Default: ().
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -808,7 +810,7 @@ class ClipPPOLoss(PPOLoss):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
-        normalize_advantage_exclude_dims: Sequence[int] = (),
+        normalize_advantage_exclude_dims: Tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -961,8 +963,9 @@ class KLPENPPOLoss(PPOLoss):
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
-        normalize_advantage_exclude_dims (Sequence[int], optional): dimensions to exclude from the advantage
-            standardization, can be negative. Useful in multiagent settings to exlude the agent dimension. Default: ().
+        normalize_advantage_exclude_dims (Tuple[int], optional): dimensions to exclude from the advantage
+            standardization. Negative dimensions are valid. This is useful in multiagent (or multiobjective) settings
+            where the agent (or objective) dimension may be excluded from the reductions. Default: ().
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -1056,7 +1059,7 @@ class KLPENPPOLoss(PPOLoss):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
-        normalize_advantage_exclude_dims: Sequence[int] = (),
+        normalize_advantage_exclude_dims: Tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
