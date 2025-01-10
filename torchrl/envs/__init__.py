@@ -67,6 +67,7 @@ from .transforms import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
+    Hash,
     InitTracker,
     KLRewardTransform,
     MultiStepTransform,

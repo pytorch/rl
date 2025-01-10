@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import importlib.util
 import multiprocessing as mp
 import warnings
@@ -4398,6 +4399,132 @@ class CatTensors(Transform):
             f"{self.__class__.__name__}(in_keys={self.in_keys}, out_key"
             f"={self.out_keys[0]})"
         )
+
+
+class UnaryTransform(Transform):
+    """Applies a unary operation on the specified inputs.
+
+    Args:
+        in_keys (sequence of NestedKey): the keys of inputs to the unary operation.
+        out_keys (sequence of NestedKey): the keys of the outputs of the unary operation.
+        fn (Callable, optional): the function to use as the unary operation.
+        output_spec (TensorSpec, optional): the spec of the output of the operation.
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey],
+        fn: Callable,
+        output_spec: TensorSpec,
+    ):
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self._fn = fn
+        self._output_spec = output_spec
+
+    def _apply_transform(self, value):
+        if isinstance(value, NonTensorData):
+            value = value.get("data")
+        return self._fn(value)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
+    def _transform_spec(self, spec: TensorSpec) -> TensorSpec:
+        if not isinstance(spec, Composite):
+            raise TypeError(f"{self}: Only specs of type Composite can be transformed")
+
+        spec_keys = set(spec.keys(include_nested=True))
+
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key in spec_keys:
+                spec.set(out_key, self._output_spec)
+        return spec
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(observation_spec)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(reward_spec)
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        return self._transform_spec(done_spec)
+
+
+class Hash(UnaryTransform):
+    """Adds a hash value to a tensordict.
+
+    Args:
+        in_keys (sequence of NestedKey): the keys of the values to hash.
+        out_keys (sequence of NestedKey): the keys of the resulting hashes.
+        hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,
+            the hash function must accept it as its second argument. Default is
+            ``Hash.reproducible_hash``.
+        output_spec (TensorSpec, optional): the spec of the hash output. Default
+            is ``Unbounded(shape=(32,), dtype=torch.uint8)``.
+        seed (optional): seed to use for the hash function, if it requires one.
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey],
+        hash_fn: Callable = None,
+        output_spec: TensorSpec | None = None,
+        seed: Any | None = None,
+    ):
+        if hash_fn is None:
+            hash_fn = Hash.reproducible_hash
+
+        if output_spec is None:
+            output_spec = Unbounded(shape=(32,), dtype=torch.uint8)
+
+        self._seed = seed
+        self._hash_fn = hash_fn
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            fn=self.call_hash_fn,
+            output_spec=output_spec,
+        )
+
+    def call_hash_fn(self, value):
+        if self._seed is None:
+            return self._hash_fn(value)
+        else:
+            return self._hash_fn(value, self._seed)
+
+    @classmethod
+    def reproducible_hash(cls, string, seed=None):
+        """Creates a reproducible 256-bit hash from a string using a seed.
+
+        Args:
+            string (str): The input string.
+            seed (str, optional): The seed value. Default is ``None``.
+
+        Returns:
+            Tensor: Shape ``(32,)`` with dtype ``torch.int8``.
+        """
+        # Prepend the seed to the string
+        if seed is not None:
+            seeded_string = seed + string
+        else:
+            seeded_string = string
+
+        # Create a new SHA-256 hash object
+        hash_object = hashlib.sha256()
+
+        # Update the hash object with the seeded string
+        hash_object.update(seeded_string.encode("utf-8"))
+
+        # Get the hash value as bytes
+        hash_bytes = hash_object.digest()
+
+        return torch.frombuffer(hash_bytes, dtype=torch.uint8)
 
 
 class Stack(Transform):

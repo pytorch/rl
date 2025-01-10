@@ -827,6 +827,7 @@ to be able to create this other composition:
     FlattenObservation
     FrameSkipTransform
     GrayScale
+    Hash
     InitTracker
     KLRewardTransform
     NoopResetEnv
