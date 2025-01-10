@@ -12630,9 +12630,7 @@ class TestLineariseRewards(TransformBase):
 
         expected = sum(
             w * r
-            for w, r in zip(
-                weights, rollout.get(("next", "reward")).split(1, dim=-1), strict=True
-            )
+            for w, r in zip(weights, rollout.get(("next", "reward")).split(1, dim=-1))
         )
         torch.testing.assert_close(scalar_reward, expected)
 
@@ -12654,7 +12652,7 @@ class TestLineariseRewards(TransformBase):
         td = TensorDict({"reward": torch.randn(num_rewards)}, [])
         model(td)
 
-        expected = sum(w * r for w, r in zip(weights, td["reward"], strict=True))
+        expected = sum(w * r for w, r in zip(weights, td["reward"]))
         torch.testing.assert_close(td["scalar_reward"], expected)
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
