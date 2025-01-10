@@ -13,7 +13,7 @@ from functools import wraps
 from typing import Callable, List, Union
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import is_tensor_collection, TensorDictBase
 from tensordict.nn import (
     CompositeDistribution,
     dispatch,
@@ -23,13 +23,18 @@ from tensordict.nn import (
     TensorDictModuleBase,
 )
 from tensordict.nn.probabilistic import interaction_type
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
 
-from torchrl.objectives.utils import _vmap_func, hold_out_net, RANDOM_MODULE_LIST
+from torchrl.objectives.utils import (
+    _maybe_get_or_select,
+    _vmap_func,
+    hold_out_net,
+    RANDOM_MODULE_LIST,
+)
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -293,13 +298,18 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     def set_keys(self, **kwargs) -> None:
         """Set tensordict key names."""
-        for key, value in kwargs.items():
-            if not isinstance(value, (str, tuple)):
+        for key, value in list(kwargs.items()):
+            if isinstance(value, list):
+                value = [unravel_key(k) for k in value]
+            elif not isinstance(value, (str, tuple)):
+                if value is None:
+                    raise ValueError("tensordict keys cannot be None")
                 raise ValueError(
                     f"key name must be of type NestedKey (Union[str, Tuple[str]]) but got {type(value)}"
                 )
-            if value is None:
-                raise ValueError("tensordict keys cannot be None")
+            else:
+                value = unravel_key(value)
+
             if key not in self._AcceptedKeys.__dict__:
                 raise KeyError(
                     f"{key} is not an accepted tensordict key for advantages"
@@ -312,6 +322,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 raise KeyError(
                     f"value key '{value}' not found in value network out_keys {self.value_network.out_keys}"
                 )
+            kwargs[key] = value
         if self._tensor_keys is None:
             conf = asdict(self.default_keys)
             conf.update(self.dep_keys)
@@ -1765,12 +1776,11 @@ class VTrace(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
-        # Make sure we have the log prob computed at collection time
-        if self.tensor_keys.sample_log_prob not in tensordict.keys():
-            raise ValueError(
-                f"Expected {self.tensor_keys.sample_log_prob} to be in tensordict"
-            )
-        log_mu = tensordict.get(self.tensor_keys.sample_log_prob).view_as(value)
+        lp = _maybe_get_or_select(tensordict, self.tensor_keys.sample_log_prob)
+        if is_tensor_collection(lp):
+            # Sum all values to match the batch size
+            lp = lp.sum(dim="feature", reduce=True)
+        log_mu = lp.view_as(value)
 
         # Compute log prob with current policy
         with hold_out_net(self.actor_network):

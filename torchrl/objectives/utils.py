@@ -8,10 +8,10 @@ import functools
 import re
 import warnings
 from enum import Enum
-from typing import Iterable, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import TensorDictModule
 from torch import nn, Tensor
 from torch.nn import functional as F
@@ -620,3 +620,26 @@ def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimize
 def _sum_td_features(data: TensorDictBase) -> torch.Tensor:
     # Sum all features and return a tensor
     return data.sum(dim="feature", reduce=True)
+
+
+def _maybe_get_or_select(td, key_or_keys):
+    if isinstance(key_or_keys, (str, tuple)):
+        return td.get(key_or_keys)
+    return td.select(*key_or_keys)
+
+
+def _maybe_add_or_extend_key(
+    tensor_keys: List[NestedKey],
+    key_or_list_of_keys: NestedKey | List[NestedKey],
+    prefix: NestedKey = None,
+):
+    if prefix is not None:
+        if isinstance(key_or_list_of_keys, NestedKey):
+            tensor_keys.append(unravel_key((prefix, key_or_list_of_keys)))
+        else:
+            tensor_keys.extend([unravel_key((prefix, k)) for k in key_or_list_of_keys])
+        return
+    if isinstance(key_or_list_of_keys, NestedKey):
+        tensor_keys.append(key_or_list_of_keys)
+    else:
+        tensor_keys.extend(key_or_list_of_keys)
