@@ -47,6 +47,7 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
+from yaml import warnings
 
 
 class PPOLoss(LossModule):
@@ -613,6 +614,15 @@ class PPOLoss(LossModule):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
+            if advantage.numel() > tensordict.batch_size.numel() and not len(
+                self.normalize_advantage_exclude_dims
+            ):
+                warnings.warn(
+                    "You requested advantage normalization and the advantage key has more dimensions"
+                    " than the tensordict batch. Make sure to pass `normalize_advantage_exclude_dims` "
+                    "if you want to keep any dimension independent while computing normalization statistics. "
+                    "If you are working in multi-agent/multi-objective settings this is highly suggested."
+                )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
         log_weight, dist, kl_approx = self._log_weight(tensordict)
@@ -881,6 +891,15 @@ class ClipPPOLoss(PPOLoss):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
+            if advantage.numel() > tensordict.batch_size.numel() and not len(
+                self.normalize_advantage_exclude_dims
+            ):
+                warnings.warn(
+                    "You requested advantage normalization and the advantage key has more dimensions"
+                    " than the tensordict batch. Make sure to pass `normalize_advantage_exclude_dims` "
+                    "if you want to keep any dimension independent while computing normalization statistics. "
+                    "If you are working in multi-agent/multi-objective settings this is highly suggested."
+                )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
         log_weight, dist, kl_approx = self._log_weight(tensordict)
@@ -1164,6 +1183,15 @@ class KLPENPPOLoss(PPOLoss):
             )
             advantage = tensordict_copy.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
+            if advantage.numel() > tensordict.batch_size.numel() and not len(
+                self.normalize_advantage_exclude_dims
+            ):
+                warnings.warn(
+                    "You requested advantage normalization and the advantage key has more dimensions"
+                    " than the tensordict batch. Make sure to pass `normalize_advantage_exclude_dims` "
+                    "if you want to keep any dimension independent while computing normalization statistics. "
+                    "If you are working in multi-agent/multi-objective settings this is highly suggested."
+                )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
         log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
