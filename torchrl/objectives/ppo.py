@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import warnings
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -531,26 +532,35 @@ class PPOLoss(LossModule):
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.action} requires grad."
             )
-        if isinstance(action, torch.Tensor):
+        if isinstance(dist, CompositeDistribution):
+            is_composite = True
+            aggregate = dist.aggregate_probabilities
+            if aggregate is None:
+                aggregate = False
+            include_sum = dist.include_sum
+            if include_sum is None:
+                include_sum = False
+            kwargs = {
+                "inplace": False,
+                "aggregate_probabilities": aggregate,
+                "include_sum": include_sum,
+            }
+        else:
+            is_composite = False
+            kwargs = {}
+        if not is_composite:
             log_prob = dist.log_prob(action)
         else:
-            if isinstance(dist, CompositeDistribution):
-                is_composite = True
-                aggregate = dist.aggregate_probabilities
-                if aggregate is None:
-                    aggregate = False
-                include_sum = dist.include_sum
-                if include_sum is None:
-                    include_sum = False
-                kwargs = {
-                    "inplace": False,
-                    "aggregate_probabilities": aggregate,
-                    "include_sum": include_sum,
-                }
-            else:
-                is_composite = False
-                kwargs = {}
             log_prob: TensorDictBase = dist.log_prob(tensordict, **kwargs)
+            if not is_tensor_collection(prev_log_prob):
+                # this isn't great, in general multihead actions should have a composite log-prob too
+                warnings.warn(
+                    "You are using a composite distribution, yet your log-probability is a tensor. "
+                    "This usually happens whenever the CompositeDistribution has aggregate_probabilities=True "
+                    "or include_sum=True. These options should be avoided: leaf log-probs should be written "
+                    "independently and PPO will take care of the aggregation.",
+                    category=UserWarning,
+                )
             if (
                 is_composite
                 and not is_tensor_collection(prev_log_prob)
@@ -559,6 +569,7 @@ class PPOLoss(LossModule):
                 log_prob = _sum_td_features(log_prob)
                 log_prob.view_as(prev_log_prob)
 
+        print(log_prob , prev_log_prob)
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
         if is_tensor_collection(kl_approx):
