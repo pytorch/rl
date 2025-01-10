@@ -375,7 +375,7 @@ class PPOLoss(LossModule):
         try:
             device = next(self.parameters()).device
         except (AttributeError, StopIteration):
-            device = torch.device("cpu")
+            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
 
         self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
         if critic_coef is not None:
