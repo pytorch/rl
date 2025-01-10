@@ -4463,9 +4463,9 @@ class Hash(UnaryTransform):
         out_keys (sequence of NestedKey): the keys of the resulting hashes.
         hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,
             the hash function must accept it as its second argument. Default is
-            Python's builtin ``hash`` function.
+            ``Hash.reproducible_hash``.
         output_spec (TensorSpec, optional): the spec of the hash output. Default
-            is ``Unbounded(shape=(), dtype=torch.int64)``.
+            is ``Unbounded(shape=(32,), dtype=torch.uint8)``.
         seed (optional): seed to use for the hash function, if it requires one.
     """
 
@@ -4478,10 +4478,10 @@ class Hash(UnaryTransform):
         seed: Any | None = None,
     ):
         if hash_fn is None:
-            hash_fn = Hash.reproducible_hash_parts
+            hash_fn = Hash.reproducible_hash
 
         if output_spec is None:
-            output_spec = Unbounded(shape=(4,), dtype=torch.int64)
+            output_spec = Unbounded(shape=(32,), dtype=torch.uint8)
 
         self._seed = seed
         self._hash_fn = hash_fn
@@ -4499,7 +4499,7 @@ class Hash(UnaryTransform):
             return self._hash_fn(value, self._seed)
 
     @classmethod
-    def reproducible_hash_parts(cls, string, seed=None):
+    def reproducible_hash(cls, string, seed=None):
         """Creates a reproducible 256-bit hash from a string using a seed.
 
         Args:
@@ -4507,7 +4507,7 @@ class Hash(UnaryTransform):
             seed (str, optional): The seed value. Default is ``None``.
 
         Returns:
-            tuple: Four 64-bit integers representing the parts of the 256-bit hash value.
+            Tensor: Shape ``(32,)`` with dtype ``torch.int8``.
         """
         # Prepend the seed to the string
         if seed is not None:
@@ -4524,21 +4524,7 @@ class Hash(UnaryTransform):
         # Get the hash value as bytes
         hash_bytes = hash_object.digest()
 
-        # Split the hash bytes into four parts
-        part1 = hash_bytes[:8]
-        part2 = hash_bytes[8:16]
-        part3 = hash_bytes[16:24]
-        part4 = hash_bytes[24:]
-
-        # Convert each part to a 64-bit integer
-        part1_value = int.from_bytes(part1, "big", signed=True)
-        part2_value = int.from_bytes(part2, "big", signed=True)
-        part3_value = int.from_bytes(part3, "big", signed=True)
-        part4_value = int.from_bytes(part4, "big", signed=True)
-
-        return torch.tensor(
-            [part1_value, part2_value, part3_value, part4_value], dtype=torch.int64
-        )
+        return torch.frombuffer(hash_bytes, dtype=torch.uint8)
 
 
 class Stack(Transform):

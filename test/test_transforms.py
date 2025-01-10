@@ -2188,7 +2188,7 @@ class TestHash(TransformBase):
             hash_fn = hash
         elif datatype == "str":
             obs = "abcdefg"
-            hash_fn = Hash.reproducible_hash_parts
+            hash_fn = Hash.reproducible_hash
         elif datatype == "NonTensorStack":
             obs = torch.stack(
                 [
@@ -2199,9 +2199,7 @@ class TestHash(TransformBase):
             )
 
             def fn0(x):
-                return torch.stack(
-                    [Hash.reproducible_hash_parts(x_.get("data")) for x_ in x]
-                )
+                return torch.stack([Hash.reproducible_hash(x_.get("data")) for x_ in x])
 
             hash_fn = fn0
         else:
@@ -2311,9 +2309,9 @@ class TestHash(TransformBase):
                 in_keys=["string"],
                 out_keys=["hash"],
                 hash_fn=lambda x: torch.stack(
-                    [Hash.reproducible_hash_parts(x_.get("data")) for x_ in x]
+                    [Hash.reproducible_hash(x_.get("data")) for x_ in x]
                 ),
-                output_spec=Unbounded(shape=(2, 4), dtype=torch.int64),
+                output_spec=Unbounded(shape=(2, 32), dtype=torch.uint8),
             )
             base_env = CountingEnvWithString
 
@@ -2335,9 +2333,9 @@ class TestHash(TransformBase):
                 in_keys=["string"],
                 out_keys=["hash"],
                 hash_fn=lambda x: torch.stack(
-                    [Hash.reproducible_hash_parts(x_.get("data")) for x_ in x]
+                    [Hash.reproducible_hash(x_.get("data")) for x_ in x]
                 ),
-                output_spec=Unbounded(shape=(2, 4), dtype=torch.int64),
+                output_spec=Unbounded(shape=(2, 32), dtype=torch.uint8),
             )
             base_env = CountingEnvWithString
 
