@@ -12703,7 +12703,7 @@ class TestLineariseRewards(TransformBase):
     )
     def test_reward_spec(
         self,
-        weights: list[float] | None,
+        weights,
         reward_spec: TensorSpec,
         expected_spec: TensorSpec,
     ) -> None:
