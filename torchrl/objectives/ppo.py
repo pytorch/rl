@@ -69,7 +69,7 @@ class PPOLoss(LossModule):
 
     Args:
         actor_network (ProbabilisticTensorDictSequential): policy operator.
-            Typically a :class:`~tensordict.nn.ProbabilisticTensorDictSequential` subclass taking observations
+            Typically, a :class:`~tensordict.nn.ProbabilisticTensorDictSequential` subclass taking observations
             as input and outputting an action (or actions) as well as its log-probability value.
         critic_network (ValueOperator): value operator. The critic will usually take the observations as input
             and return a scalar value (``state_value`` by default) in the output keys.
@@ -490,7 +490,10 @@ class PPOLoss(LossModule):
 
             if is_tensor_collection(log_prob):
                 if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
-                    log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+                    try:
+                        log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+                    except KeyError as err:
+                        raise _make_lp_get_error(self.tensor_keys, log_prob, err)
                 else:
                     log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
 
@@ -511,9 +514,12 @@ class PPOLoss(LossModule):
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict)
 
-        prev_log_prob = _maybe_get_or_select(
-            tensordict, self.tensor_keys.sample_log_prob
-        )
+        try:
+            prev_log_prob = _maybe_get_or_select(
+                tensordict, self.tensor_keys.sample_log_prob
+            )
+        except KeyError as err:
+            raise _make_lp_get_error(self.tensor_keys, tensordict, err)
 
         if prev_log_prob.requires_grad:
             raise RuntimeError(
@@ -930,7 +936,7 @@ class ClipPPOLoss(PPOLoss):
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
         if is_tensor_collection(gain):
-            gain = gain.sum(reduce=True)
+            gain = _sum_td_features(gain)
         td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
         td_out.set("clip_fraction", clip_fraction)
 
@@ -938,7 +944,7 @@ class ClipPPOLoss(PPOLoss):
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
+            td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
@@ -1223,6 +1229,7 @@ class KLPENPPOLoss(PPOLoss):
             current_log_prob = current_dist.log_prob(x, **kwargs)
             if is_tensor_collection(previous_log_prob):
                 previous_log_prob = _sum_td_features(previous_log_prob)
+                # Both dists have presumably the same params
                 current_log_prob = _sum_td_features(current_log_prob)
             kl = (previous_log_prob - current_log_prob).mean(0)
         kl = kl.unsqueeze(-1)

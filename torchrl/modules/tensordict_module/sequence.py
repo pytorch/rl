@@ -23,7 +23,7 @@ class SafeSequential(TensorDictSequential, SafeModule):
     Args:
          modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.
          partial_tolerant (bool, optional): if ``True``, the input tensordict can miss some of the input keys.
-            If so, the only module that will be executed are those who can be executed given the keys that
+            If so, the only modules that will be executed are those which can be executed given the keys that
             are present.
             Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is ``True`` AND if the
             stack does not have the required keys, then SafeSequential will scan through the sub-tensordicts
