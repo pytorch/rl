@@ -8158,18 +8158,19 @@ class TestPPO(LossModuleTestBase):
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
-                -1, 1
-            )
+            action_shape = (batch, T, atoms, action_dim)
         else:
-            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+            action_shape = (batch, T, action_dim)
+        params_mean = torch.randn(action_shape, device=device) / 10
+        params_scale = torch.rand(action_shape, device=device) / 10
+        action = (params_mean + params_scale * torch.randn(action_shape, device=device)).clamp(
+            -1, 1
+        )
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         action = action.masked_fill_(~mask.unsqueeze(-1), 0.0)
-        params_mean = torch.randn_like(action) / 10
-        params_scale = torch.rand_like(action) / 10
         loc = params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0)
         scale = params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0)
         td = TensorDict(
@@ -8184,9 +8185,6 @@ class TestPPO(LossModuleTestBase):
                 },
                 "collector": {"mask": mask},
                 action_key: {"action1": action} if composite_action_dist else action,
-                sample_log_prob_key: (
-                    torch.randn_like(action[..., 1]) / 10
-                ).masked_fill_(~mask, 0.0),
             },
             device=device,
             names=[None, "time"],
