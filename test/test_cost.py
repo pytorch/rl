@@ -7918,14 +7918,13 @@ class TestPPO(LossModuleTestBase):
         action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        if composite_action_dist:
-            action_spec = Composite({action_key: {"action1": action_spec}})
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         if composite_action_dist:
             if action_key is None:
                 action_key = ("action", "action1")
             else:
                 action_key = (action_key, "action1")
+            action_spec = Composite({action_key: {"action1": action_spec}})
             distribution_class = functools.partial(
                 CompositeDistribution,
                 distribution_map={
@@ -8380,7 +8379,10 @@ class TestPPO(LossModuleTestBase):
             loss_critic_type="l2",
             functional=functional,
         )
-        loss_fn.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
+        loss_fn.set_keys(
+            action=("action", "action1"),
+            sample_log_prob=[("action", "action1_log_prob")],
+        )
         if advantage is not None:
             advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
             advantage(td)
@@ -8495,7 +8497,10 @@ class TestPPO(LossModuleTestBase):
             advantage(td)
 
         if composite_action_dist:
-            loss_fn.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
+            loss_fn.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
         loss = loss_fn(td)
 
         loss_critic = loss["loss_critic"]
@@ -8607,8 +8612,14 @@ class TestPPO(LossModuleTestBase):
             advantage(td)
 
         if composite_action_dist:
-            loss_fn.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
-            loss_fn2.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
+            loss_fn.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
+            loss_fn2.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
 
         loss = loss_fn(td).exclude("entropy")
 
@@ -8701,7 +8712,10 @@ class TestPPO(LossModuleTestBase):
                     advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
                 advantage(td)
             if composite_action_dist:
-                loss_fn.set_keys(action=("action", "action1"), sample_log_prob=[("action", "action1_log_prob")])
+                loss_fn.set_keys(
+                    action=("action", "action1"),
+                    sample_log_prob=[("action", "action1_log_prob")],
+                )
             loss = loss_fn(td)
 
         loss_critic = loss["loss_critic"]
@@ -8791,10 +8805,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("composite_action_dist", [True, False])
-    def test_ppo_tensordict_keys_run(
-        self, loss_class, advantage, td_est, composite_action_dist
-    ):
+    def test_ppo_tensordict_keys_run(self, loss_class, advantage, td_est):
         """Test PPO loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -8802,18 +8813,16 @@ class TestPPO(LossModuleTestBase):
             "advantage": "advantage_test",
             "value_target": "value_target_test",
             "value": "state_value_test",
-            "sample_log_prob": ('action_test', 'action1_log_prob') if composite_action_dist else "sample_log_prob_test",
-            "action": ("action_test", "action") if composite_action_dist else "action_test",
+            "sample_log_prob": "sample_log_prob_test",
+            "action": "action_test",
         }
 
         td = self._create_seq_mock_data_ppo(
             sample_log_prob_key=tensor_keys["sample_log_prob"],
             action_key=tensor_keys["action"],
-            composite_action_dist=composite_action_dist,
         )
         actor = self._create_mock_actor(
             sample_log_prob_key=tensor_keys["sample_log_prob"],
-            composite_action_dist=composite_action_dist,
             action_key=tensor_keys["action"],
         )
         value = self._create_mock_value(out_keys=[tensor_keys["value"]])
@@ -8851,8 +8860,6 @@ class TestPPO(LossModuleTestBase):
             raise NotImplementedError
 
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
-        if composite_action_dist:
-            tensor_keys["sample_log_prob"] = [tensor_keys["sample_log_prob"]]
         loss_fn.set_keys(**tensor_keys)
         if advantage is not None:
             # collect tensordict key names for the advantage module
@@ -9030,11 +9037,16 @@ class TestPPO(LossModuleTestBase):
             reduction=reduction,
         )
         advantage(td)
+        if composite_action_dist:
+            loss_fn.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
         loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss_"):
-                    assert loss[key].shape == td.shape
+                    assert loss[key].shape == td.shape, key
         else:
             for key in loss.keys():
                 if not key.startswith("loss_"):
@@ -9082,6 +9094,11 @@ class TestPPO(LossModuleTestBase):
                 clip_value=clip_value,
             )
             advantage(td)
+            if composite_action_dist:
+                loss_fn.set_keys(
+                    action=("action", "action1"),
+                    sample_log_prob=[("action", "action1_log_prob")],
+                )
 
             value = td.pop(loss_fn.tensor_keys.value)
 
