@@ -34,6 +34,7 @@ from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictSequential,
     TensorDictSequential as Seq,
+    WrapModule,
 )
 from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
@@ -7907,27 +7908,30 @@ class TestPPO(LossModuleTestBase):
         obs_dim=3,
         action_dim=4,
         device="cpu",
-        action_key="action",
+        action_key=None,
         observation_key="observation",
         sample_log_prob_key="sample_log_prob",
         composite_action_dist=False,
-        aggregate_probabilities=True,
+        aggregate_probabilities=None,
     ):
         # Actor
         action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        if composite_action_dist:
-            action_spec = Composite({action_key: {"action1": action_spec}})
         net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
         if composite_action_dist:
+            if action_key is None:
+                action_key = ("action", "action1")
+            else:
+                action_key = (action_key, "action1")
+            action_spec = Composite({action_key: {"action1": action_spec}})
             distribution_class = functools.partial(
                 CompositeDistribution,
                 distribution_map={
                     "action1": TanhNormal,
                 },
                 name_map={
-                    "action1": (action_key, "action1"),
+                    "action1": action_key,
                 },
                 log_prob_key=sample_log_prob_key,
                 aggregate_probabilities=aggregate_probabilities,
@@ -7938,6 +7942,8 @@ class TestPPO(LossModuleTestBase):
             ]
             actor_in_keys = ["params"]
         else:
+            if action_key is None:
+                action_key = "action"
             distribution_class = TanhNormal
             module_out_keys = actor_in_keys = ["loc", "scale"]
         module = TensorDictModule(
@@ -8148,8 +8154,8 @@ class TestPPO(LossModuleTestBase):
         action_dim=4,
         atoms=None,
         device="cpu",
-        sample_log_prob_key="sample_log_prob",
-        action_key="action",
+        sample_log_prob_key=None,
+        action_key=None,
         composite_action_dist=False,
     ):
         # create a tensordict
@@ -8171,6 +8177,17 @@ class TestPPO(LossModuleTestBase):
         params_scale = torch.rand_like(action) / 10
         loc = params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0)
         scale = params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0)
+        if sample_log_prob_key is None:
+            if composite_action_dist:
+                sample_log_prob_key = ("action", "action1_log_prob")
+            else:
+                sample_log_prob_key = "sample_log_prob"
+
+        if action_key is None:
+            if composite_action_dist:
+                action_key = ("action", "action1")
+            else:
+                action_key = "action"
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -8182,7 +8199,7 @@ class TestPPO(LossModuleTestBase):
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
-                action_key: {"action1": action} if composite_action_dist else action,
+                action_key: action,
                 sample_log_prob_key: (
                     torch.randn_like(action[..., 1]) / 10
                 ).masked_fill_(~mask, 0.0),
@@ -8262,6 +8279,13 @@ class TestPPO(LossModuleTestBase):
             loss_critic_type="l2",
             functional=functional,
         )
+        if composite_action_dist:
+            loss_fn.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
+            if advantage is not None:
+                advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
         if advantage is not None:
             advantage(td)
         else:
@@ -8355,7 +8379,12 @@ class TestPPO(LossModuleTestBase):
             loss_critic_type="l2",
             functional=functional,
         )
+        loss_fn.set_keys(
+            action=("action", "action1"),
+            sample_log_prob=[("action", "action1_log_prob")],
+        )
         if advantage is not None:
+            advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
             advantage(td)
         else:
             if td_est is not None:
@@ -8463,7 +8492,15 @@ class TestPPO(LossModuleTestBase):
         )
 
         if advantage is not None:
+            if composite_action_dist:
+                advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
             advantage(td)
+
+        if composite_action_dist:
+            loss_fn.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
         loss = loss_fn(td)
 
         loss_critic = loss["loss_critic"]
@@ -8570,7 +8607,20 @@ class TestPPO(LossModuleTestBase):
         )
 
         if advantage is not None:
+            if composite_action_dist:
+                advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
             advantage(td)
+
+        if composite_action_dist:
+            loss_fn.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
+            loss_fn2.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
+
         loss = loss_fn(td).exclude("entropy")
 
         sum(val for key, val in loss.items() if key.startswith("loss_")).backward()
@@ -8658,7 +8708,14 @@ class TestPPO(LossModuleTestBase):
         # assert len(list(floss_fn.parameters())) == 0
         with params.to_module(loss_fn):
             if advantage is not None:
+                if composite_action_dist:
+                    advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
                 advantage(td)
+            if composite_action_dist:
+                loss_fn.set_keys(
+                    action=("action", "action1"),
+                    sample_log_prob=[("action", "action1_log_prob")],
+                )
             loss = loss_fn(td)
 
         loss_critic = loss["loss_critic"]
@@ -8748,10 +8805,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("composite_action_dist", [True, False])
-    def test_ppo_tensordict_keys_run(
-        self, loss_class, advantage, td_est, composite_action_dist
-    ):
+    def test_ppo_tensordict_keys_run(self, loss_class, advantage, td_est):
         """Test PPO loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
@@ -8766,11 +8820,9 @@ class TestPPO(LossModuleTestBase):
         td = self._create_seq_mock_data_ppo(
             sample_log_prob_key=tensor_keys["sample_log_prob"],
             action_key=tensor_keys["action"],
-            composite_action_dist=composite_action_dist,
         )
         actor = self._create_mock_actor(
             sample_log_prob_key=tensor_keys["sample_log_prob"],
-            composite_action_dist=composite_action_dist,
             action_key=tensor_keys["action"],
         )
         value = self._create_mock_value(out_keys=[tensor_keys["value"]])
@@ -8864,9 +8916,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
     @pytest.mark.parametrize(
         "composite_action_dist",
-        [
-            False,
-        ],
+        [False],
     )
     def test_ppo_notensordict(
         self,
@@ -8987,11 +9037,16 @@ class TestPPO(LossModuleTestBase):
             reduction=reduction,
         )
         advantage(td)
+        if composite_action_dist:
+            loss_fn.set_keys(
+                action=("action", "action1"),
+                sample_log_prob=[("action", "action1_log_prob")],
+            )
         loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
                 if key.startswith("loss_"):
-                    assert loss[key].shape == td.shape
+                    assert loss[key].shape == td.shape, key
         else:
             for key in loss.keys():
                 if not key.startswith("loss_"):
@@ -9039,6 +9094,11 @@ class TestPPO(LossModuleTestBase):
                 clip_value=clip_value,
             )
             advantage(td)
+            if composite_action_dist:
+                loss_fn.set_keys(
+                    action=("action", "action1"),
+                    sample_log_prob=[("action", "action1_log_prob")],
+                )
 
             value = td.pop(loss_fn.tensor_keys.value)
 
@@ -9059,6 +9119,110 @@ class TestPPO(LossModuleTestBase):
             # Test it works with value key
             loss = loss_fn(td)
             assert "loss_critic" in loss.keys()
+
+    def test_ppo_composite_dists(self):
+        d = torch.distributions
+
+        make_params = TensorDictModule(
+            lambda: (
+                torch.ones(4),
+                torch.ones(4),
+                torch.ones(4, 2),
+                torch.ones(4, 2),
+                torch.ones(4, 10) / 10,
+                torch.zeros(4, 10),
+                torch.ones(4, 10),
+            ),
+            in_keys=[],
+            out_keys=[
+                ("params", "gamma", "concentration"),
+                ("params", "gamma", "rate"),
+                ("params", "Kumaraswamy", "concentration0"),
+                ("params", "Kumaraswamy", "concentration1"),
+                ("params", "mixture", "logits"),
+                ("params", "mixture", "loc"),
+                ("params", "mixture", "scale"),
+            ],
+        )
+
+        def mixture_constructor(logits, loc, scale):
+            return d.MixtureSameFamily(
+                d.Categorical(logits=logits), d.Normal(loc=loc, scale=scale)
+            )
+
+        dist_constructor = functools.partial(
+            CompositeDistribution,
+            distribution_map={
+                "gamma": d.Gamma,
+                "Kumaraswamy": d.Kumaraswamy,
+                "mixture": mixture_constructor,
+            },
+            name_map={
+                "gamma": ("agent0", "action"),
+                "Kumaraswamy": ("agent1", "action"),
+                "mixture": ("agent2", "action"),
+            },
+            aggregate_probabilities=False,
+            include_sum=False,
+            inplace=True,
+        )
+        policy = ProbSeq(
+            make_params,
+            ProbabilisticTensorDictModule(
+                in_keys=["params"],
+                out_keys=[
+                    ("agent0", "action"),
+                    ("agent1", "action"),
+                    ("agent2", "action"),
+                ],
+                distribution_class=dist_constructor,
+                return_log_prob=True,
+                default_interaction_type=InteractionType.RANDOM,
+            ),
+        )
+        # We want to make sure there is no warning
+        td = policy(TensorDict(batch_size=[4]))
+        assert isinstance(
+            policy.get_dist(td).log_prob(
+                td, aggregate_probabilities=False, inplace=False, include_sum=False
+            ),
+            TensorDict,
+        )
+        assert isinstance(
+            policy.log_prob(
+                td, aggregate_probabilities=False, inplace=False, include_sum=False
+            ),
+            TensorDict,
+        )
+        value_operator = Seq(
+            WrapModule(
+                lambda td: td.set("state_value", torch.ones((*td.shape, 1))),
+                out_keys=["state_value"],
+            )
+        )
+        for cls in (PPOLoss, ClipPPOLoss, KLPENPPOLoss):
+            data = policy(TensorDict(batch_size=[4]))
+            data.set(
+                "next",
+                TensorDict(
+                    reward=torch.randn(4, 1), done=torch.zeros(4, 1, dtype=torch.bool)
+                ),
+            )
+            ppo = cls(policy, value_operator)
+            ppo.set_keys(
+                action=[
+                    ("agent0", "action"),
+                    ("agent1", "action"),
+                    ("agent2", "action"),
+                ],
+                sample_log_prob=[
+                    ("agent0", "action_log_prob"),
+                    ("agent1", "action_log_prob"),
+                    ("agent2", "action_log_prob"),
+                ],
+            )
+            loss = ppo(data)
+            loss.sum(reduce=True)
 
 
 class TestA2C(LossModuleTestBase):
