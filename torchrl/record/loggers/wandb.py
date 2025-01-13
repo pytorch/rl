@@ -35,6 +35,9 @@ class WandbLogger(Logger):
         project (str, optional): The name of the project where you're sending
             the new run. If the project is not specified, the run is put in
             an ``"Uncategorized"`` project.
+
+    Keyword Args:
+        fps (int, optional): Number of frames per second when recording videos. Defaults to ``30``.
         **kwargs: Extra keyword arguments for ``wandb.init``. See relevant page for
             more info.
 
@@ -52,6 +55,8 @@ class WandbLogger(Logger):
         save_dir: str = None,
         id: str = None,
         project: str = None,
+        *,
+        video_fps: int = 32,
         **kwargs,
     ) -> None:
         if not _has_wandb:
@@ -68,6 +73,7 @@ class WandbLogger(Logger):
         self.save_dir = save_dir
         self.id = id
         self.project = project
+        self.video_fps = video_fps
         self._wandb_kwargs = {
             "name": exp_name,
             "dir": save_dir,
@@ -127,7 +133,7 @@ class WandbLogger(Logger):
             video (Tensor): The video to be logged.
             **kwargs: Other keyword arguments. By construction, log_video
                 supports 'step' (integer indicating the step index), 'format'
-                (default is 'mp4') and 'fps' (default: 6). Other kwargs are
+                (default is 'mp4') and 'fps' (defaults to ``self.video_fps``). Other kwargs are
                 passed as-is to the :obj:`experiment.log` method.
         """
         import wandb
@@ -148,7 +154,7 @@ class WandbLogger(Logger):
                     "moviepy not found, videos cannot be logged with TensorboardLogger"
                 )
         self.video_log_counter += 1
-        fps = kwargs.pop("fps", 6)
+        fps = kwargs.pop("fps", self.video_fps)
         step = kwargs.pop("step", None)
         format = kwargs.pop("format", "mp4")
         if step not in (None, self._prev_video_step, self._prev_video_step + 1):
