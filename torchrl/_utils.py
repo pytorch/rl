@@ -32,7 +32,7 @@ from packaging.version import parse
 from tensordict import unravel_key
 
 from tensordict.utils import NestedKey
-from torch import multiprocessing as mp
+from torch import multiprocessing as mp, Tensor
 
 try:
     from torch.compiler import is_compiling
@@ -873,7 +873,11 @@ class _ContextManager:
 
 
 def _standardize(
-    input, exclude_dims: Tuple[int] = (), mean=None, std=None, eps: float = None
+    input: Tensor,
+    exclude_dims: Tuple[int] = (),
+    mean: Tensor | None = None,
+    std: Tensor | None = None,
+    eps: float | None = None,
 ):
     """Standardizes the input tensor with the possibility of excluding specific dims from the statistics.
 
