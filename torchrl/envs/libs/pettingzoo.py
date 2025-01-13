@@ -749,6 +749,7 @@ class PettingZooWrapper(_EnvWrapper):
                 "full_action_spec", group, "action"
             ].to_numpy(group_action)
             for index, agent in enumerate(agents):
+                # group_action_np can be a dict or an array. We need to recursively index it
                 action = _extract_nested_with_index(group_action_np, index)
                 action_dict[agent] = action
 
@@ -765,6 +766,7 @@ class PettingZooWrapper(_EnvWrapper):
                 group_action_np = self.input_spec[
                     "full_action_spec", group, "action"
                 ].to_numpy(group_action)
+                # group_action_np can be a dict or an array. We need to recursively index it
                 action = _extract_nested_with_index(group_action_np, agent_index)
                 break
 
