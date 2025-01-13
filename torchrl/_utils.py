@@ -911,7 +911,7 @@ def _standardize(
         )
     if len_exclude_dims == len(input_shape):
         warnings.warn(
-            "standardize called but all dims were excluded from the statistics, returning unprocessed input"
+            "_standardize called but all dims were excluded from the statistics, returning unprocessed input"
         )
         return input
 
