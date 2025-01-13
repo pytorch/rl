@@ -890,32 +890,38 @@ def _standardize(
     if eps is None:
         eps = torch.finfo(torch.float.dtype).resolution
 
+    len_exclude_dims = len(exclude_dims)
+    if not len_exclude_dims:
+        if mean is None:
+            mean = input.mean()
+        if std is None:
+            std = input.std()
+        return (input - mean) / std.clamp_min(eps)
+
     input_shape = input.shape
     exclude_dims = [
         d if d >= 0 else d + len(input_shape) for d in exclude_dims
     ]  # Make negative dims positive
 
-    if len(set(exclude_dims)) != len(exclude_dims):
+    if len(set(exclude_dims)) != len_exclude_dims:
         raise ValueError("Exclude dims has repeating elements")
     if any(dim < 0 or dim >= len(input_shape) for dim in exclude_dims):
         raise ValueError(
             f"exclude_dims={exclude_dims} provided outside bounds for input of shape={input_shape}"
         )
-    if len(exclude_dims) == len(input_shape):
+    if len_exclude_dims == len(input_shape):
         warnings.warn(
             "standardize called but all dims were excluded from the statistics, returning unprocessed input"
         )
         return input
 
-    if len(exclude_dims):
-        # Put all excluded dims in the beginning
-        permutation = list(range(len(input_shape)))
-        for dim in exclude_dims:
-            permutation.insert(0, permutation.pop(permutation.index(dim)))
-        permuted_input = input.permute(*permutation)
-    else:
-        permuted_input = input
-    normalized_shape_len = len(input_shape) - len(exclude_dims)
+    # Put all excluded dims in the beginning
+    permutation = list(range(len(input_shape)))
+    for dim in exclude_dims:
+        permutation.insert(0, permutation.pop(permutation.index(dim)))
+    permuted_input = input.permute(*permutation)
+
+    normalized_shape_len = len(input_shape) - len_exclude_dims
 
     if mean is None:
         mean = torch.mean(
@@ -928,11 +934,10 @@ def _standardize(
     output = (permuted_input - mean) / std.clamp_min(eps)
 
     # Reverse permutation
-    if len(exclude_dims):
-        inv_permutation = torch.argsort(
-            torch.tensor(permutation, dtype=torch.long, device=input.device)
-        ).tolist()
-        output = torch.permute(output, inv_permutation)
+    inv_permutation = torch.argsort(
+        torch.tensor(permutation, dtype=torch.long, device=input.device)
+    ).tolist()
+    output = torch.permute(output, inv_permutation)
 
     return output
 
