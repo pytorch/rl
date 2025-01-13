@@ -735,7 +735,13 @@ class PettingZooWrapper(_EnvWrapper):
                 "full_action_spec", group, "action"
             ].to_numpy(group_action)
             for index, agent in enumerate(agents):
-                action_dict[agent] = group_action_np[index]
+                if isinstance(group_action_np, dict):
+                    action = {
+                        key: value[index] for key, value in group_action_np.items()
+                    }
+                else:
+                    action = group_action_np[index]
+                action_dict[agent] = action
 
         return self._env.step(action_dict)
 
@@ -750,7 +756,13 @@ class PettingZooWrapper(_EnvWrapper):
                 group_action_np = self.input_spec[
                     "full_action_spec", group, "action"
                 ].to_numpy(group_action)
-                action = group_action_np[agent_index]
+                if isinstance(group_action_np, dict):
+                    action = {
+                        key: value[agent_index]
+                        for key, value in group_action_np.items()
+                    }
+                else:
+                    action = group_action_np[agent_index]
                 break
 
         self._env.step(action)
