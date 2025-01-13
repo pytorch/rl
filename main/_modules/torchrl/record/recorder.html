@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+ff1ff7e) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+61e05b3) &#x25BC</span></a>
     </div>
     
 
@@ -452,6 +452,10 @@
 <span class="sd">            if not.</span>
 <span class="sd">        out_keys (sequence of NestedKey, optional): destination keys. Defaults</span>
 <span class="sd">            to ``in_keys`` if not provided.</span>
+<span class="sd">        fps (int, optional): Frames per second of the output video. Defaults to the logger predefined ``fps``,</span>
+<span class="sd">            and overrides it if provided.</span>
+<span class="sd">        **kwargs (Dict[str, Any], optional): additional keyword arguments for</span>
+<span class="sd">            :meth:`~torchrl.record.loggers.Logger.log_video`.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        The following example shows how to save a rollout under a video. First a few imports:</span>
@@ -484,10 +488,11 @@
 <span class="sd">            &gt;&gt;&gt; from torchrl.data.datasets import OpenXExperienceReplay</span>
 <span class="sd">            &gt;&gt;&gt; from torchrl.envs import Compose</span>
 <span class="sd">            &gt;&gt;&gt; from torchrl.record import VideoRecorder, CSVLogger</span>
-<span class="sd">            &gt;&gt;&gt; # Create a logger that saves videos as mp4</span>
-<span class="sd">            &gt;&gt;&gt; logger = CSVLogger(&quot;./dump&quot;, video_format=&quot;mp4&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; # Create a logger that saves videos as mp4 using 24 frames per sec</span>
+<span class="sd">            &gt;&gt;&gt; logger = CSVLogger(&quot;./dump&quot;, video_format=&quot;mp4&quot;, video_fps=24)</span>
 <span class="sd">            &gt;&gt;&gt; # We use the VideoRecorder transform to save register the images coming from the batch.</span>
-<span class="sd">            &gt;&gt;&gt; t = VideoRecorder(logger=logger, tag=&quot;pixels&quot;, in_keys=[(&quot;next&quot;, &quot;observation&quot;, &quot;image&quot;)])</span>
+<span class="sd">            &gt;&gt;&gt; #  Setting the fps to 12 overrides the one set in the logger, not doing so keeps it unchanged.</span>
+<span class="sd">            &gt;&gt;&gt; t = VideoRecorder(logger=logger, tag=&quot;pixels&quot;, in_keys=[(&quot;next&quot;, &quot;observation&quot;, &quot;image&quot;)], fps=12)</span>
 <span class="sd">            &gt;&gt;&gt; # Each batch of data will have 10 consecutive videos of 200 frames each (maximum, since strict_length=False)</span>
 <span class="sd">            &gt;&gt;&gt; dataset = OpenXExperienceReplay(&quot;cmu_stretch&quot;, batch_size=2000, slice_len=200,</span>
 <span class="sd">            ...             download=True, strict_length=False,</span>
@@ -511,6 +516,7 @@
         <span class="n">center_crop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">make_grid</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">out_keys</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -518,8 +524,10 @@
         <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">out_keys</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
-        <span class="n">video_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;fps&quot;</span><span class="p">:</span> <span class="mi">6</span><span class="p">}</span>
+        <span class="n">video_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">video_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">fps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">video_kwargs</span><span class="p">[</span><span class="s2">&quot;fps&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">video_kwargs</span> <span class="o">=</span> <span class="n">video_kwargs</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">iter</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">skip</span> <span class="o">=</span> <span class="n">skip</span>

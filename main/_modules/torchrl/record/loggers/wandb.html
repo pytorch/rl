@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+ff1ff7e) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+61e05b3) &#x25BC</span></a>
     </div>
     
 
@@ -438,6 +438,9 @@
 <span class="sd">        project (str, optional): The name of the project where you&#39;re sending</span>
 <span class="sd">            the new run. If the project is not specified, the run is put in</span>
 <span class="sd">            an ``&quot;Uncategorized&quot;`` project.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        fps (int, optional): Number of frames per second when recording videos. Defaults to ``30``.</span>
 <span class="sd">        **kwargs: Extra keyword arguments for ``wandb.init``. See relevant page for</span>
 <span class="sd">            more info.</span>
 
@@ -455,6 +458,8 @@
         <span class="n">save_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">video_fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_wandb</span><span class="p">:</span>
@@ -471,6 +476,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">save_dir</span> <span class="o">=</span> <span class="n">save_dir</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">id</span> <span class="o">=</span> <span class="nb">id</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">project</span> <span class="o">=</span> <span class="n">project</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">video_fps</span> <span class="o">=</span> <span class="n">video_fps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_wandb_kwargs</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">exp_name</span><span class="p">,</span>
             <span class="s2">&quot;dir&quot;</span><span class="p">:</span> <span class="n">save_dir</span><span class="p">,</span>
@@ -530,7 +536,7 @@
 <span class="sd">            video (Tensor): The video to be logged.</span>
 <span class="sd">            **kwargs: Other keyword arguments. By construction, log_video</span>
 <span class="sd">                supports &#39;step&#39; (integer indicating the step index), &#39;format&#39;</span>
-<span class="sd">                (default is &#39;mp4&#39;) and &#39;fps&#39; (default: 6). Other kwargs are</span>
+<span class="sd">                (default is &#39;mp4&#39;) and &#39;fps&#39; (defaults to ``self.video_fps``). Other kwargs are</span>
 <span class="sd">                passed as-is to the :obj:`experiment.log` method.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">wandb</span>
@@ -551,7 +557,7 @@
                     <span class="s2">&quot;moviepy not found, videos cannot be logged with TensorboardLogger&quot;</span>
                 <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">video_log_counter</span> <span class="o">+=</span> <span class="mi">1</span>
-        <span class="n">fps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;fps&quot;</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+        <span class="n">fps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;fps&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">video_fps</span><span class="p">)</span>
         <span class="n">step</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="nb">format</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;format&quot;</span><span class="p">,</span> <span class="s2">&quot;mp4&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">step</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev_video_step</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev_video_step</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>

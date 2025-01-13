@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+ff1ff7e) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+61e05b3) &#x25BC</span></a>
     </div>
     
 
@@ -427,6 +427,10 @@
 <span class="sd">    Args:</span>
 <span class="sd">        exp_name (str): The name of the experiment.</span>
 <span class="sd">        tracking_uri (str): A tracking URI to a datastore that supports MLFlow or a local directory.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        fps (int, optional): Number of frames per second when recording videos. Defaults to ``30``.</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -434,6 +438,8 @@
         <span class="n">exp_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">tracking_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">tags</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">video_fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">mlflow</span>
@@ -446,6 +452,7 @@
         <span class="n">mlflow</span><span class="o">.</span><span class="n">set_tracking_uri</span><span class="p">(</span><span class="n">tracking_uri</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">log_dir</span><span class="o">=</span><span class="n">tracking_uri</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">video_log_counter</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">video_fps</span> <span class="o">=</span> <span class="n">video_fps</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_create_experiment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;mlflow.ActiveRun&quot;</span><span class="p">:</span>  <span class="c1"># noqa</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">mlflow</span>
@@ -488,7 +495,7 @@
 <span class="sd">            video (Tensor): The video to be logged, expected to be in (T, C, H, W) format</span>
 <span class="sd">                for consistency with other loggers.</span>
 <span class="sd">            **kwargs: Other keyword arguments. By construction, log_video</span>
-<span class="sd">                supports &#39;step&#39; (integer indicating the step index) and &#39;fps&#39; (default: 6).</span>
+<span class="sd">                supports &#39;step&#39; (integer indicating the step index) and &#39;fps&#39; (defaults to ``self.video_fps``).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">mlflow</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">torchvision</span>
@@ -506,7 +513,7 @@
                 <span class="s2">&quot;The MLFlow logger only supports videos with 3 color channels.&quot;</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">video_log_counter</span> <span class="o">+=</span> <span class="mi">1</span>
-        <span class="n">fps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;fps&quot;</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+        <span class="n">fps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;fps&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">video_fps</span><span class="p">)</span>
         <span class="n">step</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">with</span> <span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">temp_dir</span><span class="p">:</span>
             <span class="n">video_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_step_</span><span class="si">{</span><span class="n">step</span><span class="si">:</span><span class="s2">04</span><span class="si">}</span><span class="s2">.mp4&quot;</span> <span class="k">if</span> <span class="n">step</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.mp4&quot;</span>
