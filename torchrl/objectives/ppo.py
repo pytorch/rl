@@ -557,7 +557,6 @@ class PPOLoss(LossModule):
                 log_prob = _sum_td_features(log_prob)
                 log_prob.view_as(prev_log_prob)
 
-        print(log_prob , prev_log_prob)
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
         if is_tensor_collection(kl_approx):
@@ -936,7 +935,7 @@ class ClipPPOLoss(PPOLoss):
         ratio = log_weight_clip.exp()
         gain2 = ratio * advantage
 
-        gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
+        gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
         if is_tensor_collection(gain):
             gain = _sum_td_features(gain)
         td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
