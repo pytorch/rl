@@ -268,7 +268,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (0.6.1+f672c70) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (0.6.1+ff1ff7e) &#x25BC</span></a>
     </div>
     
 
@@ -860,17 +860,9 @@
         <li><a href="reference/generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv.batch_locked">(torchrl.envs.transforms.TransformedEnv property)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.batch_size">batch_size (torchrl.data.PairwiseDataset property)</a>
+      <li><a href="reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.batch_size">batch_size (torchrl.envs.ChessEnv property)</a>
 
       <ul>
-        <li><a href="reference/generated/torchrl.data.PromptData.html#torchrl.data.PromptData.batch_size">(torchrl.data.PromptData property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.data.RewardData.html#torchrl.data.RewardData.batch_size">(torchrl.data.RewardData property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.batch_size">(torchrl.data.Tree property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.batch_size">(torchrl.envs.ChessEnv property)</a>
-</li>
         <li><a href="reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.batch_size">(torchrl.envs.EnvBase property)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.batch_size">(torchrl.envs.GymLikeEnv property)</a>
@@ -1768,8 +1760,6 @@
         <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.done_key">(torchrl.envs.TicTacToeEnv property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.MCTSForest.html#torchrl.data.MCTSForest.done_keys">done_keys (torchrl.data.MCTSForest property)</a>
 
       <ul>
@@ -1790,6 +1780,8 @@
         <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.done_keys">(torchrl.envs.TicTacToeEnv property)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.done_keys_groups">done_keys_groups (torchrl.envs.ChessEnv property)</a>
 
       <ul>
@@ -1963,15 +1955,23 @@
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.VD4RLExperienceReplay.html#torchrl.data.datasets.VD4RLExperienceReplay.dumps">(torchrl.data.datasets.VD4RLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.dumps">(torchrl.data.PairwiseDataset method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.dumps">(torchrl.data.PrioritizedReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.PromptData.html#torchrl.data.PromptData.dumps">(torchrl.data.PromptData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble.dumps">(torchrl.data.replay_buffers.ReplayBufferEnsemble method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dumps">(torchrl.data.ReplayBuffer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.RewardData.html#torchrl.data.RewardData.dumps">(torchrl.data.RewardData method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer.dumps">(torchrl.data.TensorDictPrioritizedReplayBuffer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.dumps">(torchrl.data.TensorDictReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.dumps">(torchrl.data.Tree method)</a>
 </li>
       </ul></li>
   </ul></td>
@@ -4368,16 +4368,6 @@
         <li><a href="reference/generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.named_parameters">(torchrl.objectives.LossModule method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.names">names (torchrl.data.PairwiseDataset property)</a>
-
-      <ul>
-        <li><a href="reference/generated/torchrl.data.PromptData.html#torchrl.data.PromptData.names">(torchrl.data.PromptData property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.data.RewardData.html#torchrl.data.RewardData.names">(torchrl.data.RewardData property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.names">(torchrl.data.Tree property)</a>
-</li>
-      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.Binary.html#torchrl.data.Binary.ndim">ndim (torchrl.data.Binary property)</a>
@@ -6364,17 +6354,9 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.shape">shape (torchrl.data.PairwiseDataset property)</a>
+      <li><a href="reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.shape">shape (torchrl.envs.ChessEnv property)</a>
 
       <ul>
-        <li><a href="reference/generated/torchrl.data.PromptData.html#torchrl.data.PromptData.shape">(torchrl.data.PromptData property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.data.RewardData.html#torchrl.data.RewardData.shape">(torchrl.data.RewardData property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.shape">(torchrl.data.Tree property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.shape">(torchrl.envs.ChessEnv property)</a>
-</li>
         <li><a href="reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.shape">(torchrl.envs.EnvBase property)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.shape">(torchrl.envs.GymLikeEnv property)</a>
