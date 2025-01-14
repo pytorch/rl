@@ -18,3 +18,4 @@ dependencies:
     - scipy==1.9.1
     - hydra-core
     - ninja
+    - numpy<2.0
