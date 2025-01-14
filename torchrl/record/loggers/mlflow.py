@@ -24,6 +24,10 @@ class MLFlowLogger(Logger):
     Args:
         exp_name (str): The name of the experiment.
         tracking_uri (str): A tracking URI to a datastore that supports MLFlow or a local directory.
+
+    Keyword Args:
+        fps (int, optional): Number of frames per second when recording videos. Defaults to ``30``.
+
     """
 
     def __init__(
@@ -31,6 +35,8 @@ class MLFlowLogger(Logger):
         exp_name: str,
         tracking_uri: str,
         tags: Optional[Dict[str, Any]] = None,
+        *,
+        video_fps: int = 30,
         **kwargs,
     ) -> None:
         import mlflow
@@ -43,6 +49,7 @@ class MLFlowLogger(Logger):
         mlflow.set_tracking_uri(tracking_uri)
         super().__init__(exp_name=exp_name, log_dir=tracking_uri)
         self.video_log_counter = 0
+        self.video_fps = video_fps
 
     def _create_experiment(self) -> "mlflow.ActiveRun":  # noqa
         import mlflow
@@ -85,7 +92,7 @@ class MLFlowLogger(Logger):
             video (Tensor): The video to be logged, expected to be in (T, C, H, W) format
                 for consistency with other loggers.
             **kwargs: Other keyword arguments. By construction, log_video
-                supports 'step' (integer indicating the step index) and 'fps' (default: 6).
+                supports 'step' (integer indicating the step index) and 'fps' (defaults to ``self.video_fps``).
         """
         import mlflow
         import torchvision
@@ -103,7 +110,7 @@ class MLFlowLogger(Logger):
                 "The MLFlow logger only supports videos with 3 color channels."
             )
         self.video_log_counter += 1
-        fps = kwargs.pop("fps", 6)
+        fps = kwargs.pop("fps", self.video_fps)
         step = kwargs.pop("step", None)
         with TemporaryDirectory() as temp_dir:
             video_name = f"{name}_step_{step:04}.mp4" if step else f"{name}.mp4"

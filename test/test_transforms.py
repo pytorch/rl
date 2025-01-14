@@ -86,6 +86,7 @@ from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod
 from torchrl.data import (
     Bounded,
+    BoundedContinuous,
     Categorical,
     Composite,
     LazyTensorStorage,
@@ -94,6 +95,7 @@ from torchrl.data import (
     TensorSpec,
     TensorStorage,
     Unbounded,
+    UnboundedContinuous,
 )
 from torchrl.envs import (
     ActionMask,
@@ -120,6 +122,7 @@ from torchrl.envs import (
     gSDENoise,
     Hash,
     InitTracker,
+    LineariseRewards,
     MultiStepTransform,
     NoopResetEnv,
     ObservationNorm,
@@ -415,7 +418,7 @@ class TestBinarizeReward(TransformBase):
         assert ((sample["reward"] == 0) | (sample["reward"] == 1)).all()
 
     def test_transform_inverse(self):
-        raise pytest.skip("No inverse for BinerizedReward")
+        raise pytest.skip("No inverse for BinarizedReward")
 
 
 class TestClipTransform(TransformBase):
@@ -2199,7 +2202,7 @@ class TestHash(TransformBase):
             )
 
             def fn0(x):
-                return torch.stack([Hash.reproducible_hash(x_.get("data")) for x_ in x])
+                return torch.stack([Hash.reproducible_hash(x_) for x_ in x])
 
             hash_fn = fn0
         else:
@@ -2211,32 +2214,33 @@ class TestHash(TransformBase):
             }
         )
 
-        t = Hash(in_keys=["observation"], out_keys=["hash"], hash_fn=hash_fn)
+        t = Hash(in_keys=["observation"], out_keys=["hashing"], hash_fn=hash_fn)
         td_hashed = t(td)
 
         assert td_hashed.get("observation") is td.get("observation")
 
         if datatype == "NonTensorStack":
-            assert (td_hashed["hash"] == hash_fn(td.get("observation"))).all()
+            assert (
+                td_hashed["hashing"] == hash_fn(td.get("observation").tolist())
+            ).all()
         elif datatype == "str":
-            assert all(td_hashed["hash"] == hash_fn(td["observation"]))
+            assert all(td_hashed["hashing"] == hash_fn(td["observation"]))
         else:
-            assert td_hashed["hash"] == hash_fn(td["observation"])
+            assert td_hashed["hashing"] == hash_fn(td["observation"])
 
     @pytest.mark.parametrize("datatype", ["tensor", "str"])
     def test_single_trans_env_check(self, datatype):
         if datatype == "tensor":
             t = Hash(
                 in_keys=["observation"],
-                out_keys=["hash"],
+                out_keys=["hashing"],
                 hash_fn=hash,
-                output_spec=Unbounded(shape=(), dtype=torch.int64),
             )
             base_env = CountingEnv()
         elif datatype == "str":
             t = Hash(
                 in_keys=["string"],
-                out_keys=["hash"],
+                out_keys=["hashing"],
             )
             base_env = CountingEnvWithString()
         env = TransformedEnv(base_env, t)
@@ -2248,16 +2252,15 @@ class TestHash(TransformBase):
             if datatype == "tensor":
                 t = Hash(
                     in_keys=["observation"],
-                    out_keys=["hash"],
+                    out_keys=["hashing"],
                     hash_fn=hash,
-                    output_spec=Unbounded(shape=(), dtype=torch.int64),
                 )
                 base_env = CountingEnv()
 
             elif datatype == "str":
                 t = Hash(
                     in_keys=["string"],
-                    out_keys=["hash"],
+                    out_keys=["hashing"],
                 )
                 base_env = CountingEnvWithString()
 
@@ -2272,15 +2275,14 @@ class TestHash(TransformBase):
             if datatype == "tensor":
                 t = Hash(
                     in_keys=["observation"],
-                    out_keys=["hash"],
+                    out_keys=["hashing"],
                     hash_fn=hash,
-                    output_spec=Unbounded(shape=(), dtype=torch.int64),
                 )
                 base_env = CountingEnv()
             elif datatype == "str":
                 t = Hash(
                     in_keys=["string"],
-                    out_keys=["hash"],
+                    out_keys=["hashing"],
                 )
                 base_env = CountingEnvWithString()
             return TransformedEnv(base_env, t)
@@ -2299,19 +2301,15 @@ class TestHash(TransformBase):
         if datatype == "tensor":
             t = Hash(
                 in_keys=["observation"],
-                out_keys=["hash"],
+                out_keys=["hashing"],
                 hash_fn=lambda x: [hash(x[0]), hash(x[1])],
-                output_spec=Unbounded(shape=(2,), dtype=torch.int64),
             )
             base_env = CountingEnv
         elif datatype == "str":
             t = Hash(
                 in_keys=["string"],
-                out_keys=["hash"],
-                hash_fn=lambda x: torch.stack(
-                    [Hash.reproducible_hash(x_.get("data")) for x_ in x]
-                ),
-                output_spec=Unbounded(shape=(2, 32), dtype=torch.uint8),
+                out_keys=["hashing"],
+                hash_fn=lambda x: torch.stack([Hash.reproducible_hash(x_) for x_ in x]),
             )
             base_env = CountingEnvWithString
 
@@ -2323,19 +2321,15 @@ class TestHash(TransformBase):
         if datatype == "tensor":
             t = Hash(
                 in_keys=["observation"],
-                out_keys=["hash"],
+                out_keys=["hashing"],
                 hash_fn=lambda x: [hash(x[0]), hash(x[1])],
-                output_spec=Unbounded(shape=(2,), dtype=torch.int64),
             )
             base_env = CountingEnv
         elif datatype == "str":
             t = Hash(
                 in_keys=["string"],
-                out_keys=["hash"],
-                hash_fn=lambda x: torch.stack(
-                    [Hash.reproducible_hash(x_.get("data")) for x_ in x]
-                ),
-                output_spec=Unbounded(shape=(2, 32), dtype=torch.uint8),
+                out_keys=["hashing"],
+                hash_fn=lambda x: torch.stack([Hash.reproducible_hash(x_) for x_ in x]),
             )
             base_env = CountingEnvWithString
 
@@ -2362,43 +2356,40 @@ class TestHash(TransformBase):
         )
         t = Hash(
             in_keys=["observation"],
-            out_keys=["hash"],
+            out_keys=["hashing"],
             hash_fn=hash,
-            output_spec=Unbounded(shape=(), dtype=torch.int64),
         )
         t = Compose(t)
         td_hashed = t(td)
 
         assert td_hashed["observation"] is td["observation"]
-        assert td_hashed["hash"] == hash(td["observation"])
+        assert td_hashed["hashing"] == hash(td["observation"])
 
     def test_transform_model(self):
         t = Hash(
             in_keys=[("next", "observation"), ("observation",)],
-            out_keys=[("next", "hash"), ("hash",)],
+            out_keys=[("next", "hashing"), ("hashing",)],
             hash_fn=hash,
-            output_spec=Unbounded(shape=(), dtype=torch.int64),
         )
         model = nn.Sequential(t, nn.Identity())
         td = TensorDict(
             {("next", "observation"): torch.randn(3), "observation": torch.randn(3)}, []
         )
         td_out = model(td)
-        assert ("next", "hash") in td_out.keys(True)
-        assert ("hash",) in td_out.keys(True)
-        assert td_out["next", "hash"] == hash(td["next", "observation"])
-        assert td_out["hash"] == hash(td["observation"])
+        assert ("next", "hashing") in td_out.keys(True)
+        assert ("hashing",) in td_out.keys(True)
+        assert td_out["next", "hashing"] == hash(td["next", "observation"])
+        assert td_out["hashing"] == hash(td["observation"])
 
     @pytest.mark.skipif(not _has_gym, reason="Gym not found")
     def test_transform_env(self):
         t = Hash(
             in_keys=["observation"],
-            out_keys=["hash"],
+            out_keys=["hashing"],
             hash_fn=hash,
-            output_spec=Unbounded(shape=(), dtype=torch.int64),
         )
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), t)
-        assert env.observation_spec["hash"]
+        assert env.observation_spec["hashing"]
         assert "observation" in env.observation_spec
         assert "observation" in env.base_env.observation_spec
         check_env_specs(env)
@@ -2407,9 +2398,8 @@ class TestHash(TransformBase):
     def test_transform_rb(self, rbclass):
         t = Hash(
             in_keys=[("next", "observation"), ("observation",)],
-            out_keys=[("next", "hash"), ("hash",)],
+            out_keys=[("next", "hashing"), ("hashing",)],
             hash_fn=lambda x: [hash(x[0]), hash(x[1])],
-            output_spec=Unbounded(shape=(2,), dtype=torch.int64),
         )
         rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
@@ -2425,7 +2415,7 @@ class TestHash(TransformBase):
         ).expand(10)
         rb.extend(td)
         td = rb.sample(2)
-        assert "hash" in td.keys()
+        assert "hashing" in td.keys()
         assert "observation" in td.keys()
         assert ("next", "observation") in td.keys(True)
 
@@ -12657,6 +12647,332 @@ class TestActionDiscretizer(TransformBase):
 
     def test_transform_inverse(self):
         pytest.skip("Tested elsewhere")
+
+
+class TestLineariseRewards(TransformBase):
+    def test_weight_shape_error(self):
+        with pytest.raises(
+            ValueError, match="Expected weights to be a unidimensional tensor"
+        ):
+            LineariseRewards(in_keys=("reward",), weights=torch.ones(size=(2, 4)))
+
+    def test_weight_sign_error(self):
+        with pytest.raises(ValueError, match="Expected all weights to be >0"):
+            LineariseRewards(in_keys=("reward",), weights=-torch.ones(size=(2,)))
+
+    def test_discrete_spec_error(self):
+        with pytest.raises(
+            NotImplementedError,
+            match="Aggregation of rewards that take discrete values is not supported.",
+        ):
+            transform = LineariseRewards(in_keys=("reward",))
+            reward_spec = Categorical(n=2)
+            transform.transform_reward_spec(reward_spec)
+
+    @pytest.mark.parametrize(
+        "reward_spec",
+        [
+            UnboundedContinuous(shape=3),
+            BoundedContinuous(0, 1, shape=2),
+        ],
+    )
+    def test_single_trans_env_check(self, reward_spec: TensorSpec):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(reward_spec=reward_spec),
+            LineariseRewards(in_keys=["reward"]),  # will use default weights
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize(
+        "reward_spec",
+        [
+            UnboundedContinuous(shape=3),
+            BoundedContinuous(0, 1, shape=2),
+        ],
+    )
+    def test_serial_trans_env_check(self, reward_spec: TensorSpec):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(reward_spec=reward_spec),
+                LineariseRewards(in_keys=["reward"]),  # will use default weights
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize(
+        "reward_spec",
+        [
+            UnboundedContinuous(shape=3),
+            BoundedContinuous(0, 1, shape=2),
+        ],
+    )
+    def test_parallel_trans_env_check(
+        self, maybe_fork_ParallelEnv, reward_spec: TensorSpec
+    ):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(reward_spec=reward_spec),
+                LineariseRewards(in_keys=["reward"]),  # will use default weights
+            )
+
+        env = maybe_fork_ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    @pytest.mark.parametrize(
+        "reward_spec",
+        [
+            UnboundedContinuous(shape=3),
+            BoundedContinuous(0, 1, shape=2),
+        ],
+    )
+    def test_trans_serial_env_check(self, reward_spec: TensorSpec):
+        def make_env():
+            return ContinuousActionVecMockEnv(reward_spec=reward_spec)
+
+        env = TransformedEnv(
+            SerialEnv(2, make_env), LineariseRewards(in_keys=["reward"])
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize(
+        "reward_spec",
+        [
+            UnboundedContinuous(shape=3),
+            BoundedContinuous(0, 1, shape=2),
+        ],
+    )
+    def test_trans_parallel_env_check(
+        self, maybe_fork_ParallelEnv, reward_spec: TensorSpec
+    ):
+        def make_env():
+            return ContinuousActionVecMockEnv(reward_spec=reward_spec)
+
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, make_env),
+            LineariseRewards(in_keys=["reward"]),
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    @pytest.mark.parametrize("reward_key", [("reward",), ("agents", "reward")])
+    @pytest.mark.parametrize(
+        "num_rewards, weights",
+        [
+            (1, None),
+            (3, None),
+            (2, [1.0, 2.0]),
+        ],
+    )
+    def test_transform_no_env(self, reward_key, num_rewards, weights):
+        out_keys = reward_key[:-1] + ("scalar_reward",)
+        t = LineariseRewards(in_keys=[reward_key], out_keys=[out_keys], weights=weights)
+        td = TensorDict({reward_key: torch.randn(num_rewards)}, [])
+        t._call(td)
+
+        weights = torch.ones(num_rewards) if weights is None else torch.tensor(weights)
+        expected = sum(
+            w * r
+            for w, r in zip(
+                weights,
+                td[reward_key],
+            )
+        )
+        torch.testing.assert_close(td[out_keys], expected)
+
+    @pytest.mark.parametrize("reward_key", [("reward",), ("agents", "reward")])
+    @pytest.mark.parametrize(
+        "num_rewards, weights",
+        [
+            (1, None),
+            (3, None),
+            (2, [1.0, 2.0]),
+        ],
+    )
+    def test_transform_compose(self, reward_key, num_rewards, weights):
+        out_keys = reward_key[:-1] + ("scalar_reward",)
+        t = Compose(
+            LineariseRewards(in_keys=[reward_key], out_keys=[out_keys], weights=weights)
+        )
+        td = TensorDict({reward_key: torch.randn(num_rewards)}, [])
+        t._call(td)
+
+        weights = torch.ones(num_rewards) if weights is None else torch.tensor(weights)
+        expected = sum(
+            w * r
+            for w, r in zip(
+                weights,
+                td[reward_key],
+            )
+        )
+        torch.testing.assert_close(td[out_keys], expected)
+
+    class _DummyMultiObjectiveEnv(EnvBase):
+        """A dummy multi-objective environment."""
+
+        def __init__(self, num_rewards: int) -> None:
+            super().__init__()
+            self._num_rewards = num_rewards
+
+            self.observation_spec = Composite(
+                observation=UnboundedContinuous((*self.batch_size, 3))
+            )
+            self.action_spec = Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+            self.done_spec = Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+            self.full_done_spec["truncated"] = self.full_done_spec["terminated"].clone()
+            self.reward_spec = UnboundedContinuous(*self.batch_size, num_rewards)
+
+        def _reset(self, tensordict: TensorDict) -> TensorDict:
+            return self.observation_spec.sample()
+
+        def _step(self, tensordict: TensorDict) -> TensorDict:
+            done, terminated = False, False
+            reward = torch.randn((self._num_rewards,))
+
+            return TensorDict(
+                {
+                    ("observation"): self.observation_spec["observation"].sample(),
+                    ("done"): done,
+                    ("terminated"): terminated,
+                    ("reward"): reward,
+                }
+            )
+
+        def _set_seed(self) -> None:
+            pass
+
+    @pytest.mark.parametrize(
+        "num_rewards, weights",
+        [
+            (1, None),
+            (3, None),
+            (2, [1.0, 2.0]),
+        ],
+    )
+    def test_transform_env(self, num_rewards, weights):
+        weights = weights if weights is not None else [1.0 for _ in range(num_rewards)]
+
+        transform = LineariseRewards(
+            in_keys=("reward",), out_keys=("scalar_reward",), weights=weights
+        )
+        env = TransformedEnv(self._DummyMultiObjectiveEnv(num_rewards), transform)
+        rollout = env.rollout(10)
+        scalar_reward = rollout.get(("next", "scalar_reward"))
+        assert scalar_reward.shape[-1] == 1
+
+        expected = sum(
+            w * r
+            for w, r in zip(weights, rollout.get(("next", "reward")).split(1, dim=-1))
+        )
+        torch.testing.assert_close(scalar_reward, expected)
+
+    @pytest.mark.parametrize(
+        "num_rewards, weights",
+        [
+            (1, None),
+            (3, None),
+            (2, [1.0, 2.0]),
+        ],
+    )
+    def test_transform_model(self, num_rewards, weights):
+        weights = weights if weights is not None else [1.0 for _ in range(num_rewards)]
+        transform = LineariseRewards(
+            in_keys=("reward",), out_keys=("scalar_reward",), weights=weights
+        )
+
+        model = nn.Sequential(transform, nn.Identity())
+        td = TensorDict({"reward": torch.randn(num_rewards)}, [])
+        model(td)
+
+        expected = sum(w * r for w, r in zip(weights, td["reward"]))
+        torch.testing.assert_close(td["scalar_reward"], expected)
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        num_rewards = 3
+        weights = None
+        transform = LineariseRewards(
+            in_keys=("reward",), out_keys=("scalar_reward",), weights=weights
+        )
+
+        rb = rbclass(storage=LazyTensorStorage(10))
+        td = TensorDict({"reward": torch.randn(num_rewards)}, []).expand(10)
+        rb.append_transform(transform)
+        rb.extend(td)
+
+        td = rb.sample(2)
+        torch.testing.assert_close(td["scalar_reward"], td["reward"].sum(-1))
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for LineariseReward")
+
+    @pytest.mark.parametrize(
+        "weights, reward_spec, expected_spec",
+        [
+            (None, UnboundedContinuous(shape=3), UnboundedContinuous(shape=1)),
+            (
+                None,
+                BoundedContinuous(0, 1, shape=3),
+                BoundedContinuous(0, 3, shape=1),
+            ),
+            (
+                None,
+                BoundedContinuous(low=[-1.0, -2.0], high=[1.0, 2.0]),
+                BoundedContinuous(low=-3.0, high=3.0, shape=1),
+            ),
+            (
+                [1.0, 0.0],
+                BoundedContinuous(
+                    low=[-1.0, -2.0],
+                    high=[1.0, 2.0],
+                    shape=2,
+                ),
+                BoundedContinuous(low=-1.0, high=1.0, shape=1),
+            ),
+        ],
+    )
+    def test_reward_spec(
+        self,
+        weights,
+        reward_spec: TensorSpec,
+        expected_spec: TensorSpec,
+    ) -> None:
+        transform = LineariseRewards(in_keys=("reward",), weights=weights)
+        assert transform.transform_reward_spec(reward_spec) == expected_spec
+
+    def test_composite_reward_spec(self) -> None:
+        weights = None
+        reward_spec = Composite(
+            agent_0=Composite(
+                reward=BoundedContinuous(low=[0, 0, 0], high=[1, 1, 1], shape=3)
+            ),
+            agent_1=Composite(
+                reward=BoundedContinuous(
+                    low=[-1, -1, -1],
+                    high=[1, 1, 1],
+                    shape=3,
+                )
+            ),
+        )
+        expected_reward_spec = Composite(
+            agent_0=Composite(reward=BoundedContinuous(low=0, high=3, shape=1)),
+            agent_1=Composite(reward=BoundedContinuous(low=-3, high=3, shape=1)),
+        )
+        transform = LineariseRewards(
+            in_keys=[("agent_0", "reward"), ("agent_1", "reward")], weights=weights
+        )
+        assert transform.transform_reward_spec(reward_spec) == expected_reward_spec
 
 
 if __name__ == "__main__":

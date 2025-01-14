@@ -36,6 +36,7 @@ from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     set_lazy_legacy,
     TensorDict,
     TensorDictBase,
@@ -64,6 +65,7 @@ from torchrl._utils import (
 from torchrl.data.tensor_specs import (
     Binary,
     Bounded,
+    BoundedContinuous,
     Categorical,
     Composite,
     ContinuousBox,
@@ -72,6 +74,7 @@ from torchrl.data.tensor_specs import (
     OneHot,
     TensorSpec,
     Unbounded,
+    UnboundedContinuous,
 )
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
@@ -80,7 +83,12 @@ from torchrl.envs.transforms.utils import (
     _set_missing_tolerance,
     check_finite,
 )
-from torchrl.envs.utils import _sort_keys, _update_during_reset, step_mdp
+from torchrl.envs.utils import (
+    _sort_keys,
+    _update_during_reset,
+    make_composite_from_td,
+    step_mdp,
+)
 from torchrl.objectives.value.functional import reward2go
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
@@ -4235,7 +4243,7 @@ class CatTensors(Transform):
         del_keys (bool, optional): if ``True``, the input values will be deleted after
             concatenation. Default is ``True``.
         unsqueeze_if_oor (bool, optional): if ``True``, CatTensor will check that
-            the dimension indicated exist for the tensors to concatenate. If not,
+            the indicated dimension exists for the tensors to concatenate. If not,
             the tensors will be unsqueezed along that dimension.
             Default is ``False``.
         sort (bool, optional): if ``True``, the keys will be sorted in the
@@ -4407,8 +4415,15 @@ class UnaryTransform(Transform):
     Args:
         in_keys (sequence of NestedKey): the keys of inputs to the unary operation.
         out_keys (sequence of NestedKey): the keys of the outputs of the unary operation.
-        fn (Callable, optional): the function to use as the unary operation.
-        output_spec (TensorSpec, optional): the spec of the output of the operation.
+        fn (Callable): the function to use as the unary operation. If it accepts
+            a non-tensor input, it must also accept ``None``.
+
+    Keyword Args:
+        use_raw_nontensor (bool, optional): if ``False``, data is extracted from
+            ``NonTensorData``/``NonTensorStack`` inputs before ``fn`` is called
+            on them. If ``True``, the raw ``NonTensorData``/``NonTensorStack``
+            inputs are given directly to ``fn``, which must support those
+            inputs. Default is ``False``.
     """
 
     def __init__(
@@ -4416,15 +4431,22 @@ class UnaryTransform(Transform):
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
         fn: Callable,
-        output_spec: TensorSpec,
+        *,
+        use_raw_nontensor: bool = False,
     ):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self._fn = fn
-        self._output_spec = output_spec
+        self._use_raw_nontensor = use_raw_nontensor
 
     def _apply_transform(self, value):
-        if isinstance(value, NonTensorData):
-            value = value.get("data")
+        if not self._use_raw_nontensor:
+            if isinstance(value, NonTensorData):
+                if value.dim() == 0:
+                    value = value.get("data")
+                else:
+                    value = value.tolist()
+            elif isinstance(value, NonTensorStack):
+                value = value.tolist()
         return self._fn(value)
 
     def _reset(
@@ -4434,7 +4456,41 @@ class UnaryTransform(Transform):
             tensordict_reset = self._call(tensordict_reset)
         return tensordict_reset
 
-    def _transform_spec(self, spec: TensorSpec) -> TensorSpec:
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        output_spec = output_spec.clone()
+
+        # Make a generic input from the spec, call the transform with that
+        # input, and then generate the output spec from the output.
+        zero_input_ = output_spec.zero()
+        test_input = (
+            zero_input_["full_observation_spec"]
+            .update(zero_input_["full_reward_spec"])
+            .update(zero_input_["full_done_spec"])
+        )
+        test_output = self.forward(test_input)
+        test_output_spec = make_composite_from_td(
+            test_output, unsqueeze_null_shapes=False
+        )
+
+        output_spec["full_observation_spec"] = self.transform_observation_spec(
+            output_spec["full_observation_spec"],
+            test_output_spec,
+        )
+        if "full_reward_spec" in output_spec.keys():
+            output_spec["full_reward_spec"] = self.transform_reward_spec(
+                output_spec["full_reward_spec"],
+                test_output_spec,
+            )
+        if "full_done_spec" in output_spec.keys():
+            output_spec["full_done_spec"] = self.transform_done_spec(
+                output_spec["full_done_spec"],
+                test_output_spec,
+            )
+        return output_spec
+
+    def _transform_spec(
+        self, spec: TensorSpec, test_output_spec: TensorSpec
+    ) -> TensorSpec:
         if not isinstance(spec, Composite):
             raise TypeError(f"{self}: Only specs of type Composite can be transformed")
 
@@ -4442,17 +4498,23 @@ class UnaryTransform(Transform):
 
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in spec_keys:
-                spec.set(out_key, self._output_spec)
+                spec.set(out_key, test_output_spec[out_key])
         return spec
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        return self._transform_spec(observation_spec)
+    def transform_observation_spec(
+        self, observation_spec: TensorSpec, test_output_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(observation_spec, test_output_spec)
 
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        return self._transform_spec(reward_spec)
+    def transform_reward_spec(
+        self, reward_spec: TensorSpec, test_output_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(reward_spec, test_output_spec)
 
-    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
-        return self._transform_spec(done_spec)
+    def transform_done_spec(
+        self, done_spec: TensorSpec, test_output_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(done_spec, test_output_spec)
 
 
 class Hash(UnaryTransform):
@@ -4464,9 +4526,14 @@ class Hash(UnaryTransform):
         hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,
             the hash function must accept it as its second argument. Default is
             ``Hash.reproducible_hash``.
-        output_spec (TensorSpec, optional): the spec of the hash output. Default
-            is ``Unbounded(shape=(32,), dtype=torch.uint8)``.
         seed (optional): seed to use for the hash function, if it requires one.
+
+    Keyword Args:
+        use_raw_nontensor (bool, optional): if ``False``, data is extracted from
+            ``NonTensorData``/``NonTensorStack`` inputs before ``fn`` is called
+            on them. If ``True``, the raw ``NonTensorData``/``NonTensorStack``
+            inputs are given directly to ``fn``, which must support those
+            inputs. Default is ``False``.
     """
 
     def __init__(
@@ -4474,14 +4541,12 @@ class Hash(UnaryTransform):
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
         hash_fn: Callable = None,
-        output_spec: TensorSpec | None = None,
         seed: Any | None = None,
+        *,
+        use_raw_nontensor: bool = False,
     ):
         if hash_fn is None:
             hash_fn = Hash.reproducible_hash
-
-        if output_spec is None:
-            output_spec = Unbounded(shape=(32,), dtype=torch.uint8)
 
         self._seed = seed
         self._hash_fn = hash_fn
@@ -4489,7 +4554,7 @@ class Hash(UnaryTransform):
             in_keys=in_keys,
             out_keys=out_keys,
             fn=self.call_hash_fn,
-            output_spec=output_spec,
+            use_raw_nontensor=use_raw_nontensor,
         )
 
     def call_hash_fn(self, value):
@@ -4503,12 +4568,15 @@ class Hash(UnaryTransform):
         """Creates a reproducible 256-bit hash from a string using a seed.
 
         Args:
-            string (str): The input string.
+            string (str or None): The input string. If ``None``, null string ``""`` is used.
             seed (str, optional): The seed value. Default is ``None``.
 
         Returns:
-            Tensor: Shape ``(32,)`` with dtype ``torch.int8``.
+            Tensor: Shape ``(32,)`` with dtype ``torch.uint8``.
         """
+        if string is None:
+            string = ""
+
         # Prepend the seed to the string
         if seed is not None:
             seeded_string = seed + string
@@ -4522,7 +4590,7 @@ class Hash(UnaryTransform):
         hash_object.update(seeded_string.encode("utf-8"))
 
         # Get the hash value as bytes
-        hash_bytes = hash_object.digest()
+        hash_bytes = bytearray(hash_object.digest())
 
         return torch.frombuffer(hash_bytes, dtype=torch.uint8)
 
@@ -7836,7 +7904,7 @@ class BurnInTransform(Transform):
 
     .. note::
         This transform expects as inputs TensorDicts with its last dimension being the
-        time dimension. It also  assumes that all provided modules can process
+        time dimension. It also assumes that all provided modules can process
         sequential data.
 
     Examples:
@@ -9414,3 +9482,118 @@ class TrajCounter(Transform):
             high=torch.iinfo(torch.int64).max,
         )
         return super().transform_observation_spec(observation_spec)
+
+
+class LineariseRewards(Transform):
+    """Transforms a multi-objective reward signal to a single-objective one via a weighted sum.
+
+    Args:
+        in_keys (List[NestedKey]): The keys under which the multi-objective rewards are found.
+        out_keys (List[NestedKey], optional): The keys under which single-objective rewards should be written. Defaults to :attr:`in_keys`.
+        weights (List[float], Tensor, optional): Dictates how to weight each reward when summing them. Defaults to `[1.0, 1.0, ...]`.
+
+    .. warning::
+        If a sequence of `in_keys` of length strictly greater than one is passed (e.g. one group for each agent in a
+        multi-agent set-up), the same weights will be applied for each entry. If you need to aggregate rewards
+        differently for each group, use several :class:`~torchrl.envs.LineariseRewards` in a row.
+
+    Example:
+        >>> import mo_gymnasium as mo_gym
+        >>> from torchrl.envs import MOGymWrapper
+        >>> mo_env = MOGymWrapper(mo_gym.make("deep-sea-treasure-v0"))
+        >>> mo_env.reward_spec
+        BoundedContinuous(
+            shape=torch.Size([2]),
+            space=ContinuousBox(
+            low=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, contiguous=True),
+            high=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, contiguous=True)),
+            ...)
+        >>> so_env = TransformedEnv(mo_env, LineariseRewards(in_keys=("reward",)))
+        >>> so_env.reward_spec
+        BoundedContinuous(
+            shape=torch.Size([1]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+            ...)
+        >>> td = so_env.rollout(5)
+        >>> td["next", "reward"].shape
+        torch.Size([5, 1])
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey] | None = None,
+        *,
+        weights: Sequence[float] | Tensor | None = None,
+    ) -> None:
+        out_keys = in_keys if out_keys is None else out_keys
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+
+        if weights is not None:
+            weights = weights if isinstance(weights, Tensor) else torch.tensor(weights)
+
+            # This transform should only receive vectorial weights (all batch dimensions will be aggregated similarly).
+            if weights.ndim >= 2:
+                raise ValueError(
+                    f"Expected weights to be a unidimensional tensor. Got {weights.ndim} dimension."
+                )
+
+            # Avoids switching from reward to costs.
+            if (weights < 0).any():
+                raise ValueError(f"Expected all weights to be >0. Got {weights}.")
+
+            self.register_buffer("weights", weights)
+        else:
+            self.weights = None
+
+    @_apply_to_composite
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        if not reward_spec.domain == "continuous":
+            raise NotImplementedError(
+                "Aggregation of rewards that take discrete values is not supported."
+            )
+
+        *batch_size, num_rewards = reward_spec.shape
+        weights = (
+            torch.ones(num_rewards, device=reward_spec.device, dtype=reward_spec.dtype)
+            if self.weights is None
+            else self.weights
+        )
+
+        num_weights = torch.numel(weights)
+        if num_weights != num_rewards:
+            raise ValueError(
+                "The number of rewards and weights should match. "
+                f"Got: {num_rewards} and {num_weights}"
+            )
+
+        if isinstance(reward_spec, UnboundedContinuous):
+            reward_spec.shape = torch.Size([*batch_size, 1])
+            return reward_spec
+
+        # The lines below are correct only if all weights are positive.
+        low = (weights * reward_spec.space.low).sum(dim=-1, keepdim=True)
+        high = (weights * reward_spec.space.high).sum(dim=-1, keepdim=True)
+
+        return BoundedContinuous(
+            low=low,
+            high=high,
+            device=reward_spec.device,
+            dtype=reward_spec.dtype,
+        )
+
+    def _apply_transform(self, reward: Tensor) -> TensorDictBase:
+        if self.weights is None:
+            return reward.sum(dim=-1)
+
+        *batch_size, num_rewards = reward.shape
+        num_weights = torch.numel(self.weights)
+        if num_weights != num_rewards:
+            raise ValueError(
+                "The number of rewards and weights should match. "
+                f"Got: {num_rewards} and {num_weights}."
+            )
+
+        return (self.weights * reward).sum(dim=-1)

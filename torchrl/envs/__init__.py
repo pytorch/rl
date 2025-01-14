@@ -70,6 +70,7 @@ from .transforms import (
     Hash,
     InitTracker,
     KLRewardTransform,
+    LineariseRewards,
     MultiStepTransform,
     NoopResetEnv,
     ObservationNorm,

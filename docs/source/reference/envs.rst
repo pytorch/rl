@@ -830,6 +830,7 @@ to be able to create this other composition:
     Hash
     InitTracker
     KLRewardTransform
+    LineariseReward
     NoopResetEnv
     ObservationNorm
     ObservationTransform
@@ -853,6 +854,7 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     TrajCounter
+    UnaryTransform
     UnsqueezeTransform
     VC1Transform
     VIPRewardTransform

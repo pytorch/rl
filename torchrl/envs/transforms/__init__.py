@@ -33,6 +33,7 @@ from .transforms import (
     gSDENoise,
     Hash,
     InitTracker,
+    LineariseRewards,
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
