@@ -19,7 +19,6 @@ import pytest
 import torch
 
 from packaging import version, version as pack_version
-
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict._C import unravel_keys
 from tensordict.nn import (
@@ -38,6 +37,7 @@ from tensordict.nn import (
 from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
 from torch import autograd, nn
+from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -15848,6 +15848,18 @@ class TestBase:
 
 
 class TestUtils:
+    def test_standardization(self):
+        t = torch.arange(3 * 4 * 5 * 6, dtype=torch.float32).view(3, 4, 5, 6)
+        std_t0 = _standardize(t, exclude_dims=(1, 3))
+        std_t1 = (t - t.mean((0, 2), keepdim=True)) / t.std((0, 2), keepdim=True).clamp(
+            1 - 6
+        )
+        torch.testing.assert_close(std_t0, std_t1)
+        std_t = _standardize(t, (), -1, 2)
+        torch.testing.assert_close(std_t, (t + 1) / 2)
+        std_t = _standardize(t, ())
+        torch.testing.assert_close(std_t, (t - t.mean()) / t.std())
+
     @pytest.mark.parametrize("B", [None, (1, ), (4, ), (2, 2, ), (1, 2, 8, )])  # fmt: skip
     @pytest.mark.parametrize("T", [1, 10])
     @pytest.mark.parametrize("device", get_default_devices())
