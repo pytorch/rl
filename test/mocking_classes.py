@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import random
+import string
 from typing import Dict, List, Optional
 
 import torch
@@ -1064,6 +1066,34 @@ class CountingEnv(EnvBase):
             device=self.device,
         )
         return tensordict
+
+
+class CountingEnvWithString(CountingEnv):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.observation_spec.set(
+            "string",
+            NonTensor(
+                shape=self.batch_size,
+                device=self.device,
+            ),
+        )
+
+    def get_random_string(self):
+        size = random.randint(4, 30)
+        return "".join(random.choice(string.ascii_lowercase) for _ in range(size))
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        res = super()._reset(tensordict, **kwargs)
+        random_string = self.get_random_string()
+        res["string"] = random_string
+        return res
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        res = super()._step(tensordict)
+        random_string = self.get_random_string()
+        res["string"] = random_string
+        return res
 
 
 class MultiAgentCountingEnv(EnvBase):
