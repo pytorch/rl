@@ -189,19 +189,6 @@ commands = {
   logger.mode=offline \
   logger.backend=
 """,
-    "dreamer": """python sota-implementations/dreamer/dreamer.py \
-  collector.total_frames=600 \
-  collector.init_random_frames=10 \
-  collector.frames_per_batch=200 \
-  env.n_parallel_envs=1 \
-  optimization.optim_steps_per_batch=1 \
-  logger.video=False \
-  logger.backend=csv \
-  replay_buffer.buffer_size=120 \
-  replay_buffer.batch_size=24 \
-  replay_buffer.batch_length=12 \
-  networks.rssm_hidden_dim=17
-""",
     "ddpg-single": """python sota-implementations/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -289,6 +276,19 @@ commands = {
   logger.backend=
 """,
     "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100
+""",
+    "dreamer": """python sota-implementations/dreamer/dreamer.py \
+  collector.total_frames=600 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=200 \
+  env.n_parallel_envs=1 \
+  optimization.optim_steps_per_batch=1 \
+  logger.video=False \
+  logger.backend=csv \
+  replay_buffer.buffer_size=120 \
+  replay_buffer.batch_size=24 \
+  replay_buffer.batch_length=12 \
+  networks.rssm_hidden_dim=17
 """,
 }
 

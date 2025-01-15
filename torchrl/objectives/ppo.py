@@ -317,7 +317,6 @@ class PPOLoss(LossModule):
     target_actor_network_params: TensorDictParams
     target_critic_network_params: TensorDictParams
 
-    @set_composite_lp_aggregate(False)
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential | None = None,
@@ -487,7 +486,6 @@ class PPOLoss(LossModule):
     def reset(self) -> None:
         pass
 
-    @set_composite_lp_aggregate(False)
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
         try:
             entropy = dist.entropy()
@@ -496,20 +494,21 @@ class PPOLoss(LossModule):
                 x = dist.rsample((self.samples_mc_entropy,))
             else:
                 x = dist.sample((self.samples_mc_entropy,))
-            log_prob = dist.log_prob(x)
-
-            if is_tensor_collection(log_prob):
-                if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
-                    log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
-                else:
-                    log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
+            with set_composite_lp_aggregate(False) if isinstance(
+                dist, CompositeDistribution
+            ) else contextlib.nullcontext():
+                log_prob = dist.log_prob(x)
+                if is_tensor_collection(log_prob):
+                    if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
+                        log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+                    else:
+                        log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
 
             entropy = -log_prob.mean(0)
         if is_tensor_collection(entropy):
             entropy = _sum_td_features(entropy)
         return entropy.unsqueeze(-1)
 
-    @set_composite_lp_aggregate(False)
     def _log_weight(
         self, tensordict: TensorDictBase
     ) -> Tuple[torch.Tensor, d.Distribution]:
@@ -550,21 +549,22 @@ class PPOLoss(LossModule):
             )
         log_prob = dist.log_prob(action)
         if is_composite:
-            if not is_tensor_collection(prev_log_prob):
-                # this isn't great, in general multihead actions should have a composite log-prob too
-                warnings.warn(
-                    "You are using a composite distribution, yet your log-probability is a tensor. "
-                    "Make sure you have called tensordict.nn.set_composite_lp_aggregate(False).set() at "
-                    "the beginning of your script to get a proper composite log-prob.",
-                    category=UserWarning,
-                )
-            if (
-                is_composite
-                and not is_tensor_collection(prev_log_prob)
-                and is_tensor_collection(log_prob)
-            ):
-                log_prob = _sum_td_features(log_prob)
-                log_prob.view_as(prev_log_prob)
+            with set_composite_lp_aggregate(False):
+                if not is_tensor_collection(prev_log_prob):
+                    # this isn't great, in general multihead actions should have a composite log-prob too
+                    warnings.warn(
+                        "You are using a composite distribution, yet your log-probability is a tensor. "
+                        "Make sure you have called tensordict.nn.set_composite_lp_aggregate(False).set() at "
+                        "the beginning of your script to get a proper composite log-prob.",
+                        category=UserWarning,
+                    )
+                if (
+                    is_composite
+                    and not is_tensor_collection(prev_log_prob)
+                    and is_tensor_collection(log_prob)
+                ):
+                    log_prob = _sum_td_features(log_prob)
+                    log_prob.view_as(prev_log_prob)
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
@@ -1215,11 +1215,14 @@ class KLPENPPOLoss(PPOLoss):
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             current_dist = self.actor_network.get_dist(tensordict_copy)
+        is_composite = isinstance(current_dist, CompositeDistribution)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
-            with set_composite_lp_aggregate(False):
+            with set_composite_lp_aggregate(
+                False
+            ) if is_composite else contextlib.nullcontext():
                 previous_log_prob = previous_dist.log_prob(x)
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
