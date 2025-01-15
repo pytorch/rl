@@ -9269,17 +9269,22 @@ class TrajCounter(Transform):
 
 
 class HERSubGoalSampler(Transform):
-    """Returns a TensorDict with a key `subgoal_idx` of shape [batch_size, num_samples] representing the subgoal index. Available strategies are: `last` and `future`. The `last` strategy assigns the last state as the subgoal. The `future` strategy samples up to `num_samples` subgoal from the future states.
+    """Returns a TensorDict with a key `subgoal_idx` of shape [batch_size, num_samples] represebting the subgoal index.
+
+    Available strategies are: `final` and `future`. The `final` strategy assigns the last state of the trajectory as the subgoal. The `future` strategy samples up to `num_samples` subgoal from all intermediate states within the same trajectory.
 
     Args:
         num_samples (int): Number of subgoals to sample from each trajectory. Defaults to 4.
-        out_keys (str): The key to store the subgoal index. Defaults to "subgoal_idx".
+        subgoal_idx_key (NestedKey): The key to store the subgoal index. Defaults to "subgoal_idx".
+        strategy (str): Specifies the subgoal sampling strategy `"final"` | `"future"`. Defaults to `"future"`.
+
+    seealso:: `HindsightExperienceReplayTransform`, `HERSubgoalSampler`, `HERSubGoalAssigner`, `HERRewardAssigner`.
     """
 
     def __init__(
         self,
         num_samples: int = 4,
-        subgoal_idx_key: str = "subgoal_idx",
+        subgoal_idx_key: NestedKey = "subgoal_idx",
         strategy: str = "future",
     ):
         super().__init__(
@@ -9292,14 +9297,25 @@ class HERSubGoalSampler(Transform):
         self.strategy = strategy
 
     def forward(self, trajectories: TensorDictBase) -> TensorDictBase:
+        assert len(trajectories.shape) in [1, 2]
+        assert self.strategy in ["final", "future"]
+
         if len(trajectories.shape) == 1:
             trajectories = trajectories.unsqueeze(0)
 
         batch_size, trajectory_len = trajectories.shape
 
-        if self.strategy == "last":
+        if self.strategy == "final":
             return TensorDict(
-                {"subgoal_idx": torch.full((batch_size, 1), -2)}, batch_size=batch_size
+                {
+                    self.subgoal_idx_key: torch.full(
+                        (batch_size, 1),
+                        -2,
+                        dtype=torch.int64,
+                        device=trajectories.device,
+                    )
+                },
+                batch_size=batch_size,
             )
 
         else:
@@ -9308,9 +9324,14 @@ class HERSubGoalSampler(Transform):
                 subgoal_idxs.append(
                     TensorDict(
                         {
-                            "subgoal_idx": (torch.randperm(trajectory_len - 2) + 1)[
-                                : self.num_samples
-                            ]
+                            self.subgoal_idx_key: (
+                                torch.randperm(
+                                    trajectory_len - 2,
+                                    dtype=torch.int64,
+                                    device=trajectories.device,
+                                )
+                                + 1
+                            )[: self.num_samples]
                         },
                         batch_size=torch.Size(),
                     )
@@ -9324,12 +9345,14 @@ class HERSubGoalAssigner(Transform):
     Args:
         subgoal_idx_name (str): The key to the subgoal index. Defaults to "subgoal_idx".
         subgoal_name (str): The key to assign the observation of the subgoal to the goal. Defaults to "goal".
+
+    seealso:: `HindsightExperienceReplayTransform`, `HERSubgoalSampler`, `HERRewardAssigner`.
     """
 
     def __init__(
         self,
-        achieved_goal_key: str | tuple = "achieved_goal",
-        desired_goal_key: str | tuple = "desired_goal",
+        achieved_goal_key: NestedKey = "achieved_goal",
+        desired_goal_key: NestedKey = "desired_goal",
     ):
         self.achieved_goal_key = achieved_goal_key
         self.desired_goal_key = desired_goal_key
@@ -9359,11 +9382,13 @@ class HERSubGoalAssigner(Transform):
         return trajectories
 
 
-class HERRewardTransform(Transform):
+class HERRewardAssigner(Transform):
     """This module assigns a reward of `reward_value` where the new trajectory `(next, done)` is `True`.
 
     Args:
         reward_value (float): The reward to be assigned to the newly generated trajectories. Defaults to "1.0".
+
+    seealso:: `HindsightExperienceReplayTransform`, `HERSubgoalSampler`, `HERSubGoalAssigner`.
     """
 
     def __init__(
@@ -9391,23 +9416,31 @@ class HindsightExperienceReplayTransform(Transform):
         SubGoalSampler (Transform):
         SubGoalAssigner (Transform):
         RewardTransform (Transform):
+
+    seealso:: `HERSubgoalSampler`, `HERSubGoalAssigner`, `HERRewardAssigner`.
     """
 
     def __init__(
         self,
-        SubGoalSampler: Transform = HERSubGoalSampler(),
-        SubGoalAssigner: Transform = HERSubGoalAssigner(),
-        RewardTransform: Transform = HERRewardTransform(),
+        subgoal_sampler: Transform | None = None,
+        subgoal_assigner: Transform | None = None,
+        reward_assigner: Transform | None = None,
         assign_subgoal_idxs: bool = False,
     ):
+        if subgoal_sampler is None:
+            subgoal_sampler = HERSubGoalSampler()
+        if subgoal_assigner is None:
+            subgoal_assigner = HERSubGoalAssigner()
+        if reward_assigner is None:
+            reward_assigner = HERRewardAssigner()
         super().__init__(
             in_keys=None,
             in_keys_inv=None,
             out_keys_inv=None,
         )
-        self.SubGoalSampler = SubGoalSampler
-        self.SubGoalAssigner = SubGoalAssigner
-        self.RewardTransform = RewardTransform
+        self.subgoal_sampler = subgoal_sampler
+        self.subgoal_assigner = subgoal_assigner
+        self.reward_assigner = reward_assigner
         self.assign_subgoal_idxs = assign_subgoal_idxs
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -9431,17 +9464,17 @@ class HindsightExperienceReplayTransform(Transform):
         new_trajectories = trajectories.clone(True)
 
         # Sample subgoal indices
-        subgoal_idxs = self.SubGoalSampler(new_trajectories)
+        subgoal_idxs = self.subgoal_sampler(new_trajectories)
 
         # Create new trajectories
         augmented_trajectories = []
         list_idxs = []
         for i in range(batch_size):
-            idxs = subgoal_idxs[i][self.SubGoalSampler.subgoal_idx_key]
+            idxs = subgoal_idxs[i][self.subgoal_sampler.subgoal_idx_key]
 
             if "masks" in subgoal_idxs.keys():
                 idxs = idxs[
-                    subgoal_idxs[i]["masks", self.SubGoalSampler.subgoal_idx_key]
+                    subgoal_idxs[i]["masks", self.subgoal_sampler.subgoal_idx_key]
                 ]
 
             list_idxs.append(idxs.unsqueeze(-1))
@@ -9452,7 +9485,7 @@ class HindsightExperienceReplayTransform(Transform):
             )
 
             if self.assign_subgoal_idxs:
-                new_traj[self.SubGoalSampler.subgoal_idx_key] = idxs.unsqueeze(
+                new_traj[self.subgoal_sampler.subgoal_idx_key] = idxs.unsqueeze(
                     -1
                 ).repeat(1, trajectory_length)
 
@@ -9461,11 +9494,11 @@ class HindsightExperienceReplayTransform(Transform):
         associated_idxs = torch.cat(list_idxs, dim=0)
 
         # Assign subgoals to the new trajectories
-        augmented_trajectories = self.SubGoalAssigner.forward(
+        augmented_trajectories = self.subgoal_assigner.forward(
             augmented_trajectories, associated_idxs
         )
 
         # Adjust the rewards based on the new subgoals
-        augmented_trajectories = self.RewardTransform.forward(augmented_trajectories)
+        augmented_trajectories = self.reward_assigner.forward(augmented_trajectories)
 
         return augmented_trajectories

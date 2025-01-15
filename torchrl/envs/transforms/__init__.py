@@ -31,7 +31,7 @@ from .transforms import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
-    HERRewardTransform,
+    HERRewardAssigner,
     HERSubGoalAssigner,
     HERSubGoalSampler,
     HindsightExperienceReplayTransform,

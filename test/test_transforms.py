@@ -116,7 +116,7 @@ from torchrl.envs import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
-    HERRewardTransform,
+    HERRewardAssigner,
     HERSubGoalAssigner,
     HERSubGoalSampler,
     HindsightExperienceReplayTransform,
@@ -12381,7 +12381,7 @@ class TestActionDiscretizer(TransformBase):
 
 
 class TestHERTransform(TransformBase):
-    @pytest.mark.parametrize("strategy", ["last", "future"])
+    @pytest.mark.parametrize("strategy", ["final", "future"])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_inverse(self, strategy, device):
         batch = 10
@@ -12402,15 +12402,15 @@ class TestHERTransform(TransformBase):
         )
 
         her = HindsightExperienceReplayTransform(
-            SubGoalSampler=HERSubGoalSampler(
+            subgoal_sampler=HERSubGoalSampler(
                 num_samples=4,
                 strategy=strategy,
             ),
-            SubGoalAssigner=HERSubGoalAssigner(
+            subgoal_assigner=HERSubGoalAssigner(
                 achieved_goal_key=("next", "pos"),
                 desired_goal_key="original_goal",
             ),
-            RewardTransform=HERRewardTransform(),
+            reward_assigner=HERRewardAssigner(),
         )
 
         done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
