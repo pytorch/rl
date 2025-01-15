@@ -242,6 +242,7 @@ class A2CLoss(LossModule):
         terminated: NestedKey = "terminated"
         sample_log_prob: NestedKey = "sample_log_prob"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
 
