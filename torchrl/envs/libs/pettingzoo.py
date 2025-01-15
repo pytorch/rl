@@ -9,6 +9,7 @@ import importlib
 import warnings
 from typing import Dict, List, Tuple, Union
 
+import numpy as np
 import packaging
 import torch
 from tensordict import TensorDictBase
@@ -70,6 +71,19 @@ def _load_available_envs() -> Dict:
             f"Butterfly environments failed to load with error message {err}."
         )
     return all_environments
+
+
+def _extract_nested_with_index(
+    data: Union[np.ndarray, Dict[str, np.ndarray]], index: int
+):
+    if isinstance(data, np.ndarray):
+        return data[index]
+    elif isinstance(data, dict):
+        return {
+            key: _extract_nested_with_index(value, index) for key, value in data.items()
+        }
+    else:
+        raise NotImplementedError(f"Invalid type of data {data}")
 
 
 class PettingZooWrapper(_EnvWrapper):
@@ -735,7 +749,9 @@ class PettingZooWrapper(_EnvWrapper):
                 "full_action_spec", group, "action"
             ].to_numpy(group_action)
             for index, agent in enumerate(agents):
-                action_dict[agent] = group_action_np[index]
+                # group_action_np can be a dict or an array. We need to recursively index it
+                action = _extract_nested_with_index(group_action_np, index)
+                action_dict[agent] = action
 
         return self._env.step(action_dict)
 
@@ -750,7 +766,8 @@ class PettingZooWrapper(_EnvWrapper):
                 group_action_np = self.input_spec[
                     "full_action_spec", group, "action"
                 ].to_numpy(group_action)
-                action = group_action_np[agent_index]
+                # group_action_np can be a dict or an array. We need to recursively index it
+                action = _extract_nested_with_index(group_action_np, agent_index)
                 break
 
         self._env.step(action)

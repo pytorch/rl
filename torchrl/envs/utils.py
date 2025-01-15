@@ -42,6 +42,7 @@ from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logg
 from torchrl.data.tensor_specs import (
     Composite,
     NO_DEFAULT_RL as NO_DEFAULT,
+    NonTensor,
     TensorSpec,
     Unbounded,
 )
@@ -907,6 +908,8 @@ def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
         {
             key: make_composite_from_td(tensor)
             if isinstance(tensor, TensorDictBase)
+            else NonTensor(shape=data.shape, device=tensor.device)
+            if is_non_tensor(tensor)
             else Unbounded(
                 dtype=tensor.dtype,
                 device=tensor.device,
