@@ -89,7 +89,12 @@ class DreamerModelLoss(LossModule):
         pixels: NestedKey = "pixels"
         reco_pixels: NestedKey = "reco_pixels"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
+
+    decoder: TensorDictModule
+    reward_model: TensorDictModule
+    world_mdel: TensorDictModule
 
     def __init__(
         self,
@@ -238,8 +243,12 @@ class DreamerActorLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TDLambda
+
+    value_model: TensorDictModule
+    actor_model: TensorDictModule
 
     def __init__(
         self,
@@ -392,7 +401,10 @@ class DreamerValueLoss(LossModule):
 
         value: NestedKey = "state_value"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
+
+    value_model: TensorDictModule
 
     def __init__(
         self,

@@ -257,6 +257,7 @@ class A2CLoss(LossModule):
                     self.sample_log_prob = "action_log_prob"
 
     default_keys = _AcceptedKeys
+    tensor_keys: _AcceptedKeys
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
 
     actor_network: TensorDictModule

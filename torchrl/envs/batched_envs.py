@@ -1217,6 +1217,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     __doc__ += BatchedEnvBase.__doc__
     __doc__ += """
 
+    .. note:: ParallelEnv will timeout after one of the worker is idle for a determinate amount of time.
+        This can be controlled via the BATCHED_PIPE_TIMEOUT environment variable, which in turn modifies
+        the torchrl._utils.BATCHED_PIPE_TIMEOUT integer. The default timeout value is 10000 seconds.
+
     .. warning::
       TorchRL's ParallelEnv is quite stringent when it comes to env specs, since
       these are used to build shared memory buffers for inter-process communication.
@@ -1353,7 +1357,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     """
 
     def _start_workers(self) -> None:
+        import torchrl
+
         self._timeout = 10.0
+        self.BATCHED_PIPE_TIMEOUT = torchrl._utils.BATCHED_PIPE_TIMEOUT
 
         from torchrl.envs.env_creator import EnvCreator
 
@@ -1606,7 +1613,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for i in workers_range:
             event = self._events[i]
-            event.wait(self._timeout)
+            event.wait(self.BATCHED_PIPE_TIMEOUT)
             event.clear()
 
         if self._non_tensor_keys:
@@ -1796,7 +1803,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for i in workers_range:
             event = self._events[i]
-            event.wait(self._timeout)
+            event.wait(self.BATCHED_PIPE_TIMEOUT)
             event.clear()
 
         if self._non_tensor_keys:
@@ -1965,7 +1972,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         for i, _ in outs:
             event = self._events[i]
-            event.wait(self._timeout)
+            event.wait(self.BATCHED_PIPE_TIMEOUT)
             event.clear()
 
         workers_nontensor = []
@@ -2023,7 +2030,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             for channel in self.parent_channels:
                 channel.close()
             for proc in self._workers:
-                proc.join(timeout=1.0)
+                proc.join(timeout=self._timeout)
         finally:
             for proc in self._workers:
                 if proc.is_alive():
