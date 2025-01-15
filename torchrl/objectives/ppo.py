@@ -19,16 +19,17 @@ from tensordict import (
     TensorDictParams,
 )
 from tensordict.nn import (
+    composite_lp_aggregate,
     CompositeDistribution,
     dispatch,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
+    set_composite_lp_aggregate,
     TensorDictModule,
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl._utils import _replace_last
 from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
@@ -275,7 +276,9 @@ class PPOLoss(LossModule):
             value (NestedKey): The input tensordict key where the state value is expected.
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             sample_log_prob (NestedKey or list of nested keys): The input tensordict key where the
-               sample log probability is expected.  Defaults to ``"sample_log_prob"``.
+               sample log probability is expected.
+               Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
             action (NestedKey or list of nested keys): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
             reward (NestedKey or list of nested keys): The input tensordict key where the reward is expected.
@@ -291,22 +294,30 @@ class PPOLoss(LossModule):
         advantage: NestedKey = "advantage"
         value_target: NestedKey = "value_target"
         value: NestedKey = "state_value"
-        sample_log_prob: NestedKey | List[NestedKey] = "sample_log_prob"
+        sample_log_prob: NestedKey | List[NestedKey] | None = None
         action: NestedKey | List[NestedKey] = "action"
         reward: NestedKey | List[NestedKey] = "reward"
         done: NestedKey | List[NestedKey] = "done"
         terminated: NestedKey | List[NestedKey] = "terminated"
 
-    default_keys = _AcceptedKeys()
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.GAE
 
-    actor_network: TensorDictModule
+    actor_network: ProbabilisticTensorDictModule
     critic_network: TensorDictModule
     actor_network_params: TensorDictParams
     critic_network_params: TensorDictParams
     target_actor_network_params: TensorDictParams
     target_critic_network_params: TensorDictParams
 
+    @set_composite_lp_aggregate(False)
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictSequential | None = None,
@@ -409,6 +420,12 @@ class PPOLoss(LossModule):
                     f"clip_value must be a float or a scalar tensor, got {clip_value}."
                 )
         self.register_buffer("clip_value", clip_value)
+        log_prob_keys = self.actor_network.log_prob_keys
+        action_keys = self.actor_network.dist_sample_keys
+        if len(log_prob_keys) > 1:
+            self.set_keys(sample_log_prob=log_prob_keys, action=action_keys)
+        else:
+            self.set_keys(sample_log_prob=log_prob_keys[0], action=action_keys[0])
 
     @property
     def functional(self):
@@ -470,32 +487,20 @@ class PPOLoss(LossModule):
     def reset(self) -> None:
         pass
 
+    @set_composite_lp_aggregate(False)
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
-        if isinstance(dist, CompositeDistribution):
-            aggregate = dist.aggregate_probabilities
-            if aggregate is None:
-                aggregate = False
-            include_sum = dist.include_sum
-            if include_sum is None:
-                include_sum = False
-            kwargs = {"aggregate_probabilities": aggregate, "include_sum": include_sum}
-        else:
-            kwargs = {}
         try:
-            entropy = dist.entropy(**kwargs)
+            entropy = dist.entropy()
         except NotImplementedError:
             if getattr(dist, "has_rsample", False):
                 x = dist.rsample((self.samples_mc_entropy,))
             else:
                 x = dist.sample((self.samples_mc_entropy,))
-            log_prob = dist.log_prob(x, **kwargs)
+            log_prob = dist.log_prob(x)
 
             if is_tensor_collection(log_prob):
                 if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
-                    try:
-                        log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
-                    except KeyError as err:
-                        raise _make_lp_get_error(self.tensor_keys, log_prob, err)
+                    log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
                 else:
                     log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
 
@@ -504,24 +509,35 @@ class PPOLoss(LossModule):
             entropy = _sum_td_features(entropy)
         return entropy.unsqueeze(-1)
 
+    @set_composite_lp_aggregate(False)
     def _log_weight(
         self, tensordict: TensorDictBase
     ) -> Tuple[torch.Tensor, d.Distribution]:
-
-        # current log_prob of actions
-        action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
 
         with self.actor_network_params.to_module(
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict)
+        if isinstance(dist, CompositeDistribution):
+            is_composite = True
+        else:
+            is_composite = False
 
-        try:
-            prev_log_prob = _maybe_get_or_select(
-                tensordict, self.tensor_keys.sample_log_prob
+        # current log_prob of actions
+        if is_composite:
+            action = tensordict.select(
+                *(
+                    (self.tensor_keys.action,)
+                    if isinstance(self.tensor_keys.action, NestedKey)
+                    else self.tensor_keys.action
+                )
             )
-        except KeyError as err:
-            raise _make_lp_get_error(self.tensor_keys, tensordict, err)
+        else:
+            action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
+
+        prev_log_prob = _maybe_get_or_select(
+            tensordict, self.tensor_keys.sample_log_prob
+        )
 
         if prev_log_prob.requires_grad:
             raise RuntimeError(
@@ -532,33 +548,14 @@ class PPOLoss(LossModule):
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.action} requires grad."
             )
-        if isinstance(dist, CompositeDistribution):
-            is_composite = True
-            aggregate = dist.aggregate_probabilities
-            if aggregate is None:
-                aggregate = False
-            include_sum = dist.include_sum
-            if include_sum is None:
-                include_sum = False
-            kwargs = {
-                "inplace": False,
-                "aggregate_probabilities": aggregate,
-                "include_sum": include_sum,
-            }
-        else:
-            is_composite = False
-            kwargs = {}
-        if not is_composite:
-            log_prob = dist.log_prob(action)
-        else:
-            log_prob: TensorDictBase = dist.log_prob(tensordict, **kwargs)
+        log_prob = dist.log_prob(action)
+        if is_composite:
             if not is_tensor_collection(prev_log_prob):
                 # this isn't great, in general multihead actions should have a composite log-prob too
                 warnings.warn(
                     "You are using a composite distribution, yet your log-probability is a tensor. "
-                    "This usually happens whenever the CompositeDistribution has aggregate_probabilities=True "
-                    "or include_sum=True. These options should be avoided: leaf log-probs should be written "
-                    "independently and PPO will take care of the aggregation.",
+                    "Make sure you have called tensordict.nn.set_composite_lp_aggregate(False).set() at "
+                    "the beginning of your script to get a proper composite log-prob.",
                     category=UserWarning,
                 )
             if (
@@ -1222,22 +1219,9 @@ class KLPENPPOLoss(PPOLoss):
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
-            if isinstance(previous_dist, CompositeDistribution):
-                aggregate = previous_dist.aggregate_probabilities
-                if aggregate is None:
-                    aggregate = False
-                include_sum = previous_dist.include_sum
-                if include_sum is None:
-                    include_sum = False
-                kwargs = {
-                    "aggregate_probabilities": aggregate,
-                    "inplace": False,
-                    "include_sum": include_sum,
-                }
-            else:
-                kwargs = {}
-            previous_log_prob = previous_dist.log_prob(x, **kwargs)
-            current_log_prob = current_dist.log_prob(x, **kwargs)
+            with set_composite_lp_aggregate(False):
+                previous_log_prob = previous_dist.log_prob(x)
+                current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
                 previous_log_prob = _sum_td_features(previous_log_prob)
                 # Both dists have presumably the same params
@@ -1278,30 +1262,3 @@ class KLPENPPOLoss(PPOLoss):
 
     def reset(self) -> None:
         self.beta = self._beta_init
-
-
-def _make_lp_get_error(tensor_keys, log_prob, err):
-    result = (
-        f"The sample log probability key (tensor_keys.sample_log_prob={tensor_keys.sample_log_prob}) does "
-        f"not appear in the log-prob tensordict with keys {list(log_prob.keys(True, True))}. "
-    )
-    # now check if we can substitute the actions with action_log_prob and retrieve the log-probs
-    action_keys = tensor_keys.action
-    if isinstance(action_keys, list):
-        has_all_log_probs = True
-        log_prob_keys = []
-        for action_key in action_keys:
-            log_prob_key = _replace_last(action_key, "action_log_prob")
-            log_prob_keys.append(log_prob_key)
-            if log_prob_key not in log_prob:
-                has_all_log_probs = False
-                break
-        if has_all_log_probs:
-            result += (
-                f"The action keys are {action_keys} and all log_prob keys {log_prob_keys} are present in the "
-                f"log-prob tensordict. Calling `loss.set_keys(sample_log_prob={log_prob_keys})` should resolve "
-                f"this error."
-            )
-        return KeyError(result)
-    result += "This is usually due to a missing call to loss.set_keys(sample_log_prob=<list_of_log_prob_keys>)."
-    return KeyError(result)

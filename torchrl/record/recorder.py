@@ -49,6 +49,10 @@ class VideoRecorder(ObservationTransform):
             if not.
         out_keys (sequence of NestedKey, optional): destination keys. Defaults
             to ``in_keys`` if not provided.
+        fps (int, optional): Frames per second of the output video. Defaults to the logger predefined ``fps``,
+            and overrides it if provided.
+        **kwargs (Dict[str, Any], optional): additional keyword arguments for
+            :meth:`~torchrl.record.loggers.Logger.log_video`.
 
     Examples:
         The following example shows how to save a rollout under a video. First a few imports:
@@ -81,10 +85,11 @@ class VideoRecorder(ObservationTransform):
             >>> from torchrl.data.datasets import OpenXExperienceReplay
             >>> from torchrl.envs import Compose
             >>> from torchrl.record import VideoRecorder, CSVLogger
-            >>> # Create a logger that saves videos as mp4
-            >>> logger = CSVLogger("./dump", video_format="mp4")
+            >>> # Create a logger that saves videos as mp4 using 24 frames per sec
+            >>> logger = CSVLogger("./dump", video_format="mp4", video_fps=24)
             >>> # We use the VideoRecorder transform to save register the images coming from the batch.
-            >>> t = VideoRecorder(logger=logger, tag="pixels", in_keys=[("next", "observation", "image")])
+            >>> #  Setting the fps to 12 overrides the one set in the logger, not doing so keeps it unchanged.
+            >>> t = VideoRecorder(logger=logger, tag="pixels", in_keys=[("next", "observation", "image")], fps=12)
             >>> # Each batch of data will have 10 consecutive videos of 200 frames each (maximum, since strict_length=False)
             >>> dataset = OpenXExperienceReplay("cmu_stretch", batch_size=2000, slice_len=200,
             ...             download=True, strict_length=False,
@@ -108,6 +113,7 @@ class VideoRecorder(ObservationTransform):
         center_crop: Optional[int] = None,
         make_grid: bool | None = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
+        fps: int | None = None,
         **kwargs,
     ) -> None:
         if in_keys is None:
@@ -115,8 +121,10 @@ class VideoRecorder(ObservationTransform):
         if out_keys is None:
             out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
-        video_kwargs = {"fps": 6}
+        video_kwargs = {}
         video_kwargs.update(kwargs)
+        if fps is not None:
+            self.video_kwargs["fps"] = fps
         self.video_kwargs = video_kwargs
         self.iter = 0
         self.skip = skip

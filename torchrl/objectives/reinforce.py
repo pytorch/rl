@@ -11,7 +11,12 @@ from dataclasses import dataclass
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import (
+    composite_lp_aggregate,
+    dispatch,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+)
 from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
 
@@ -189,7 +194,8 @@ class ReinforceLoss(LossModule):
             value (NestedKey): The input tensordict key where the state value is expected.
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             sample_log_prob (NestedKey): The input tensordict key where the sample log probability is expected.
-                Defaults to ``"sample_log_prob"``.
+                Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
             action (NestedKey): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
@@ -205,13 +211,20 @@ class ReinforceLoss(LossModule):
         advantage: NestedKey = "advantage"
         value_target: NestedKey = "value_target"
         value: NestedKey = "state_value"
-        sample_log_prob: NestedKey = "sample_log_prob"
+        sample_log_prob: NestedKey | None = None
         action: NestedKey = "action"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
-    default_keys = _AcceptedKeys()
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.GAE
     out_keys = ["loss_actor", "loss_value"]
 

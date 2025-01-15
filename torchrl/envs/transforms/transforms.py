@@ -63,6 +63,7 @@ from torchrl._utils import (
 from torchrl.data.tensor_specs import (
     Binary,
     Bounded,
+    BoundedContinuous,
     Categorical,
     Composite,
     ContinuousBox,
@@ -71,6 +72,7 @@ from torchrl.data.tensor_specs import (
     OneHot,
     TensorSpec,
     Unbounded,
+    UnboundedContinuous,
 )
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
@@ -4234,7 +4236,7 @@ class CatTensors(Transform):
         del_keys (bool, optional): if ``True``, the input values will be deleted after
             concatenation. Default is ``True``.
         unsqueeze_if_oor (bool, optional): if ``True``, CatTensor will check that
-            the dimension indicated exist for the tensors to concatenate. If not,
+            the indicated dimension exists for the tensors to concatenate. If not,
             the tensors will be unsqueezed along that dimension.
             Default is ``False``.
         sort (bool, optional): if ``True``, the keys will be sorted in the
@@ -7709,7 +7711,7 @@ class BurnInTransform(Transform):
 
     .. note::
         This transform expects as inputs TensorDicts with its last dimension being the
-        time dimension. It also  assumes that all provided modules can process
+        time dimension. It also assumes that all provided modules can process
         sequential data.
 
     Examples:
@@ -9287,3 +9289,118 @@ class TrajCounter(Transform):
             high=torch.iinfo(torch.int64).max,
         )
         return super().transform_observation_spec(observation_spec)
+
+
+class LineariseRewards(Transform):
+    """Transforms a multi-objective reward signal to a single-objective one via a weighted sum.
+
+    Args:
+        in_keys (List[NestedKey]): The keys under which the multi-objective rewards are found.
+        out_keys (List[NestedKey], optional): The keys under which single-objective rewards should be written. Defaults to :attr:`in_keys`.
+        weights (List[float], Tensor, optional): Dictates how to weight each reward when summing them. Defaults to `[1.0, 1.0, ...]`.
+
+    .. warning::
+        If a sequence of `in_keys` of length strictly greater than one is passed (e.g. one group for each agent in a
+        multi-agent set-up), the same weights will be applied for each entry. If you need to aggregate rewards
+        differently for each group, use several :class:`~torchrl.envs.LineariseRewards` in a row.
+
+    Example:
+        >>> import mo_gymnasium as mo_gym
+        >>> from torchrl.envs import MOGymWrapper
+        >>> mo_env = MOGymWrapper(mo_gym.make("deep-sea-treasure-v0"))
+        >>> mo_env.reward_spec
+        BoundedContinuous(
+            shape=torch.Size([2]),
+            space=ContinuousBox(
+            low=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, contiguous=True),
+            high=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, contiguous=True)),
+            ...)
+        >>> so_env = TransformedEnv(mo_env, LineariseRewards(in_keys=("reward",)))
+        >>> so_env.reward_spec
+        BoundedContinuous(
+            shape=torch.Size([1]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+            ...)
+        >>> td = so_env.rollout(5)
+        >>> td["next", "reward"].shape
+        torch.Size([5, 1])
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey] | None = None,
+        *,
+        weights: Sequence[float] | Tensor | None = None,
+    ) -> None:
+        out_keys = in_keys if out_keys is None else out_keys
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+
+        if weights is not None:
+            weights = weights if isinstance(weights, Tensor) else torch.tensor(weights)
+
+            # This transform should only receive vectorial weights (all batch dimensions will be aggregated similarly).
+            if weights.ndim >= 2:
+                raise ValueError(
+                    f"Expected weights to be a unidimensional tensor. Got {weights.ndim} dimension."
+                )
+
+            # Avoids switching from reward to costs.
+            if (weights < 0).any():
+                raise ValueError(f"Expected all weights to be >0. Got {weights}.")
+
+            self.register_buffer("weights", weights)
+        else:
+            self.weights = None
+
+    @_apply_to_composite
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        if not reward_spec.domain == "continuous":
+            raise NotImplementedError(
+                "Aggregation of rewards that take discrete values is not supported."
+            )
+
+        *batch_size, num_rewards = reward_spec.shape
+        weights = (
+            torch.ones(num_rewards, device=reward_spec.device, dtype=reward_spec.dtype)
+            if self.weights is None
+            else self.weights
+        )
+
+        num_weights = torch.numel(weights)
+        if num_weights != num_rewards:
+            raise ValueError(
+                "The number of rewards and weights should match. "
+                f"Got: {num_rewards} and {num_weights}"
+            )
+
+        if isinstance(reward_spec, UnboundedContinuous):
+            reward_spec.shape = torch.Size([*batch_size, 1])
+            return reward_spec
+
+        # The lines below are correct only if all weights are positive.
+        low = (weights * reward_spec.space.low).sum(dim=-1, keepdim=True)
+        high = (weights * reward_spec.space.high).sum(dim=-1, keepdim=True)
+
+        return BoundedContinuous(
+            low=low,
+            high=high,
+            device=reward_spec.device,
+            dtype=reward_spec.dtype,
+        )
+
+    def _apply_transform(self, reward: Tensor) -> TensorDictBase:
+        if self.weights is None:
+            return reward.sum(dim=-1)
+
+        *batch_size, num_rewards = reward.shape
+        num_weights = torch.numel(self.weights)
+        if num_weights != num_rewards:
+            raise ValueError(
+                "The number of rewards and weights should match. "
+                f"Got: {num_rewards} and {num_weights}."
+            )
+
+        return (self.weights * reward).sum(dim=-1)

@@ -12,7 +12,7 @@ from typing import List, Union
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import composite_lp_aggregate, dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
 
@@ -207,7 +207,9 @@ class REDQLoss(LossModule):
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             action (NestedKey): The input tensordict key where the action is expected. Defaults to ``"action"``.
             sample_log_prob (NestedKey): The input tensordict key where the
-                sample log probability is expected. Defaults to ``"sample_log_prob"``.
+                sample log probability is expected.
+                Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
             priority (NestedKey): The input tensordict key where the target
                 priority is written to. Defaults to ``"td_error"``.
             state_action_value (NestedKey): The input tensordict key where the
@@ -224,14 +226,21 @@ class REDQLoss(LossModule):
 
         action: NestedKey = "action"
         value: NestedKey = "state_value"
-        sample_log_prob: NestedKey = "sample_log_prob"
+        sample_log_prob: NestedKey | None = None
         priority: NestedKey = "td_error"
         state_action_value: NestedKey = "state_action_value"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
-    default_keys = _AcceptedKeys()
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    default_keys = _AcceptedKeys
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
