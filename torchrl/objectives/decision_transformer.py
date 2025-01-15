@@ -70,6 +70,7 @@ class OnlineDTLoss(LossModule):
         # the "action" output from the model
         action_pred: NestedKey = "action"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys()
 
     actor_network: TensorDictModule
@@ -280,6 +281,7 @@ class DTLoss(LossModule):
         # the "action" output from the model
         action_pred: NestedKey = "action"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys()
 
     actor_network: TensorDictModule

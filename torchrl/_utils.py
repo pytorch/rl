@@ -24,7 +24,7 @@ from copy import copy
 from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
-from typing import Any, Callable, cast, Dict, TypeVar, Union
+from typing import Any, Callable, cast, Dict, Tuple, TypeVar, Union
 
 import numpy as np
 import torch
@@ -32,7 +32,7 @@ from packaging.version import parse
 from tensordict import unravel_key
 
 from tensordict.utils import NestedKey
-from torch import multiprocessing as mp
+from torch import multiprocessing as mp, Tensor
 
 try:
     from torch.compiler import is_compiling
@@ -870,6 +870,70 @@ class _ContextManager:
         cm = self._lock if not is_compiling() else nullcontext()
         with cm:
             self._mode = type
+
+
+def _standardize(
+    input: Tensor,
+    exclude_dims: Tuple[int] = (),
+    mean: Tensor | None = None,
+    std: Tensor | None = None,
+    eps: float | None = None,
+):
+    """Standardizes the input tensor with the possibility of excluding specific dims from the statistics.
+
+    Useful when processing multi-agent data to keep the agent dimensions independent.
+
+    Args:
+        input (Tensor): the input tensor to be standardized.
+        exclude_dims (Tuple[int]): dimensions to exclude from the statistics, can be negative. Default: ().
+        mean (Tensor): a mean to be used for standardization. Must be of shape broadcastable to input. Default: None.
+        std (Tensor): a standard deviation to be used for standardization. Must be of shape broadcastable to input. Default: None.
+        eps (float): epsilon to be used for numerical stability. Default: float32 resolution.
+
+    """
+    if eps is None:
+        if input.dtype.is_floating_point:
+            eps = torch.finfo(torch.float).resolution
+        else:
+            eps = 1e-6
+
+    len_exclude_dims = len(exclude_dims)
+    if not len_exclude_dims:
+        if mean is None:
+            mean = input.mean()
+        else:
+            # Assume dtypes are compatible
+            mean = torch.as_tensor(mean, device=input.device)
+        if std is None:
+            std = input.std()
+        else:
+            # Assume dtypes are compatible
+            std = torch.as_tensor(std, device=input.device)
+        return (input - mean) / std.clamp_min(eps)
+
+    input_shape = input.shape
+    exclude_dims = [
+        d if d >= 0 else d + len(input_shape) for d in exclude_dims
+    ]  # Make negative dims positive
+
+    if len(set(exclude_dims)) != len_exclude_dims:
+        raise ValueError("Exclude dims has repeating elements")
+    if any(dim < 0 or dim >= len(input_shape) for dim in exclude_dims):
+        raise ValueError(
+            f"exclude_dims={exclude_dims} provided outside bounds for input of shape={input_shape}"
+        )
+    if len_exclude_dims == len(input_shape):
+        warnings.warn(
+            "_standardize called but all dims were excluded from the statistics, returning unprocessed input"
+        )
+        return input
+
+    included_dims = tuple(d for d in range(len(input_shape)) if d not in exclude_dims)
+    if mean is None:
+        mean = torch.mean(input, keepdim=True, dim=included_dims)
+    if std is None:
+        std = torch.std(input, keepdim=True, dim=included_dims)
+    return (input - mean) / std.clamp_min(eps)
 
 
 @wraps(torch.compile)

@@ -143,6 +143,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
         sample_log_prob: NestedKey = "sample_log_prob"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
     _vmap_randomness = None

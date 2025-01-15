@@ -59,6 +59,7 @@ class GAILLoss(LossModule):
         collector_observation: NestedKey = "collector_observation"
         discriminator_pred: NestedKey = "d_logits"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys()
 
     discriminator_network: TensorDictModule
