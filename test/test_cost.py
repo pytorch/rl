@@ -18,7 +18,6 @@ import pytest
 import torch
 
 from packaging import version, version as pack_version
-
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict._C import unravel_keys
 from tensordict.nn import (
@@ -37,6 +36,7 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
     WrapModule,
 )
+from tensordict.nn.distributions.composite import _add_suffix
 from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
 from torch import autograd, nn
@@ -199,6 +199,13 @@ def get_devices():
 
 
 class LossModuleTestBase:
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         assert hasattr(
@@ -3541,13 +3548,6 @@ class TestTD3BC(LossModuleTestBase):
 class TestSAC(LossModuleTestBase):
     seed = 0
 
-    @pytest.fixture(scope="class", autouse=True)
-    def _composite_log_prob(self):
-        setter = set_composite_lp_aggregate(False)
-        setter.set()
-        yield
-        setter.unset()
-
     def _create_mock_actor(
         self,
         batch=2,
@@ -4622,13 +4622,6 @@ class TestSAC(LossModuleTestBase):
 )
 class TestDiscreteSAC(LossModuleTestBase):
     seed = 0
-
-    @pytest.fixture(scope="class", autouse=True)
-    def _composite_log_prob(self):
-        setter = set_composite_lp_aggregate(False)
-        setter.set()
-        yield
-        setter.unset()
 
     def _create_mock_actor(
         self,
@@ -6786,7 +6779,7 @@ class TestREDQ(LossModuleTestBase):
             "priority": "td_error",
             "action": "action",
             "value": "state_value",
-            "sample_log_prob": "sample_log_prob",
+            "sample_log_prob": "action_log_prob",
             "state_action_value": "state_action_value",
             "reward": "reward",
             "done": "done",
@@ -6849,12 +6842,22 @@ class TestREDQ(LossModuleTestBase):
             actor_network=actor,
             qvalue_network=qvalue,
         )
-        loss.set_keys(
-            action=action_key,
-            reward=reward_key,
-            done=done_key,
-            terminated=terminated_key,
-        )
+        if deprec:
+            loss.set_keys(
+                action=action_key,
+                reward=reward_key,
+                done=done_key,
+                terminated=terminated_key,
+                log_prob=_add_suffix(action_key, "_log_prob"),
+            )
+        else:
+            loss.set_keys(
+                action=action_key,
+                reward=reward_key,
+                done=done_key,
+                terminated=terminated_key,
+                sample_log_prob=_add_suffix(action_key, "_log_prob"),
+            )
 
         kwargs = {
             action_key: td.get(action_key),
@@ -7916,13 +7919,6 @@ class TestDiscreteCQL(LossModuleTestBase):
 class TestPPO(LossModuleTestBase):
     seed = 0
 
-    @pytest.fixture(scope="class", autouse=True)
-    def _composite_log_prob(self):
-        setter = set_composite_lp_aggregate(False)
-        setter.set()
-        yield
-        setter.unset()
-
     def _create_mock_actor(
         self,
         batch=2,
@@ -8003,7 +7999,7 @@ class TestPPO(LossModuleTestBase):
         action_dim=4,
         device="cpu",
         composite_action_dist=False,
-        sample_log_prob_key="sample_log_prob",
+        sample_log_prob_key="action_log_prob",
     ):
         # Actor
         action_spec = Bounded(
@@ -8058,7 +8054,7 @@ class TestPPO(LossModuleTestBase):
         action_dim=4,
         device="cpu",
         composite_action_dist=False,
-        sample_log_prob_key="sample_log_prob",
+        sample_log_prob_key="action_log_prob",
     ):
         # Actor
         action_spec = Bounded(
@@ -8123,7 +8119,7 @@ class TestPPO(LossModuleTestBase):
         reward_key="reward",
         done_key="done",
         terminated_key="terminated",
-        sample_log_prob_key="sample_log_prob",
+        sample_log_prob_key="action_log_prob",
         composite_action_dist=False,
     ):
         # create a tensordict
@@ -8834,7 +8830,7 @@ class TestPPO(LossModuleTestBase):
             "advantage": "advantage_test",
             "value_target": "value_target_test",
             "value": "state_value_test",
-            "sample_log_prob": "sample_log_prob_test",
+            "sample_log_prob": "action_log_prob_test",
             "action": "action_test",
         }
 
@@ -9241,13 +9237,6 @@ class TestPPO(LossModuleTestBase):
 
 class TestA2C(LossModuleTestBase):
     seed = 0
-
-    @pytest.fixture(scope="class", autouse=True)
-    def _composite_log_prob(self):
-        setter = set_composite_lp_aggregate(False)
-        setter.set()
-        yield
-        setter.unset()
 
     def _create_mock_actor(
         self,
@@ -9814,7 +9803,7 @@ class TestA2C(LossModuleTestBase):
         value_key = "state_value_test"
         action_key = "action_test"
         reward_key = "reward_test"
-        sample_log_prob_key = "sample_log_prob_test"
+        sample_log_prob_key = "action_log_prob_test"
         done_key = ("done", "test")
         terminated_key = ("terminated", "test")
 
@@ -10258,7 +10247,7 @@ class TestReinforce(LossModuleTestBase):
             "advantage": "advantage",
             "value_target": "value_target",
             "value": "state_value",
-            "sample_log_prob": "sample_log_prob",
+            "sample_log_prob": "action_log_prob",
             "reward": "reward",
             "done": "done",
             "terminated": "terminated",
@@ -10316,7 +10305,7 @@ class TestReinforce(LossModuleTestBase):
             {
                 "obs": torch.randn(*batch, n_obs),
                 "action": torch.randn(*batch, n_act),
-                "sample_log_prob": torch.randn(*batch),
+                "action_log_prob": torch.randn(*batch),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
                 "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
@@ -11788,7 +11777,7 @@ class TestIQL(LossModuleTestBase):
             {
                 "obs": torch.randn(*batch, n_obs),
                 "action": torch.randn(*batch, n_act),
-                "sample_log_prob": torch.randn(*batch),
+                "action_log_prob": torch.randn(*batch),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
                 "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
@@ -12604,7 +12593,7 @@ class TestDiscreteIQL(LossModuleTestBase):
             {
                 "obs": torch.randn(*batch, n_obs),
                 "action": torch.randn(*batch, n_act),
-                "sample_log_prob": torch.randn(*batch),
+                "action_log_prob": torch.randn(*batch),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
                 "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
@@ -15228,6 +15217,7 @@ class TestValues:
         ["half", torch.half, "cpu"],
     ],
 )
+@set_composite_lp_aggregate(False)
 def test_shared_params(dest, expected_dtype, expected_device):
     if torch.cuda.device_count() == 0 and dest == "cuda":
         pytest.skip("no cuda device available")
@@ -15332,6 +15322,13 @@ def test_shared_params(dest, expected_dtype, expected_device):
 
 
 class TestAdv:
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
+
     @pytest.mark.parametrize(
         "adv,kwargs",
         [
@@ -15369,7 +15366,7 @@ class TestAdv:
             )
             kwargs = {
                 "obs": torch.randn(1, 10, 3),
-                "sample_log_prob": torch.log(torch.rand(1, 10, 1)),
+                "action_log_prob": torch.log(torch.rand(1, 10, 1)),
                 "next_reward": torch.randn(1, 10, 1, requires_grad=True),
                 "next_done": torch.zeros(1, 10, 1, dtype=torch.bool),
                 "next_terminated": torch.zeros(1, 10, 1, dtype=torch.bool),
@@ -15431,7 +15428,7 @@ class TestAdv:
             td = TensorDict(
                 {
                     "obs": torch.randn(1, 10, 3),
-                    "sample_log_prob": torch.log(torch.rand(1, 10, 1)),
+                    "action_log_prob": torch.log(torch.rand(1, 10, 1)),
                     "next": {
                         "obs": torch.randn(1, 10, 3),
                         "reward": torch.randn(1, 10, 1, requires_grad=True),
@@ -15504,7 +15501,7 @@ class TestAdv:
             td = TensorDict(
                 {
                     "obs": torch.randn(1, 10, 3),
-                    "sample_log_prob": torch.log(torch.rand(1, 10, 1)),
+                    "action_log_prob": torch.log(torch.rand(1, 10, 1)),
                     "next": {
                         "obs": torch.randn(1, 10, 3),
                         "reward": torch.randn(1, 10, 1, requires_grad=True),
@@ -15575,7 +15572,7 @@ class TestAdv:
             td = TensorDict(
                 {
                     "obs": torch.randn(1, 10, 3),
-                    "sample_log_prob": torch.log(torch.rand(1, 10, 1)),
+                    "action_log_prob": torch.log(torch.rand(1, 10, 1)),
                     "next": {
                         "obs": torch.randn(1, 10, 3),
                         "reward": torch.randn(1, 10, 1, requires_grad=True),
@@ -15676,7 +15673,7 @@ class TestAdv:
             td = TensorDict(
                 {
                     "obs": torch.randn(1, 10, 3),
-                    "sample_log_prob": torch.log(torch.rand(1, 10, 1)),
+                    "action_log_prob": torch.log(torch.rand(1, 10, 1)),
                     "state_value": torch.ones(1, 10, 1),
                     "next": {
                         "obs": torch.randn(1, 10, 3),
@@ -15814,6 +15811,13 @@ class TestAdv:
 
 
 class TestBase:
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
+
     def test_decorators(self):
         class MyLoss(LossModule):
             def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -16033,6 +16037,13 @@ class TestBase:
 
 
 class TestUtils:
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
+
     @pytest.mark.parametrize("B", [None, (1, ), (4, ), (2, 2, ), (1, 2, 8, )])  # fmt: skip
     @pytest.mark.parametrize("T", [1, 10])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -16203,6 +16214,7 @@ class TestUtils:
         (SoftUpdate, {"eps": 0.99}),
     ],
 )
+@set_composite_lp_aggregate(False)
 def test_updater_warning(updater, kwarg):
     with warnings.catch_warnings():
         dqn = DQNLoss(torch.nn.Linear(3, 4), delay_value=True, action_space="one_hot")
@@ -16215,6 +16227,13 @@ def test_updater_warning(updater, kwarg):
 
 
 class TestSingleCall:
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
+
     def _mock_value_net(self, has_target, value_key):
         model = nn.Linear(3, 1)
         module = TensorDictModule(model, in_keys=["obs"], out_keys=[value_key])
@@ -16267,6 +16286,7 @@ class TestSingleCall:
         assert (value != value_).all()
 
 
+@set_composite_lp_aggregate(False)
 def test_instantiate_with_different_keys():
     loss_1 = DQNLoss(
         value_network=nn.Linear(3, 3), action_space="one_hot", delay_value=True
@@ -16281,6 +16301,13 @@ def test_instantiate_with_different_keys():
 
 
 class TestBuffer:
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
+
     # @pytest.mark.parametrize('dtype', (torch.double, torch.float, torch.half))
     # def test_param_cast(self, dtype):
     #     param = nn.Parameter(torch.zeros(3))
@@ -16390,6 +16417,7 @@ class TestBuffer:
     TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
 )
 @pytest.mark.skipif(IS_WINDOWS, reason="windows tests do not support compile")
+@set_composite_lp_aggregate(False)
 def test_exploration_compile():
     try:
         torch._dynamo.reset_code_caches()
@@ -16456,6 +16484,7 @@ def test_exploration_compile():
     assert it == exploration_type()
 
 
+@set_composite_lp_aggregate(False)
 def test_loss_exploration():
     class DummyLoss(LossModule):
         def forward(self, td, mode):

@@ -240,6 +240,7 @@ class REDQLoss(LossModule):
                 else:
                     self.sample_log_prob = "action_log_prob"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
