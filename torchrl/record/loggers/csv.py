@@ -21,7 +21,7 @@ from .common import Logger
 class CSVExperiment:
     """A CSV logger experiment class."""
 
-    def __init__(self, log_dir: str, *, video_format="pt", video_fps=30):
+    def __init__(self, log_dir: str, *, video_format="pt", video_fps: int = 30):
         self.scalars = defaultdict(lambda: [])
         self.videos_counter = defaultdict(lambda: 0)
         self.text_counter = defaultdict(lambda: 0)
@@ -143,6 +143,8 @@ class CSVLogger(Logger):
         video_fps (int, optional): the video frames-per-seconds if `video_format="mp4"`. Defaults to 30.
 
     """
+
+    experiment: CSVExperiment
 
     def __init__(
         self,
