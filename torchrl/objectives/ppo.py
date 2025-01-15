@@ -30,6 +30,7 @@ from tensordict.nn import (
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
+from torchrl._utils import _standardize
 from torchrl.objectives.common import LossModule
 
 from torchrl.objectives.utils import (
@@ -95,6 +96,9 @@ class PPOLoss(LossModule):
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
+        normalize_advantage_exclude_dims (Tuple[int], optional): dimensions to exclude from the advantage
+            standardization. Negative dimensions are valid. This is useful in multiagent (or multiobjective) settings
+            where the agent (or objective) dimension may be excluded from the reductions. Default: ().
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -308,6 +312,7 @@ class PPOLoss(LossModule):
                     self.sample_log_prob = "action_log_prob"
 
     default_keys = _AcceptedKeys
+    tensor_keys: _AcceptedKeys
     default_value_estimator = ValueEstimators.GAE
 
     actor_network: ProbabilisticTensorDictModule
@@ -328,6 +333,7 @@ class PPOLoss(LossModule):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
+        normalize_advantage_exclude_dims: Tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         advantage_key: str = None,
@@ -398,6 +404,8 @@ class PPOLoss(LossModule):
             self.critic_coef = None
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
+        self.normalize_advantage_exclude_dims = normalize_advantage_exclude_dims
+
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self._set_deprecated_ctor_keys(
@@ -689,9 +697,16 @@ class PPOLoss(LossModule):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean()
-            scale = advantage.std().clamp_min(1e-6)
-            advantage = (advantage - loc) / scale
+            if advantage.numel() > tensordict.batch_size.numel() and not len(
+                self.normalize_advantage_exclude_dims
+            ):
+                warnings.warn(
+                    "You requested advantage normalization and the advantage key has more dimensions"
+                    " than the tensordict batch. Make sure to pass `normalize_advantage_exclude_dims` "
+                    "if you want to keep any dimension independent while computing normalization statistics. "
+                    "If you are working in multi-agent/multi-objective settings this is highly suggested."
+                )
+            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
         if is_tensor_collection(log_weight):
             log_weight = _sum_td_features(log_weight)
@@ -793,6 +808,9 @@ class ClipPPOLoss(PPOLoss):
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
+        normalize_advantage_exclude_dims (Tuple[int], optional): dimensions to exclude from the advantage
+            standardization. Negative dimensions are valid. This is useful in multiagent (or multiobjective) settings
+            where the agent (or objective) dimension may be excluded from the reductions. Default: ().
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -884,6 +902,7 @@ class ClipPPOLoss(PPOLoss):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
+        normalize_advantage_exclude_dims: Tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -903,6 +922,7 @@ class ClipPPOLoss(PPOLoss):
             critic_coef=critic_coef,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
+            normalize_advantage_exclude_dims=normalize_advantage_exclude_dims,
             gamma=gamma,
             separate_losses=separate_losses,
             reduction=reduction,
@@ -953,9 +973,16 @@ class ClipPPOLoss(PPOLoss):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean()
-            scale = advantage.std().clamp_min(1e-6)
-            advantage = (advantage - loc) / scale
+            if advantage.numel() > tensordict.batch_size.numel() and not len(
+                self.normalize_advantage_exclude_dims
+            ):
+                warnings.warn(
+                    "You requested advantage normalization and the advantage key has more dimensions"
+                    " than the tensordict batch. Make sure to pass `normalize_advantage_exclude_dims` "
+                    "if you want to keep any dimension independent while computing normalization statistics. "
+                    "If you are working in multi-agent/multi-objective settings this is highly suggested."
+                )
+            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
         log_weight, dist, kl_approx = self._log_weight(tensordict)
         # ESS for logging
@@ -1039,6 +1066,9 @@ class KLPENPPOLoss(PPOLoss):
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
+        normalize_advantage_exclude_dims (Tuple[int], optional): dimensions to exclude from the advantage
+            standardization. Negative dimensions are valid. This is useful in multiagent (or multiobjective) settings
+            where the agent (or objective) dimension may be excluded from the reductions. Default: ().
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -1132,6 +1162,7 @@ class KLPENPPOLoss(PPOLoss):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
+        normalize_advantage_exclude_dims: Tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -1147,6 +1178,7 @@ class KLPENPPOLoss(PPOLoss):
             critic_coef=critic_coef,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
+            normalize_advantage_exclude_dims=normalize_advantage_exclude_dims,
             gamma=gamma,
             separate_losses=separate_losses,
             reduction=reduction,
@@ -1235,9 +1267,17 @@ class KLPENPPOLoss(PPOLoss):
             )
             advantage = tensordict_copy.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
-            loc = advantage.mean()
-            scale = advantage.std().clamp_min(1e-6)
-            advantage = (advantage - loc) / scale
+            if advantage.numel() > tensordict.batch_size.numel() and not len(
+                self.normalize_advantage_exclude_dims
+            ):
+                warnings.warn(
+                    "You requested advantage normalization and the advantage key has more dimensions"
+                    " than the tensordict batch. Make sure to pass `normalize_advantage_exclude_dims` "
+                    "if you want to keep any dimension independent while computing normalization statistics. "
+                    "If you are working in multi-agent/multi-objective settings this is highly suggested."
+                )
+            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+
         log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
         if is_tensor_collection(neg_loss):
