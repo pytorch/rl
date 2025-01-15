@@ -173,6 +173,7 @@ class DDPGLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
     out_keys = [

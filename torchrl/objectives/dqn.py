@@ -164,6 +164,7 @@ class DQNLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     out_keys = ["loss"]
@@ -435,6 +436,7 @@ class DistributionalDQNLoss(LossModule):
         terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 

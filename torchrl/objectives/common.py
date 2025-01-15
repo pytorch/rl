@@ -128,6 +128,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
         pass
 
+    tensor_keys: _AcceptedKeys
     _vmap_randomness = None
     default_value_estimator: ValueEstimators = None
 
