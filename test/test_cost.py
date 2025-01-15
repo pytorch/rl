@@ -8,7 +8,6 @@ import functools
 import itertools
 import operator
 import os
-
 import sys
 import warnings
 from copy import deepcopy
@@ -23,6 +22,7 @@ from packaging import version, version as pack_version
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict._C import unravel_keys
 from tensordict.nn import (
+    composite_lp_aggregate,
     CompositeDistribution,
     InteractionType,
     NormalParamExtractor,
@@ -30,6 +30,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictModule as ProbMod,
     ProbabilisticTensorDictSequential,
     ProbabilisticTensorDictSequential as ProbSeq,
+    set_composite_lp_aggregate,
     TensorDictModule,
     TensorDictModule as Mod,
     TensorDictSequential,
@@ -3540,6 +3541,13 @@ class TestTD3BC(LossModuleTestBase):
 class TestSAC(LossModuleTestBase):
     seed = 0
 
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
+
     def _create_mock_actor(
         self,
         batch=2,
@@ -3563,7 +3571,6 @@ class TestSAC(LossModuleTestBase):
                 distribution_map={
                     "action1": TanhNormal,
                 },
-                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -3583,6 +3590,7 @@ class TestSAC(LossModuleTestBase):
             out_keys=[action_key],
             spec=action_spec,
         )
+        assert actor.log_prob_keys
         return actor.to(device)
 
     def _create_mock_qvalue(
@@ -3688,7 +3696,6 @@ class TestSAC(LossModuleTestBase):
                 distribution_map={
                     "action1": TanhNormal,
                 },
-                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -4342,7 +4349,7 @@ class TestSAC(LossModuleTestBase):
             "value": "state_value",
             "state_action_value": "state_action_value",
             "action": "action",
-            "log_prob": "sample_log_prob",
+            "log_prob": "action_log_prob",
             "reward": "reward",
             "done": "done",
             "terminated": "terminated",
@@ -4615,6 +4622,13 @@ class TestSAC(LossModuleTestBase):
 )
 class TestDiscreteSAC(LossModuleTestBase):
     seed = 0
+
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
 
     def _create_mock_actor(
         self,
@@ -7902,6 +7916,13 @@ class TestDiscreteCQL(LossModuleTestBase):
 class TestPPO(LossModuleTestBase):
     seed = 0
 
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
+
     def _create_mock_actor(
         self,
         batch=2,
@@ -7910,9 +7931,8 @@ class TestPPO(LossModuleTestBase):
         device="cpu",
         action_key=None,
         observation_key="observation",
-        sample_log_prob_key="sample_log_prob",
+        sample_log_prob_key=None,
         composite_action_dist=False,
-        aggregate_probabilities=None,
     ):
         # Actor
         action_spec = Bounded(
@@ -7934,7 +7954,6 @@ class TestPPO(LossModuleTestBase):
                     "action1": action_key,
                 },
                 log_prob_key=sample_log_prob_key,
-                aggregate_probabilities=aggregate_probabilities,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -8006,7 +8025,6 @@ class TestPPO(LossModuleTestBase):
                     "action1": ("action", "action1"),
                 },
                 log_prob_key=sample_log_prob_key,
-                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -8063,7 +8081,6 @@ class TestPPO(LossModuleTestBase):
                     "action1": ("action", "action1"),
                 },
                 log_prob_key=sample_log_prob_key,
-                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -8181,7 +8198,8 @@ class TestPPO(LossModuleTestBase):
             if composite_action_dist:
                 sample_log_prob_key = ("action", "action1_log_prob")
             else:
-                sample_log_prob_key = "sample_log_prob"
+                # conforming to composite_lp_aggregate(False)
+                sample_log_prob_key = "action_log_prob"
 
         if action_key is None:
             if composite_action_dist:
@@ -8287,6 +8305,7 @@ class TestPPO(LossModuleTestBase):
             if advantage is not None:
                 advantage.set_keys(sample_log_prob=[("action", "action1_log_prob")])
         if advantage is not None:
+            assert not composite_lp_aggregate()
             advantage(td)
         else:
             if td_est is not None:
@@ -8346,7 +8365,6 @@ class TestPPO(LossModuleTestBase):
         actor = self._create_mock_actor(
             device=device,
             composite_action_dist=True,
-            aggregate_probabilities=False,
         )
         value = self._create_mock_value(device=device)
         if advantage == "gae":
@@ -8766,6 +8784,7 @@ class TestPPO(LossModuleTestBase):
     )
     @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_ppo_tensordict_keys(self, loss_class, td_est, composite_action_dist):
+        assert not composite_lp_aggregate()
         actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
         value = self._create_mock_value()
 
@@ -8775,8 +8794,10 @@ class TestPPO(LossModuleTestBase):
             "advantage": "advantage",
             "value_target": "value_target",
             "value": "state_value",
-            "sample_log_prob": "sample_log_prob",
-            "action": "action",
+            "sample_log_prob": "action_log_prob"
+            if not composite_action_dist
+            else ("action", "action1_log_prob"),
+            "action": "action" if not composite_action_dist else ("action", "action1"),
             "reward": "reward",
             "done": "done",
             "terminated": "terminated",
@@ -9162,9 +9183,6 @@ class TestPPO(LossModuleTestBase):
                 "Kumaraswamy": ("agent1", "action"),
                 "mixture": ("agent2", "action"),
             },
-            aggregate_probabilities=False,
-            include_sum=False,
-            inplace=True,
         )
         policy = ProbSeq(
             make_params,
@@ -9183,15 +9201,11 @@ class TestPPO(LossModuleTestBase):
         # We want to make sure there is no warning
         td = policy(TensorDict(batch_size=[4]))
         assert isinstance(
-            policy.get_dist(td).log_prob(
-                td, aggregate_probabilities=False, inplace=False, include_sum=False
-            ),
+            policy.get_dist(td).log_prob(td),
             TensorDict,
         )
         assert isinstance(
-            policy.log_prob(
-                td, aggregate_probabilities=False, inplace=False, include_sum=False
-            ),
+            policy.log_prob(td),
             TensorDict,
         )
         value_operator = Seq(
@@ -9228,6 +9242,13 @@ class TestPPO(LossModuleTestBase):
 class TestA2C(LossModuleTestBase):
     seed = 0
 
+    @pytest.fixture(scope="class", autouse=True)
+    def _composite_log_prob(self):
+        setter = set_composite_lp_aggregate(False)
+        setter.set()
+        yield
+        setter.unset()
+
     def _create_mock_actor(
         self,
         batch=2,
@@ -9236,8 +9257,8 @@ class TestA2C(LossModuleTestBase):
         device="cpu",
         action_key="action",
         observation_key="observation",
-        sample_log_prob_key="sample_log_prob",
         composite_action_dist=False,
+        sample_log_prob_key=None,
     ):
         # Actor
         action_spec = Bounded(
@@ -9255,8 +9276,6 @@ class TestA2C(LossModuleTestBase):
                 name_map={
                     "action1": (action_key, "action1"),
                 },
-                log_prob_key=sample_log_prob_key,
-                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -9306,7 +9325,6 @@ class TestA2C(LossModuleTestBase):
         n_hidden=2,
         T=10,
         composite_action_dist=False,
-        sample_log_prob_key="sample_log_prob",
     ):
         common_net = MLP(
             num_cells=ncells,
@@ -9332,7 +9350,7 @@ class TestA2C(LossModuleTestBase):
             {
                 "obs": torch.randn(*batch, n_obs),
                 "action": {"action1": action} if composite_action_dist else action,
-                "sample_log_prob": torch.randn(*batch),
+                "action_log_prob": torch.randn(*batch),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
                 "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
@@ -9356,8 +9374,6 @@ class TestA2C(LossModuleTestBase):
                 name_map={
                     "action1": ("action", "action1"),
                 },
-                log_prob_key=sample_log_prob_key,
-                aggregate_probabilities=True,
             )
             module_out_keys = [
                 ("params", "action1", "loc"),
@@ -9398,7 +9414,7 @@ class TestA2C(LossModuleTestBase):
         reward_key="reward",
         done_key="done",
         terminated_key="terminated",
-        sample_log_prob_key="sample_log_prob",
+        sample_log_prob_key="action_log_prob",
         composite_action_dist=False,
     ):
         # create a tensordict
@@ -9530,6 +9546,11 @@ class TestA2C(LossModuleTestBase):
 
         td = td.exclude(loss_fn.tensor_keys.value_target)
         if advantage is not None:
+            advantage.set_keys(
+                sample_log_prob=actor.log_prob_keys
+                if composite_action_dist
+                else "action_log_prob"
+            )
             advantage(td)
         elif td_est is not None:
             loss_fn.make_value_estimator(td_est)
@@ -9749,7 +9770,7 @@ class TestA2C(LossModuleTestBase):
             "reward": "reward",
             "done": "done",
             "terminated": "terminated",
-            "sample_log_prob": "sample_log_prob",
+            "sample_log_prob": "action_log_prob",
         }
 
         self.tensordict_keys_test(

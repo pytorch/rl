@@ -829,6 +829,7 @@ to be able to create this other composition:
     GrayScale
     InitTracker
     KLRewardTransform
+    LineariseReward
     NoopResetEnv
     ObservationNorm
     ObservationTransform

@@ -72,6 +72,7 @@ from .tensor_specs import (
     Binary,
     BinaryDiscreteTensorSpec,
     Bounded,
+    BoundedContinuous,
     BoundedTensorSpec,
     Categorical,
     Composite,
