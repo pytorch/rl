@@ -15,9 +15,10 @@ from typing import Callable, List, Union
 import torch
 from tensordict import is_tensor_collection, TensorDictBase
 from tensordict.nn import (
-    CompositeDistribution,
+    composite_lp_aggregate,
     dispatch,
     ProbabilisticTensorDictModule,
+    set_composite_lp_aggregate,
     set_skip_existing,
     TensorDictModule,
     TensorDictModuleBase,
@@ -88,16 +89,9 @@ def _call_actor_net(
     log_prob_key: NestedKey,
 ):
     dist = actor_net.get_dist(data.select(*actor_net.in_keys, strict=False))
-    if isinstance(dist, CompositeDistribution):
-        kwargs = {
-            "aggregate_probabilities": True,
-            "inplace": False,
-            "include_sum": False,
-        }
-    else:
-        kwargs = {}
     s = actor_net._dist_sample(dist, interaction_type=interaction_type())
-    return dist.log_prob(s, **kwargs)
+    with set_composite_lp_aggregate(True):
+        return dist.log_prob(s)
 
 
 class ValueEstimatorBase(TensorDictModuleBase):
@@ -136,7 +130,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 that indicates the number of steps to the next observation.
                 Defaults to ``"steps_to_next_obs"``.
             sample_log_prob (NestedKey): The key in the input tensordict that
-                indicates the log probability of the sampled action. Defaults to ``"sample_log_prob"``.
+                indicates the log probability of the sampled action.
+                Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
         """
 
         advantage: NestedKey = "advantage"
@@ -146,9 +142,16 @@ class ValueEstimatorBase(TensorDictModuleBase):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
-        sample_log_prob: NestedKey = "sample_log_prob"
+        sample_log_prob: NestedKey | None = None
 
-    default_keys = _AcceptedKeys()
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    default_keys = _AcceptedKeys
     value_network: Union[TensorDictModule, Callable]
     _vmap_randomness = None
 
@@ -324,7 +327,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 )
             kwargs[key] = value
         if self._tensor_keys is None:
-            conf = asdict(self.default_keys)
+            conf = asdict(self.default_keys())
             conf.update(self.dep_keys)
         else:
             conf = asdict(self._tensor_keys)
