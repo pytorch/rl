@@ -301,6 +301,7 @@ class SACLoss(LossModule):
                     self.log_prob = "action_log_prob"
 
     default_keys = _AcceptedKeys
+    tensor_keys: _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 
     actor_network: TensorDictModule
@@ -1046,6 +1047,7 @@ class DiscreteSACLoss(LossModule):
         terminated: NestedKey = "terminated"
         log_prob: NestedKey = "log_prob"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     delay_actor: bool = False

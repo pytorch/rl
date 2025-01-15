@@ -152,6 +152,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                     self.sample_log_prob = "action_log_prob"
 
     default_keys = _AcceptedKeys
+    tensor_keys: _AcceptedKeys
     value_network: Union[TensorDictModule, Callable]
     _vmap_randomness = None
 

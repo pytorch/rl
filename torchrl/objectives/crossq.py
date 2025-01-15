@@ -242,6 +242,7 @@ class CrossQLoss(LossModule):
         terminated: NestedKey = "terminated"
         log_prob: NestedKey = "_log_prob"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 
