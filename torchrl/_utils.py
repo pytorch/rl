@@ -919,31 +919,12 @@ def _standardize(
         )
         return input
 
-    # Put all excluded dims in the beginning
-    permutation = list(range(len(input_shape)))
-    for dim in exclude_dims:
-        permutation.insert(0, permutation.pop(permutation.index(dim)))
-    permuted_input = input.permute(*permutation)
-
-    normalized_shape_len = len(input_shape) - len_exclude_dims
-
+    included_dims = tuple(d for d in range(len(input_shape)) if d not in exclude_dims)
     if mean is None:
-        mean = torch.mean(
-            permuted_input, keepdim=True, dim=tuple(range(-normalized_shape_len, 0))
-        )
+        mean = torch.mean(input, keepdim=True, dim=included_dims)
     if std is None:
-        std = torch.std(
-            permuted_input, keepdim=True, dim=tuple(range(-normalized_shape_len, 0))
-        )
-    output = (permuted_input - mean) / std.clamp_min(eps)
-
-    # Reverse permutation
-    inv_permutation = torch.argsort(
-        torch.tensor(permutation, dtype=torch.long, device=input.device)
-    ).tolist()
-    output = torch.permute(output, inv_permutation)
-
-    return output
+        std = torch.std(input, keepdim=True, dim=included_dims)
+    return (input - mean) / std.clamp_min(eps)
 
 
 @wraps(torch.compile)
