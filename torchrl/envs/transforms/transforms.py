@@ -34,13 +34,14 @@ import torch
 from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
+    NestedKey,
     NonTensorData,
+    pad_sequence,
     set_lazy_legacy,
     TensorDict,
     TensorDictBase,
     unravel_key,
     unravel_key_list,
-    pad_sequence,
 )
 from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.utils import (
@@ -9268,17 +9269,18 @@ class TrajCounter(Transform):
 
 
 class HERSubGoalSampler(Transform):
-    """Returns a TensorDict with a key `subgoal_idx` of shape [batch_size, num_samples] represebting the subgoal index.
-    Available strategies are: `last` and `future`. The `last` strategy assigns the last state as the subgoal. The `future` strategy samples up to `num_samples` subgoal from the future states.
+    """Returns a TensorDict with a key `subgoal_idx` of shape [batch_size, num_samples] representing the subgoal index. Available strategies are: `last` and `future`. The `last` strategy assigns the last state as the subgoal. The `future` strategy samples up to `num_samples` subgoal from the future states.
+
     Args:
         num_samples (int): Number of subgoals to sample from each trajectory. Defaults to 4.
         out_keys (str): The key to store the subgoal index. Defaults to "subgoal_idx".
-    """    
+    """
+
     def __init__(
         self,
         num_samples: int = 4,
         subgoal_idx_key: str = "subgoal_idx",
-        strategy: str = "future"
+        strategy: str = "future",
     ):
         super().__init__(
             in_keys=None,
@@ -9296,14 +9298,20 @@ class HERSubGoalSampler(Transform):
         batch_size, trajectory_len = trajectories.shape
 
         if self.strategy == "last":
-            return TensorDict({"subgoal_idx": torch.full((batch_size, 1), -1)}, batch_size=batch_size)
+            return TensorDict(
+                {"subgoal_idx": torch.full((batch_size, 1), -2)}, batch_size=batch_size
+            )
 
         else:
             subgoal_idxs = []
-            for i in range(batch_size):
+            for _ in range(batch_size):
                 subgoal_idxs.append(
                     TensorDict(
-                        {"subgoal_idx": (torch.randperm(trajectory_len-2)+1)[:self.num_samples]},
+                        {
+                            "subgoal_idx": (torch.randperm(trajectory_len - 2) + 1)[
+                                : self.num_samples
+                            ]
+                        },
                         batch_size=torch.Size(),
                     )
                 )
@@ -9312,55 +9320,79 @@ class HERSubGoalSampler(Transform):
 
 class HERSubGoalAssigner(Transform):
     """This module assigns the subgoal to the trajectory according to a given subgoal index.
+
     Args:
         subgoal_idx_name (str): The key to the subgoal index. Defaults to "subgoal_idx".
         subgoal_name (str): The key to assign the observation of the subgoal to the goal. Defaults to "goal".
-    """    
+    """
+
     def __init__(
         self,
-        achieved_goal_key: str = "achieved_goal",
-        desired_goal_key: str = "desired_goal",
+        achieved_goal_key: str | tuple = "achieved_goal",
+        desired_goal_key: str | tuple = "desired_goal",
     ):
         self.achieved_goal_key = achieved_goal_key
         self.desired_goal_key = desired_goal_key
 
-    def forward(self, trajectories: TensorDictBase, subgoals_idxs: torch.Tensor) -> TensorDictBase:
+    def forward(
+        self, trajectories: TensorDictBase, subgoals_idxs: torch.Tensor
+    ) -> TensorDictBase:
         batch_size, trajectory_len = trajectories.shape
         for i in range(batch_size):
+            # Assign the subgoal to the desired_goal_key, and ("next", desired_goal_key) of the trajectory
             subgoal = trajectories[i][subgoals_idxs[i]][self.achieved_goal_key]
             desired_goal_shape = trajectories[i][self.desired_goal_key].shape
-            trajectories[i][self.desired_goal_key] = subgoal.expand(desired_goal_shape)
-            trajectories[i][subgoals_idxs[i]]["next", "done"] = True
-            # trajectories[i][subgoals_idxs[i]+1:]["truncated"] = True
-        
+            trajectories[i].set_(
+                self.desired_goal_key, subgoal.expand(desired_goal_shape)
+            )
+            trajectories[i].set_(
+                ("next", self.desired_goal_key), subgoal.expand(desired_goal_shape)
+            )
+
+            # Update the done and (next, done) flags
+            new_done = torch.zeros_like(
+                trajectories[i]["next", "done"], dtype=torch.bool
+            )
+            new_done[subgoals_idxs[i]] = True
+            trajectories[i].set_(("next", "done"), new_done)
+
         return trajectories
 
 
 class HERRewardTransform(Transform):
-    """This module assigns the reward to the trajectory according to the new subgoal.
+    """This module assigns a reward of `reward_value` where the new trajectory `(next, done)` is `True`.
+
     Args:
-        reward_name (str): The key to the reward. Defaults to "reward".
-    """    
+        reward_value (float): The reward to be assigned to the newly generated trajectories. Defaults to "1.0".
+    """
+
     def __init__(
-        self
+        self,
+        reward_value: float = 1.0,
     ):
-        pass
-    
+        self.reward_value = reward_value
+
     def forward(self, trajectories: TensorDictBase) -> TensorDictBase:
+        new_reward = torch.zeros_like(trajectories["next", "reward"])
+        new_reward[trajectories["next", "done"]] = self.reward_value
+        trajectories.set_(("next", "reward"), new_reward)
         return trajectories
 
 
 class HindsightExperienceReplayTransform(Transform):
     """Hindsight Experience Replay (HER) is a technique that allows to learn from failure by creating new experiences from the failed ones.
+
     This module is a wrapper that includes the following modules:
     - SubGoalSampler: Creates new trajectories by sampling future subgoals from the same trajectory.
     - SubGoalAssigner: Assigns the subgoal to the trajectory according to a given subgoal index.
     - RewardTransform: Assigns the reward to the trajectory according to the new subgoal.
+
     Args:
-        SubGoalSampler (Transform): 
-        SubGoalAssigner (Transform): 
-        RewardTransform (Transform): 
-    """    
+        SubGoalSampler (Transform):
+        SubGoalAssigner (Transform):
+        RewardTransform (Transform):
+    """
+
     def __init__(
         self,
         SubGoalSampler: Transform = HERSubGoalSampler(),
@@ -9395,33 +9427,43 @@ class HindsightExperienceReplayTransform(Transform):
         if len(trajectories.shape) == 1:
             trajectories = trajectories.unsqueeze(0)
         batch_size, trajectory_length = trajectories.shape
-        
+
         new_trajectories = trajectories.clone(True)
-        
+
         # Sample subgoal indices
         subgoal_idxs = self.SubGoalSampler(new_trajectories)
 
-        # Create new trajectories 
+        # Create new trajectories
         augmented_trajectories = []
         list_idxs = []
         for i in range(batch_size):
             idxs = subgoal_idxs[i][self.SubGoalSampler.subgoal_idx_key]
-            
+
             if "masks" in subgoal_idxs.keys():
-                idxs = idxs[subgoal_idxs[i]["masks", self.SubGoalSampler.subgoal_idx_key]]
-            
+                idxs = idxs[
+                    subgoal_idxs[i]["masks", self.SubGoalSampler.subgoal_idx_key]
+                ]
+
             list_idxs.append(idxs.unsqueeze(-1))
-            new_traj = new_trajectories[i].expand((idxs.numel(),trajectory_length)).clone(True)
-            
+            new_traj = (
+                new_trajectories[i]
+                .expand((idxs.numel(), trajectory_length))
+                .clone(True)
+            )
+
             if self.assign_subgoal_idxs:
-                new_traj[self.SubGoalSampler.subgoal_idx_key] = idxs.unsqueeze(-1).repeat(1, trajectory_length)
-            
+                new_traj[self.SubGoalSampler.subgoal_idx_key] = idxs.unsqueeze(
+                    -1
+                ).repeat(1, trajectory_length)
+
             augmented_trajectories.append(new_traj)
         augmented_trajectories = torch.cat(augmented_trajectories, dim=0)
         associated_idxs = torch.cat(list_idxs, dim=0)
 
         # Assign subgoals to the new trajectories
-        augmented_trajectories = self.SubGoalAssigner.forward(augmented_trajectories, associated_idxs)
+        augmented_trajectories = self.SubGoalAssigner.forward(
+            augmented_trajectories, associated_idxs
+        )
 
         # Adjust the rewards based on the new subgoals
         augmented_trajectories = self.RewardTransform.forward(augmented_trajectories)

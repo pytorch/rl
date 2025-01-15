@@ -116,6 +116,10 @@ from torchrl.envs import (
     FrameSkipTransform,
     GrayScale,
     gSDENoise,
+    HERRewardTransform,
+    HERSubGoalAssigner,
+    HERSubGoalSampler,
+    HindsightExperienceReplayTransform,
     InitTracker,
     MultiStepTransform,
     NoopResetEnv,
@@ -12374,6 +12378,102 @@ class TestActionDiscretizer(TransformBase):
 
     def test_transform_inverse(self):
         pytest.skip("Tested elsewhere")
+
+
+class TestHERTransform(TransformBase):
+    @pytest.mark.parametrize("strategy", ["last", "future"])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_transform_inverse(self, strategy, device):
+        batch = 10
+        trajectory_len = 20
+        num_samples = 4
+        batch_size = [batch, trajectory_len]
+        torch.manual_seed(0)
+
+        # Let every episode be a random 1D trajectory
+        velocity = torch.rand((batch, 1), device=device)
+        time = torch.arange(trajectory_len + 1, device=device).expand(batch, -1)
+        start_pos = torch.rand((batch, 1), device=device)
+        pos = start_pos + velocity * time
+        goal = (
+            (torch.rand(batch, device=device) * 10)
+            .expand(trajectory_len, batch)
+            .T[:, :, None]
+        )
+
+        her = HindsightExperienceReplayTransform(
+            SubGoalSampler=HERSubGoalSampler(
+                num_samples=4,
+                strategy=strategy,
+            ),
+            SubGoalAssigner=HERSubGoalAssigner(
+                achieved_goal_key=("next", "pos"),
+                desired_goal_key="original_goal",
+            ),
+            RewardTransform=HERRewardTransform(),
+        )
+
+        done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
+        done[:, -1] = True
+        reward = done.clone().float()
+
+        td = TensorDict(
+            {
+                "pos": pos[:, :-1],
+                "original_goal": goal,
+                "next": {
+                    "done": done,
+                    "reward": reward,
+                    "pos": pos[:, 1:],
+                    "original_goal": goal,
+                },
+            },
+            batch_size,
+            device=device,
+        )
+
+        td = her.inv(td)
+        if strategy == "last":
+            assert td.shape == (batch * 2, trajectory_len)
+        elif strategy == "future":
+            assert td.shape == (batch * (num_samples + 1), trajectory_len)
+
+        # original trajectories are at the top so we can check if the sugoals are part of the positions
+        augmented_td = td[batch:, :]
+        new_batch_size, _ = augmented_td.shape
+        for i in range(new_batch_size):
+            goal_value = augmented_td["original_goal"][i, 0]
+            assert (goal_value == augmented_td["next", "pos"][i]).any()
+
+    def test_parallel_trans_env_check(self):
+        pass
+
+    def test_serial_trans_env_check(self):
+        pass
+
+    def test_single_trans_env_check(self):
+        pass
+
+    def test_trans_parallel_env_check(self):
+        pass
+
+    def test_trans_serial_env_check(self):
+        pass
+
+    def test_transform_compose(self):
+        pass
+
+    def test_transform_env(self):
+        pass
+
+    def test_transform_model(self):
+        pass
+
+    def test_transform_no_env(self):
+        pass
+
+    def test_transform_rb(self):
+        pass
 
 
 if __name__ == "__main__":
