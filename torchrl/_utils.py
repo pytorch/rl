@@ -892,14 +892,23 @@ def _standardize(
 
     """
     if eps is None:
-        eps = torch.finfo(torch.float.dtype).resolution
+        if input.dtype.is_floating_point:
+            eps = torch.finfo(torch.float).resolution
+        else:
+            eps = 1e-6
 
     len_exclude_dims = len(exclude_dims)
     if not len_exclude_dims:
         if mean is None:
             mean = input.mean()
+        else:
+            # Assume dtypes are compatible
+            mean = torch.as_tensor(mean, device=input.device)
         if std is None:
             std = input.std()
+        else:
+            # Assume dtypes are compatible
+            std = torch.as_tensor(std, device=input.device)
         return (input - mean) / std.clamp_min(eps)
 
     input_shape = input.shape
