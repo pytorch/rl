@@ -231,6 +231,7 @@ class REDQLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
+    tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys()
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
