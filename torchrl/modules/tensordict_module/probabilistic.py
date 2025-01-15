@@ -86,7 +86,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             distribution sample will be written in the tensordict with the key
             `'sample_log_prob'`. Default is ``False``.
         log_prob_key (NestedKey, optional): key where to write the log_prob if return_log_prob = True.
-            Defaults to `'sample_log_prob'`.
+            Defaults to `"action_log_prob"`.
         cache_dist (bool, optional): EXPERIMENTAL: if ``True``, the parameters of the
             distribution (i.e. the output of the module) will be written to the
             tensordict along with the sample. Those parameters can be used to re-compute
@@ -108,7 +108,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
         return_log_prob: bool = False,
-        log_prob_key: Optional[NestedKey] = "sample_log_prob",
+        log_prob_key: NestedKey | None = None,
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
     ):
@@ -140,7 +140,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         elif spec is None:
             spec = Composite()
         spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
-        out_keys = set(unravel_key_list(self.out_keys))
+        out_keys = set(unravel_key_list(self._out_keys))
         if spec_keys != out_keys:
             # then assume that all the non indicated specs are None
             for key in out_keys:

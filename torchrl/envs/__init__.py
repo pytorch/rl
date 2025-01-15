@@ -69,6 +69,7 @@ from .transforms import (
     gSDENoise,
     InitTracker,
     KLRewardTransform,
+    LineariseRewards,
     MultiStepTransform,
     NoopResetEnv,
     ObservationNorm,
