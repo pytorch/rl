@@ -98,6 +98,7 @@ from .transforms import (
     TrajCounter,
     Transform,
     TransformedEnv,
+    UnaryTransform,
     UnsqueezeTransform,
     VC1Transform,
     VecGymEnvTransform,

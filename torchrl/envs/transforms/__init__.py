@@ -59,6 +59,7 @@ from .transforms import (
     TrajCounter,
     Transform,
     TransformedEnv,
+    UnaryTransform,
     UnsqueezeTransform,
     VecGymEnvTransform,
     VecNorm,

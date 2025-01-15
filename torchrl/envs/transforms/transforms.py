@@ -4410,7 +4410,7 @@ class CatTensors(Transform):
 
 
 class UnaryTransform(Transform):
-    """Applies a unary operation on the specified inputs.
+    r"""Applies a unary operation on the specified inputs.
 
     Args:
         in_keys (sequence of NestedKey): the keys of inputs to the unary operation.
@@ -4420,10 +4420,69 @@ class UnaryTransform(Transform):
 
     Keyword Args:
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
-            ``NonTensorData``/``NonTensorStack`` inputs before ``fn`` is called
-            on them. If ``True``, the raw ``NonTensorData``/``NonTensorStack``
+            :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
+            on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
             inputs are given directly to ``fn``, which must support those
             inputs. Default is ``False``.
+
+    Example:
+        >>> from torchrl.envs import GymEnv, UnaryTransform
+        >>> env = GymEnv("Pendulum-v1")
+        >>> env = env.append_transform(
+        ...     UnaryTransform(
+        ...         in_keys=["observation"],
+        ...         out_keys=["observation_trsf"],
+        ...             fn=lambda tensor: str(tensor.numpy().tobytes())))
+        >>> env.observation_spec
+        Composite(
+            observation: BoundedContinuous(
+                shape=torch.Size([3]),
+                space=ContinuousBox(
+                    low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous),
+            observation_trsf: NonTensor(
+                shape=torch.Size([]),
+                space=None,
+                device=cpu,
+                dtype=None,
+                domain=None),
+            device=None,
+            shape=torch.Size([]))
+        >>> env.rollout(3)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        observation_trsf: NonTensorStack(
+                            ["b'\\xbe\\xbc\\x7f?8\\x859=/\\x81\\xbe;'", "b'\\x...,
+                            batch_size=torch.Size([3]),
+                            device=None),
+                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=None,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation_trsf: NonTensorStack(
+                    ["b'\\x9a\\xbd\\x7f?\\xb8T8=8.c>'", "b'\\xbe\\xbc\...,
+                    batch_size=torch.Size([3]),
+                    device=None),
+                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+        >>> env.check_env_specs()
+        [torchrl][INFO] check_env_specs succeeded!
+
     """
 
     def __init__(
@@ -4518,7 +4577,7 @@ class UnaryTransform(Transform):
 
 
 class Hash(UnaryTransform):
-    """Adds a hash value to a tensordict.
+    r"""Adds a hash value to a tensordict.
 
     Args:
         in_keys (sequence of NestedKey): the keys of the values to hash.
@@ -4530,10 +4589,84 @@ class Hash(UnaryTransform):
 
     Keyword Args:
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
-            ``NonTensorData``/``NonTensorStack`` inputs before ``fn`` is called
-            on them. If ``True``, the raw ``NonTensorData``/``NonTensorStack``
+            :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
+            on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
             inputs are given directly to ``fn``, which must support those
             inputs. Default is ``False``.
+
+        >>> from torchrl.envs import GymEnv, UnaryTransform, Hash
+        >>> env = GymEnv("Pendulum-v1")
+        >>> # Add a string output
+        >>> env = env.append_transform(
+        ...     UnaryTransform(
+        ...         in_keys=["observation"],
+        ...         out_keys=["observation_str"],
+        ...             fn=lambda tensor: str(tensor.numpy().tobytes())))
+        >>> # process the string output
+        >>> env = env.append_transform(
+        ...     Hash(
+        ...         in_keys=["observation_str"],
+        ...         out_keys=["observation_hash"],)
+        ... )
+        >>> env.observation_spec
+        Composite(
+            observation: BoundedContinuous(
+                shape=torch.Size([3]),
+                space=ContinuousBox(
+                    low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous),
+            observation_str: NonTensor(
+                shape=torch.Size([]),
+                space=None,
+                device=cpu,
+                dtype=None,
+                domain=None),
+            observation_hash: UnboundedDiscrete(
+                shape=torch.Size([32]),
+                space=ContinuousBox(
+                    low=Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.uint8, contiguous=True),
+                    high=Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.uint8, contiguous=True)),
+                device=cpu,
+                dtype=torch.uint8,
+                domain=discrete),
+            device=None,
+            shape=torch.Size([]))
+        >>> env.rollout(3)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        observation_hash: Tensor(shape=torch.Size([3, 32]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        observation_str: NonTensorStack(
+                            ["b'g\\x08\\x8b\\xbexav\\xbf\\x00\\xee(>'", "b'\\x...,
+                            batch_size=torch.Size([3]),
+                            device=None),
+                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=None,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation_hash: Tensor(shape=torch.Size([3, 32]), device=cpu, dtype=torch.uint8, is_shared=False),
+                observation_str: NonTensorStack(
+                    ["b'\\xb5\\x17\\x8f\\xbe\\x88\\xccu\\xbf\\xc0Vr?'"...,
+                    batch_size=torch.Size([3]),
+                    device=None),
+                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+        >>> env.check_env_specs()
+        [torchrl][INFO] check_env_specs succeeded!
     """
 
     def __init__(
