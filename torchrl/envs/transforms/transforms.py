@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import importlib.util
 import multiprocessing as mp
 import warnings
@@ -35,6 +36,7 @@ from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     set_lazy_legacy,
     TensorDict,
     TensorDictBase,
@@ -81,7 +83,12 @@ from torchrl.envs.transforms.utils import (
     _set_missing_tolerance,
     check_finite,
 )
-from torchrl.envs.utils import _sort_keys, _update_during_reset, step_mdp
+from torchrl.envs.utils import (
+    _sort_keys,
+    _update_during_reset,
+    make_composite_from_td,
+    step_mdp,
+)
 from torchrl.objectives.value.functional import reward2go
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
@@ -4400,6 +4407,325 @@ class CatTensors(Transform):
             f"{self.__class__.__name__}(in_keys={self.in_keys}, out_key"
             f"={self.out_keys[0]})"
         )
+
+
+class UnaryTransform(Transform):
+    r"""Applies a unary operation on the specified inputs.
+
+    Args:
+        in_keys (sequence of NestedKey): the keys of inputs to the unary operation.
+        out_keys (sequence of NestedKey): the keys of the outputs of the unary operation.
+        fn (Callable): the function to use as the unary operation. If it accepts
+            a non-tensor input, it must also accept ``None``.
+
+    Keyword Args:
+        use_raw_nontensor (bool, optional): if ``False``, data is extracted from
+            :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
+            on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
+            inputs are given directly to ``fn``, which must support those
+            inputs. Default is ``False``.
+
+    Example:
+        >>> from torchrl.envs import GymEnv, UnaryTransform
+        >>> env = GymEnv("Pendulum-v1")
+        >>> env = env.append_transform(
+        ...     UnaryTransform(
+        ...         in_keys=["observation"],
+        ...         out_keys=["observation_trsf"],
+        ...             fn=lambda tensor: str(tensor.numpy().tobytes())))
+        >>> env.observation_spec
+        Composite(
+            observation: BoundedContinuous(
+                shape=torch.Size([3]),
+                space=ContinuousBox(
+                    low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous),
+            observation_trsf: NonTensor(
+                shape=torch.Size([]),
+                space=None,
+                device=cpu,
+                dtype=None,
+                domain=None),
+            device=None,
+            shape=torch.Size([]))
+        >>> env.rollout(3)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        observation_trsf: NonTensorStack(
+                            ["b'\\xbe\\xbc\\x7f?8\\x859=/\\x81\\xbe;'", "b'\\x...,
+                            batch_size=torch.Size([3]),
+                            device=None),
+                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=None,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation_trsf: NonTensorStack(
+                    ["b'\\x9a\\xbd\\x7f?\\xb8T8=8.c>'", "b'\\xbe\\xbc\...,
+                    batch_size=torch.Size([3]),
+                    device=None),
+                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+        >>> env.check_env_specs()
+        [torchrl][INFO] check_env_specs succeeded!
+
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey],
+        fn: Callable,
+        *,
+        use_raw_nontensor: bool = False,
+    ):
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self._fn = fn
+        self._use_raw_nontensor = use_raw_nontensor
+
+    def _apply_transform(self, value):
+        if not self._use_raw_nontensor:
+            if isinstance(value, NonTensorData):
+                if value.dim() == 0:
+                    value = value.get("data")
+                else:
+                    value = value.tolist()
+            elif isinstance(value, NonTensorStack):
+                value = value.tolist()
+        return self._fn(value)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        with _set_missing_tolerance(self, True):
+            tensordict_reset = self._call(tensordict_reset)
+        return tensordict_reset
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        output_spec = output_spec.clone()
+
+        # Make a generic input from the spec, call the transform with that
+        # input, and then generate the output spec from the output.
+        zero_input_ = output_spec.zero()
+        test_input = (
+            zero_input_["full_observation_spec"]
+            .update(zero_input_["full_reward_spec"])
+            .update(zero_input_["full_done_spec"])
+        )
+        test_output = self.forward(test_input)
+        test_output_spec = make_composite_from_td(
+            test_output, unsqueeze_null_shapes=False
+        )
+
+        output_spec["full_observation_spec"] = self.transform_observation_spec(
+            output_spec["full_observation_spec"],
+            test_output_spec,
+        )
+        if "full_reward_spec" in output_spec.keys():
+            output_spec["full_reward_spec"] = self.transform_reward_spec(
+                output_spec["full_reward_spec"],
+                test_output_spec,
+            )
+        if "full_done_spec" in output_spec.keys():
+            output_spec["full_done_spec"] = self.transform_done_spec(
+                output_spec["full_done_spec"],
+                test_output_spec,
+            )
+        return output_spec
+
+    def _transform_spec(
+        self, spec: TensorSpec, test_output_spec: TensorSpec
+    ) -> TensorSpec:
+        if not isinstance(spec, Composite):
+            raise TypeError(f"{self}: Only specs of type Composite can be transformed")
+
+        spec_keys = set(spec.keys(include_nested=True))
+
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if in_key in spec_keys:
+                spec.set(out_key, test_output_spec[out_key])
+        return spec
+
+    def transform_observation_spec(
+        self, observation_spec: TensorSpec, test_output_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(observation_spec, test_output_spec)
+
+    def transform_reward_spec(
+        self, reward_spec: TensorSpec, test_output_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(reward_spec, test_output_spec)
+
+    def transform_done_spec(
+        self, done_spec: TensorSpec, test_output_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(done_spec, test_output_spec)
+
+
+class Hash(UnaryTransform):
+    r"""Adds a hash value to a tensordict.
+
+    Args:
+        in_keys (sequence of NestedKey): the keys of the values to hash.
+        out_keys (sequence of NestedKey): the keys of the resulting hashes.
+        hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,
+            the hash function must accept it as its second argument. Default is
+            ``Hash.reproducible_hash``.
+        seed (optional): seed to use for the hash function, if it requires one.
+
+    Keyword Args:
+        use_raw_nontensor (bool, optional): if ``False``, data is extracted from
+            :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
+            on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
+            inputs are given directly to ``fn``, which must support those
+            inputs. Default is ``False``.
+
+        >>> from torchrl.envs import GymEnv, UnaryTransform, Hash
+        >>> env = GymEnv("Pendulum-v1")
+        >>> # Add a string output
+        >>> env = env.append_transform(
+        ...     UnaryTransform(
+        ...         in_keys=["observation"],
+        ...         out_keys=["observation_str"],
+        ...             fn=lambda tensor: str(tensor.numpy().tobytes())))
+        >>> # process the string output
+        >>> env = env.append_transform(
+        ...     Hash(
+        ...         in_keys=["observation_str"],
+        ...         out_keys=["observation_hash"],)
+        ... )
+        >>> env.observation_spec
+        Composite(
+            observation: BoundedContinuous(
+                shape=torch.Size([3]),
+                space=ContinuousBox(
+                    low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous),
+            observation_str: NonTensor(
+                shape=torch.Size([]),
+                space=None,
+                device=cpu,
+                dtype=None,
+                domain=None),
+            observation_hash: UnboundedDiscrete(
+                shape=torch.Size([32]),
+                space=ContinuousBox(
+                    low=Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.uint8, contiguous=True),
+                    high=Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.uint8, contiguous=True)),
+                device=cpu,
+                dtype=torch.uint8,
+                domain=discrete),
+            device=None,
+            shape=torch.Size([]))
+        >>> env.rollout(3)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        observation_hash: Tensor(shape=torch.Size([3, 32]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        observation_str: NonTensorStack(
+                            ["b'g\\x08\\x8b\\xbexav\\xbf\\x00\\xee(>'", "b'\\x...,
+                            batch_size=torch.Size([3]),
+                            device=None),
+                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=None,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation_hash: Tensor(shape=torch.Size([3, 32]), device=cpu, dtype=torch.uint8, is_shared=False),
+                observation_str: NonTensorStack(
+                    ["b'\\xb5\\x17\\x8f\\xbe\\x88\\xccu\\xbf\\xc0Vr?'"...,
+                    batch_size=torch.Size([3]),
+                    device=None),
+                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+        >>> env.check_env_specs()
+        [torchrl][INFO] check_env_specs succeeded!
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey],
+        hash_fn: Callable = None,
+        seed: Any | None = None,
+        *,
+        use_raw_nontensor: bool = False,
+    ):
+        if hash_fn is None:
+            hash_fn = Hash.reproducible_hash
+
+        self._seed = seed
+        self._hash_fn = hash_fn
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            fn=self.call_hash_fn,
+            use_raw_nontensor=use_raw_nontensor,
+        )
+
+    def call_hash_fn(self, value):
+        if self._seed is None:
+            return self._hash_fn(value)
+        else:
+            return self._hash_fn(value, self._seed)
+
+    @classmethod
+    def reproducible_hash(cls, string, seed=None):
+        """Creates a reproducible 256-bit hash from a string using a seed.
+
+        Args:
+            string (str or None): The input string. If ``None``, null string ``""`` is used.
+            seed (str, optional): The seed value. Default is ``None``.
+
+        Returns:
+            Tensor: Shape ``(32,)`` with dtype ``torch.uint8``.
+        """
+        if string is None:
+            string = ""
+
+        # Prepend the seed to the string
+        if seed is not None:
+            seeded_string = seed + string
+        else:
+            seeded_string = string
+
+        # Create a new SHA-256 hash object
+        hash_object = hashlib.sha256()
+
+        # Update the hash object with the seeded string
+        hash_object.update(seeded_string.encode("utf-8"))
+
+        # Get the hash value as bytes
+        hash_bytes = bytearray(hash_object.digest())
+
+        return torch.frombuffer(hash_bytes, dtype=torch.uint8)
 
 
 class Stack(Transform):
