@@ -132,8 +132,8 @@
                   <span class=dropdown-title>Developer Resources</span>
                   <p>Find resources and get questions answered</p>
                 </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2023">
-                  <span class="dropdown-title">Contributor Awards - 2023</span>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
                   <p>Award winners announced at this year's PyTorch Conference</p>
                 </a>
               </div>
@@ -153,6 +153,9 @@
                 <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
                   <span class="dropdown-title">ExecuTorch</span>
                   <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
                 </a>
               </div>
             </div>  
@@ -201,6 +204,10 @@
                   <span class="dropdown-title">Events</span>
                   <p>Find events, webinars, and podcasts</p>
                 </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
             </div>
           </li>
 
@@ -216,7 +223,18 @@
                 </a>
                 <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
                   <span class="dropdown-title">Governing Board</span>
-                  <p></p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
                 </a>
               </div>
             </div>
@@ -268,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+61e05b3) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+256a700) &#x25BC</span></a>
     </div>
     
 
@@ -418,7 +436,13 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">TensorDictParams</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span><span class="p">,</span> <span class="n">TensorDictModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">composite_lp_aggregate</span><span class="p">,</span>
+    <span class="n">CompositeDistribution</span><span class="p">,</span>
+    <span class="n">dispatch</span><span class="p">,</span>
+    <span class="n">set_composite_lp_aggregate</span><span class="p">,</span>
+    <span class="n">TensorDictModule</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_right</span><span class="p">,</span> <span class="n">NestedKey</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">TensorSpec</span>
@@ -449,17 +473,13 @@
     <span class="k">return</span> <span class="n">new_func</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_log_prob</span><span class="p">(</span><span class="n">action_dist</span><span class="p">,</span> <span class="n">action_or_tensordict</span><span class="p">,</span> <span class="n">tensor_key</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_log_prob</span><span class="p">(</span><span class="n">action_dist</span><span class="p">,</span> <span class="n">action_or_tensordict</span><span class="p">,</span> <span class="n">tensor_key</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the log probability of an action given a distribution.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_or_tensordict</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-        <span class="n">log_p</span> <span class="o">=</span> <span class="n">action_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action_or_tensordict</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">maybe_log_prob</span> <span class="o">=</span> <span class="n">action_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action_or_tensordict</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">maybe_log_prob</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-            <span class="n">log_p</span> <span class="o">=</span> <span class="n">maybe_log_prob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">tensor_key</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">log_p</span> <span class="o">=</span> <span class="n">maybe_log_prob</span>
-    <span class="k">return</span> <span class="n">log_p</span>
+    <span class="n">lp</span> <span class="o">=</span> <span class="n">action_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action_or_tensordict</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">False</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">lp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">lp</span>
 
 
 <div class="viewcode-block" id="SACLoss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">SACLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
@@ -671,7 +691,8 @@
 <span class="sd">            state_action_value (NestedKey): The input tensordict key where the</span>
 <span class="sd">                state action value is expected.  Defaults to ``&quot;state_action_value&quot;``.</span>
 <span class="sd">            log_prob (NestedKey): The input tensordict key where the log probability is expected.</span>
-<span class="sd">                Defaults to ``&quot;sample_log_prob&quot;``.</span>
+<span class="sd">                Defaults to ``&quot;sample_log_prob&quot;`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,</span>
+<span class="sd">                `&quot;action_log_prob&quot;`  otherwise.</span>
 <span class="sd">            priority (NestedKey): The input tensordict key where the target priority is written to.</span>
 <span class="sd">                Defaults to ``&quot;td_error&quot;``.</span>
 <span class="sd">            reward (NestedKey): The input tensordict key where the reward is expected.</span>
@@ -687,13 +708,21 @@
         <span class="n">action</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span>
         <span class="n">value</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;state_value&quot;</span>
         <span class="n">state_action_value</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;state_action_value&quot;</span>
-        <span class="n">log_prob</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;sample_log_prob&quot;</span>
+        <span class="n">log_prob</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">priority</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;td_error&quot;</span>
         <span class="n">reward</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span>
         <span class="n">done</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span>
         <span class="n">terminated</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span>
 
-    <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span><span class="p">()</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_prob</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">composite_lp_aggregate</span><span class="p">(</span><span class="n">nowarn</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">log_prob</span> <span class="o">=</span> <span class="s2">&quot;sample_log_prob&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">log_prob</span> <span class="o">=</span> <span class="s2">&quot;action_log_prob&quot;</span>
+
+    <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span>
+    <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
     <span class="n">default_value_estimator</span> <span class="o">=</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD0</span>
 
     <span class="n">actor_network</span><span class="p">:</span> <span class="n">TensorDictModule</span>
@@ -827,6 +856,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_make_vmap</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span> <span class="o">=</span> <span class="n">reduction</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">skip_done_states</span> <span class="o">=</span> <span class="n">skip_done_states</span>
+
+        <span class="n">log_prob_keys</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="s2">&quot;log_prob_keys&quot;</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="n">action_keys</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="s2">&quot;dist_sample_keys&quot;</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_prob_keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">log_prob</span><span class="o">=</span><span class="n">log_prob_keys</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action_keys</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">log_prob</span><span class="o">=</span><span class="n">log_prob_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">action</span><span class="o">=</span><span class="n">action_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_make_vmap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_vmap_qnetworkN0</span> <span class="o">=</span> <span class="n">_vmap_func</span><span class="p">(</span>
@@ -1432,7 +1468,8 @@
         <span class="n">terminated</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span>
         <span class="n">log_prob</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;log_prob&quot;</span>
 
-    <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span><span class="p">()</span>
+    <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
+    <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span>
     <span class="n">default_value_estimator</span> <span class="o">=</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD0</span>
     <span class="n">delay_actor</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span>
@@ -2102,7 +2139,7 @@
                <a href="https://pytorch.org/resources">Developer Resources</a>
              </li>
              <li>
-               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2023</a>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
              </li>
            </ul>
 
@@ -2117,6 +2154,9 @@
              
              <li>
                <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
              </li>
            </ul>
 
@@ -2156,6 +2196,9 @@
             <li>
               <a href="https://pytorch.org/events">Events</a>
             </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
           </ul>
           
           <li class="resources-mobile-menu-title">
@@ -2168,6 +2211,18 @@
             </li>
             <li>
               <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
             </li>
           </ul>
         </ul>

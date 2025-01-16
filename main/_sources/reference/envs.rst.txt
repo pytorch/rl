@@ -827,6 +827,7 @@ to be able to create this other composition:
     FlattenObservation
     FrameSkipTransform
     GrayScale
+    Hash
     InitTracker
     KLRewardTransform
     LineariseReward
@@ -853,6 +854,7 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     TrajCounter
+    UnaryTransform
     UnsqueezeTransform
     VC1Transform
     VIPRewardTransform

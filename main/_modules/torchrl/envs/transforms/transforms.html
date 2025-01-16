@@ -132,8 +132,8 @@
                   <span class=dropdown-title>Developer Resources</span>
                   <p>Find resources and get questions answered</p>
                 </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2023">
-                  <span class="dropdown-title">Contributor Awards - 2023</span>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
                   <p>Award winners announced at this year's PyTorch Conference</p>
                 </a>
               </div>
@@ -153,6 +153,9 @@
                 <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
                   <span class="dropdown-title">ExecuTorch</span>
                   <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
                 </a>
               </div>
             </div>  
@@ -201,6 +204,10 @@
                   <span class="dropdown-title">Events</span>
                   <p>Find events, webinars, and podcasts</p>
                 </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
             </div>
           </li>
 
@@ -216,7 +223,18 @@
                 </a>
                 <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
                   <span class="dropdown-title">Governing Board</span>
-                  <p></p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
                 </a>
               </div>
             </div>
@@ -268,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+61e05b3) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+256a700) &#x25BC</span></a>
     </div>
     
 
@@ -409,6 +427,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mp</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
@@ -438,6 +457,7 @@
     <span class="n">is_tensor_collection</span><span class="p">,</span>
     <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
     <span class="n">NonTensorData</span><span class="p">,</span>
+    <span class="n">NonTensorStack</span><span class="p">,</span>
     <span class="n">set_lazy_legacy</span><span class="p">,</span>
     <span class="n">TensorDict</span><span class="p">,</span>
     <span class="n">TensorDictBase</span><span class="p">,</span>
@@ -484,7 +504,12 @@
     <span class="n">_set_missing_tolerance</span><span class="p">,</span>
     <span class="n">check_finite</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_sort_keys</span><span class="p">,</span> <span class="n">_update_during_reset</span><span class="p">,</span> <span class="n">step_mdp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_sort_keys</span><span class="p">,</span>
+    <span class="n">_update_during_reset</span><span class="p">,</span>
+    <span class="n">make_composite_from_td</span><span class="p">,</span>
+    <span class="n">step_mdp</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.value.functional</span><span class="w"> </span><span class="kn">import</span> <span class="n">reward2go</span>
 
 <span class="n">_has_tv</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -4803,6 +4828,325 @@
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(in_keys=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="si">}</span><span class="s2">, out_key&quot;</span>
             <span class="sa">f</span><span class="s2">&quot;=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">)&quot;</span>
         <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="UnaryTransform"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">UnaryTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies a unary operation on the specified inputs.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        in_keys (sequence of NestedKey): the keys of inputs to the unary operation.</span>
+<span class="sd">        out_keys (sequence of NestedKey): the keys of the outputs of the unary operation.</span>
+<span class="sd">        fn (Callable): the function to use as the unary operation. If it accepts</span>
+<span class="sd">            a non-tensor input, it must also accept ``None``.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        use_raw_nontensor (bool, optional): if ``False``, data is extracted from</span>
+<span class="sd">            :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called</span>
+<span class="sd">            on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`</span>
+<span class="sd">            inputs are given directly to ``fn``, which must support those</span>
+<span class="sd">            inputs. Default is ``False``.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv, UnaryTransform</span>
+<span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        ...     UnaryTransform(</span>
+<span class="sd">        ...         in_keys=[&quot;observation&quot;],</span>
+<span class="sd">        ...         out_keys=[&quot;observation_trsf&quot;],</span>
+<span class="sd">        ...             fn=lambda tensor: str(tensor.numpy().tobytes())))</span>
+<span class="sd">        &gt;&gt;&gt; env.observation_spec</span>
+<span class="sd">        Composite(</span>
+<span class="sd">            observation: BoundedContinuous(</span>
+<span class="sd">                shape=torch.Size([3]),</span>
+<span class="sd">                space=ContinuousBox(</span>
+<span class="sd">                    low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),</span>
+<span class="sd">                    high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),</span>
+<span class="sd">                device=cpu,</span>
+<span class="sd">                dtype=torch.float32,</span>
+<span class="sd">                domain=continuous),</span>
+<span class="sd">            observation_trsf: NonTensor(</span>
+<span class="sd">                shape=torch.Size([]),</span>
+<span class="sd">                space=None,</span>
+<span class="sd">                device=cpu,</span>
+<span class="sd">                dtype=None,</span>
+<span class="sd">                domain=None),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            shape=torch.Size([]))</span>
+<span class="sd">        &gt;&gt;&gt; env.rollout(3)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        observation_trsf: NonTensorStack(</span>
+<span class="sd">                            [&quot;b&#39;\\xbe\\xbc\\x7f?8\\x859=/\\x81\\xbe;&#39;&quot;, &quot;b&#39;\\x...,</span>
+<span class="sd">                            batch_size=torch.Size([3]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                observation_trsf: NonTensorStack(</span>
+<span class="sd">                    [&quot;b&#39;\\x9a\\xbd\\x7f?\\xb8T8=8.c&gt;&#39;&quot;, &quot;b&#39;\\xbe\\xbc\...,</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; env.check_env_specs()</span>
+<span class="sd">        [torchrl][INFO] check_env_specs succeeded!</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
+        <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">use_raw_nontensor</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fn</span> <span class="o">=</span> <span class="n">fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_use_raw_nontensor</span> <span class="o">=</span> <span class="n">use_raw_nontensor</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_raw_nontensor</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">NonTensorData</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;data&quot;</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">NonTensorStack</span><span class="p">):</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fn</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">_set_missing_tolerance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+<div class="viewcode-block" id="UnaryTransform.transform_output_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_output_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_output_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
+        <span class="n">output_spec</span> <span class="o">=</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="c1"># Make a generic input from the spec, call the transform with that</span>
+        <span class="c1"># input, and then generate the output spec from the output.</span>
+        <span class="n">zero_input_</span> <span class="o">=</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span>
+        <span class="n">test_input</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">zero_input_</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">zero_input_</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">])</span>
+            <span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">zero_input_</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">])</span>
+        <span class="p">)</span>
+        <span class="n">test_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">test_input</span><span class="p">)</span>
+        <span class="n">test_output_spec</span> <span class="o">=</span> <span class="n">make_composite_from_td</span><span class="p">(</span>
+            <span class="n">test_output</span><span class="p">,</span> <span class="n">unsqueeze_null_shapes</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+
+        <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform_observation_spec</span><span class="p">(</span>
+            <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">],</span>
+            <span class="n">test_output_spec</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;full_reward_spec&quot;</span> <span class="ow">in</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform_reward_spec</span><span class="p">(</span>
+                <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">],</span>
+                <span class="n">test_output_spec</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;full_done_spec&quot;</span> <span class="ow">in</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform_done_spec</span><span class="p">(</span>
+                <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">],</span>
+                <span class="n">test_output_spec</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">output_spec</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_transform_spec</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">test_output_spec</span><span class="p">:</span> <span class="n">TensorSpec</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2">: Only specs of type Composite can be transformed&quot;</span><span class="p">)</span>
+
+        <span class="n">spec_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">spec_keys</span><span class="p">:</span>
+                <span class="n">spec</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">test_output_spec</span><span class="p">[</span><span class="n">out_key</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">spec</span>
+
+<div class="viewcode-block" id="UnaryTransform.transform_observation_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_observation_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">test_output_spec</span><span class="p">:</span> <span class="n">TensorSpec</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform_spec</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">,</span> <span class="n">test_output_spec</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="UnaryTransform.transform_reward_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_reward_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_reward_spec</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">test_output_spec</span><span class="p">:</span> <span class="n">TensorSpec</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform_spec</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">,</span> <span class="n">test_output_spec</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="UnaryTransform.transform_done_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_done_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_done_spec</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">done_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">test_output_spec</span><span class="p">:</span> <span class="n">TensorSpec</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform_spec</span><span class="p">(</span><span class="n">done_spec</span><span class="p">,</span> <span class="n">test_output_spec</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="Hash"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Hash</span><span class="p">(</span><span class="n">UnaryTransform</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Adds a hash value to a tensordict.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        in_keys (sequence of NestedKey): the keys of the values to hash.</span>
+<span class="sd">        out_keys (sequence of NestedKey): the keys of the resulting hashes.</span>
+<span class="sd">        hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,</span>
+<span class="sd">            the hash function must accept it as its second argument. Default is</span>
+<span class="sd">            ``Hash.reproducible_hash``.</span>
+<span class="sd">        seed (optional): seed to use for the hash function, if it requires one.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        use_raw_nontensor (bool, optional): if ``False``, data is extracted from</span>
+<span class="sd">            :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called</span>
+<span class="sd">            on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`</span>
+<span class="sd">            inputs are given directly to ``fn``, which must support those</span>
+<span class="sd">            inputs. Default is ``False``.</span>
+
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv, UnaryTransform, Hash</span>
+<span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; # Add a string output</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        ...     UnaryTransform(</span>
+<span class="sd">        ...         in_keys=[&quot;observation&quot;],</span>
+<span class="sd">        ...         out_keys=[&quot;observation_str&quot;],</span>
+<span class="sd">        ...             fn=lambda tensor: str(tensor.numpy().tobytes())))</span>
+<span class="sd">        &gt;&gt;&gt; # process the string output</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        ...     Hash(</span>
+<span class="sd">        ...         in_keys=[&quot;observation_str&quot;],</span>
+<span class="sd">        ...         out_keys=[&quot;observation_hash&quot;],)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; env.observation_spec</span>
+<span class="sd">        Composite(</span>
+<span class="sd">            observation: BoundedContinuous(</span>
+<span class="sd">                shape=torch.Size([3]),</span>
+<span class="sd">                space=ContinuousBox(</span>
+<span class="sd">                    low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),</span>
+<span class="sd">                    high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),</span>
+<span class="sd">                device=cpu,</span>
+<span class="sd">                dtype=torch.float32,</span>
+<span class="sd">                domain=continuous),</span>
+<span class="sd">            observation_str: NonTensor(</span>
+<span class="sd">                shape=torch.Size([]),</span>
+<span class="sd">                space=None,</span>
+<span class="sd">                device=cpu,</span>
+<span class="sd">                dtype=None,</span>
+<span class="sd">                domain=None),</span>
+<span class="sd">            observation_hash: UnboundedDiscrete(</span>
+<span class="sd">                shape=torch.Size([32]),</span>
+<span class="sd">                space=ContinuousBox(</span>
+<span class="sd">                    low=Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.uint8, contiguous=True),</span>
+<span class="sd">                    high=Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.uint8, contiguous=True)),</span>
+<span class="sd">                device=cpu,</span>
+<span class="sd">                dtype=torch.uint8,</span>
+<span class="sd">                domain=discrete),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            shape=torch.Size([]))</span>
+<span class="sd">        &gt;&gt;&gt; env.rollout(3)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        observation_hash: Tensor(shape=torch.Size([3, 32]), device=cpu, dtype=torch.uint8, is_shared=False),</span>
+<span class="sd">                        observation_str: NonTensorStack(</span>
+<span class="sd">                            [&quot;b&#39;g\\x08\\x8b\\xbexav\\xbf\\x00\\xee(&gt;&#39;&quot;, &quot;b&#39;\\x...,</span>
+<span class="sd">                            batch_size=torch.Size([3]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                observation_hash: Tensor(shape=torch.Size([3, 32]), device=cpu, dtype=torch.uint8, is_shared=False),</span>
+<span class="sd">                observation_str: NonTensorStack(</span>
+<span class="sd">                    [&quot;b&#39;\\xb5\\x17\\x8f\\xbe\\x88\\xccu\\xbf\\xc0Vr?&#39;&quot;...,</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; env.check_env_specs()</span>
+<span class="sd">        [torchrl][INFO] check_env_specs succeeded!</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
+        <span class="n">hash_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">use_raw_nontensor</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">hash_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">hash_fn</span> <span class="o">=</span> <span class="n">Hash</span><span class="o">.</span><span class="n">reproducible_hash</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_seed</span> <span class="o">=</span> <span class="n">seed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_hash_fn</span> <span class="o">=</span> <span class="n">hash_fn</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span>
+            <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
+            <span class="n">fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">call_hash_fn</span><span class="p">,</span>
+            <span class="n">use_raw_nontensor</span><span class="o">=</span><span class="n">use_raw_nontensor</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">call_hash_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hash_fn</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hash_fn</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seed</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Hash.reproducible_hash"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash.reproducible_hash">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reproducible_hash</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">string</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates a reproducible 256-bit hash from a string using a seed.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            string (str or None): The input string. If ``None``, null string ``&quot;&quot;`` is used.</span>
+<span class="sd">            seed (str, optional): The seed value. Default is ``None``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tensor: Shape ``(32,)`` with dtype ``torch.uint8``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">string</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">string</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+
+        <span class="c1"># Prepend the seed to the string</span>
+        <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">seeded_string</span> <span class="o">=</span> <span class="n">seed</span> <span class="o">+</span> <span class="n">string</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">seeded_string</span> <span class="o">=</span> <span class="n">string</span>
+
+        <span class="c1"># Create a new SHA-256 hash object</span>
+        <span class="n">hash_object</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
+
+        <span class="c1"># Update the hash object with the seeded string</span>
+        <span class="n">hash_object</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">seeded_string</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+
+        <span class="c1"># Get the hash value as bytes</span>
+        <span class="n">hash_bytes</span> <span class="o">=</span> <span class="nb">bytearray</span><span class="p">(</span><span class="n">hash_object</span><span class="o">.</span><span class="n">digest</span><span class="p">())</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="n">hash_bytes</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span></div></div>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">Stack</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
@@ -10081,7 +10425,7 @@
                <a href="https://pytorch.org/resources">Developer Resources</a>
              </li>
              <li>
-               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2023</a>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
              </li>
            </ul>
 
@@ -10096,6 +10440,9 @@
              
              <li>
                <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
              </li>
            </ul>
 
@@ -10135,6 +10482,9 @@
             <li>
               <a href="https://pytorch.org/events">Events</a>
             </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
           </ul>
           
           <li class="resources-mobile-menu-title">
@@ -10147,6 +10497,18 @@
             </li>
             <li>
               <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
             </li>
           </ul>
         </ul>
