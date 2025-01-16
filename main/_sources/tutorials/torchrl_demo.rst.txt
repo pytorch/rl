@@ -588,9 +588,9 @@ Using them makes it easy to abstract away the behaviour of the replay buffer for
         batch_size=torch.Size([2]),
         device=None,
         is_shared=False)
-    tensor([0, 0])
+    tensor([1, 0])
     0 0.28791671991348267
-    1 1.0
+    1 0.06984967738389969
     2 0.0
 
 
@@ -1896,9 +1896,9 @@ See the `Contributing guide <https://github.com/pytorch/rl/blob/main/CONTRIBUTIN
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (2 minutes 27.714 seconds)
+   **Total running time of the script:** (2 minutes 27.534 seconds)
 
-**Estimated memory usage:**  447 MB
+**Estimated memory usage:**  324 MB
 
 
 .. _sphx_glr_download_tutorials_torchrl_demo.py:
