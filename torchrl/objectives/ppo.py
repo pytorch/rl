@@ -959,6 +959,8 @@ class ClipPPOLoss(PPOLoss):
             # to different, unrelated trajectories, which is not standard. Still it can give a idea of the dispersion
             # of the weights.
             lw = log_weight.squeeze()
+            if not isinstance(lw, torch.Tensor):
+                lw = _sum_td_features(lw)
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
