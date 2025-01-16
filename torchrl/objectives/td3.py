@@ -205,7 +205,7 @@ class TD3Loss(LossModule):
         terminated: NestedKey = "terminated"
 
     tensor_keys: _AcceptedKeys
-    default_keys = _AcceptedKeys()
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
         "loss_actor",

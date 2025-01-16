@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import contextlib
+import warnings
 
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Tuple
+from typing import List, Tuple
 
 import torch
 from tensordict import (
@@ -18,10 +19,12 @@ from tensordict import (
     TensorDictParams,
 )
 from tensordict.nn import (
+    composite_lp_aggregate,
     CompositeDistribution,
     dispatch,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
+    set_composite_lp_aggregate,
     TensorDictModule,
 )
 from tensordict.utils import NestedKey
@@ -34,6 +37,8 @@ from torchrl.objectives.utils import (
     _cache_values,
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _maybe_add_or_extend_key,
+    _maybe_get_or_select,
     _reduce,
     _sum_td_features,
     default_value_kwargs,
@@ -47,7 +52,6 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
-from yaml import warnings
 
 
 class PPOLoss(LossModule):
@@ -69,7 +73,10 @@ class PPOLoss(LossModule):
 
     Args:
         actor_network (ProbabilisticTensorDictSequential): policy operator.
-        critic_network (ValueOperator): value operator.
+            Typically, a :class:`~tensordict.nn.ProbabilisticTensorDictSequential` subclass taking observations
+            as input and outputting an action (or actions) as well as its log-probability value.
+        critic_network (ValueOperator): value operator. The critic will usually take the observations as input
+            and return a scalar value (``state_value`` by default) in the output keys.
 
     Keyword Args:
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
@@ -272,16 +279,18 @@ class PPOLoss(LossModule):
                 Will be used for the underlying value estimator Defaults to ``"value_target"``.
             value (NestedKey): The input tensordict key where the state value is expected.
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-            sample_log_prob (NestedKey): The input tensordict key where the
-               sample log probability is expected.  Defaults to ``"sample_log_prob"``.
-            action (NestedKey): The input tensordict key where the action is expected.
+            sample_log_prob (NestedKey or list of nested keys): The input tensordict key where the
+               sample log probability is expected.
+               Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
+            action (NestedKey or list of nested keys): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
-            reward (NestedKey): The input tensordict key where the reward is expected.
+            reward (NestedKey or list of nested keys): The input tensordict key where the reward is expected.
                 Will be used for the underlying value estimator. Defaults to ``"reward"``.
-            done (NestedKey): The key in the input TensorDict that indicates
+            done (NestedKey or list of nested keys): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
-            terminated (NestedKey): The key in the input TensorDict that indicates
+            terminated (NestedKey or list of nested keys): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
         """
@@ -289,17 +298,24 @@ class PPOLoss(LossModule):
         advantage: NestedKey = "advantage"
         value_target: NestedKey = "value_target"
         value: NestedKey = "state_value"
-        sample_log_prob: NestedKey = "sample_log_prob"
-        action: NestedKey = "action"
-        reward: NestedKey = "reward"
-        done: NestedKey = "done"
-        terminated: NestedKey = "terminated"
+        sample_log_prob: NestedKey | List[NestedKey] | None = None
+        action: NestedKey | List[NestedKey] = "action"
+        reward: NestedKey | List[NestedKey] = "reward"
+        done: NestedKey | List[NestedKey] = "done"
+        terminated: NestedKey | List[NestedKey] = "terminated"
 
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
-    default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
 
-    actor_network: TensorDictModule
+    actor_network: ProbabilisticTensorDictModule
     critic_network: TensorDictModule
     actor_network_params: TensorDictParams
     critic_network_params: TensorDictParams
@@ -376,7 +392,7 @@ class PPOLoss(LossModule):
 
         try:
             device = next(self.parameters()).device
-        except AttributeError:
+        except (AttributeError, StopIteration):
             device = torch.device("cpu")
 
         self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
@@ -411,22 +427,28 @@ class PPOLoss(LossModule):
                     f"clip_value must be a float or a scalar tensor, got {clip_value}."
                 )
         self.register_buffer("clip_value", clip_value)
+        log_prob_keys = self.actor_network.log_prob_keys
+        action_keys = self.actor_network.dist_sample_keys
+        if len(log_prob_keys) > 1:
+            self.set_keys(sample_log_prob=log_prob_keys, action=action_keys)
+        else:
+            self.set_keys(sample_log_prob=log_prob_keys[0], action=action_keys[0])
 
     @property
     def functional(self):
         return self._functional
 
     def _set_in_keys(self):
-        keys = [
-            self.tensor_keys.action,
-            self.tensor_keys.sample_log_prob,
-            ("next", self.tensor_keys.reward),
-            ("next", self.tensor_keys.done),
-            ("next", self.tensor_keys.terminated),
-            *self.actor_network.in_keys,
-            *[("next", key) for key in self.actor_network.in_keys],
-            *self.critic_network.in_keys,
-        ]
+        keys = []
+        _maybe_add_or_extend_key(keys, self.actor_network.in_keys)
+        _maybe_add_or_extend_key(keys, self.actor_network.in_keys, "next")
+        _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
+        _maybe_add_or_extend_key(keys, self.tensor_keys.action)
+        _maybe_add_or_extend_key(keys, self.tensor_keys.sample_log_prob)
+        _maybe_add_or_extend_key(keys, self.tensor_keys.reward, "next")
+        _maybe_add_or_extend_key(keys, self.tensor_keys.done, "next")
+        _maybe_add_or_extend_key(keys, self.tensor_keys.terminated, "next")
+
         self._in_keys = list(set(keys))
 
     @property
@@ -465,6 +487,7 @@ class PPOLoss(LossModule):
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
                 terminated=self.tensor_keys.terminated,
+                sample_log_prob=self.tensor_keys.sample_log_prob,
             )
         self._set_in_keys()
 
@@ -473,33 +496,56 @@ class PPOLoss(LossModule):
 
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
         try:
-            if isinstance(dist, CompositeDistribution):
-                kwargs = {"aggregate_probabilities": False, "include_sum": False}
-            else:
-                kwargs = {}
-            entropy = dist.entropy(**kwargs)
-            if is_tensor_collection(entropy):
-                entropy = _sum_td_features(entropy)
+            entropy = dist.entropy()
         except NotImplementedError:
-            x = dist.rsample((self.samples_mc_entropy,))
-            log_prob = dist.log_prob(x)
-            if is_tensor_collection(log_prob):
-                log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+            if getattr(dist, "has_rsample", False):
+                x = dist.rsample((self.samples_mc_entropy,))
+            else:
+                x = dist.sample((self.samples_mc_entropy,))
+            with set_composite_lp_aggregate(False) if isinstance(
+                dist, CompositeDistribution
+            ) else contextlib.nullcontext():
+                log_prob = dist.log_prob(x)
+                if is_tensor_collection(log_prob):
+                    if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
+                        log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+                    else:
+                        log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
+
             entropy = -log_prob.mean(0)
+        if is_tensor_collection(entropy):
+            entropy = _sum_td_features(entropy)
         return entropy.unsqueeze(-1)
 
     def _log_weight(
         self, tensordict: TensorDictBase
     ) -> Tuple[torch.Tensor, d.Distribution]:
-        # current log_prob of actions
-        action = tensordict.get(self.tensor_keys.action)
 
         with self.actor_network_params.to_module(
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict)
+        if isinstance(dist, CompositeDistribution):
+            is_composite = True
+        else:
+            is_composite = False
 
-        prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
+        # current log_prob of actions
+        if is_composite:
+            action = tensordict.select(
+                *(
+                    (self.tensor_keys.action,)
+                    if isinstance(self.tensor_keys.action, NestedKey)
+                    else self.tensor_keys.action
+                )
+            )
+        else:
+            action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
+
+        prev_log_prob = _maybe_get_or_select(
+            tensordict, self.tensor_keys.sample_log_prob
+        )
+
         if prev_log_prob.requires_grad:
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.sample_log_prob} requires grad."
@@ -509,26 +555,29 @@ class PPOLoss(LossModule):
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.action} requires grad."
             )
-        if isinstance(action, torch.Tensor):
-            log_prob = dist.log_prob(action)
-        else:
-            if isinstance(dist, CompositeDistribution):
-                is_composite = True
-                kwargs = {
-                    "inplace": False,
-                    "aggregate_probabilities": False,
-                    "include_sum": False,
-                }
-            else:
-                is_composite = False
-                kwargs = {}
-            log_prob = dist.log_prob(tensordict, **kwargs)
-            if is_composite and not isinstance(prev_log_prob, TensorDict):
-                log_prob = _sum_td_features(log_prob)
-                log_prob.view_as(prev_log_prob)
+        log_prob = dist.log_prob(action)
+        if is_composite:
+            with set_composite_lp_aggregate(False):
+                if not is_tensor_collection(prev_log_prob):
+                    # this isn't great, in general multihead actions should have a composite log-prob too
+                    warnings.warn(
+                        "You are using a composite distribution, yet your log-probability is a tensor. "
+                        "Make sure you have called tensordict.nn.set_composite_lp_aggregate(False).set() at "
+                        "the beginning of your script to get a proper composite log-prob.",
+                        category=UserWarning,
+                    )
+                if (
+                    is_composite
+                    and not is_tensor_collection(prev_log_prob)
+                    and is_tensor_collection(log_prob)
+                ):
+                    log_prob = _sum_td_features(log_prob)
+                    log_prob.view_as(prev_log_prob)
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
+        if is_tensor_collection(kl_approx):
+            kl_approx = _sum_td_features(kl_approx)
 
         return log_weight, dist, kl_approx
 
@@ -910,6 +959,8 @@ class ClipPPOLoss(PPOLoss):
             # to different, unrelated trajectories, which is not standard. Still it can give a idea of the dispersion
             # of the weights.
             lw = log_weight.squeeze()
+            if not isinstance(lw, torch.Tensor):
+                lw = _sum_td_features(lw)
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
@@ -920,7 +971,9 @@ class ClipPPOLoss(PPOLoss):
         ratio = log_weight_clip.exp()
         gain2 = ratio * advantage
 
-        gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
+        gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
+        if is_tensor_collection(gain):
+            gain = _sum_td_features(gain)
         td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
         td_out.set("clip_fraction", clip_fraction)
 
@@ -1120,16 +1173,16 @@ class KLPENPPOLoss(PPOLoss):
         self.samples_mc_kl = samples_mc_kl
 
     def _set_in_keys(self):
-        keys = [
-            self.tensor_keys.action,
-            self.tensor_keys.sample_log_prob,
-            ("next", self.tensor_keys.reward),
-            ("next", self.tensor_keys.done),
-            ("next", self.tensor_keys.terminated),
-            *self.actor_network.in_keys,
-            *[("next", key) for key in self.actor_network.in_keys],
-            *self.critic_network.in_keys,
-        ]
+        keys = []
+        _maybe_add_or_extend_key(keys, self.actor_network.in_keys)
+        _maybe_add_or_extend_key(keys, self.actor_network.in_keys, "next")
+        _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
+        _maybe_add_or_extend_key(keys, self.tensor_keys.action)
+        _maybe_add_or_extend_key(keys, self.tensor_keys.sample_log_prob)
+        _maybe_add_or_extend_key(keys, self.tensor_keys.reward, "next")
+        _maybe_add_or_extend_key(keys, self.tensor_keys.done, "next")
+        _maybe_add_or_extend_key(keys, self.tensor_keys.terminated, "next")
+
         # Get the parameter keys from the actor dist
         actor_dist_module = None
         for module in self.actor_network.modules():
@@ -1197,27 +1250,26 @@ class KLPENPPOLoss(PPOLoss):
 
         log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
         neg_loss = log_weight.exp() * advantage
+        if is_tensor_collection(neg_loss):
+            neg_loss = _sum_td_features(neg_loss)
 
         with self.actor_network_params.to_module(
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             current_dist = self.actor_network.get_dist(tensordict_copy)
+        is_composite = isinstance(current_dist, CompositeDistribution)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
-            if isinstance(previous_dist, CompositeDistribution):
-                kwargs = {
-                    "aggregate_probabilities": False,
-                    "inplace": False,
-                    "include_sum": False,
-                }
-            else:
-                kwargs = {}
-            previous_log_prob = previous_dist.log_prob(x, **kwargs)
-            current_log_prob = current_dist.log_prob(x, **kwargs)
-            if is_tensor_collection(current_log_prob):
+            with set_composite_lp_aggregate(
+                False
+            ) if is_composite else contextlib.nullcontext():
+                previous_log_prob = previous_dist.log_prob(x)
+                current_log_prob = current_dist.log_prob(x)
+            if is_tensor_collection(previous_log_prob):
                 previous_log_prob = _sum_td_features(previous_log_prob)
+                # Both dists have presumably the same params
                 current_log_prob = _sum_td_features(current_log_prob)
             kl = (previous_log_prob - current_log_prob).mean(0)
         kl = kl.unsqueeze(-1)

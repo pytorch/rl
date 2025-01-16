@@ -13,7 +13,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import composite_lp_aggregate, dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
 
@@ -121,14 +121,21 @@ class REDQLoss_deprecated(LossModule):
         action: NestedKey = "action"
         state_action_value: NestedKey = "state_action_value"
         value: NestedKey = "state_value"
-        log_prob: NestedKey = "_log_prob"
+        log_prob: NestedKey | None = None
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
+        def __post_init__(self):
+            if self.log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.log_prob = "sample_log_prob"
+                else:
+                    self.log_prob = "action_log_prob"
+
     tensor_keys: _AcceptedKeys
-    default_keys = _AcceptedKeys()
+    default_keys = _AcceptedKeys
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
 
@@ -359,12 +366,14 @@ class REDQLoss_deprecated(LossModule):
             tensordict_clone.select(*self.qvalue_network.in_keys, strict=False),
             self._cached_detach_qvalue_network_params,
         )
-        state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
+        state_action_value = tensordict_expand.get(
+            self.tensor_keys.state_action_value
+        ).squeeze(-1)
         loss_actor = -(
             state_action_value
-            - self.alpha * tensordict_clone.get("sample_log_prob").squeeze(-1)
+            - self.alpha * tensordict_clone.get(self.tensor_keys.log_prob).squeeze(-1)
         )
-        return loss_actor, tensordict_clone.get("sample_log_prob")
+        return loss_actor, tensordict_clone.get(self.tensor_keys.log_prob)
 
     def _qvalue_loss(self, tensordict: TensorDictBase) -> Tensor:
         tensordict_save = tensordict
@@ -389,30 +398,33 @@ class REDQLoss_deprecated(LossModule):
                 ExplorationType.RANDOM
             ), self.target_actor_network_params.to_module(self.actor_network):
                 self.actor_network(next_td)
-            sample_log_prob = next_td.get("sample_log_prob")
+            sample_log_prob = next_td.get(self.tensor_keys.log_prob)
             # get q-values
             next_td = self._vmap_qvalue_networkN0(
                 next_td,
                 selected_q_params,
             )
-            state_action_value = next_td.get("state_action_value")
+            state_action_value = next_td.get(self.tensor_keys.state_action_value)
             if (
                 state_action_value.shape[-len(sample_log_prob.shape) :]
                 != sample_log_prob.shape
             ):
                 sample_log_prob = sample_log_prob.unsqueeze(-1)
             next_state_value = (
-                next_td.get("state_action_value") - self.alpha * sample_log_prob
+                next_td.get(self.tensor_keys.state_action_value)
+                - self.alpha * sample_log_prob
             )
             next_state_value = next_state_value.min(0)[0]
 
-        tensordict.set(("next", "state_value"), next_state_value)
+        tensordict.set(("next", self.tensor_keys.value), next_state_value)
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
         tensordict_expand = self._vmap_qvalue_networkN0(
             tensordict.select(*self.qvalue_network.in_keys, strict=False),
             self.qvalue_network_params,
         )
-        pred_val = tensordict_expand.get("state_action_value").squeeze(-1)
+        pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
+            -1
+        )
         td_error = abs(pred_val - target_value)
         loss_qval = distance_loss(
             pred_val,

@@ -15,7 +15,13 @@ import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import (
+    composite_lp_aggregate,
+    CompositeDistribution,
+    dispatch,
+    set_composite_lp_aggregate,
+    TensorDictModule,
+)
 from tensordict.utils import expand_right, NestedKey
 from torch import Tensor
 from torchrl.data.tensor_specs import Composite, TensorSpec
@@ -46,17 +52,13 @@ def _delezify(func):
     return new_func
 
 
-def compute_log_prob(action_dist, action_or_tensordict, tensor_key):
+def compute_log_prob(action_dist, action_or_tensordict, tensor_key) -> torch.Tensor:
     """Compute the log probability of an action given a distribution."""
-    if isinstance(action_or_tensordict, torch.Tensor):
-        log_p = action_dist.log_prob(action_or_tensordict)
-    else:
-        maybe_log_prob = action_dist.log_prob(action_or_tensordict)
-        if not isinstance(maybe_log_prob, torch.Tensor):
-            log_p = maybe_log_prob.get(tensor_key)
-        else:
-            log_p = maybe_log_prob
-    return log_p
+    lp = action_dist.log_prob(action_or_tensordict)
+    if isinstance(action_dist, CompositeDistribution):
+        with set_composite_lp_aggregate(False):
+            return sum(lp.sum(dim="feature").values(True, True))
+    return lp
 
 
 class SACLoss(LossModule):
@@ -268,7 +270,8 @@ class SACLoss(LossModule):
             state_action_value (NestedKey): The input tensordict key where the
                 state action value is expected.  Defaults to ``"state_action_value"``.
             log_prob (NestedKey): The input tensordict key where the log probability is expected.
-                Defaults to ``"sample_log_prob"``.
+                Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
@@ -284,14 +287,21 @@ class SACLoss(LossModule):
         action: NestedKey = "action"
         value: NestedKey = "state_value"
         state_action_value: NestedKey = "state_action_value"
-        log_prob: NestedKey = "sample_log_prob"
+        log_prob: NestedKey | None = None
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
+        def __post_init__(self):
+            if self.log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.log_prob = "sample_log_prob"
+                else:
+                    self.log_prob = "action_log_prob"
+
+    default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
-    default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
 
     actor_network: TensorDictModule
@@ -425,6 +435,13 @@ class SACLoss(LossModule):
         self._make_vmap()
         self.reduction = reduction
         self.skip_done_states = skip_done_states
+
+        log_prob_keys = getattr(self.actor_network, "log_prob_keys", [])
+        action_keys = getattr(self.actor_network, "dist_sample_keys", [])
+        if len(log_prob_keys) > 1:
+            self.set_keys(log_prob=log_prob_keys, action=action_keys)
+        else:
+            self.set_keys(log_prob=log_prob_keys[0], action=action_keys[0])
 
     def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
@@ -1031,7 +1048,7 @@ class DiscreteSACLoss(LossModule):
         log_prob: NestedKey = "log_prob"
 
     tensor_keys: _AcceptedKeys
-    default_keys = _AcceptedKeys()
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     delay_actor: bool = False
     out_keys = [

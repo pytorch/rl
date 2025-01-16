@@ -13,23 +13,29 @@ from functools import wraps
 from typing import Callable, List, Union
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import is_tensor_collection, TensorDictBase
 from tensordict.nn import (
-    CompositeDistribution,
+    composite_lp_aggregate,
     dispatch,
     ProbabilisticTensorDictModule,
+    set_composite_lp_aggregate,
     set_skip_existing,
     TensorDictModule,
     TensorDictModuleBase,
 )
 from tensordict.nn.probabilistic import interaction_type
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
 
-from torchrl.objectives.utils import _vmap_func, hold_out_net, RANDOM_MODULE_LIST
+from torchrl.objectives.utils import (
+    _maybe_get_or_select,
+    _vmap_func,
+    hold_out_net,
+    RANDOM_MODULE_LIST,
+)
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -83,16 +89,9 @@ def _call_actor_net(
     log_prob_key: NestedKey,
 ):
     dist = actor_net.get_dist(data.select(*actor_net.in_keys, strict=False))
-    if isinstance(dist, CompositeDistribution):
-        kwargs = {
-            "aggregate_probabilities": True,
-            "inplace": False,
-            "include_sum": False,
-        }
-    else:
-        kwargs = {}
     s = actor_net._dist_sample(dist, interaction_type=interaction_type())
-    return dist.log_prob(s, **kwargs)
+    with set_composite_lp_aggregate(True):
+        return dist.log_prob(s)
 
 
 class ValueEstimatorBase(TensorDictModuleBase):
@@ -131,7 +130,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 that indicates the number of steps to the next observation.
                 Defaults to ``"steps_to_next_obs"``.
             sample_log_prob (NestedKey): The key in the input tensordict that
-                indicates the log probability of the sampled action. Defaults to ``"sample_log_prob"``.
+                indicates the log probability of the sampled action.
+                Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
         """
 
         advantage: NestedKey = "advantage"
@@ -141,10 +142,17 @@ class ValueEstimatorBase(TensorDictModuleBase):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
-        sample_log_prob: NestedKey = "sample_log_prob"
+        sample_log_prob: NestedKey | None = None
 
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
-    default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
     _vmap_randomness = None
 
@@ -294,13 +302,18 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     def set_keys(self, **kwargs) -> None:
         """Set tensordict key names."""
-        for key, value in kwargs.items():
-            if not isinstance(value, (str, tuple)):
+        for key, value in list(kwargs.items()):
+            if isinstance(value, list):
+                value = [unravel_key(k) for k in value]
+            elif not isinstance(value, (str, tuple)):
+                if value is None:
+                    raise ValueError("tensordict keys cannot be None")
                 raise ValueError(
                     f"key name must be of type NestedKey (Union[str, Tuple[str]]) but got {type(value)}"
                 )
-            if value is None:
-                raise ValueError("tensordict keys cannot be None")
+            else:
+                value = unravel_key(value)
+
             if key not in self._AcceptedKeys.__dict__:
                 raise KeyError(
                     f"{key} is not an accepted tensordict key for advantages"
@@ -313,8 +326,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 raise KeyError(
                     f"value key '{value}' not found in value network out_keys {self.value_network.out_keys}"
                 )
+            kwargs[key] = value
         if self._tensor_keys is None:
-            conf = asdict(self.default_keys)
+            conf = asdict(self.default_keys())
             conf.update(self.dep_keys)
         else:
             conf = asdict(self._tensor_keys)
@@ -1766,12 +1780,11 @@ class VTrace(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
-        # Make sure we have the log prob computed at collection time
-        if self.tensor_keys.sample_log_prob not in tensordict.keys():
-            raise ValueError(
-                f"Expected {self.tensor_keys.sample_log_prob} to be in tensordict"
-            )
-        log_mu = tensordict.get(self.tensor_keys.sample_log_prob).view_as(value)
+        lp = _maybe_get_or_select(tensordict, self.tensor_keys.sample_log_prob)
+        if is_tensor_collection(lp):
+            # Sum all values to match the batch size
+            lp = lp.sum(dim="feature", reduce=True)
+        log_mu = lp.view_as(value)
 
         # Compute log prob with current policy
         with hold_out_net(self.actor_network):

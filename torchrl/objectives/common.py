@@ -247,7 +247,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             if value is not None:
                 setattr(self.tensor_keys, key, value)
             else:
-                setattr(self.tensor_keys, key, self.default_keys.key)
+                setattr(self.tensor_keys, key, self.default_keys().key)
 
         try:
             self._forward_value_estimator_keys(**kwargs)

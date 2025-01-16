@@ -261,7 +261,7 @@ class CQLLoss(LossModule):
         terminated: NestedKey = "terminated"
 
     tensor_keys: _AcceptedKeys
-    default_keys = _AcceptedKeys()
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 
     actor_network: TensorDictModule
@@ -1026,7 +1026,7 @@ class DiscreteCQLLoss(LossModule):
         pred_val: NestedKey = "pred_val"
 
     tensor_keys: _AcceptedKeys
-    default_keys = _AcceptedKeys()
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
         "loss_qvalue",

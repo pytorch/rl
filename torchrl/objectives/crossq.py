@@ -243,7 +243,7 @@ class CrossQLoss(LossModule):
         log_prob: NestedKey = "_log_prob"
 
     tensor_keys: _AcceptedKeys
-    default_keys = _AcceptedKeys()
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 
     actor_network: ProbabilisticActor
