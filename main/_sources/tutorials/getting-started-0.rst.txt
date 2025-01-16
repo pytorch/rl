@@ -202,7 +202,7 @@ dictionary:
 
  .. code-block:: none
 
-    tensor([-1.8367])
+    tensor([1.8937])
 
 
 
@@ -565,7 +565,7 @@ To explore further what TorchRL's environments can do, go and check:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 46.915 seconds)
+   **Total running time of the script:** (0 minutes 53.331 seconds)
 
 **Estimated memory usage:**  318 MB
 
