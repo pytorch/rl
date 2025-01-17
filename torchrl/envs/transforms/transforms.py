@@ -795,6 +795,17 @@ but got an object of type {type(transform)}."""
             input_spec = self.__dict__.get("_input_spec", None)
         return input_spec
 
+    def rand_action(self, tensordict: Optional[TensorDictBase] = None) -> TensorDict:
+        if self.base_env.rand_action is not EnvBase.rand_action:
+            # TODO: this will fail if the transform modifies the input.
+            #  For instance, if PendulumEnv overrides rand_action and we build a
+            #  env = PendulumEnv().append_transform(ActionDiscretizer(num_intervals=4))
+            #  env.rand_action will NOT have a discrete action!
+            #  Getting a discrete action would require coding the inverse transform of an action within
+            #  ActionDiscretizer (ie, float->int, not int->float).
+            return self.base_env.rand_action(tensordict)
+        return super().rand_action(tensordict)
+
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # No need to clone here because inv does it already
         # tensordict = tensordict.clone(False)
@@ -4415,10 +4426,12 @@ class UnaryTransform(Transform):
     Args:
         in_keys (sequence of NestedKey): the keys of inputs to the unary operation.
         out_keys (sequence of NestedKey): the keys of the outputs of the unary operation.
-        fn (Callable): the function to use as the unary operation. If it accepts
-            a non-tensor input, it must also accept ``None``.
+        in_keys_inv (sequence of NestedKey): the keys of inputs to the unary operation during inverse call.
+        out_keys_inv (sequence of NestedKey): the keys of the outputs of the unary operation durin inverse call.
 
     Keyword Args:
+        fn (Callable): the function to use as the unary operation. If it accepts
+            a non-tensor input, it must also accept ``None``.
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
             :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
             on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
@@ -4489,11 +4502,18 @@ class UnaryTransform(Transform):
         self,
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
-        fn: Callable,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
         *,
+        fn: Callable,
         use_raw_nontensor: bool = False,
     ):
-        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
         self._fn = fn
         self._use_raw_nontensor = use_raw_nontensor
 
@@ -4508,12 +4528,49 @@ class UnaryTransform(Transform):
                 value = value.tolist()
         return self._fn(value)
 
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
+        if not self._use_raw_nontensor:
+            if isinstance(state, NonTensorData):
+                if state.dim() == 0:
+                    state = state.get("data")
+                else:
+                    state = state.tolist()
+            elif isinstance(state, NonTensorStack):
+                state = state.tolist()
+        return self._fn(state)
+
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         with _set_missing_tolerance(self, True):
             tensordict_reset = self._call(tensordict_reset)
         return tensordict_reset
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        input_spec = input_spec.clone()
+
+        # Make a generic input from the spec, call the transform with that
+        # input, and then generate the output spec from the output.
+        zero_input_ = input_spec.zero()
+        test_input = zero_input_["full_action_spec"].update(
+            zero_input_["full_state_spec"]
+        )
+        test_output = self.inv(test_input)
+        test_input_spec = make_composite_from_td(
+            test_output, unsqueeze_null_shapes=False
+        )
+
+        input_spec["full_action_spec"] = self.transform_action_spec(
+            input_spec["full_action_spec"],
+            test_input_spec,
+        )
+        if "full_state_spec" in input_spec.keys():
+            input_spec["full_state_spec"] = self.transform_state_spec(
+                input_spec["full_state_spec"],
+                test_input_spec,
+            )
+        print(input_spec)
+        return input_spec
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
         output_spec = output_spec.clone()
@@ -4575,6 +4632,16 @@ class UnaryTransform(Transform):
     ) -> TensorSpec:
         return self._transform_spec(done_spec, test_output_spec)
 
+    def transform_action_spec(
+        self, action_spec: TensorSpec, test_input_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(action_spec, test_input_spec)
+
+    def transform_state_spec(
+        self, state_spec: TensorSpec, test_input_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(state_spec, test_input_spec)
+
 
 class Hash(UnaryTransform):
     r"""Adds a hash value to a tensordict.
@@ -4582,12 +4649,14 @@ class Hash(UnaryTransform):
     Args:
         in_keys (sequence of NestedKey): the keys of the values to hash.
         out_keys (sequence of NestedKey): the keys of the resulting hashes.
+        in_keys_inv (sequence of NestedKey): the keys of the values to hash during inv call.
+        out_keys_inv (sequence of NestedKey): the keys of the resulting hashes during inv call.
+
+    Keyword Args:
         hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,
             the hash function must accept it as its second argument. Default is
             ``Hash.reproducible_hash``.
         seed (optional): seed to use for the hash function, if it requires one.
-
-    Keyword Args:
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
             :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
             on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
@@ -4673,9 +4742,11 @@ class Hash(UnaryTransform):
         self,
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
+        *,
         hash_fn: Callable = None,
         seed: Any | None = None,
-        *,
         use_raw_nontensor: bool = False,
     ):
         if hash_fn is None:
@@ -4686,6 +4757,8 @@ class Hash(UnaryTransform):
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
             fn=self.call_hash_fn,
             use_raw_nontensor=use_raw_nontensor,
         )
@@ -4714,7 +4787,7 @@ class Hash(UnaryTransform):
         if seed is not None:
             seeded_string = seed + string
         else:
-            seeded_string = string
+            seeded_string = str(string)
 
         # Create a new SHA-256 hash object
         hash_object = hashlib.sha256()
