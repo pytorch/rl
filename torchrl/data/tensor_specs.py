@@ -2452,6 +2452,8 @@ class NonTensor(TensorSpec):
     (same will go for :meth:`.zero` and :meth:`.one`).
     """
 
+    example_data: Any = None
+
     def __init__(
         self,
         shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
@@ -2469,6 +2471,11 @@ class NonTensor(TensorSpec):
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
         )
         self.example_data = example_data
+
+    def __eq__(self, other):
+        eq = super().__eq__(other)
+        eq = eq & (self.example_data == getattr(other, "example_data", None))
+        return eq
 
     def cardinality(self) -> Any:
         raise RuntimeError("Cannot enumerate a NonTensorSpec.")
@@ -2554,6 +2561,16 @@ class NonTensor(TensorSpec):
         return self.__class__(
             shape=shape, device=self.device, dtype=None, example_data=self.example_data
         )
+
+    def unsqueeze(self, dim: int) -> NonTensor:
+        unsq = super().unsqueeze(dim=dim)
+        unsq.example_data = self.example_data
+        return unsq
+
+    def squeeze(self, dim: int | None = None) -> NonTensor:
+        sq = super().squeeze(dim=dim)
+        sq.example_data = self.example_data
+        return sq
 
     def _reshape(self, shape):
         return self.__class__(
