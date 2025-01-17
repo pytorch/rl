@@ -1402,12 +1402,13 @@ class TestExpand:
         assert spec2.zero().shape == spec2.shape
 
     def test_non_tensor(self):
-        spec = NonTensor((3, 4), device="cpu")
+        spec = NonTensor((3, 4), device="cpu", example_data="example_data")
         assert (
             spec.expand(2, 3, 4)
             == spec.expand((2, 3, 4))
-            == NonTensor((2, 3, 4), device="cpu")
+            == NonTensor((2, 3, 4), device="cpu", example_data="example_data")
         )
+        assert spec.expand(2, 3, 4).example_data == "example_data"
 
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
@@ -1607,9 +1608,10 @@ class TestClone:
         assert spec is not spec.clone()
 
     def test_non_tensor(self):
-        spec = NonTensor(shape=(3, 4), device="cpu")
+        spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
         assert spec.clone() == spec
         assert spec.clone() is not spec
+        assert spec.clone().example_data == "example_data"
 
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_onehot(
@@ -1840,9 +1842,10 @@ class TestUnbind:
             spec.unbind(-1)
 
     def test_non_tensor(self):
-        spec = NonTensor(shape=(3, 4), device="cpu")
+        spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
         assert spec.unbind(1)[0] == spec[:, 0]
         assert spec.unbind(1)[0] is not spec[:, 0]
+        assert spec.unbind(1)[0].example_data == "example_data"
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_onehot(
@@ -2001,8 +2004,9 @@ class TestTo:
         assert spec.to(device).device == device
 
     def test_non_tensor(self, device):
-        spec = NonTensor(shape=(3, 4), device="cpu")
+        spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
         assert spec.to(device).device == device
+        assert spec.to(device).example_data == "example_data"
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_onehot(self, shape1, device):
@@ -2262,13 +2266,14 @@ class TestStack:
         assert r.shape == c.shape
 
     def test_stack_non_tensor(self, shape, stack_dim):
-        spec0 = NonTensor(shape=shape, device="cpu")
-        spec1 = NonTensor(shape=shape, device="cpu")
+        spec0 = NonTensor(shape=shape, device="cpu", example_data="example_data")
+        spec1 = NonTensor(shape=shape, device="cpu", example_data="example_data")
         new_spec = torch.stack([spec0, spec1], stack_dim)
         shape_insert = list(shape)
         shape_insert.insert(stack_dim, 2)
         assert new_spec.shape == torch.Size(shape_insert)
         assert new_spec.device == torch.device("cpu")
+        assert new_spec.example_data == "example_data"
 
     def test_stack_onehot(self, shape, stack_dim):
         n = 5
@@ -3642,10 +3647,18 @@ class TestDynamicSpec:
 
 class TestNonTensorSpec:
     def test_sample(self):
-        nts = NonTensor(shape=(3, 4))
+        nts = NonTensor(shape=(3, 4), example_data="example_data")
         assert nts.one((2,)).shape == (2, 3, 4)
         assert nts.rand((2,)).shape == (2, 3, 4)
         assert nts.zero((2,)).shape == (2, 3, 4)
+        assert nts.one((2,)).data == "example_data"
+        assert nts.rand((2,)).data == "example_data"
+        assert nts.zero((2,)).data == "example_data"
+
+    def test_example_data_ineq(self):
+        nts0 = NonTensor(shape=(3, 4), example_data="example_data")
+        nts1 = NonTensor(shape=(3, 4), example_data="example_data 2")
+        assert nts0 != nts1
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="not cuda device")
