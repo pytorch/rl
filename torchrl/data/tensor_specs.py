@@ -2452,11 +2452,14 @@ class NonTensor(TensorSpec):
     (same will go for :meth:`.zero` and :meth:`.one`).
     """
 
+    example_data: Any = None
+
     def __init__(
         self,
         shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
         device: Optional[DEVICE_TYPING] = None,
         dtype: torch.dtype | None = None,
+        example_data: Any = None,
         **kwargs,
     ):
         if isinstance(shape, int):
@@ -2467,6 +2470,12 @@ class NonTensor(TensorSpec):
         super().__init__(
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
         )
+        self.example_data = example_data
+
+    def __eq__(self, other):
+        eq = super().__eq__(other)
+        eq = eq & (self.example_data == getattr(other, "example_data", None))
+        return eq
 
     def cardinality(self) -> Any:
         raise RuntimeError("Cannot enumerate a NonTensorSpec.")
@@ -2485,30 +2494,46 @@ class NonTensor(TensorSpec):
             dest_device = torch.device(dest)
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
-        return self.__class__(shape=self.shape, device=dest_device, dtype=None)
+        return self.__class__(
+            shape=self.shape,
+            device=dest_device,
+            dtype=None,
+            example_data=self.example_data,
+        )
 
     def clone(self) -> NonTensor:
-        return self.__class__(shape=self.shape, device=self.device, dtype=self.dtype)
+        return self.__class__(
+            shape=self.shape,
+            device=self.device,
+            dtype=self.dtype,
+            example_data=self.example_data,
+        )
 
     def rand(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
+            data=self.example_data,
+            batch_size=(*shape, *self._safe_shape),
+            device=self.device,
         )
 
     def zero(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
+            data=self.example_data,
+            batch_size=(*shape, *self._safe_shape),
+            device=self.device,
         )
 
     def one(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
+            data=self.example_data,
+            batch_size=(*shape, *self._safe_shape),
+            device=self.device,
         )
 
     def is_in(self, val: Any) -> bool:
@@ -2533,10 +2558,27 @@ class NonTensor(TensorSpec):
             raise ValueError(
                 f"The last elements of the expanded shape must match the current one. Got shape={shape} while self.shape={self.shape}."
             )
-        return self.__class__(shape=shape, device=self.device, dtype=None)
+        return self.__class__(
+            shape=shape, device=self.device, dtype=None, example_data=self.example_data
+        )
+
+    def unsqueeze(self, dim: int) -> NonTensor:
+        unsq = super().unsqueeze(dim=dim)
+        unsq.example_data = self.example_data
+        return unsq
+
+    def squeeze(self, dim: int | None = None) -> NonTensor:
+        sq = super().squeeze(dim=dim)
+        sq.example_data = self.example_data
+        return sq
 
     def _reshape(self, shape):
-        return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+        return self.__class__(
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            example_data=self.example_data,
+        )
 
     def _unflatten(self, dim, sizes):
         shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
@@ -2544,12 +2586,18 @@ class NonTensor(TensorSpec):
             shape=shape,
             device=self.device,
             dtype=self.dtype,
+            example_data=self.example_data,
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
         indexed_shape = _size(_shape_indexing(self.shape, idx))
-        return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
+        return self.__class__(
+            shape=indexed_shape,
+            device=self.device,
+            dtype=self.dtype,
+            example_data=self.example_data,
+        )
 
     def unbind(self, dim: int = 0):
         orig_dim = dim
@@ -2565,6 +2613,7 @@ class NonTensor(TensorSpec):
                 shape=shape,
                 device=self.device,
                 dtype=self.dtype,
+                example_data=self.example_data,
             )
             for i in range(self.shape[dim])
         )
