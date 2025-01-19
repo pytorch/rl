@@ -4069,18 +4069,18 @@ class DeviceCastTransform(Transform):
 
     def _to(self, name, tensor):
         if name in self.in_keys:
-            return tensor.to(self.device, non_blocking=True)
+            return tensor.to(self.device, )
         return tensor
 
     def _to_inv(self, name, tensor, device):
         if name in self.in_keys_inv:
-            return tensor.to(device, non_blocking=True)
+            return tensor.to(device, )
         return tensor
 
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._map_env_device:
-            result = tensordict.to(self.device, non_blocking=True)
+            result = tensordict.to(self.device, )
             self._sync_device()
             return result
         tensordict_t = tensordict.named_apply(self._to, nested_keys=True, device=None)
@@ -4094,7 +4094,7 @@ class DeviceCastTransform(Transform):
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._map_env_device:
-            result = tensordict.to(self.device, non_blocking=True)
+            result = tensordict.to(self.device, )
             self._sync_device()
             return result
         tensordict_t = tensordict.named_apply(self._to, nested_keys=True, device=None)
@@ -4118,7 +4118,7 @@ class DeviceCastTransform(Transform):
         if device is None:
             return tensordict
         if self._map_env_device:
-            result = tensordict.to(device, non_blocking=True)
+            result = tensordict.to(device, )
             self._sync_orig_device()
             return result
         tensordict_t = tensordict.named_apply(
@@ -6551,7 +6551,7 @@ class StepCounter(Transform):
             if step_count is None:
                 step_count = self.container.observation_spec[step_count_key].zero()
                 if step_count.device != reset.device:
-                    step_count = step_count.to(reset.device, non_blocking=True)
+                    step_count = step_count.to(reset.device, )
 
             # zero the step count if reset is needed
             step_count = torch.where(~expand_as_right(reset, step_count), step_count, 0)

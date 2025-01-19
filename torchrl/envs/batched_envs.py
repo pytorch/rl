@@ -181,7 +181,7 @@ class BatchedEnvBase(EnvBase):
             with a single worker will return a :class:`~SerialEnv` instead.
             This option has no effect with :class:`~SerialEnv`. Defaults to ``False``.
         non_blocking (bool, optional): if ``True``, device moves will be done using the
-            ``non_blocking=True`` option. Defaults to ``True``.
+            ```` option. Defaults to ``True``.
         mp_start_method (str, optional): the multiprocessing start method.
             Uses the default start method if not indicated ('spawn' by default in
             TorchRL if not initiated differently before first import).

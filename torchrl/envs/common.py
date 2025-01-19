@@ -2512,7 +2512,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict_reset = self._reset(tensordict, **kwargs)
         # We assume that this is done properly
         # if reset.device != self.device:
-        #     reset = reset.to(self.device, non_blocking=True)
+        #     reset = reset.to(self.device, )
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
@@ -3109,7 +3109,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         for i in range(max_steps):
             if auto_cast_to_device:
                 if policy_device is not None:
-                    tensordict = tensordict.to(policy_device, non_blocking=True)
+                    tensordict = tensordict.to(policy_device, )
                     sync_func()
                 else:
                     tensordict.clear_device_()
@@ -3117,7 +3117,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 if env_device is not None:
-                    tensordict = tensordict.to(env_device, non_blocking=True)
+                    tensordict = tensordict.to(env_device, )
                     sync_func()
                 else:
                     tensordict.clear_device_()
@@ -3186,14 +3186,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         for i in range(max_steps):
             if auto_cast_to_device:
                 if policy_device is not None:
-                    tensordict_ = tensordict_.to(policy_device, non_blocking=True)
+                    tensordict_ = tensordict_.to(policy_device, )
                     sync_func()
                 else:
                     tensordict_.clear_device_()
             tensordict_ = policy(tensordict_)
             if auto_cast_to_device:
                 if env_device is not None:
-                    tensordict_ = tensordict_.to(env_device, non_blocking=True)
+                    tensordict_ = tensordict_.to(env_device, )
                     sync_func()
                 else:
                     tensordict_.clear_device_()

@@ -394,7 +394,7 @@ def get_dataloader(
     )
     out = TensorDictReplayBuffer(
         storage=TensorStorage(data),
-        collate_fn=lambda x: x.as_tensor().to(device, non_blocking=True),
+        collate_fn=lambda x: x.as_tensor().to(device, ),
         sampler=SamplerWithoutReplacement(drop_last=True),
         batch_size=batch_size,
         prefetch=prefetch,

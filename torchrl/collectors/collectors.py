@@ -802,7 +802,7 @@ class SyncDataCollector(DataCollectorBase):
         # since at least one data source has a device that is not clear.
         if self.storing_device:
             self._final_rollout = self._final_rollout.to(
-                self.storing_device, non_blocking=True
+                self.storing_device,
             )
         else:
             # erase all devices
@@ -1151,7 +1151,7 @@ class SyncDataCollector(DataCollectorBase):
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
                             policy_input = self._shuttle.to(
-                                self.policy_device, non_blocking=True
+                                self.policy_device,
                             )
                             self._sync_policy()
                         elif self.policy_device is None:
@@ -1175,7 +1175,7 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self._cast_to_env_device:
                     if self.env_device is not None:
-                        env_input = self._shuttle.to(self.env_device, non_blocking=True)
+                        env_input = self._shuttle.to(self.env_device, )
                         self._sync_env()
                     elif self.env_device is None:
                         # we know the tensordict has a device otherwise we would not be here
@@ -1201,7 +1201,7 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     if self.storing_device is not None:
                         tensordicts.append(
-                            self._shuttle.to(self.storing_device, non_blocking=True)
+                            self._shuttle.to(self.storing_device, )
                         )
                         self._sync_storage()
                     else:

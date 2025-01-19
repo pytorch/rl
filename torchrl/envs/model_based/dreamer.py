@@ -55,7 +55,7 @@ class DreamerEnv(ModelBasedEnvBase):
             td[("next", "reward")] = self.reward_spec.rand(shape=batch_size)
             td.update(self.observation_spec.rand(shape=batch_size))
             if device is not None:
-                td = td.to(device, non_blocking=True)
+                td = td.to(device, )
                 if torch.cuda.is_available() and device.type == "cpu":
                     torch.cuda.synchronize()
                 elif torch.backends.mps.is_available():
