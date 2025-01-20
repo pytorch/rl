@@ -15,6 +15,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   python-source-and-configs:
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
