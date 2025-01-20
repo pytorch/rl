@@ -232,7 +232,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         # Create a stateless policy, then populate this copy with params on device
         get_original_weights = functools.partial(TensorDict.from_module, policy)
-        with param_and_buf.to("meta").to_module(policy):
+        # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
+        with param_and_buf.data.to("meta").to_module(policy):
             policy = deepcopy(policy)
 
         param_and_buf.apply(
