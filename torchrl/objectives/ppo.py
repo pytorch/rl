@@ -687,8 +687,7 @@ class PPOLoss(LossModule):
                 for head_key, head_entropy in entropy.items(
                     include_nested=True, leaves_only=True
                 ):
-                    head_prefix = head_key[0] if len(head_key) == 1 else head_key[-2]
-                    td_out.set(f"{head_prefix}_entropy", head_entropy.detach().mean())
+                    td_out.set("-".join(head_key), head_entropy.detach().mean())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
@@ -991,8 +990,7 @@ class ClipPPOLoss(PPOLoss):
                 for head_key, head_entropy in entropy.items(
                     include_nested=True, leaves_only=True
                 ):
-                    head_prefix = head_key[0] if len(head_key) == 1 else head_key[-2]
-                    td_out.set(f"{head_prefix}_entropy", head_entropy.detach().mean())
+                    td_out.set("-".join(head_key), head_entropy.detach().mean())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
@@ -1308,8 +1306,7 @@ class KLPENPPOLoss(PPOLoss):
                 for head_key, head_entropy in entropy.items(
                     include_nested=True, leaves_only=True
                 ):
-                    head_prefix = head_key[0] if len(head_key) == 1 else head_key[-2]
-                    td_out.set(f"{head_prefix}_entropy", head_entropy.detach().mean())
+                    td_out.set("-".join(head_key), head_entropy.detach().mean())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
