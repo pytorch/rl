@@ -9,6 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  id-token: write
   deployments: write
   contents: write
 
