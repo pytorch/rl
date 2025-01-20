@@ -494,7 +494,7 @@ class PPOLoss(LossModule):
     def reset(self) -> None:
         pass
 
-    def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
+    def _get_entropy(self, dist: d.Distribution) -> torch.Tensor | TensorDict:
         try:
             entropy = dist.entropy()
         except NotImplementedError:
@@ -513,13 +513,11 @@ class PPOLoss(LossModule):
                         log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
 
             entropy = -log_prob.mean(0)
-        if is_tensor_collection(entropy):
-            entropy = _sum_td_features(entropy)
         return entropy.unsqueeze(-1)
 
     def _log_weight(
         self, tensordict: TensorDictBase
-    ) -> Tuple[torch.Tensor, d.Distribution]:
+    ) -> Tuple[torch.Tensor, d.Distribution, torch.Tensor]:
 
         with self.actor_network_params.to_module(
             self.actor_network
@@ -681,10 +679,18 @@ class PPOLoss(LossModule):
             log_weight = log_weight.view(advantage.shape)
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
+        td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
         if self.entropy_bonus:
-            entropy = self.get_entropy_bonus(dist)
+            entropy = self._get_entropy(dist)
+            if is_tensor_collection(entropy):
+                # Logs the entropy of each action head.
+                for head_key, head_entropy in entropy.items(
+                    include_nested=True, leaves_only=True
+                ):
+                    head_prefix = head_key[0] if len(head_key) == 1 else head_key[-2]
+                    td_out.set(f"{head_prefix}_entropy", head_entropy.detach().mean())
+                entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
@@ -956,8 +962,8 @@ class ClipPPOLoss(PPOLoss):
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
-            # to different, unrelated trajectories, which is not standard. Still it can give a idea of the dispersion
-            # of the weights.
+            # to different, unrelated trajectories, which is not standard. Still, it can give an idea of the weights'
+            # dispersion.
             lw = log_weight.squeeze()
             if not isinstance(lw, torch.Tensor):
                 lw = _sum_td_features(lw)
@@ -976,11 +982,19 @@ class ClipPPOLoss(PPOLoss):
             gain = _sum_td_features(gain)
         td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
         td_out.set("clip_fraction", clip_fraction)
+        td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
 
         if self.entropy_bonus:
-            entropy = self.get_entropy_bonus(dist)
+            entropy = self._get_entropy(dist)
+            if is_tensor_collection(entropy):
+                # Logs the entropy of each action head.
+                for head_key, head_entropy in entropy.items(
+                    include_nested=True, leaves_only=True
+                ):
+                    head_prefix = head_key[0] if len(head_key) == 1 else head_key[-2]
+                    td_out.set(f"{head_prefix}_entropy", head_entropy.detach().mean())
+                entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
@@ -1282,14 +1296,22 @@ class KLPENPPOLoss(PPOLoss):
             {
                 "loss_objective": -neg_loss,
                 "kl": kl.detach(),
+                "kl_approx": kl_approx.detach().mean(),
             },
             batch_size=[],
         )
 
         if self.entropy_bonus:
-            entropy = self.get_entropy_bonus(dist)
+            entropy = self._get_entropy(dist)
+            if is_tensor_collection(entropy):
+                # Logs the entropy of each action head.
+                for head_key, head_entropy in entropy.items(
+                    include_nested=True, leaves_only=True
+                ):
+                    head_prefix = head_key[0] if len(head_key) == 1 else head_key[-2]
+                    td_out.set(f"{head_prefix}_entropy", head_entropy.detach().mean())
+                entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
         if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)
