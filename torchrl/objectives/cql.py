@@ -324,7 +324,7 @@ class CQLLoss(LossModule):
         try:
             device = next(self.parameters()).device
         except AttributeError:
-            device = torch.device("cpu")
+            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         if bool(min_alpha) ^ bool(max_alpha):
             min_alpha = min_alpha if min_alpha else 0.0
