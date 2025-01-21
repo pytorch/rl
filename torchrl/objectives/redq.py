@@ -319,7 +319,7 @@ class REDQLoss(LossModule):
         try:
             device = next(self.parameters()).device
         except AttributeError:
-            device = torch.device("cpu")
+            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
 
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         self.register_buffer(
