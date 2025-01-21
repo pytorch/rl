@@ -9974,3 +9974,21 @@ class LineariseRewards(Transform):
             )
 
         return (self.weights * reward).sum(dim=-1)
+
+
+class ConditionalPolicySwitch(Transform):
+    def __init__(self, policy: Callable[[TensorDictBase], TensorDictBase], condition: Callable[[TensorDictBase], bool]):
+        super().__init__([], [])
+        self.__dict__["policy"] = policy
+        self.condition = condition
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        if self.condition(tensordict):
+            parent: TransformedEnv = self.parent
+            tensordict = parent.step(tensordict)
+            tensordict_ = parent.step_mdp(tensordict)
+            tensordict_ = self.policy(tensordict_)
+            return parent.step(tensordict_)
+            return tensordict
+        return
