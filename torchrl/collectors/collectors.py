@@ -232,7 +232,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         # Create a stateless policy, then populate this copy with params on device
         get_original_weights = functools.partial(TensorDict.from_module, policy)
-        with param_and_buf.to("meta").to_module(policy):
+        # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
+        with param_and_buf.data.to("meta").to_module(policy):
             policy = deepcopy(policy)
 
         param_and_buf.apply(
@@ -1147,6 +1148,21 @@ class SyncDataCollector(DataCollectorBase):
                     and self._frames < self.init_random_frames
                 ):
                     self.env.rand_action(self._shuttle)
+                    if (
+                        self.policy_device is not None
+                        and self.policy_device != self.env_device
+                    ):
+                        # TODO: This may break with exclusive / ragged lazy stacks
+                        self._shuttle.apply(
+                            lambda name, val: val.to(
+                                device=self.policy_device, non_blocking=True
+                            )
+                            if name in self._policy_output_keys
+                            else val,
+                            out=self._shuttle,
+                            named=True,
+                            nested_keys=True,
+                        )
                 else:
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
