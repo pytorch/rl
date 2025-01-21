@@ -1070,17 +1070,20 @@ class CountingEnv(EnvBase):
 
 class CountingEnvWithString(CountingEnv):
     def __init__(self, *args, **kwargs):
+        self.max_size = kwargs.pop("max_size", 30)
+        self.min_size = kwargs.pop("min_size", 4)
         super().__init__(*args, **kwargs)
         self.observation_spec.set(
             "string",
             NonTensor(
                 shape=self.batch_size,
                 device=self.device,
+                example_data=self.get_random_string(),
             ),
         )
 
     def get_random_string(self):
-        size = random.randint(4, 30)
+        size = random.randint(self.min_size, self.max_size)
         return "".join(random.choice(string.ascii_lowercase) for _ in range(size))
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
