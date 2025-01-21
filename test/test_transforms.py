@@ -106,6 +106,7 @@ from torchrl.envs import (
     CenterCrop,
     ClipTransform,
     Compose,
+    ConditionalPolicySwitch,
     Crop,
     DeviceCastTransform,
     DiscreteActionProjection,
@@ -13190,6 +13191,127 @@ class TestLineariseRewards(TransformBase):
             in_keys=[("agent_0", "reward"), ("agent_1", "reward")], weights=weights
         )
         assert transform.transform_reward_spec(reward_spec) == expected_reward_spec
+
+
+class TestConditionalPolicySwitch(TransformBase):
+    def test_single_trans_env_check(self):
+        base_env = CountingEnv(max_steps=15)
+        condition = lambda td: ((td.get("step_count") % 2) == 0).all()
+        # Player 0
+        policy_odd = lambda td: td.set("action", env.action_spec.zero())
+        policy_even = lambda td: td.set("action", env.action_spec.one())
+        transforms = Compose(
+            StepCounter(),
+            ConditionalPolicySwitch(condition=condition, policy=policy_even),
+        )
+        env = base_env.append_transform(transforms)
+        r = env.rollout(1000, policy_odd, break_when_all_done=True)
+        assert r.shape[0] == 15
+        assert (r["action"] == 0).all()
+        assert (r["step_count"] == torch.arange(1, r.numel() * 2, 2).unsqueeze(-1)).all()
+        assert r["next", "done"].any()
+
+        # Player 1
+        condition = lambda td: ((td.get("step_count") % 2) == 1).all()
+        transforms = Compose(
+            StepCounter(),
+            ConditionalPolicySwitch(condition=condition, policy=policy_odd),
+        )
+        env = base_env.append_transform(transforms)
+        r = env.rollout(1000, policy_even, break_when_all_done=True)
+        assert r.shape[0] == 16
+        assert (r["action"] == 1).all()
+        assert (r["step_count"] == torch.arange(0, r.numel() * 2, 2).unsqueeze(-1)).all()
+        assert r["next", "done"].any()
+
+
+    def test_trans_serial_env_check(self):
+        def make_env(max_count):
+            def make():
+                base_env = CountingEnv(max_steps=max_count)
+                transforms =
+                return base_env.append_transform(transforms)
+            return make
+
+        base_env = SerialEnv(3,
+                        [partial(CountingEnv, 6), partial(CountingEnv, 7), partial(CountingEnv, 8)])
+        condition = lambda td: ((td.get("step_count") % 2) == 0)
+        policy_odd = lambda td, base_env=base_env: td.set("action", base_env.action_spec.zero())
+        policy_even = lambda td, base_env=base_env: td.set("action", base_env.action_spec.one())
+        env = base_env.append_transform(Compose(
+                    StepCounter(),
+                    ConditionalPolicySwitch(condition=condition, policy=policy_even),
+                ))
+        r = env.rollout(100, break_when_all_done=False)
+        print(r["step_count"].squeeze())
+
+
+    def test_trans_parallel_env_check(self):
+        """tests that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    def test_serial_trans_env_check(self):
+        condition = lambda td: ((td.get("step_count") % 2) == 0).all()
+        # Player 0
+        policy_odd = lambda td: td.set("action", env.action_spec.zero())
+        policy_even = lambda td: td.set("action", env.action_spec.one())
+        def make_env(max_count):
+            def make():
+                base_env = CountingEnv(max_steps=max_count)
+                transforms = Compose(
+                    StepCounter(),
+                    ConditionalPolicySwitch(condition=condition, policy=policy_even),
+                )
+                return base_env.append_transform(transforms)
+            return make
+
+        env = SerialEnv(3,
+                        [make_env(6), make_env(7), make_env(8)])
+        r = env.rollout(100, break_when_all_done=False)
+        print(r["step_count"].squeeze())
+
+    def test_parallel_trans_env_check(self):
+        """tests that a parallel transformed env (ParallelEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
+        raise NotImplementedError
+
+    def test_transform_no_env(self):
+        """tests the transform on dummy data, without an env."""
+        raise NotImplementedError
+
+    def test_transform_compose(self):
+        """tests the transform on dummy data, without an env but inside a Compose."""
+        raise NotImplementedError
+
+    def test_transform_env(self):
+        """tests the transform on a real env.
+
+        If possible, do not use a mock env, as bugs may go unnoticed if the dynamic is too
+        simplistic. A call to reset() and step() should be tested independently, ie
+        a check that reset produces the desired output and that step() does too.
+
+        """
+        raise NotImplementedError
+
+    def test_transform_model(self):
+        """tests the transform before an nn.Module that reads the output."""
+        raise NotImplementedError
+
+    def test_transform_rb(self):
+        """tests the transform when used with a replay buffer.
+
+        If your transform is not supposed to work with a replay buffer, test that
+        an error will be raised when called or appended to a RB.
+
+        """
+        raise NotImplementedError
+
+    def test_transform_inverse(self):
+        """tests the inverse transform. If not applicable, simply skip this test.
+
+        If your transform is not supposed to work offline, test that
+        an error will be raised when called in a nn.Module.
+        """
+        raise NotImplementedError
 
 
 if __name__ == "__main__":

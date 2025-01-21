@@ -9977,18 +9977,50 @@ class LineariseRewards(Transform):
 
 
 class ConditionalPolicySwitch(Transform):
-    def __init__(self, policy: Callable[[TensorDictBase], TensorDictBase], condition: Callable[[TensorDictBase], bool]):
+    def __init__(
+        self,
+        policy: Callable[[TensorDictBase], TensorDictBase],
+        condition: Callable[[TensorDictBase], bool],
+    ):
         super().__init__([], [])
         self.__dict__["policy"] = policy
         self.condition = condition
+
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        if self.condition(tensordict):
+        cond = self.condition(next_tensordict)
+        if not isinstance(cond, (bool, torch.Tensor)):
+            raise RuntimeError("Calling the condition function should return a boolean or a tensor.")
+        if isinstance(cond, (torch.Tensor,)) and cond.shape not in ((1,), (), tensordict.shape):
+            raise RuntimeError("Tenspr outputs must have the shape of the tensordict, or contain a single element.")
+        if cond.any():
             parent: TransformedEnv = self.parent
-            tensordict = parent.step(tensordict)
-            tensordict_ = parent.step_mdp(tensordict)
-            tensordict_ = self.policy(tensordict_)
-            return parent.step(tensordict_)
-            return tensordict
-        return
+            done = next_tensordict.get("done")
+            next_td_save = None
+            if done.any():
+                if next_tensordict.numel() == 1 or done.all():
+                    return next_tensordict
+                if parent.base_env.batch_locked:
+                    raise RuntimeError("Cannot run partial steps in a batched locked environment")
+                done = done.view(next_tensordict.shape)
+                next_td_save = next_tensordict[done]
+                next_tensordict = next_tensordict[~done]
+                tensordict = tensordict[~done]
+            td = self.policy(
+                parent.step_mdp(tensordict.copy().set("next", next_tensordict))
+            )
+            next_tensordict = parent._step(td)
+            if next_td_save is not None:
+                return torch.where(done, next_td_save, next_tensordict)
+            return next_tensordict
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        if self.condition(tensordict_reset):
+            parent: TransformedEnv = self.parent
+            td = self.policy(tensordict_reset)
+            return parent._step(td).exclude(*parent.reward_keys)
+        return tensordict_reset
