@@ -848,6 +848,7 @@ to be able to create this other composition:
     SelectTransform
     SignTransform
     SqueezeTransform
+    Stack
     StepCounter
     TargetReturn
     TensorDictPrimer
