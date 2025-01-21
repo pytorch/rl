@@ -2233,7 +2233,9 @@ class TestUpdateParams:
             self.out_keys = ["action"]
 
         def forward(self, td):
-            td["action"] = (self.param + self.buf).expand(td.shape)
+            td["action"] = (self.param + self.buf.to(self.param.device)).expand(
+                td.shape
+            )
             return td
 
     @pytest.mark.parametrize(
@@ -2271,6 +2273,64 @@ class TestUpdateParams:
                     # update policy
                     policy.param.data += 1
                     policy.buf.data += 2
+                    if give_weights:
+                        p_w = TensorDict.from_module(policy)
+                    else:
+                        p_w = None
+                    col.update_policy_weights_(p_w)
+                elif i == 20:
+                    if (data["action"] == 1).all():
+                        raise RuntimeError("Failed to update buffer")
+                    elif (data["action"] == 2).all():
+                        raise RuntimeError("Failed to update params")
+                    elif (data["action"] == 0).all():
+                        raise RuntimeError("Failed to update params and buffers")
+                    assert (data["action"] == 3).all()
+        finally:
+            col.shutdown()
+            del col
+
+    @pytest.mark.parametrize(
+        "collector",
+        [
+            functools.partial(MultiSyncDataCollector, cat_results="stack"),
+            MultiaSyncDataCollector,
+        ],
+    )
+    @pytest.mark.parametrize("give_weights", [True, False])
+    @pytest.mark.parametrize(
+        "policy_device,env_device",
+        [
+            ["cpu", get_default_devices()[0]],
+            [get_default_devices()[0], "cpu"],
+            # ["cpu", "cuda:0"],  # 1226: faster execution
+            # ["cuda:0", "cpu"],
+            # ["cuda", "cuda:0"],
+            # ["cuda:0", "cuda"],
+        ],
+    )
+    def test_param_sync_mixed_device(
+        self, give_weights, collector, policy_device, env_device
+    ):
+        with torch.device("cpu"):
+            policy = TestUpdateParams.Policy()
+        policy.param = nn.Parameter(policy.param.data.to(policy_device))
+        assert policy.buf.device == torch.device("cpu")
+
+        env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device=env_device))
+        device = env().device
+        env = [env]
+        col = collector(
+            env, policy, device=device, total_frames=200, frames_per_batch=10
+        )
+        try:
+            for i, data in enumerate(col):
+                if i == 0:
+                    assert (data["action"] == 0).all()
+                    # update policy
+                    policy.param.data += 1
+                    policy.buf.data += 2
+                    assert policy.buf.device == torch.device("cpu")
                     if give_weights:
                         p_w = TensorDict.from_module(policy)
                     else:

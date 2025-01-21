@@ -7,6 +7,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from tensordict.nn import composite_lp_aggregate
+
+# Check that we're using the new behavior
+assert (
+    not composite_lp_aggregate()
+), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
     "dt": """python sota-implementations/decision_transformer/dt.py \
