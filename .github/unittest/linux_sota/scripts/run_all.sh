@@ -75,6 +75,7 @@ export SDL_VIDEODRIVER=dummy
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
 export LAZY_LEGACY_OP=False
+export COMPOSITE_LP_AGGREGATE=0
 
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
