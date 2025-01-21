@@ -4943,7 +4943,7 @@ class Tokenizer(UnaryTransform):
         if isinstance(value, str):
             out = self.tokenizer.encode(value, return_tensors="pt", **kwargs)[0]
             # TODO: incorporate attention mask
-            attention_mask = torch.ones_like(out, dtype=torch.bool)
+            # attention_mask = torch.ones_like(out, dtype=torch.bool)
         else:
             kwargs["padding"] = (
                 self.padding if self.max_length is None else "max_length"
@@ -4951,7 +4951,7 @@ class Tokenizer(UnaryTransform):
             # kwargs["return_attention_mask"] = False
             # kwargs["return_token_type_ids"] = False
             out = self.tokenizer.batch_encode_plus(value, return_tensors="pt", **kwargs)
-            attention_mask = out["attention_mask"]
+            # attention_mask = out["attention_mask"]
             out = out["input_ids"]
 
         if device is not None and out.device != device:
