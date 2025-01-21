@@ -258,7 +258,7 @@ we only want a certain set of outputs (in case the policy returns more than one 
         from torch._higher_order_ops.map import (  # noqa: F401
       File "/pytorch/rl/env/lib/python3.10/site-packages/torch/_higher_order_ops/map.py", line 6, in <module>
         from torch._functorch.aot_autograd import AOTConfig, create_joint
-      File "/pytorch/rl/env/lib/python3.10/site-packages/torch/_functorch/aot_autograd.py", line 147, in <module>
+      File "/pytorch/rl/env/lib/python3.10/site-packages/torch/_functorch/aot_autograd.py", line 135, in <module>
         from .partitioners import default_partition
       File "/pytorch/rl/env/lib/python3.10/site-packages/torch/_functorch/partitioners.py", line 31, in <module>
         from ._activation_checkpointing.graph_info_provider import GraphInfoProvider
@@ -675,9 +675,9 @@ Further reading and learning steps:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.371 seconds)
+   **Total running time of the script:** (0 minutes 4.140 seconds)
 
-**Estimated memory usage:**  3209 MB
+**Estimated memory usage:**  4676 MB
 
 
 .. _sphx_glr_download_tutorials_export.py:

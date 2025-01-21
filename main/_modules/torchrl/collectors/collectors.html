@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+c5f1565) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+a901064) &#x25BC</span></a>
     </div>
     
 
@@ -653,7 +653,8 @@
 
         <span class="c1"># Create a stateless policy, then populate this copy with params on device</span>
         <span class="n">get_original_weights</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">,</span> <span class="n">policy</span><span class="p">)</span>
-        <span class="k">with</span> <span class="n">param_and_buf</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
+        <span class="c1"># We need to use &quot;.data&quot; otherwise buffers may disappear from the `get_original_weights` function</span>
+        <span class="k">with</span> <span class="n">param_and_buf</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
             <span class="n">policy</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
 
         <span class="n">param_and_buf</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
@@ -1568,6 +1569,21 @@
                     <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
                 <span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">rand_action</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                        <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span>
+                    <span class="p">):</span>
+                        <span class="c1"># TODO: This may break with exclusive / ragged lazy stacks</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+                            <span class="k">lambda</span> <span class="n">name</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span>
+                            <span class="p">)</span>
+                            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span>
+                            <span class="k">else</span> <span class="n">val</span><span class="p">,</span>
+                            <span class="n">out</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="p">,</span>
+                            <span class="n">named</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                            <span class="n">nested_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cast_to_policy_device</span><span class="p">:</span>
                         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>

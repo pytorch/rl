@@ -215,7 +215,7 @@ change the ``collate_fn`` since the default expects numerical data):
 
  .. code-block:: none
 
-    [0, 'a', 'a']
+    ['a', 'a', 0]
 
 
 
@@ -338,15 +338,15 @@ Let us sample from the buffer, and print the data:
 
  .. code-block:: none
 
-    samples tensor([[ 4,  5,  6,  7],
-            [ 8,  9, 10, 11],
+    samples tensor([[ 8,  9, 10, 11],
             [ 0,  1,  2,  3],
             [ 0,  1,  2,  3],
-            [ 0,  1,  2,  3]]) tensor([[ 5,  6,  7,  8,  9],
-            [10, 11, 12, 13, 14],
+            [ 0,  1,  2,  3],
+            [ 8,  9, 10, 11]]) tensor([[10, 11, 12, 13, 14],
             [ 0,  1,  2,  3,  4],
             [ 0,  1,  2,  3,  4],
-            [ 0,  1,  2,  3,  4]])
+            [ 0,  1,  2,  3,  4],
+            [10, 11, 12, 13, 14]])
 
 
 
@@ -376,16 +376,16 @@ A :class:`~torchrl.data.LazyMemmapStorage` is created in the same manner:
  .. code-block:: none
 
     The buffer has 3 elements
-    samples: a= tensor([[ 8,  9, 10, 11],
-            [ 0,  1,  2,  3],
+    samples: a= tensor([[ 0,  1,  2,  3],
             [ 8,  9, 10, 11],
             [ 4,  5,  6,  7],
-            [ 0,  1,  2,  3]]) 
-    ('b', 'c'): tensor([[10, 11, 12, 13, 14],
-            [ 0,  1,  2,  3,  4],
+            [ 0,  1,  2,  3],
+            [ 4,  5,  6,  7]]) 
+    ('b', 'c'): tensor([[ 0,  1,  2,  3,  4],
             [10, 11, 12, 13, 14],
             [ 5,  6,  7,  8,  9],
-            [ 0,  1,  2,  3,  4]])
+            [ 0,  1,  2,  3,  4],
+            [ 5,  6,  7,  8,  9]])
 
 
 
@@ -419,8 +419,8 @@ We can also customize the storage location on disk:
  .. code-block:: none
 
     The buffer has 3 elements
-    the 'a' tensor is stored in /pytorch/rl/docs/source/reference/generated/tutorials/<TemporaryDirectory '/tmp/tmp_6azav0h'>/a.memmap
-    the ('b', 'c') tensor is stored in /pytorch/rl/docs/source/reference/generated/tutorials/<TemporaryDirectory '/tmp/tmp_6azav0h'>/b/c.memmap
+    the 'a' tensor is stored in /pytorch/rl/docs/source/reference/generated/tutorials/<TemporaryDirectory '/tmp/tmp9eczj6o8'>/a.memmap
+    the ('b', 'c') tensor is stored in /pytorch/rl/docs/source/reference/generated/tutorials/<TemporaryDirectory '/tmp/tmp9eczj6o8'>/b/c.memmap
 
 
 
@@ -511,7 +511,7 @@ Let us have a look at these indices:
 
  .. code-block:: none
 
-    tensor([1, 0, 0, 2, 0, 2, 2, 1, 1, 0, 1, 0])
+    tensor([0, 0, 2, 0, 2, 2, 1, 1, 0, 1, 0, 1])
 
 
 
@@ -1206,7 +1206,7 @@ higher indices should occur more frequently:
  .. code-block:: none
 
 
-    (array([139.,  62., 128.,  57., 106.,  78., 136.,  64., 130., 124.]), array([ 0. ,  1.5,  3. ,  4.5,  6. ,  7.5,  9. , 10.5, 12. , 13.5, 15. ]), <BarContainer object of 10 artists>)
+    (array([133.,  68., 159.,  61., 118.,  61., 128.,  58., 127., 111.]), array([ 0. ,  1.5,  3. ,  4.5,  6. ,  7.5,  9. , 10.5, 12. , 13.5, 15. ]), <BarContainer object of 10 artists>)
 
 
 
@@ -1262,7 +1262,7 @@ Now, higher indices should occur less frequently:
  .. code-block:: none
 
 
-    (array([201., 102., 210.,  78., 116.,  58., 107.,  43.,  83.,  26.]), array([ 0. ,  1.5,  3. ,  4.5,  6. ,  7.5,  9. , 10.5, 12. , 13.5, 15. ]), <BarContainer object of 10 artists>)
+    (array([214., 101., 173.,  82., 143.,  68.,  97.,  52.,  60.,  34.]), array([ 0. ,  1.5,  3. ,  4.5,  6. ,  7.5,  9. , 10.5, 12. , 13.5, 15. ]), <BarContainer object of 10 artists>)
 
 
 
@@ -1816,8 +1816,8 @@ We mark the steps as well.
 
  .. code-block:: none
 
-    episode are grouped tensor([4, 4, 1, 1, 1, 1, 4, 4], dtype=torch.int32)
-    steps are successive tensor([1, 2, 1, 2, 0, 1, 1, 2])
+    episode are grouped tensor([1, 1, 1, 1, 4, 4, 3, 3], dtype=torch.int32)
+    steps are successive tensor([1, 2, 0, 1, 1, 2, 0, 1])
 
 
 
@@ -1851,9 +1851,9 @@ Next steps
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 21.782 seconds)
+   **Total running time of the script:** (3 minutes 12.796 seconds)
 
-**Estimated memory usage:**  512 MB
+**Estimated memory usage:**  478 MB
 
 
 .. _sphx_glr_download_tutorials_rb_tutorial.py:
