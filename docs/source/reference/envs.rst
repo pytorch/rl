@@ -816,6 +816,7 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    ConditionalPolicySwitch
     Crop
     DTypeCastTransform
     DeviceCastTransform
