@@ -319,6 +319,10 @@ class MaskedCategorical(D.Categorical):
             logits.masked_fill_(padding_mask, neg_inf)
         return logits
 
+    @property
+    def deterministic_sample(self):
+        return self.mode
+
 
 class MaskedOneHotCategorical(MaskedCategorical):
     """MaskedCategorical distribution.
