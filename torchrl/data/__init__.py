@@ -75,6 +75,7 @@ from .tensor_specs import (
     BoundedContinuous,
     BoundedTensorSpec,
     Categorical,
+    Choice,
     Composite,
     CompositeSpec,
     DEVICE_TYPING,

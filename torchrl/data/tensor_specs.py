@@ -36,6 +36,7 @@ from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     TensorDict,
     TensorDictBase,
     unravel_key,
@@ -3676,6 +3677,99 @@ class Categorical(TensorSpec):
             dtype=self.dtype,
             mask=self.mask.clone() if self.mask is not None else None,
         )
+
+
+class Choice(TensorSpec):
+    """A discrete choice spec for either tensor or non-tensor data.
+
+    Args:
+        stack (:class:`~Stacked`, :class:`~StackedComposite`, or :class:`~tensordict.NonTensorStack`):
+            Stack of specs or non-tensor data from which to choose during
+            sampling.
+        device (str, int or torch.device, optional): device of the tensors.
+
+    Examples:
+        >>> import torch
+        >>> _ = torch.manual_seed(0)
+        >>> from torchrl.data import Choice, Categorical
+        >>> spec = Choice(torch.stack([
+        ...     Categorical(n=4, shape=(1,)),
+        ...     Categorical(n=4, shape=(2,))]))
+        >>> spec.shape
+        torch.Size([2, -1])
+        >>> spec.rand()
+        tensor([3])
+        >>> spec.rand()
+        tensor([0, 3])
+    """
+
+    def __init__(
+        self,
+        stack: Stacked | StackedComposite | NonTensorStack,
+        device: Optional[DEVICE_TYPING] = None,
+    ):
+        assert isinstance(stack, (Stacked, StackedComposite, NonTensorStack))
+        stack = stack.clone()
+        if device is not None:
+            self._stack = stack.to(device)
+        else:
+            self._stack = stack
+            device = stack.device
+
+        shape = stack.shape
+        dtype = stack.dtype
+
+        domain = None
+        super().__init__(
+            shape=shape, space=None, device=device, dtype=dtype, domain=domain
+        )
+
+    def _rand_idx(self):
+        return torch.randint(0, len(self._stack), ()).item()
+
+    def _sample(self, idx, spec_sample_fn) -> TensorDictBase:
+        res = self._stack[idx]
+        if isinstance(res, TensorSpec):
+            return spec_sample_fn(res)
+        else:
+            return res
+
+    def zero(self, shape: torch.Size = None) -> TensorDictBase:
+        return self._sample(0, lambda x: x.zero(shape))
+
+    def one(self, shape: torch.Size = None) -> TensorDictBase:
+        return self._sample(min(1, len(self - 1)), lambda x: x.one(shape))
+
+    def rand(self, shape: torch.Size = None) -> TensorDictBase:
+        return self._sample(self._rand_idx(), lambda x: x.rand(shape))
+
+    def is_in(self, val: torch.Tensor | TensorDictBase) -> bool:
+        if isinstance(self._stack, (Stacked, StackedComposite)):
+            return any([stack_elem.is_in(val) for stack_elem in self._stack])
+        else:
+            return any([(stack_elem == val).all() for stack_elem in self._stack])
+
+    def expand(self, *shape):
+        raise NotImplementedError
+
+    def unsqueeze(self, dim: int):
+        raise NotImplementedError
+
+    def clone(self) -> Choice:
+        return self.__class__(self._stack)
+
+    def cardinality(self) -> int:
+        if isinstance(self._stack, NonTensorStack):
+            return len(self._stack)
+        else:
+            return (
+                torch.tensor([stack_elem.cardinality() for stack_elem in self._stack])
+                .sum()
+                .item()
+            )
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Choice:
+        return self.__class__(self._stack.to(dest))
 
 
 @dataclass(repr=False)
