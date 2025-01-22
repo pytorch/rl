@@ -85,6 +85,7 @@ from torchrl.envs.transforms.utils import (
 )
 from torchrl.envs.utils import (
     _sort_keys,
+    _terminated_or_truncated,
     _update_during_reset,
     make_composite_from_td,
     step_mdp,
@@ -9977,6 +9978,97 @@ class LineariseRewards(Transform):
 
 
 class ConditionalPolicySwitch(Transform):
+    """A transform that conditionally switches between policies based on a specified condition.
+
+    This transform evaluates a condition on the data returned by the environment's `step` method.
+    If the condition is met, it applies a specified policy to the data. Otherwise, the data is
+    returned unaltered. This is useful for scenarios where different policies need to be applied
+    based on certain criteria, such as alternating turns in a game.
+
+    Args:
+        policy (Callable[[TensorDictBase], TensorDictBase]):
+            The policy to be applied when the condition is met. This should be a callable that
+            takes a `TensorDictBase` and returns a `TensorDictBase`.
+        condition (Callable[[TensorDictBase], bool]):
+            A callable that takes a `TensorDictBase` and returns a boolean or a tensor indicating
+            whether the policy should be applied.
+
+    .. warning:: This transform must have a parent environment.
+
+    .. note:: Ideally, it should be the last transform  in the stack. If the policy requires transformed
+        data (e.g., images), and this transform  is applied before those transformations, the policy will
+        not receive the transformed data.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn import TensorDictModule as Mod
+        >>>
+        >>> from torchrl.envs import GymEnv, ConditionalPolicySwitch, Compose, StepCounter
+        >>> # Create a CartPole environment. We'll be looking at the obs: if the first element of the obs is greater than
+        >>> # 0 (left position) we do a right action (action=0) using the switch policy. Otherwise, we use our main
+        >>> # policy which does a left action.
+        >>> base_env = GymEnv("CartPole-v1", categorical_action_encoding=True)
+        >>>
+        >>> policy = Mod(lambda: torch.ones((), dtype=torch.int64), in_keys=[], out_keys=["action"])
+        >>> policy_switch = Mod(lambda: torch.zeros((), dtype=torch.int64), in_keys=[], out_keys=["action"])
+        >>>
+        >>> cond = lambda td: td.get("observation")[..., 0] >= 0
+        >>>
+        >>> env = base_env.append_transform(
+        ...     Compose(
+        ...         # We use two step counters to show that one counts the global steps, whereas the other
+        ...         # only counts the steps where the main policy is executed
+        ...         StepCounter(step_count_key="step_count_total"),
+        ...         ConditionalPolicySwitch(condition=cond, policy=policy_switch),
+        ...         StepCounter(step_count_key="step_count_main"),
+        ...     )
+        ... )
+        >>>
+        >>> env.set_seed(0)
+        >>> torch.manual_seed(0)
+        >>>
+        >>> r = env.rollout(100, policy=policy)
+        >>> print("action", r["action"])
+        action tensor([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+        >>> print("obs", r["observation"])
+        obs tensor([[ 0.0322, -0.1540,  0.0111,  0.3190],
+                [ 0.0299, -0.1544,  0.0181,  0.3280],
+                [ 0.0276, -0.1550,  0.0255,  0.3414],
+                [ 0.0253, -0.1558,  0.0334,  0.3596],
+                [ 0.0230, -0.1569,  0.0422,  0.3828],
+                [ 0.0206, -0.1582,  0.0519,  0.4117],
+                [ 0.0181, -0.1598,  0.0629,  0.4469],
+                [ 0.0156, -0.1617,  0.0753,  0.4891],
+                [ 0.0130, -0.1639,  0.0895,  0.5394],
+                [ 0.0104, -0.1665,  0.1058,  0.5987],
+                [ 0.0076, -0.1696,  0.1246,  0.6685],
+                [ 0.0047, -0.1732,  0.1463,  0.7504],
+                [ 0.0016, -0.1774,  0.1715,  0.8459],
+                [-0.0020,  0.0150,  0.1884,  0.6117],
+                [-0.0017,  0.2071,  0.2006,  0.3838]])
+        >>> print("obs'", r["next", "observation"])
+        obs' tensor([[ 0.0299, -0.1544,  0.0181,  0.3280],
+                [ 0.0276, -0.1550,  0.0255,  0.3414],
+                [ 0.0253, -0.1558,  0.0334,  0.3596],
+                [ 0.0230, -0.1569,  0.0422,  0.3828],
+                [ 0.0206, -0.1582,  0.0519,  0.4117],
+                [ 0.0181, -0.1598,  0.0629,  0.4469],
+                [ 0.0156, -0.1617,  0.0753,  0.4891],
+                [ 0.0130, -0.1639,  0.0895,  0.5394],
+                [ 0.0104, -0.1665,  0.1058,  0.5987],
+                [ 0.0076, -0.1696,  0.1246,  0.6685],
+                [ 0.0047, -0.1732,  0.1463,  0.7504],
+                [ 0.0016, -0.1774,  0.1715,  0.8459],
+                [-0.0020,  0.0150,  0.1884,  0.6117],
+                [-0.0017,  0.2071,  0.2006,  0.3838],
+                [ 0.0105,  0.2015,  0.2115,  0.5110]])
+        >>> print("total step count", r["step_count_total"].squeeze())
+        total step count tensor([ 1,  3,  5,  7,  9, 11, 13, 15, 17, 19, 21, 23, 25, 26, 27])
+        >>> print("total step with main policy", r["step_count_main"].squeeze())
+        total step with main policy tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14])
+
+    """
+
     def __init__(
         self,
         policy: Callable[[TensorDictBase], TensorDictBase],
@@ -9991,36 +10083,130 @@ class ConditionalPolicySwitch(Transform):
     ) -> TensorDictBase:
         cond = self.condition(next_tensordict)
         if not isinstance(cond, (bool, torch.Tensor)):
-            raise RuntimeError("Calling the condition function should return a boolean or a tensor.")
-        if isinstance(cond, (torch.Tensor,)) and cond.shape not in ((1,), (), tensordict.shape):
-            raise RuntimeError("Tenspr outputs must have the shape of the tensordict, or contain a single element.")
+            raise RuntimeError(
+                "Calling the condition function should return a boolean or a tensor."
+            )
+        elif isinstance(cond, (torch.Tensor,)):
+            if tuple(cond.shape) not in ((1,), (), tuple(tensordict.shape)):
+                raise RuntimeError(
+                    "Tensor outputs must have the shape of the tensordict, or contain a single element."
+                )
+        else:
+            cond = torch.tensor(cond, device=tensordict.device)
+
         if cond.any():
+            step = tensordict.get("_step", cond)
+            if step.shape != cond.shape:
+                step = step.view_as(cond)
+            cond = cond & step
+
             parent: TransformedEnv = self.parent
-            done = next_tensordict.get("done")
+            any_done, done = self._check_done(next_tensordict)
             next_td_save = None
-            if done.any():
+            if any_done:
                 if next_tensordict.numel() == 1 or done.all():
                     return next_tensordict
                 if parent.base_env.batch_locked:
-                    raise RuntimeError("Cannot run partial steps in a batched locked environment")
+                    raise RuntimeError(
+                        "Cannot run partial steps in a batched locked environment. "
+                        "Hint: Parallel and Serial envs can be unlocked through a keyword argument in "
+                        "the constructor."
+                    )
                 done = done.view(next_tensordict.shape)
-                next_td_save = next_tensordict[done]
-                next_tensordict = next_tensordict[~done]
-                tensordict = tensordict[~done]
+                cond = cond & ~done
+            if not cond.all():
+                if parent.base_env.batch_locked:
+                    raise RuntimeError(
+                        "Cannot run partial steps in a batched locked environment. "
+                        "Hint: Parallel and Serial envs can be unlocked through a keyword argument in "
+                        "the constructor."
+                    )
+                next_td_save = next_tensordict
+                next_tensordict = next_tensordict[cond]
+                tensordict = tensordict[cond]
+
+            # policy may be expensive or raise an exception when executed with unadequate data so
+            # we index the td first
             td = self.policy(
                 parent.step_mdp(tensordict.copy().set("next", next_tensordict))
             )
+            # Mark the partial steps if needed
+            if next_td_save is not None:
+                td_new = td.new_zeros(cond.shape)
+                # TODO: swap with masked_scatter when avail
+                td_new[cond] = td
+                td = td_new
+                td.set("_step", cond)
             next_tensordict = parent._step(td)
             if next_td_save is not None:
-                return torch.where(done, next_td_save, next_tensordict)
+                return torch.where(cond, next_tensordict, next_td_save)
             return next_tensordict
         return next_tensordict
+
+    def _check_done(self, tensordict):
+        env = self.parent
+        if env._simple_done:
+            done = tensordict._get_str("done", default=None)
+            if done is not None:
+                any_done = done.any()
+            else:
+                any_done = False
+        else:
+            any_done = _terminated_or_truncated(
+                tensordict,
+                full_done_spec=env.output_spec["full_done_spec"],
+                key="_reset",
+            )
+            done = tensordict.pop("_reset")
+        return any_done, done
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        if self.condition(tensordict_reset):
+        cond = self.condition(tensordict_reset)
+        # TODO: move to validate
+        if not isinstance(cond, (bool, torch.Tensor)):
+            raise RuntimeError(
+                "Calling the condition function should return a boolean or a tensor."
+            )
+        elif isinstance(cond, (torch.Tensor,)):
+            if tuple(cond.shape) not in ((1,), (), tuple(tensordict.shape)):
+                raise RuntimeError(
+                    "Tensor outputs must have the shape of the tensordict, or contain a single element."
+                )
+        else:
+            cond = torch.tensor(cond, device=tensordict.device)
+
+        if cond.any():
+            reset = tensordict.get("_reset", cond)
+            if reset.shape != cond.shape:
+                reset = reset.view_as(cond)
+            cond = cond & reset
+
             parent: TransformedEnv = self.parent
+            reset_td_save = None
+            if not cond.all():
+                if parent.base_env.batch_locked:
+                    raise RuntimeError(
+                        "Cannot run partial steps in a batched locked environment. "
+                        "Hint: Parallel and Serial envs can be unlocked through a keyword argument in "
+                        "the constructor."
+                    )
+                reset_td_save = tensordict_reset.copy()
+                tensordict_reset = tensordict_reset[cond]
+                tensordict = tensordict[cond]
+
             td = self.policy(tensordict_reset)
-            return parent._step(td).exclude(*parent.reward_keys)
+            # Mark the partial steps if needed
+            if reset_td_save is not None:
+                td_new = td.new_zeros(cond.shape)
+                # TODO: swap with masked_scatter when avail
+                td_new[cond] = td
+                td = td_new
+                td.set("_step", cond)
+            tensordict_reset = parent._step(td).exclude(*parent.reward_keys)
+            if reset_td_save is not None:
+                return torch.where(cond, tensordict_reset, reset_td_save)
+            return tensordict_reset
+
         return tensordict_reset

@@ -191,6 +191,8 @@ class BatchedEnvBase(EnvBase):
             one of the environment has dynamic specs.
 
               .. note:: Learn more about dynamic specs and environments :ref:`here <dynamic_envs>`.
+        batch_locked (bool, optional): if provided, will override the ``batch_locked`` attribute of the
+            nested environments. `batch_locked=False` may allow for partial steps.
 
     .. note::
         One can pass keyword arguments to each sub-environments using the following
@@ -305,6 +307,7 @@ class BatchedEnvBase(EnvBase):
         non_blocking: bool = False,
         mp_start_method: str = None,
         use_buffers: bool = None,
+        batch_locked: bool | None = None,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
@@ -344,6 +347,7 @@ class BatchedEnvBase(EnvBase):
 
         # if share_individual_td is None, we will assess later if the output can be stacked
         self.share_individual_td = share_individual_td
+        self._batch_locked = batch_locked
         self._share_memory = shared_memory
         self._memmap = memmap
         self.allow_step_when_done = allow_step_when_done
@@ -610,8 +614,8 @@ class BatchedEnvBase(EnvBase):
                 self._env_tensordict.named_apply(
                     map_device, nested_keys=True, filter_empty=True
                 )
-
-            self._batch_locked = meta_data.batch_locked
+            if self._batch_locked is None:
+                self._batch_locked = meta_data.batch_locked
         else:
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
             devices = set()
@@ -652,7 +656,8 @@ class BatchedEnvBase(EnvBase):
                 self._env_tensordict = torch.stack(
                     [meta_data.tensordict for meta_data in meta_data], 0
                 )
-            self._batch_locked = meta_data[0].batch_locked
+            if self._batch_locked is None:
+                self._batch_locked = meta_data[0].batch_locked
         self.has_lazy_inputs = contains_lazy_spec(self.input_spec)
 
     def state_dict(self) -> OrderedDict:

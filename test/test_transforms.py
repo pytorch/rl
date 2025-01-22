@@ -20,6 +20,7 @@ import pytest
 
 import tensordict.tensordict
 import torch
+from tensordict.nn import WrapModule
 
 from torchrl.collectors import MultiSyncDataCollector
 
@@ -13208,7 +13209,9 @@ class TestConditionalPolicySwitch(TransformBase):
         r = env.rollout(1000, policy_odd, break_when_all_done=True)
         assert r.shape[0] == 15
         assert (r["action"] == 0).all()
-        assert (r["step_count"] == torch.arange(1, r.numel() * 2, 2).unsqueeze(-1)).all()
+        assert (
+            r["step_count"] == torch.arange(1, r.numel() * 2, 2).unsqueeze(-1)
+        ).all()
         assert r["next", "done"].any()
 
         # Player 1
@@ -13221,58 +13224,104 @@ class TestConditionalPolicySwitch(TransformBase):
         r = env.rollout(1000, policy_even, break_when_all_done=True)
         assert r.shape[0] == 16
         assert (r["action"] == 1).all()
-        assert (r["step_count"] == torch.arange(0, r.numel() * 2, 2).unsqueeze(-1)).all()
+        assert (
+            r["step_count"] == torch.arange(0, r.numel() * 2, 2).unsqueeze(-1)
+        ).all()
         assert r["next", "done"].any()
 
+    def _create_policy_odd(self, base_env):
+        return WrapModule(
+            lambda td, base_env=base_env: td.set(
+                "action", base_env.action_spec_unbatched.zero(td.shape)
+            ),
+            out_keys=["action"],
+        )
+
+    def _create_policy_even(self, base_env):
+        return WrapModule(
+            lambda td, base_env=base_env: td.set(
+                "action", base_env.action_spec_unbatched.one(td.shape)
+            ),
+            out_keys=["action"],
+        )
+
+    def _create_transforms(self, condition, policy_even):
+        return Compose(
+            StepCounter(),
+            ConditionalPolicySwitch(condition=condition, policy=policy_even),
+        )
+
+    def _make_env(self, max_count, env_cls):
+        torch.manual_seed(0)
+        condition = lambda td: ((td.get("step_count") % 2) == 0).squeeze(-1)
+        base_env = env_cls(max_steps=max_count)
+        policy_even = self._create_policy_even(base_env)
+        transforms = self._create_transforms(condition, policy_even)
+        return base_env.append_transform(transforms)
+
+    def _test_env(self, env, policy_odd):
+        env.check_env_specs()
+        env.set_seed(0)
+        r = env.rollout(100, policy_odd, break_when_any_done=False)
+        # Check results are independent: one reset / step in one env should not impact results in another
+        r0, r1, r2 = r.unbind(0)
+        r0_split = r0.split(6)
+        assert all(((r == r0_split[0][: r.numel()]).all() for r in r0_split[1:]))
+        r1_split = r1.split(7)
+        assert all(((r == r1_split[0][: r.numel()]).all() for r in r1_split[1:]))
+        r2_split = r2.split(8)
+        assert all(((r == r2_split[0][: r.numel()]).all() for r in r2_split[1:]))
 
     def test_trans_serial_env_check(self):
-        def make_env(max_count):
-            def make():
-                base_env = CountingEnv(max_steps=max_count)
-                transforms =
-                return base_env.append_transform(transforms)
-            return make
-
-        base_env = SerialEnv(3,
-                        [partial(CountingEnv, 6), partial(CountingEnv, 7), partial(CountingEnv, 8)])
-        condition = lambda td: ((td.get("step_count") % 2) == 0)
-        policy_odd = lambda td, base_env=base_env: td.set("action", base_env.action_spec.zero())
-        policy_even = lambda td, base_env=base_env: td.set("action", base_env.action_spec.one())
-        env = base_env.append_transform(Compose(
-                    StepCounter(),
-                    ConditionalPolicySwitch(condition=condition, policy=policy_even),
-                ))
-        r = env.rollout(100, break_when_all_done=False)
-        print(r["step_count"].squeeze())
-
+        torch.manual_seed(0)
+        base_env = SerialEnv(
+            3,
+            [partial(CountingEnv, 6), partial(CountingEnv, 7), partial(CountingEnv, 8)],
+            batch_locked=False,
+        )
+        condition = lambda td: ((td.get("step_count") % 2) == 0).squeeze(-1)
+        policy_odd = self._create_policy_odd(base_env)
+        policy_even = self._create_policy_even(base_env)
+        transforms = self._create_transforms(condition, policy_even)
+        env = base_env.append_transform(transforms)
+        self._test_env(env, policy_odd)
 
     def test_trans_parallel_env_check(self):
-        """tests that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
-        raise NotImplementedError
+        torch.manual_seed(0)
+        base_env = ParallelEnv(
+            3,
+            [partial(CountingEnv, 6), partial(CountingEnv, 7), partial(CountingEnv, 8)],
+            batch_locked=False,
+            mp_start_method=mp_ctx,
+        )
+        condition = lambda td: ((td.get("step_count") % 2) == 0).squeeze(-1)
+        policy_odd = self._create_policy_odd(base_env)
+        policy_even = self._create_policy_even(base_env)
+        transforms = self._create_transforms(condition, policy_even)
+        env = base_env.append_transform(transforms)
+        self._test_env(env, policy_odd)
 
     def test_serial_trans_env_check(self):
-        condition = lambda td: ((td.get("step_count") % 2) == 0).all()
-        # Player 0
-        policy_odd = lambda td: td.set("action", env.action_spec.zero())
-        policy_even = lambda td: td.set("action", env.action_spec.one())
-        def make_env(max_count):
-            def make():
-                base_env = CountingEnv(max_steps=max_count)
-                transforms = Compose(
-                    StepCounter(),
-                    ConditionalPolicySwitch(condition=condition, policy=policy_even),
-                )
-                return base_env.append_transform(transforms)
-            return make
+        condition = lambda td: ((td.get("step_count") % 2) == 0).squeeze(-1)
+        policy_odd = self._create_policy_odd(CountingEnv())
 
-        env = SerialEnv(3,
-                        [make_env(6), make_env(7), make_env(8)])
-        r = env.rollout(100, break_when_all_done=False)
-        print(r["step_count"].squeeze())
+        def make_env(max_count):
+            return partial(self._make_env, max_count, CountingEnv)
+
+        env = SerialEnv(3, [make_env(6), make_env(7), make_env(8)])
+        self._test_env(env, policy_odd)
 
     def test_parallel_trans_env_check(self):
-        """tests that a parallel transformed env (ParallelEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
-        raise NotImplementedError
+        condition = lambda td: ((td.get("step_count") % 2) == 0).squeeze(-1)
+        policy_odd = self._create_policy_odd(CountingEnv())
+
+        def make_env(max_count):
+            return partial(self._make_env, max_count, CountingEnv)
+
+        env = ParallelEnv(
+            3, [make_env(6), make_env(7), make_env(8)], mp_start_method=mp_ctx
+        )
+        self._test_env(env, policy_odd)
 
     def test_transform_no_env(self):
         """tests the transform on dummy data, without an env."""
