@@ -13206,28 +13206,7 @@ class TestConditionalPolicySwitch(TransformBase):
             ConditionalPolicySwitch(condition=condition, policy=policy_even),
         )
         env = base_env.append_transform(transforms)
-        r = env.rollout(1000, policy_odd, break_when_all_done=True)
-        assert r.shape[0] == 15
-        assert (r["action"] == 0).all()
-        assert (
-            r["step_count"] == torch.arange(1, r.numel() * 2, 2).unsqueeze(-1)
-        ).all()
-        assert r["next", "done"].any()
-
-        # Player 1
-        condition = lambda td: ((td.get("step_count") % 2) == 1).all()
-        transforms = Compose(
-            StepCounter(),
-            ConditionalPolicySwitch(condition=condition, policy=policy_odd),
-        )
-        env = base_env.append_transform(transforms)
-        r = env.rollout(1000, policy_even, break_when_all_done=True)
-        assert r.shape[0] == 16
-        assert (r["action"] == 1).all()
-        assert (
-            r["step_count"] == torch.arange(0, r.numel() * 2, 2).unsqueeze(-1)
-        ).all()
-        assert r["next", "done"].any()
+        env.check_env_specs()
 
     def _create_policy_odd(self, base_env):
         return WrapModule(
@@ -13324,43 +13303,95 @@ class TestConditionalPolicySwitch(TransformBase):
         self._test_env(env, policy_odd)
 
     def test_transform_no_env(self):
-        """tests the transform on dummy data, without an env."""
-        raise NotImplementedError
+        policy_odd = lambda td: td
+        policy_even = lambda td: td
+        condition = lambda td: True
+        transforms = ConditionalPolicySwitch(condition=condition, policy=policy_even)
+        with pytest.raises(
+            RuntimeError,
+            match="ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional.",
+        ):
+            transforms(TensorDict())
 
     def test_transform_compose(self):
-        """tests the transform on dummy data, without an env but inside a Compose."""
-        raise NotImplementedError
+        policy_odd = lambda td: td
+        policy_even = lambda td: td
+        condition = lambda td: True
+        transforms = Compose(
+            ConditionalPolicySwitch(condition=condition, policy=policy_even),
+        )
+        with pytest.raises(
+            RuntimeError,
+            match="ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional.",
+        ):
+            transforms(TensorDict())
 
     def test_transform_env(self):
-        """tests the transform on a real env.
+        base_env = CountingEnv(max_steps=15)
+        condition = lambda td: ((td.get("step_count") % 2) == 0).all()
+        # Player 0
+        policy_odd = lambda td: td.set("action", env.action_spec.zero())
+        policy_even = lambda td: td.set("action", env.action_spec.one())
+        transforms = Compose(
+            StepCounter(),
+            ConditionalPolicySwitch(condition=condition, policy=policy_even),
+        )
+        env = base_env.append_transform(transforms)
+        env.check_env_specs()
+        r = env.rollout(1000, policy_odd, break_when_all_done=True)
+        assert r.shape[0] == 15
+        assert (r["action"] == 0).all()
+        assert (
+            r["step_count"] == torch.arange(1, r.numel() * 2, 2).unsqueeze(-1)
+        ).all()
+        assert r["next", "done"].any()
 
-        If possible, do not use a mock env, as bugs may go unnoticed if the dynamic is too
-        simplistic. A call to reset() and step() should be tested independently, ie
-        a check that reset produces the desired output and that step() does too.
-
-        """
-        raise NotImplementedError
+        # Player 1
+        condition = lambda td: ((td.get("step_count") % 2) == 1).all()
+        transforms = Compose(
+            StepCounter(),
+            ConditionalPolicySwitch(condition=condition, policy=policy_odd),
+        )
+        env = base_env.append_transform(transforms)
+        r = env.rollout(1000, policy_even, break_when_all_done=True)
+        assert r.shape[0] == 16
+        assert (r["action"] == 1).all()
+        assert (
+            r["step_count"] == torch.arange(0, r.numel() * 2, 2).unsqueeze(-1)
+        ).all()
+        assert r["next", "done"].any()
 
     def test_transform_model(self):
-        """tests the transform before an nn.Module that reads the output."""
-        raise NotImplementedError
+        policy_odd = lambda td: td
+        policy_even = lambda td: td
+        condition = lambda td: True
+        transforms = nn.Sequential(
+            ConditionalPolicySwitch(condition=condition, policy=policy_even),
+        )
+        with pytest.raises(
+            RuntimeError,
+            match="ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional.",
+        ):
+            transforms(TensorDict())
 
-    def test_transform_rb(self):
-        """tests the transform when used with a replay buffer.
-
-        If your transform is not supposed to work with a replay buffer, test that
-        an error will be raised when called or appended to a RB.
-
-        """
-        raise NotImplementedError
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        policy_odd = lambda td: td
+        policy_even = lambda td: td
+        condition = lambda td: True
+        rb = rbclass(storage=LazyTensorStorage(10))
+        rb.append_transform(
+            ConditionalPolicySwitch(condition=condition, policy=policy_even)
+        )
+        rb.extend(TensorDict(batch_size=[2]))
+        with pytest.raises(
+            RuntimeError,
+            match="ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional.",
+        ):
+            rb.sample(2)
 
     def test_transform_inverse(self):
-        """tests the inverse transform. If not applicable, simply skip this test.
-
-        If your transform is not supposed to work offline, test that
-        an error will be raised when called in a nn.Module.
-        """
-        raise NotImplementedError
+        return
 
 
 if __name__ == "__main__":

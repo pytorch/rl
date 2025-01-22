@@ -153,9 +153,7 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
             batch_size=torch.Size([352]),
             device=None,
             is_shared=False)
-
-
-    """
+    """  # noqa: D301
 
     _hash_table: Dict[int, str] = {}
     _PNG_RESTART = """[Event "?"]

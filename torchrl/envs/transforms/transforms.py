@@ -10210,3 +10210,8 @@ class ConditionalPolicySwitch(Transform):
             return tensordict_reset
 
         return tensordict_reset
+
+    def forward(self, tensordict: TensorDictBase) -> Any:
+        raise RuntimeError(
+            "ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional."
+        )
