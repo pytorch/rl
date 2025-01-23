@@ -711,10 +711,13 @@ class TestCatFrames(TransformBase):
         )
 
         def get_rand_perm(ndim):
-            perm_pos = torch.randperm(ndim)
-            perm = perm_pos - ndim
-            cat_dim_perm = (perm == cat_dim).nonzero().item() - ndim
-            perm_inv = perm_pos.argsort() - ndim
+            cat_dim_perm = cat_dim
+            # Ensure that the permutation moves the cat_dim
+            while cat_dim_perm == cat_dim:
+                perm_pos = torch.randperm(ndim)
+                perm = perm_pos - ndim
+                cat_dim_perm = (perm == cat_dim).nonzero().item() - ndim
+                perm_inv = perm_pos.argsort() - ndim
             return perm.tolist(), perm_inv.tolist(), cat_dim_perm
 
         perm, perm_inv, cat_dim_perm = get_rand_perm(pixels.dim() - 1)
