@@ -693,6 +693,7 @@ class TestCatFrames(TransformBase):
     @pytest.mark.parametrize("cat_N", [3, 10])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_with_permute_no_env(self, cat_dim, cat_N, device):
+        torch.manual_seed(cat_dim * cat_N)
         pixels = torch.randn(8, 5, 3, 10, 4, device=device)
 
         a = TensorDict(
