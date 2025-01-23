@@ -684,7 +684,7 @@ class PPOLoss(LossModule):
             entropy = self._get_entropy(dist)
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
-                td_out.set("composite_entropy", entropy)
+                td_out.set("composite_entropy", entropy.detach())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
@@ -984,7 +984,7 @@ class ClipPPOLoss(PPOLoss):
             entropy = self._get_entropy(dist)
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
-                td_out.set("composite_entropy", entropy)
+                td_out.set("composite_entropy", entropy.detach())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
@@ -1297,7 +1297,7 @@ class KLPENPPOLoss(PPOLoss):
             entropy = self._get_entropy(dist)
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
-                td_out.set("composite_entropy", entropy)
+                td_out.set("composite_entropy", entropy.detach())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
