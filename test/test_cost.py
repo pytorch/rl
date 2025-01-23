@@ -8637,7 +8637,7 @@ class TestPPO(LossModuleTestBase):
 
         loss = loss_fn(td).exclude("entropy")
         if composite_action_dist:
-            loss = loss.exclude("action-action1_entropy")
+            loss = loss.exclude("composite_entropy")
 
         sum(val for key, val in loss.items() if key.startswith("loss_")).backward()
         grad = TensorDict(dict(model.named_parameters()), []).apply(
@@ -8645,7 +8645,7 @@ class TestPPO(LossModuleTestBase):
         )
         loss2 = loss_fn2(td).exclude("entropy")
         if composite_action_dist:
-            loss2 = loss2.exclude("action-action1_entropy")
+            loss2 = loss2.exclude("composite_entropy")
 
         model.zero_grad()
         sum(val for key, val in loss2.items() if key.startswith("loss_")).backward()

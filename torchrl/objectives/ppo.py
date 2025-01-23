@@ -683,11 +683,8 @@ class PPOLoss(LossModule):
         if self.entropy_bonus:
             entropy = self._get_entropy(dist)
             if is_tensor_collection(entropy):
-                # Logs the entropy of each action head.
-                for head_key, head_entropy in entropy.items(
-                    include_nested=True, leaves_only=True
-                ):
-                    td_out.set("-".join(head_key), head_entropy.detach().mean())
+                # Reports the entropy of each action head.
+                td_out.set("composite_entropy", entropy)
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
@@ -986,11 +983,8 @@ class ClipPPOLoss(PPOLoss):
         if self.entropy_bonus:
             entropy = self._get_entropy(dist)
             if is_tensor_collection(entropy):
-                # Logs the entropy of each action head.
-                for head_key, head_entropy in entropy.items(
-                    include_nested=True, leaves_only=True
-                ):
-                    td_out.set("-".join(head_key), head_entropy.detach().mean())
+                # Reports the entropy of each action head.
+                td_out.set("composite_entropy", entropy)
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
@@ -1302,11 +1296,8 @@ class KLPENPPOLoss(PPOLoss):
         if self.entropy_bonus:
             entropy = self._get_entropy(dist)
             if is_tensor_collection(entropy):
-                # Logs the entropy of each action head.
-                for head_key, head_entropy in entropy.items(
-                    include_nested=True, leaves_only=True
-                ):
-                    td_out.set("-".join(head_key), head_entropy.detach().mean())
+                # Reports the entropy of each action head.
+                td_out.set("composite_entropy", entropy)
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
