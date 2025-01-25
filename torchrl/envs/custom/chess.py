@@ -42,7 +42,7 @@ class _HashMeta(_EnvPostInit):
 
 
 class ChessEnv(EnvBase, metaclass=_HashMeta):
-    """A chess environment that follows the TorchRL API.
+    r"""A chess environment that follows the TorchRL API.
 
     This environment simulates a chess game using the `chess` library. It supports various state representations
     and can be configured to include different types of observations such as SAN, FEN, PGN, and legal moves.
@@ -156,7 +156,7 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
     """  # noqa: D301
 
     _hash_table: Dict[int, str] = {}
-    _PNG_RESTART = """[Event "?"]
+    _PGN_RESTART = """[Event "?"]
 [Site "?"]
 [Date "????.??.??"]
 [Round "?"]
@@ -193,16 +193,29 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         return_mask: bool = False,
         pad: bool = False,
     ) -> torch.Tensor:
-        if not self.stateful and tensordict is not None:
-            fen = self._get_fen(tensordict).data
-            self.board.set_fen(fen)
+        if not self.stateful:
+            if tensordict is None:
+                raise RuntimeError(
+                    "rand_action requires a tensordict when stateful is False."
+                )
+            if self.include_fen:
+                fen = self._get_fen(tensordict)
+                fen = fen.data
+                self.board.set_fen(fen)
+                board = self.board
+            elif self.include_pgn:
+                pgn = self._get_pgn(tensordict)
+                pgn = pgn.data
+                board = self._pgn_to_board(pgn, self.board)
+
+        if board is None:
             board = self.board
-        elif board is None:
-            board = self.board
+
         indices = torch.tensor(
             [self._san_moves.index(board.san(m)) for m in board.legal_moves],
             dtype=torch.int64,
         )
+
         if return_mask:
             return torch.zeros(len(self.san_moves), dtype=torch.bool).index_fill_(
                 0, indices, True
@@ -244,7 +257,7 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
             self.full_observation_spec["san"] = NonTensor(shape=(), example_data="Nc6")
         if include_pgn:
             self.full_observation_spec["pgn"] = NonTensor(
-                shape=(), example_data=self._PNG_RESTART
+                shape=(), example_data=self._PGN_RESTART
             )
         if include_fen:
             self.full_observation_spec["fen"] = NonTensor(shape=(), example_data="any")
@@ -294,46 +307,47 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         fen = None
         pgn = None
         if tensordict is not None:
+            dest = tensordict.empty()
             if self.include_fen:
                 fen = self._get_fen(tensordict)
                 if fen is not None:
                     fen = fen.data
-                dest = tensordict.empty()
-            if self.include_pgn:
+            elif self.include_pgn:
                 pgn = self._get_pgn(tensordict)
                 if pgn is not None:
                     pgn = pgn.data
-                dest = tensordict.empty()
         else:
             dest = TensorDict()
 
         if fen is None and pgn is None:
             self.board.reset()
-            if self.include_fen and fen is None:
-                fen = self.board.fen()
-            if self.include_pgn and pgn is None:
-                pgn = self._PNG_RESTART
-        else:
-            if fen is not None:
-                self.board.set_fen(fen)
-                if self._is_done(self.board):
-                    raise ValueError(
-                        "Cannot reset to a fen that is a gameover state." f" fen: {fen}"
-                    )
-            elif pgn is not None:
-                self.board = self._pgn_to_board(pgn)
+        elif fen is not None:
+            self.board.set_fen(fen)
+            if self._is_done(self.board):
+                raise ValueError(
+                    "Cannot reset to a fen that is a gameover state." f" fen: {fen}"
+                )
+        elif pgn is not None:
+            self.board = self._pgn_to_board(pgn)
 
-        self._set_action_space()
+        if self.include_fen and fen is None:
+            fen = self.board.fen()
+        if self.include_pgn and pgn is None:
+            pgn = self._board_to_pgn(self.board)
+
         turn = self.board.turn
         if self.include_san:
-            dest.set("san", "[SAN][START]")
+            if self.board.move_stack:
+                move = self.board.peek()
+            else:
+                move = None
+            if move is None:
+                dest.set("san", "<start>")
+            else:
+                dest.set("san", self.board.san(move))
         if self.include_fen:
-            if fen is None:
-                fen = self.board.fen()
             dest.set("fen", fen)
         if self.include_pgn:
-            if pgn is None:
-                pgn = self._board_to_pgn(self.board)
             dest.set("pgn", pgn)
         dest.set("turn", turn)
         if self.include_legal_moves:
@@ -341,6 +355,11 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
             dest.set("legal_moves", moves_idx)
         if self.pixels:
             dest.set("pixels", self._get_tensor_image(board=self.board))
+
+        if self.stateful:
+            mask = self._legal_moves_to_index(dest, return_mask=True)
+            self.action_spec.update_mask(mask)
+
         return dest
 
     _cairosvg_lib = None
@@ -382,12 +401,6 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
             )
         return img
 
-    def _set_action_space(self, tensordict: TensorDict | None = None):
-        if not self.stateful and tensordict is not None:
-            fen = self._get_fen(tensordict).data
-            self.board.set_fen(fen)
-        self.action_spec.set_provisional_n(self.board.legal_moves.count())
-
     @classmethod
     def _pgn_to_board(
         cls, pgn_string: str, board: "chess.Board" | None = None  # noqa: F821
@@ -395,7 +408,7 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         pgn_io = io.StringIO(pgn_string)
         game = cls.lib.pgn.read_game(pgn_io)
         if board is None:
-            board = cls.Board()
+            board = cls.lib.Board()
         else:
             board.reset()
         for move in game.mainline_moves():
@@ -403,16 +416,17 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         return board
 
     @classmethod
+    def _add_move_to_pgn(cls, pgn_string: str, move: "chess.Move") -> str:  # noqa: F821
+        pgn_io = io.StringIO(pgn_string)
+        game = cls.lib.pgn.read_game(pgn_io)
+        if game is None:
+            raise ValueError("Invalid PGN string")
+        game.end().add_variation(move)
+        return str(game)
+
+    @classmethod
     def _board_to_pgn(cls, board: "chess.Board") -> str:  # noqa: F821
-        # Create a new Game object
-        game = cls.lib.pgn.Game()
-
-        # Add the moves to the game
-        node = game
-        for move in board.move_stack:
-            node = node.add_variation(move)
-
-        # Generate the PGN string
+        game = cls.lib.pgn.Game.from_board(board)
         pgn_string = str(game)
         return pgn_string
 
@@ -420,6 +434,11 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
     def _get_fen(cls, tensordict):
         fen = tensordict.get("fen", None)
         return fen
+
+    @classmethod
+    def _get_pgn(cls, tensordict):
+        pgn = tensordict.get("pgn", None)
+        return pgn
 
     def get_legal_moves(self, tensordict=None, uci=False):
         """List the legal moves in a position.
@@ -458,13 +477,15 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         action = tensordict.get("action")
         board = self.board
 
+        pgn = None
+        fen = None
         if not self.stateful:
             if self.include_fen:
                 fen = self._get_fen(tensordict).data
                 board.set_fen(fen)
             elif self.include_pgn:
                 pgn = self._get_pgn(tensordict).data
-                self._pgn_to_board(pgn, board)
+                board = self._pgn_to_board(pgn, board)
             else:
                 raise RuntimeError(
                     "Not enough information to deduce the board. If stateful=False, include_pgn or include_fen must be True."
@@ -472,8 +493,6 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
 
         san = self.san_moves[action]
         board.push_san(san)
-
-        self._set_action_space()
 
         dest = tensordict.empty()
 
@@ -483,10 +502,13 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
             dest.set("fen", fen)
 
         if self.include_pgn:
-            pgn = self._board_to_pgn(board)
+            if pgn is not None:
+                pgn = self._add_move_to_pgn(pgn, board.move_stack[-1])
+            else:
+                pgn = self._board_to_pgn(board)
             dest.set("pgn", pgn)
 
-        if san is not None:
+        if self.include_san:
             dest.set("san", san)
 
         if self.include_legal_moves:
@@ -513,8 +535,8 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
             dest.set("pixels", self._get_tensor_image(board=self.board))
 
         if self.stateful:
-            # Make sure that rand_action will work next iteration
-            self._set_action_space()
+            mask = self._legal_moves_to_index(dest, return_mask=True)
+            self.action_spec.update_mask(mask)
 
         return dest
 

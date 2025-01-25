@@ -723,17 +723,13 @@ class BatchedEnvBase(EnvBase):
             env_output_keys = set()
             env_obs_keys = set()
             for meta_data in self.meta_data:
-                env_obs_keys = env_obs_keys.union(
-                    key
-                    for key in meta_data.specs["output_spec"][
-                        "full_observation_spec"
-                    ].keys(True, True)
+                keys = meta_data.specs["output_spec"]["full_observation_spec"].keys(
+                    True, True
                 )
-                env_output_keys = env_output_keys.union(
-                    meta_data.specs["output_spec"]["full_observation_spec"].keys(
-                        True, True
-                    )
-                )
+                keys = list(keys)
+                env_obs_keys = env_obs_keys.union(keys)
+
+                env_output_keys = env_output_keys.union(keys)
             env_output_keys = env_output_keys.union(self.reward_keys + self.done_keys)
             self._env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self._env_input_keys = sorted(env_input_keys, key=_sort_keys)
@@ -1008,7 +1004,12 @@ class SerialEnv(BatchedEnvBase):
         for i, _env in enumerate(self._envs):
             if not needs_resetting[i]:
                 if out_tds is not None and tensordict is not None:
-                    out_tds[i] = tensordict[i].exclude(*self._envs[i].reset_keys)
+                    ftd = _env.observation_spec.zero()
+                    if self.device is None:
+                        ftd.clear_device_()
+                    else:
+                        ftd = ftd.to(self.device)
+                    out_tds[i] = ftd
                 continue
             if tensordict is not None:
                 tensordict_ = tensordict[i]

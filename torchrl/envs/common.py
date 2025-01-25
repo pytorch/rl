@@ -2505,11 +2505,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         Returns:
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
+        .. note:: `reset` should not be overwritten by :class:`~torchrl.envs.EnvBase` subclasses. The method to
+            modify is :meth:`~torchrl.envs.EnvBase._reset`.
+
         """
         if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
 
-        tensordict_reset = self._reset(tensordict, **kwargs)
+        select_reset_only = kwargs.pop("select_reset_only", False)
+        if select_reset_only and tensordict is not None:
+            # When making rollouts with step_and_maybe_reset, it can happen that a tensordict has
+            # keys that are used by reset to optionally set the reset state (eg, the fen in chess). If that's the
+            # case and we don't throw them away here, reset will just be a no-op (put the env in the state reached
+            # during the previous step).
+            # Therefore, maybe_reset tells reset to temporarily hide the non-reset keys.
+            # To make step_and_maybe_reset handle custom reset states, some version of TensorDictPrimer should be used.
+            tensordict_reset = self._reset(
+                tensordict.select(*self.reset_keys, strict=False), **kwargs
+            )
+        else:
+            tensordict_reset = self._reset(tensordict, **kwargs)
         # We assume that this is done properly
         # if reset.device != self.device:
         #     reset = reset.to(self.device, non_blocking=True)
@@ -3292,7 +3307,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             else:
                 any_done = False
             if any_done:
-                tensordict._set_str(
+                tensordict = tensordict._set_str(
                     "_reset",
                     done.clone(),
                     validated=True,
@@ -3306,7 +3321,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 key="_reset",
             )
         if any_done:
-            tensordict = self.reset(tensordict)
+            return self.reset(tensordict, select_reset_only=True)
         return tensordict
 
     def empty_cache(self):
