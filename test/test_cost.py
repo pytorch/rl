@@ -8409,7 +8409,6 @@ class TestPPO(LossModuleTestBase):
         if isinstance(loss_fn, KLPENPPOLoss):
             kl = loss.pop("kl_approx")
             assert (kl != 0).any()
-
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -8637,12 +8636,16 @@ class TestPPO(LossModuleTestBase):
             )
 
         loss = loss_fn(td).exclude("entropy")
+        if composite_action_dist:
+            loss = loss.exclude("composite_entropy")
 
         sum(val for key, val in loss.items() if key.startswith("loss_")).backward()
         grad = TensorDict(dict(model.named_parameters()), []).apply(
             lambda x: x.grad.clone()
         )
         loss2 = loss_fn2(td).exclude("entropy")
+        if composite_action_dist:
+            loss2 = loss2.exclude("composite_entropy")
 
         model.zero_grad()
         sum(val for key, val in loss2.items() if key.startswith("loss_")).backward()
