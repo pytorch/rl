@@ -3291,6 +3291,10 @@ class TestEnvWithDynamicSpec:
         )
         del env_no_buffers
         gc.collect()
+        # print(dummy_rollouts)
+        # print(rollout_no_buffers_serial)
+        # # for a, b in zip(dummy_rollouts.exclude("action").unbind(0), rollout_no_buffers_serial.exclude("action").unbind(0)):
+        #     assert_allclose_td(a, b)
         assert_allclose_td(
             dummy_rollouts.exclude("action"),
             rollout_no_buffers_serial.exclude("action"),
@@ -3386,35 +3390,107 @@ class TestNonTensorEnv:
 
 # fen strings for board positions generated with:
 # https://lichess.org/editor
-@pytest.mark.parametrize("stateful", [False, True])
 @pytest.mark.skipif(not _has_chess, reason="chess not found")
 class TestChessEnv:
-    def test_env(self, stateful):
-        env = ChessEnv(stateful=stateful)
-        check_env_specs(env)
+    @pytest.mark.parametrize("include_pgn", [False, True])
+    @pytest.mark.parametrize("include_fen", [False, True])
+    @pytest.mark.parametrize("stateful", [False, True])
+    def test_env(self, stateful, include_pgn, include_fen):
+        with pytest.raises(
+            RuntimeError, match="At least one state representation"
+        ) if not stateful and not include_pgn and not include_fen else contextlib.nullcontext():
+            env = ChessEnv(
+                stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
+            )
+            check_env_specs(env)
 
-    def test_rollout(self, stateful):
-        env = ChessEnv(stateful=stateful)
-        env.rollout(5000)
+    def test_pgn_bijectivity(self):
+        np.random.seed(0)
+        pgn = ChessEnv._PGN_RESTART
+        board = ChessEnv._pgn_to_board(pgn)
+        pgn_prev = pgn
+        for _ in range(10):
+            moves = list(board.legal_moves)
+            move = np.random.choice(moves)
+            board.push(move)
+            pgn_move = ChessEnv._board_to_pgn(board)
+            assert pgn_move != pgn_prev
+            assert pgn_move == ChessEnv._board_to_pgn(ChessEnv._pgn_to_board(pgn_move))
+            assert pgn_move == ChessEnv._add_move_to_pgn(pgn_prev, move)
+            pgn_prev = pgn_move
 
-    def test_reset_white_to_move(self, stateful):
-        env = ChessEnv(stateful=stateful)
+    def test_consistency(self):
+        env0_stateful = ChessEnv(stateful=True, include_pgn=True, include_fen=True)
+        env1_stateful = ChessEnv(stateful=True, include_pgn=False, include_fen=True)
+        env2_stateful = ChessEnv(stateful=True, include_pgn=True, include_fen=False)
+        env0_stateless = ChessEnv(stateful=False, include_pgn=True, include_fen=True)
+        env1_stateless = ChessEnv(stateful=False, include_pgn=False, include_fen=True)
+        env2_stateless = ChessEnv(stateful=False, include_pgn=True, include_fen=False)
+        torch.manual_seed(0)
+        r1_stateless = env1_stateless.rollout(50, break_when_any_done=False)
+        torch.manual_seed(0)
+        r1_stateful = env1_stateful.rollout(50, break_when_any_done=False)
+        torch.manual_seed(0)
+        r2_stateless = env2_stateless.rollout(50, break_when_any_done=False)
+        torch.manual_seed(0)
+        r2_stateful = env2_stateful.rollout(50, break_when_any_done=False)
+        torch.manual_seed(0)
+        r0_stateless = env0_stateless.rollout(50, break_when_any_done=False)
+        torch.manual_seed(0)
+        r0_stateful = env0_stateful.rollout(50, break_when_any_done=False)
+        assert (r0_stateless["action"] == r1_stateless["action"]).all()
+        assert (r0_stateless["action"] == r2_stateless["action"]).all()
+        assert (r0_stateless["action"] == r0_stateful["action"]).all()
+        assert (r1_stateless["action"] == r1_stateful["action"]).all()
+        assert (r2_stateless["action"] == r2_stateful["action"]).all()
+
+    @pytest.mark.parametrize(
+        "include_fen,include_pgn", [[True, False], [False, True], [True, True]]
+    )
+    @pytest.mark.parametrize("stateful", [False, True])
+    def test_rollout(self, stateful, include_pgn, include_fen):
+        torch.manual_seed(0)
+        env = ChessEnv(
+            stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
+        )
+        r = env.rollout(500, break_when_any_done=False)
+        assert r.shape == (500,)
+
+    @pytest.mark.parametrize(
+        "include_fen,include_pgn", [[True, False], [False, True], [True, True]]
+    )
+    @pytest.mark.parametrize("stateful", [False, True])
+    def test_reset_white_to_move(self, stateful, include_pgn, include_fen):
+        env = ChessEnv(
+            stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
+        )
         fen = "5k2/4r3/8/8/8/1Q6/2K5/8 w - - 0 1"
         td = env.reset(TensorDict({"fen": fen}))
         assert td["fen"] == fen
+        if include_fen:
+            assert env.board.fen() == fen
         assert td["turn"] == env.lib.WHITE
         assert not td["done"]
 
-    def test_reset_black_to_move(self, stateful):
-        env = ChessEnv(stateful=stateful)
+    @pytest.mark.parametrize("include_fen,include_pgn", [[True, False], [True, True]])
+    @pytest.mark.parametrize("stateful", [False, True])
+    def test_reset_black_to_move(self, stateful, include_pgn, include_fen):
+        env = ChessEnv(
+            stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
+        )
         fen = "5k2/4r3/8/8/8/1Q6/2K5/8 b - - 0 1"
         td = env.reset(TensorDict({"fen": fen}))
         assert td["fen"] == fen
+        assert env.board.fen() == fen
         assert td["turn"] == env.lib.BLACK
         assert not td["done"]
 
-    def test_reset_done_error(self, stateful):
-        env = ChessEnv(stateful=stateful)
+    @pytest.mark.parametrize("include_fen,include_pgn", [[True, False], [True, True]])
+    @pytest.mark.parametrize("stateful", [False, True])
+    def test_reset_done_error(self, stateful, include_pgn, include_fen):
+        env = ChessEnv(
+            stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
+        )
         fen = "1R3k2/2R5/8/8/8/8/2K5/8 b - - 0 1"
         with pytest.raises(ValueError) as e_info:
             env.reset(TensorDict({"fen": fen}))
@@ -3425,12 +3501,19 @@ class TestChessEnv:
     @pytest.mark.parametrize(
         "endstate", ["white win", "black win", "stalemate", "50 move", "insufficient"]
     )
-    def test_reward(self, stateful, reset_without_fen, endstate):
+    @pytest.mark.parametrize("include_pgn", [False, True])
+    @pytest.mark.parametrize("include_fen", [True])
+    @pytest.mark.parametrize("stateful", [False, True])
+    def test_reward(
+        self, stateful, reset_without_fen, endstate, include_pgn, include_fen
+    ):
         if stateful and reset_without_fen:
             # reset_without_fen is only used for stateless env
             return
 
-        env = ChessEnv(stateful=stateful)
+        env = ChessEnv(
+            stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
+        )
 
         if endstate == "white win":
             fen = "5k2/2R5/8/8/8/1R6/2K5/8 w - - 0 1"
@@ -3443,28 +3526,28 @@ class TestChessEnv:
             fen = "5k2/6r1/8/8/8/8/7r/1K6 b - - 0 1"
             expected_turn = env.lib.BLACK
             move = "Rg1#"
-            expected_reward = -1
+            expected_reward = 1
             expected_done = True
 
         elif endstate == "stalemate":
             fen = "5k2/6r1/8/8/8/8/7r/K7 b - - 0 1"
             expected_turn = env.lib.BLACK
             move = "Rb7"
-            expected_reward = 0
+            expected_reward = 0.5
             expected_done = True
 
         elif endstate == "insufficient":
             fen = "5k2/8/8/8/3r4/2K5/8/8 w - - 0 1"
             expected_turn = env.lib.WHITE
             move = "Kxd4"
-            expected_reward = 0
+            expected_reward = 0.5
             expected_done = True
 
         elif endstate == "50 move":
             fen = "5k2/8/1R6/8/6r1/2K5/8/8 b - - 99 123"
             expected_turn = env.lib.BLACK
             move = "Kf7"
-            expected_reward = 0
+            expected_reward = 0.5
             expected_done = True
 
         elif endstate == "not_done":
@@ -3483,8 +3566,7 @@ class TestChessEnv:
             td = env.reset(TensorDict({"fen": fen}))
             assert td["turn"] == expected_turn
 
-        moves = env.get_legal_moves(None if stateful else td)
-        td["action"] = moves.index(move)
+        td["action"] = env._san_moves.index(move)
         td = env.step(td)["next"]
         assert td["done"] == expected_done
         assert td["reward"] == expected_reward

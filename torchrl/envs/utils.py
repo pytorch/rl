@@ -1391,7 +1391,7 @@ def _update_during_reset(
         # get the reset signal
         reset = tensordict.pop(reset_key, None)
 
-        # check if this reset should be ignored -- this happens whenever the a
+        # check if this reset should be ignored -- this happens whenever the
         # root node has already been updated
         root = () if isinstance(reset_key, str) else reset_key[:-1]
         processed = any(reset_key_tuple[: len(x)] == x for x in roots)
