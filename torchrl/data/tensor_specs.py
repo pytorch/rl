@@ -36,6 +36,7 @@ from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     TensorDict,
     TensorDictBase,
     unravel_key,
@@ -3676,6 +3677,120 @@ class Categorical(TensorSpec):
             dtype=self.dtype,
             mask=self.mask.clone() if self.mask is not None else None,
         )
+
+
+class Choice(TensorSpec):
+    """A discrete choice spec for either tensor or non-tensor data.
+
+    Args:
+        choices (list[:class:`~TensorSpec`, :class:`~tensordict.NonTensorData`, :class:`~tensordict.NonTensorStack`]):
+            List of specs or non-tensor data from which to choose during
+            sampling. All elements must have the same type, shape, dtype, and
+            device.
+
+    Examples:
+        >>> import torch
+        >>> _ = torch.manual_seed(0)
+        >>> from torchrl.data import Choice, Bounded
+        >>> spec = Choice([
+        ...     Bounded(0, 1, shape=(1,)),
+        ...     Bounded(10, 11, shape=(1,))])
+        >>> spec.rand()
+        tensor([0.7682])
+        >>> spec.rand()
+        tensor([10.1320])
+        >>> from tensordict import NonTensorData
+        >>> _ = torch.manual_seed(0)
+        >>> spec = Choice([NonTensorData(s) for s in ["a", "b", "c", "d"]])
+        >>> spec.rand().data
+        'a'
+        >>> spec.rand().data
+        'd'
+    """
+
+    def __init__(
+        self,
+        choices: List[TensorSpec | NonTensorData | NonTensorStack],
+    ):
+        if not isinstance(choices, list):
+            raise TypeError("'choices' must be a list")
+
+        if not isinstance(choices[0], (TensorSpec, NonTensorData, NonTensorStack)):
+            raise TypeError(
+                (
+                    "Each choice must be either a TensorSpec, NonTensorData, or "
+                    f"NonTensorStack, but got {type(choices[0])}"
+                )
+            )
+
+        if not all([isinstance(choice, type(choices[0])) for choice in choices[1:]]):
+            raise TypeError("All choices must be the same type")
+
+        if not all([choice.shape == choices[0].shape for choice in choices[1:]]):
+            raise ValueError("All choices must have the same shape")
+
+        if not all([choice.dtype == choices[0].dtype for choice in choices[1:]]):
+            raise ValueError("All choices must have the same dtype")
+
+        if not all([choice.device == choices[0].device for choice in choices[1:]]):
+            raise ValueError("All choices must have the same device")
+
+        shape = choices[0].shape
+        device = choices[0].device
+        dtype = choices[0].dtype
+
+        super().__init__(
+            shape=shape, space=None, device=device, dtype=dtype, domain=None
+        )
+
+        self._choices = [choice.clone() for choice in choices]
+
+    def _rand_idx(self):
+        return torch.randint(0, len(self._choices), ()).item()
+
+    def _sample(self, idx, spec_sample_fn) -> TensorDictBase:
+        res = self._choices[idx]
+        if isinstance(res, TensorSpec):
+            return spec_sample_fn(res)
+        else:
+            return res
+
+    def zero(self, shape: torch.Size = None) -> TensorDictBase:
+        return self._sample(0, lambda x: x.zero(shape))
+
+    def one(self, shape: torch.Size = None) -> TensorDictBase:
+        return self._sample(min(1, len(self - 1)), lambda x: x.one(shape))
+
+    def rand(self, shape: torch.Size = None) -> TensorDictBase:
+        return self._sample(self._rand_idx(), lambda x: x.rand(shape))
+
+    def is_in(self, val: torch.Tensor | TensorDictBase) -> bool:
+        if isinstance(self._choices[0], TensorSpec):
+            return any([choice.is_in(val) for choice in self._choices])
+        else:
+            return any([(choice == val).all() for choice in self._choices])
+
+    def expand(self, *shape):
+        return self.__class__([choice.expand(*shape) for choice in self._choices])
+
+    def unsqueeze(self, dim: int):
+        return self.__class__([choice.unsqueeze(dim) for choice in self._choices])
+
+    def clone(self) -> Choice:
+        return self.__class__([choice.clone() for choice in self._choices])
+
+    def cardinality(self) -> int:
+        if isinstance(self._choices[0], (NonTensorData, NonTensorStack)):
+            return len(self._choices)
+        else:
+            return (
+                torch.tensor([choice.cardinality() for choice in self._choices])
+                .sum()
+                .item()
+            )
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Choice:
+        return self.__class__([choice.to(dest) for choice in self._choices])
 
 
 @dataclass(repr=False)
