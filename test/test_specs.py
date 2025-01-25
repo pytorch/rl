@@ -689,17 +689,56 @@ class TestChoiceSpec:
     @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
     def test_choice(self, input_type):
         if input_type == "spec":
-            stack = torch.stack([Bounded(0, 2.5, ()), Bounded(10, 12, ())])
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+            example_in = torch.tensor(11.0)
+            example_out = torch.tensor(9.0)
         elif input_type == "nontensor":
-            stack = torch.stack([NonTensorData("a"), NonTensorData("b")])
+            choices = [NonTensorData("a"), NonTensorData("b")]
+            example_in = NonTensorData("b")
+            example_out = NonTensorData("c")
         elif input_type == "nontensorstack":
-            stack = torch.stack(
-                [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
-            )
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+            example_in = NonTensorStack("a", "b", "c")
+            example_out = NonTensorStack("a", "c", "b")
 
-        spec = Choice(stack)
+        spec = Choice(choices)
         res = spec.rand()
         assert spec.is_in(res)
+        assert spec.is_in(example_in)
+        assert not spec.is_in(example_out)
+
+    def test_errors(self):
+        with pytest.raises(TypeError, match="must be a list"):
+            Choice("abc")
+
+        with pytest.raises(
+            TypeError,
+            match="must be either a TensorSpec, NonTensorData, or NonTensorStack",
+        ):
+            Choice(["abc"])
+
+        with pytest.raises(TypeError, match="must be the same type"):
+            Choice([Bounded(0, 1, (1,)), Categorical(10, (1,))])
+
+        with pytest.raises(ValueError, match="must have the same shape"):
+            Choice([Categorical(10, (1,)), Categorical(10, (2,))])
+
+        with pytest.raises(ValueError, match="must have the same dtype"):
+            Choice(
+                [
+                    Categorical(10, (2,), dtype=torch.long),
+                    Categorical(10, (2,), dtype=torch.float),
+                ]
+            )
+
+        if torch.cuda.device_count():
+            with pytest.raises(ValueError, match="must have the same device"):
+                Choice(
+                    [
+                        Categorical(10, (2,), device="cpu"),
+                        Categorical(10, (2,), device="cuda"),
+                    ]
+                )
 
 
 @pytest.mark.parametrize("shape", [(), (2, 3)])
@@ -1436,17 +1475,23 @@ class TestExpand:
     @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
     def test_choice(self, input_type):
         if input_type == "spec":
-            stack = torch.stack([Bounded(0, 2.5, ()), Bounded(10, 12, ())])
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
         elif input_type == "nontensor":
-            stack = torch.stack([NonTensorData("a"), NonTensorData("b")])
+            choices = [NonTensorData("a"), NonTensorData("b")]
         elif input_type == "nontensorstack":
-            stack = torch.stack(
-                [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
-            )
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
 
-        spec = Choice(stack)
-        with pytest.raises(NotImplementedError):
-            spec.expand((3,))
+        spec = Choice(choices)
+        res = spec.expand(
+            [
+                3,
+            ]
+        )
+        assert res.shape == torch.Size(
+            [
+                3,
+            ]
+        )
 
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
@@ -1653,15 +1698,13 @@ class TestClone:
     @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
     def test_choice(self, input_type):
         if input_type == "spec":
-            stack = torch.stack([Bounded(0, 2.5, ()), Bounded(10, 12, ())])
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
         elif input_type == "nontensor":
-            stack = torch.stack([NonTensorData("a"), NonTensorData("b")])
+            choices = [NonTensorData("a"), NonTensorData("b")]
         elif input_type == "nontensorstack":
-            stack = torch.stack(
-                [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
-            )
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
 
-        spec = Choice(stack)
+        spec = Choice(choices)
         assert spec.clone() == spec
         assert spec.clone() is not spec
 
@@ -1756,19 +1799,15 @@ class TestCardinality:
     )
     def test_choice(self, input_type):
         if input_type == "bounded_spec":
-            stack = torch.stack([Bounded(0, 2.5, ()), Bounded(10, 12, ())])
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
         elif input_type == "categorical_spec":
-            stack = torch.stack([Categorical(10), Categorical(20)])
+            choices = [Categorical(10), Categorical(20)]
         elif input_type == "nontensor":
-            stack = torch.stack(
-                [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
-            )
+            choices = [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
         elif input_type == "nontensorstack":
-            stack = torch.stack(
-                [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
-            )
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
 
-        spec = Choice(stack)
+        spec = Choice(choices)
 
         if input_type == "bounded_spec":
             assert spec.cardinality() == float("inf")
@@ -2093,19 +2132,15 @@ class TestTo:
     )
     def test_choice(self, input_type, device):
         if input_type == "bounded_spec":
-            stack = torch.stack([Bounded(0, 2.5, ()), Bounded(10, 12, ())])
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
         elif input_type == "categorical_spec":
-            stack = torch.stack([Categorical(10), Categorical(20)])
+            choices = [Categorical(10), Categorical(20)]
         elif input_type == "nontensor":
-            stack = torch.stack(
-                [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
-            )
+            choices = [NonTensorData("a"), NonTensorData("b")]
         elif input_type == "nontensorstack":
-            stack = torch.stack(
-                [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
-            )
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
 
-        spec = Choice(stack, device="cpu")
+        spec = Choice(choices)
         assert spec.to(device).device == device
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
@@ -2376,26 +2411,30 @@ class TestStack:
 
     @pytest.mark.parametrize(
         "input_type",
-        ["bounded_spec", "categorical_spec", "nontensor", "nontensorstack"],
+        ["bounded_spec", "categorical_spec", "nontensor"],
     )
     def test_stack_choice(self, input_type, shape, stack_dim):
         if input_type == "bounded_spec":
-            stack = torch.stack([Bounded(0, 2.5, ()), Bounded(10, 12, ())])
+            choices = [Bounded(0, 2.5, shape), Bounded(10, 12, shape)]
         elif input_type == "categorical_spec":
-            stack = torch.stack([Categorical(10), Categorical(20)])
+            choices = [Categorical(10, shape), Categorical(20, shape)]
         elif input_type == "nontensor":
-            stack = torch.stack(
-                [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
-            )
-        elif input_type == "nontensorstack":
-            stack = torch.stack(
-                [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
-            )
+            if len(shape) == 0:
+                choices = [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
+            else:
+                choices = [
+                    NonTensorStack("a").expand(shape + (1,)).squeeze(-1),
+                    NonTensorStack("d").expand(shape + (1,)).squeeze(-1),
+                ]
 
-        spec0 = Choice(stack)
-        spec1 = Choice(stack)
-        with pytest.raises(NotImplementedError):
-            torch.stack([spec0, spec1], 0)
+        spec0 = Choice(choices)
+        spec1 = Choice(choices)
+        res = torch.stack([spec0, spec1], stack_dim)
+        assert isinstance(res, Choice)
+        assert (
+            res.shape
+            == torch.stack([torch.empty(shape), torch.empty(shape)], stack_dim).shape
+        )
 
     def test_stack_onehot(self, shape, stack_dim):
         n = 5
