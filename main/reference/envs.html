@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+ec370c6) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+093a159) &#x25BC</span></a>
     </div>
     
 
@@ -1136,30 +1136,77 @@ also easy to root the transform graph to each component of the observation data 
 pixels or states etc).</p>
 <section id="forward-and-inverse-transforms">
 <h3>Forward and inverse transforms<a class="headerlink" href="#forward-and-inverse-transforms" title="Permalink to this heading">¶</a></h3>
-<p>Transforms also have an <code class="docutils literal notranslate"><span class="pre">inv</span></code> method that is called before
-the action is applied in reverse order over the composed transform chain:
-this allows to apply transforms to data in the environment before the action is taken
-in the environment. The keys to be included in this inverse transform are passed through the
-<code class="docutils literal notranslate"><span class="pre">&quot;in_keys_inv&quot;</span></code> keyword argument:</p>
+<p>Transforms also have an <code class="xref py py-meth docutils literal notranslate"><span class="pre">inv()</span></code> method that is called before the action is applied in reverse
+order over the composed transform chain. This allows applying transforms to data in the environment before the action is
+taken in the environment. The keys to be included in this inverse transform are passed through the <cite>“in_keys_inv”</cite>
+keyword argument, and the out-keys default to these values in most cases:</p>
 <div class="literal-block-wrapper docutils container" id="id11">
 <div class="code-block-caption"><span class="caption-text">Inverse transform</span><a class="headerlink" href="#id11" title="Permalink to this code">¶</a></div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>     <span class="o">&gt;&gt;&gt;</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">DoubleToFloat</span><span class="p">(</span><span class="n">in_keys_inv</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]))</span>  <span class="c1"># will map the action from float32 to float64 before calling the base_env.step</span>
 </pre></div>
 </div>
 </div>
-<p>The way <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> relates to <code class="docutils literal notranslate"><span class="pre">in_keys_inv</span></code> can be understood by considering the base environment as the “inner” part
-of the transform. In constrast, the user inputs and outputs to and from the transform are to be considered as the
-outside world. The following figure shows what this means in practice for the <code class="xref py py-class docutils literal notranslate"><span class="pre">RenameTransform</span></code>
-class: the input <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> of the <code class="docutils literal notranslate"><span class="pre">step</span></code> function must have the <code class="docutils literal notranslate"><span class="pre">out_keys_inv</span></code> listed in its entries as they
-are part of the outside world. The transform changes these names to make them match the names of the inner, base
-environment using the <code class="docutils literal notranslate"><span class="pre">in_keys_inv</span></code>. The inverse process is executed with the output tensordict, where the <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>
-are mapped to the corresponding <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>.</p>
+<p>The following paragraphs detail how one can think about what is to be considered <cite>in_</cite> or <cite>out_</cite> features.</p>
+<section id="understanding-transform-keys">
+<h4>Understanding Transform Keys<a class="headerlink" href="#understanding-transform-keys" title="Permalink to this heading">¶</a></h4>
+<p>In transforms, <cite>in_keys</cite> and <cite>out_keys</cite> define the interaction between the base environment and the outside world
+(e.g., your policy):</p>
+<ul class="simple">
+<li><p><cite>in_keys</cite> refers to the base environment’s perspective (inner = <cite>base_env</cite> of the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code>).</p></li>
+<li><p><cite>out_keys</cite> refers to the outside world (outer = <cite>policy</cite>, <cite>agent</cite>, etc.).</p></li>
+</ul>
+<p>For example, with <cite>in_keys=[“obs”]</cite> and <cite>out_keys=[“obs_standardized”]</cite>, the policy will “see” a standardized
+observation, while the base environment outputs a regular observation.</p>
+<p>Similarly, for inverse keys:</p>
+<ul class="simple">
+<li><p><cite>in_keys_inv</cite> refers to entries as seen by the base environment.</p></li>
+<li><p><cite>out_keys_inv</cite> refers to entries as seen or produced by the policy.</p></li>
+</ul>
+<p>The following figure illustrates this concept for the <code class="xref py py-class docutils literal notranslate"><span class="pre">RenameTransform</span></code> class: the input
+<cite>TensorDict</cite> of the <cite>step</cite> function must include the <cite>out_keys_inv</cite> as they are part of the outside world. The
+transform changes these names to match the names of the inner, base environment using the <cite>in_keys_inv</cite>.
+The inverse process is executed with the output tensordict, where the <cite>in_keys</cite> are mapped to the corresponding
+<cite>out_keys</cite>.</p>
 <figure class="align-default" id="id12">
 <img alt="../_images/rename_transform.png" src="../_images/rename_transform.png" />
 <figcaption>
 <p><span class="caption-text">Rename transform logic</span><a class="headerlink" href="#id12" title="Permalink to this image">¶</a></p>
 </figcaption>
 </figure>
+</section>
+<section id="transforming-tensors-and-specs">
+<h4>Transforming Tensors and Specs<a class="headerlink" href="#transforming-tensors-and-specs" title="Permalink to this heading">¶</a></h4>
+<p>When transforming actual tensors (coming from the policy), the process is schematically represented as:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This starts with the outermost transform to the innermost transform, ensuring the action value exposed to the policy
+is properly transformed.</p>
+<p>For transforming the action spec, the process should go from innermost to outermost (similar to observation specs):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">transform_action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="n">action_spec</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">transform_action_spec</span><span class="p">(</span><span class="n">action_spec</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">action_spec</span>
+</pre></div>
+</div>
+<p>A pseudocode for a single transform_action_spec could be:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">transform_action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">):</span>
+<span class="gp">... </span>   <span class="k">return</span> <span class="n">spec_from_random_values</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">action_spec</span><span class="o">.</span><span class="n">rand</span><span class="p">()))</span>
+</pre></div>
+</div>
+<p>This approach ensures that the “outside” spec is inferred from the “inside” spec. Note that we did not call
+<cite>_inv_apply_transform</cite> but <cite>_apply_transform</cite> on purpose!</p>
+</section>
+<section id="exposing-specs-to-the-outside-world">
+<h4>Exposing Specs to the Outside World<a class="headerlink" href="#exposing-specs-to-the-outside-world" title="Permalink to this heading">¶</a></h4>
+<p><cite>TransformedEnv</cite> will expose the specs corresponding to the <cite>out_keys_inv</cite> for actions and states.
+For example, with <code class="xref py py-class docutils literal notranslate"><span class="pre">ActionDiscretizer</span></code>, the environment’s action (e.g., <cite>“action”</cite>) is a float-valued
+tensor that should not be generated when using <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.rand_action" title="torchrl.envs.EnvBase.rand_action"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rand_action()</span></code></a> with the transformed
+environment. Instead, <cite>“action_discrete”</cite> should be generated, and its continuous counterpart obtained from the
+transform. Therefore, the user should see the <cite>“action_discrete”</cite> entry being exposed, but not <cite>“action”</cite>.</p>
+</section>
 </section>
 <section id="cloning-transforms">
 <h3>Cloning transforms<a class="headerlink" href="#cloning-transforms" title="Permalink to this heading">¶</a></h3>
@@ -1279,7 +1326,7 @@ to be able to create this other composition:</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.GrayScale.html#torchrl.envs.transforms.GrayScale" title="torchrl.envs.transforms.GrayScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GrayScale</span></code></a>([in_keys, out_keys])</p></td>
 <td><p>Turns a pixel observation to grayscale.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash" title="torchrl.envs.transforms.Hash"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Hash</span></code></a>(in_keys, out_keys[, hash_fn, seed, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash" title="torchrl.envs.transforms.Hash"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Hash</span></code></a>(in_keys, out_keys, *[, hash_fn, seed, ...])</p></td>
 <td><p>Adds a hash value to a tensordict.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InitTracker</span></code></a>([init_key])</p></td>
@@ -1360,7 +1407,7 @@ to be able to create this other composition:</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.TrajCounter.html#torchrl.envs.transforms.TrajCounter" title="torchrl.envs.transforms.TrajCounter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TrajCounter</span></code></a>([out_key])</p></td>
 <td><p>Global trajectory counter transform.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform" title="torchrl.envs.transforms.UnaryTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnaryTransform</span></code></a>(in_keys, out_keys, fn, *[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform" title="torchrl.envs.transforms.UnaryTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnaryTransform</span></code></a>(in_keys, out_keys[, ...])</p></td>
 <td><p>Applies a unary operation on the specified inputs.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.UnsqueezeTransform.html#torchrl.envs.transforms.UnsqueezeTransform" title="torchrl.envs.transforms.UnsqueezeTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnsqueezeTransform</span></code></a>(*args, **kwargs)</p></td>
@@ -1782,7 +1829,12 @@ the following function will return <code class="docutils literal notranslate"><s
 <li><a class="reference internal" href="#auto-resetting-envs">Auto-resetting Envs</a></li>
 <li><a class="reference internal" href="#dynamic-specs">Dynamic Specs</a></li>
 <li><a class="reference internal" href="#transforms">Transforms</a><ul>
-<li><a class="reference internal" href="#forward-and-inverse-transforms">Forward and inverse transforms</a></li>
+<li><a class="reference internal" href="#forward-and-inverse-transforms">Forward and inverse transforms</a><ul>
+<li><a class="reference internal" href="#understanding-transform-keys">Understanding Transform Keys</a></li>
+<li><a class="reference internal" href="#transforming-tensors-and-specs">Transforming Tensors and Specs</a></li>
+<li><a class="reference internal" href="#exposing-specs-to-the-outside-world">Exposing Specs to the Outside World</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#cloning-transforms">Cloning transforms</a></li>
 </ul>
 </li>

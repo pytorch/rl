@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+ec370c6) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+093a159) &#x25BC</span></a>
     </div>
     
 
@@ -431,21 +431,32 @@
 <h1>Hash<a class="headerlink" href="#hash" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.Hash">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">Hash</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hash_fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_raw_nontensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#Hash"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.Hash" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">Hash</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hash_fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_raw_nontensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#Hash"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.Hash" title="Permalink to this definition">¶</a></dt>
 <dd><p>Adds a hash value to a tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>in_keys</strong> (<em>sequence of NestedKey</em>) – the keys of the values to hash.</p></li>
 <li><p><strong>out_keys</strong> (<em>sequence of NestedKey</em>) – the keys of the resulting hashes.</p></li>
-<li><p><strong>hash_fn</strong> (<em>Callable</em><em>, </em><em>optional</em>) – the hash function to use. If <code class="docutils literal notranslate"><span class="pre">seed</span></code> is given,
-the hash function must accept it as its second argument. Default is
-<code class="docutils literal notranslate"><span class="pre">Hash.reproducible_hash</span></code>.</p></li>
-<li><p><strong>seed</strong> (<em>optional</em>) – seed to use for the hash function, if it requires one.</p></li>
+<li><p><strong>in_keys_inv</strong> (<em>sequence of NestedKey</em><em>, </em><em>optional</em>) – <p>the keys of the values to hash during inv call.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If an inverse map is required, a repertoire <code class="docutils literal notranslate"><span class="pre">Dict[Tuple[int],</span> <span class="pre">Any]</span></code> of hash to value should be
+passed alongside the list of keys to let the <code class="docutils literal notranslate"><span class="pre">Hash</span></code> transform know how to recover a value from a
+given hash. This repertoire isn’t copied, so it can be modified in the same workspace after the
+transform instantiation and these modifications will be reflected in the map. Missing hashes will be
+mapped to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</div>
+</p></li>
+<li><p><strong>out_keys_inv</strong> (<em>sequence of NestedKey</em><em>, </em><em>optional</em>) – the keys of the resulting hashes during inv call.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
+<li><p><strong>hash_fn</strong> (<em>Callable</em><em>, </em><em>optional</em>) – the hash function to use. If <code class="docutils literal notranslate"><span class="pre">seed</span></code> is given,
+the hash function must accept it as its second argument. Default is
+<code class="docutils literal notranslate"><span class="pre">Hash.reproducible_hash</span></code>.</p></li>
+<li><p><strong>seed</strong> (<em>optional</em>) – seed to use for the hash function, if it requires one.</p></li>
 <li><p><strong>use_raw_nontensor</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, data is extracted from
 <code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code>/<code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code> inputs before <code class="docutils literal notranslate"><span class="pre">fn</span></code> is called
 on them. If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the raw <code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code>/<code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code>
@@ -561,6 +572,60 @@ is_shared=False)</p>
 <dd class="field-odd"><p>Tensor</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.Hash.state_dict">
+<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#Hash.state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.Hash.state_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a dictionary containing references to the whole state of the module.</p>
+<p>Both parameters and persistent buffers (e.g. running averages) are
+included. Keys are corresponding parameter and buffer names.
+Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
+<code class="docutils literal notranslate"><span class="pre">destination</span></code>, <code class="docutils literal notranslate"><span class="pre">prefix</span></code> and <code class="docutils literal notranslate"><span class="pre">keep_vars</span></code> in order. However,
+this is being deprecated and keyword arguments will be enforced in
+future releases.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Please avoid the use of argument <code class="docutils literal notranslate"><span class="pre">destination</span></code> as it is not
+designed for end-users.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>dict</em><em>, </em><em>optional</em>) – If provided, the state of module will
+be updated into the dict and the same object is returned.
+Otherwise, an <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code> will be created and returned.
+Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>prefix</strong> (<em>str</em><em>, </em><em>optional</em>) – a prefix added to parameter and buffer
+names to compose the keys in state_dict. Default: <code class="docutils literal notranslate"><span class="pre">''</span></code>.</p></li>
+<li><p><strong>keep_vars</strong> (<em>bool</em><em>, </em><em>optional</em>) – by default the <a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> s
+returned in the state dict are detached from autograd. If it’s
+set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, detaching will not be performed.
+Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a dictionary containing a whole state of the module</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># xdoctest: +SKIP(&quot;undefined vars&quot;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+<span class="go">[&#39;bias&#39;, &#39;weight&#39;]</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </dd></dl>

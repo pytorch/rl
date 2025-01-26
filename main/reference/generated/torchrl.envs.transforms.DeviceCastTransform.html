@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+ec370c6) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+093a159) &#x25BC</span></a>
     </div>
     
 
@@ -474,6 +474,20 @@ Defaults to the values of <code class="docutils literal notranslate"><span class
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.DeviceCastTransform.transform_action_spec">
+<span class="sig-name descname"><span class="pre">transform_action_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">full_action_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#DeviceCastTransform.transform_action_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.DeviceCastTransform.transform_action_spec" title="Permalink to this definition">¶</a></dt>
+<dd><p>Transforms the action spec such that the resulting spec matches transform mapping.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>action_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – spec before the transform</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>expected spec after the transform</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.DeviceCastTransform.transform_done_spec">
 <span class="sig-name descname"><span class="pre">transform_done_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">full_done_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#DeviceCastTransform.transform_done_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.DeviceCastTransform.transform_done_spec" title="Permalink to this definition">¶</a></dt>
 <dd><p>Transforms the done spec such that the resulting spec matches transform mapping.</p>
@@ -543,6 +557,20 @@ Defaults to the values of <code class="docutils literal notranslate"><span class
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>reward_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – spec before the transform</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>expected spec after the transform</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.DeviceCastTransform.transform_state_spec">
+<span class="sig-name descname"><span class="pre">transform_state_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">full_state_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#DeviceCastTransform.transform_state_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.DeviceCastTransform.transform_state_spec" title="Permalink to this definition">¶</a></dt>
+<dd><p>Transforms the state spec such that the resulting spec matches transform mapping.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>state_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – spec before the transform</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>expected spec after the transform</p>
