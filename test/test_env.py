@@ -250,109 +250,200 @@ def test_env_seed(env_name, frame_skip, seed=0):
     env.close()
 
 
-@pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
-@pytest.mark.parametrize("frame_skip", [1, 4])
-def test_rollout(env_name, frame_skip, seed=0):
-    if env_name is PONG_VERSIONED and version.parse(
-        gym_backend().__version__
-    ) < version.parse("0.19"):
-        # Then 100 steps in pong are not sufficient to detect a difference
-        pytest.skip("can't detect difference in gym rollout with this gym version.")
+class TestRollout:
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
+    @pytest.mark.parametrize("frame_skip", [1, 4])
+    def test_rollout(self, env_name, frame_skip, seed=0):
+        if env_name is PONG_VERSIONED and version.parse(
+            gym_backend().__version__
+        ) < version.parse("0.19"):
+            # Then 100 steps in pong are not sufficient to detect a difference
+            pytest.skip("can't detect difference in gym rollout with this gym version.")
 
-    env_name = env_name()
-    env = GymEnv(env_name, frame_skip=frame_skip)
+        env_name = env_name()
+        env = GymEnv(env_name, frame_skip=frame_skip)
 
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    env.set_seed(seed)
-    env.reset()
-    rollout1 = env.rollout(max_steps=100)
-    assert rollout1.names[-1] == "time"
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        env.set_seed(seed)
+        env.reset()
+        rollout1 = env.rollout(max_steps=100)
+        assert rollout1.names[-1] == "time"
 
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    env.set_seed(seed)
-    env.reset()
-    rollout2 = env.rollout(max_steps=100)
-    assert rollout2.names[-1] == "time"
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        env.set_seed(seed)
+        env.reset()
+        rollout2 = env.rollout(max_steps=100)
+        assert rollout2.names[-1] == "time"
 
-    assert_allclose_td(rollout1, rollout2)
+        assert_allclose_td(rollout1, rollout2)
 
-    torch.manual_seed(seed)
-    env.set_seed(seed + 10)
-    env.reset()
-    rollout3 = env.rollout(max_steps=100)
-    with pytest.raises(AssertionError):
-        assert_allclose_td(rollout1, rollout3)
-    env.close()
+        torch.manual_seed(seed)
+        env.set_seed(seed + 10)
+        env.reset()
+        rollout3 = env.rollout(max_steps=100)
+        with pytest.raises(AssertionError):
+            assert_allclose_td(rollout1, rollout3)
+        env.close()
 
+    def test_rollout_set_truncated(self):
+        env = ContinuousActionVecMockEnv()
+        with pytest.raises(RuntimeError, match="set_truncated was set to True"):
+            env.rollout(max_steps=10, set_truncated=True, break_when_any_done=False)
+        env.add_truncated_keys()
+        r = env.rollout(max_steps=10, set_truncated=True, break_when_any_done=False)
+        assert r.shape == torch.Size([10])
+        assert r[..., -1]["next", "truncated"].all()
+        assert r[..., -1]["next", "done"].all()
 
-def test_rollout_set_truncated():
-    env = ContinuousActionVecMockEnv()
-    with pytest.raises(RuntimeError, match="set_truncated was set to True"):
-        env.rollout(max_steps=10, set_truncated=True, break_when_any_done=False)
-    env.add_truncated_keys()
-    r = env.rollout(max_steps=10, set_truncated=True, break_when_any_done=False)
-    assert r.shape == torch.Size([10])
-    assert r[..., -1]["next", "truncated"].all()
-    assert r[..., -1]["next", "done"].all()
+    @pytest.mark.parametrize("max_steps", [1, 5])
+    def test_rollouts_chaining(self, max_steps, batch_size=(4,), epochs=4):
+        # CountingEnv is done at max_steps + 1, so to emulate it being done at max_steps, we feed max_steps=max_steps - 1
+        env = CountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
+        policy = CountingEnvCountPolicy(
+            action_spec=env.action_spec, action_key=env.action_key
+        )
 
+        input_td = env.reset()
+        for _ in range(epochs):
+            rollout_td = env.rollout(
+                max_steps=max_steps,
+                policy=policy,
+                auto_reset=False,
+                break_when_any_done=False,
+                tensordict=input_td,
+            )
+            assert (env.count == max_steps).all()
+            input_td = step_mdp(
+                rollout_td[..., -1],
+                keep_other=True,
+                exclude_action=False,
+                exclude_reward=True,
+                reward_keys=env.reward_keys,
+                action_keys=env.action_keys,
+                done_keys=env.done_keys,
+            )
 
-@pytest.mark.parametrize("max_steps", [1, 5])
-def test_rollouts_chaining(max_steps, batch_size=(4,), epochs=4):
-    # CountingEnv is done at max_steps + 1, so to emulate it being done at max_steps, we feed max_steps=max_steps - 1
-    env = CountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
-    policy = CountingEnvCountPolicy(
-        action_spec=env.action_spec, action_key=env.action_key
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_rollout_predictability(self, device):
+        env = MockSerialEnv(device=device)
+        env.set_seed(100)
+        first = 100 % 17
+        policy = Actor(torch.nn.Linear(1, 1, bias=False)).to(device)
+        for p in policy.parameters():
+            p.data.fill_(1.0)
+        td_out = env.rollout(policy=policy, max_steps=200)
+        assert (
+            torch.arange(first, first + 100, device=device)
+            == td_out.get("observation").squeeze()
+        ).all()
+        assert (
+            torch.arange(first + 1, first + 101, device=device)
+            == td_out.get(("next", "observation")).squeeze()
+        ).all()
+        assert (
+            torch.arange(first + 1, first + 101, device=device)
+            == td_out.get(("next", "reward")).squeeze()
+        ).all()
+        assert (
+            torch.arange(first, first + 100, device=device)
+            == td_out.get("action").squeeze()
+        ).all()
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
+    @pytest.mark.parametrize("frame_skip", [1])
+    @pytest.mark.parametrize("truncated_key", ["truncated", "done"])
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_rollout_reset(
+        self,
+        env_name,
+        frame_skip,
+        parallel,
+        truncated_key,
+        maybe_fork_ParallelEnv,
+        seed=0,
+    ):
+        env_name = env_name()
+        envs = []
+        for horizon in [20, 30, 40]:
+            envs.append(
+                lambda horizon=horizon: TransformedEnv(
+                    GymEnv(env_name, frame_skip=frame_skip),
+                    StepCounter(horizon, truncated_key=truncated_key),
+                )
+            )
+        if parallel:
+            env = maybe_fork_ParallelEnv(3, envs)
+        else:
+            env = SerialEnv(3, envs)
+        env.set_seed(100)
+        out = env.rollout(100, break_when_any_done=False)
+        assert out.names[-1] == "time"
+        assert out.shape == torch.Size([3, 100])
+        assert (
+            out[..., -1]["step_count"].squeeze().cpu() == torch.tensor([19, 9, 19])
+        ).all()
+        assert (
+            out[..., -1]["next", "step_count"].squeeze().cpu()
+            == torch.tensor([20, 10, 20])
+        ).all()
+        assert (
+            out["next", truncated_key].squeeze().sum(-1) == torch.tensor([5, 3, 2])
+        ).all()
+
+    @pytest.mark.parametrize(
+        "break_when_any_done,break_when_all_done",
+        [[True, False], [False, True], [False, False]],
     )
+    @pytest.mark.parametrize("n_envs,serial", [[1, None], [4, True], [4, False]])
+    def test_rollout_outplace_policy(
+        self, n_envs, serial, break_when_any_done, break_when_all_done
+    ):
+        def policy_inplace(td):
+            td.set("action", torch.ones(td.shape + (1,)))
+            return td
 
-    input_td = env.reset()
-    for _ in range(epochs):
-        rollout_td = env.rollout(
-            max_steps=max_steps,
-            policy=policy,
-            auto_reset=False,
-            break_when_any_done=False,
-            tensordict=input_td,
+        def policy_outplace(td):
+            return td.empty().set("action", torch.ones(td.shape + (1,)))
+
+        if n_envs == 1:
+            env = CountingEnv(10)
+        elif serial:
+            env = SerialEnv(
+                n_envs,
+                [partial(CountingEnv, 10 + i) for i in range(n_envs)],
+            )
+        else:
+            env = ParallelEnv(
+                n_envs,
+                [partial(CountingEnv, 10 + i) for i in range(n_envs)],
+                mp_start_method=mp_ctx,
+            )
+        r_inplace = env.rollout(
+            40,
+            policy_inplace,
+            break_when_all_done=break_when_all_done,
+            break_when_any_done=break_when_any_done,
         )
-        assert (env.count == max_steps).all()
-        input_td = step_mdp(
-            rollout_td[..., -1],
-            keep_other=True,
-            exclude_action=False,
-            exclude_reward=True,
-            reward_keys=env.reward_keys,
-            action_keys=env.action_keys,
-            done_keys=env.done_keys,
+        r_outplace = env.rollout(
+            40,
+            policy_outplace,
+            break_when_all_done=break_when_all_done,
+            break_when_any_done=break_when_any_done,
         )
-
-
-@pytest.mark.parametrize("device", get_default_devices())
-def test_rollout_predictability(device):
-    env = MockSerialEnv(device=device)
-    env.set_seed(100)
-    first = 100 % 17
-    policy = Actor(torch.nn.Linear(1, 1, bias=False)).to(device)
-    for p in policy.parameters():
-        p.data.fill_(1.0)
-    td_out = env.rollout(policy=policy, max_steps=200)
-    assert (
-        torch.arange(first, first + 100, device=device)
-        == td_out.get("observation").squeeze()
-    ).all()
-    assert (
-        torch.arange(first + 1, first + 101, device=device)
-        == td_out.get(("next", "observation")).squeeze()
-    ).all()
-    assert (
-        torch.arange(first + 1, first + 101, device=device)
-        == td_out.get(("next", "reward")).squeeze()
-    ).all()
-    assert (
-        torch.arange(first, first + 100, device=device)
-        == td_out.get("action").squeeze()
-    ).all()
+        if break_when_any_done:
+            assert r_outplace.shape[-1:] == (11,)
+        elif break_when_all_done:
+            if n_envs > 1:
+                assert r_outplace.shape[-1:] == (14,)
+            else:
+                assert r_outplace.shape[-1:] == (11,)
+        else:
+            assert r_outplace.shape[-1:] == (40,)
+        assert_allclose_td(r_inplace, r_outplace)
 
 
 # Check that the "terminated" key is filled in automatically if only the "done"
@@ -409,42 +500,6 @@ def test_done_key_completion_terminated():
     td = env.step(td)
     assert torch.equal(td[("next", "done")], torch.tensor([[True], [False]]))
     assert torch.equal(td[("next", "terminated")], torch.tensor([[True], [False]]))
-
-
-@pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
-@pytest.mark.parametrize("frame_skip", [1])
-@pytest.mark.parametrize("truncated_key", ["truncated", "done"])
-@pytest.mark.parametrize("parallel", [False, True])
-def test_rollout_reset(
-    env_name, frame_skip, parallel, truncated_key, maybe_fork_ParallelEnv, seed=0
-):
-    env_name = env_name()
-    envs = []
-    for horizon in [20, 30, 40]:
-        envs.append(
-            lambda horizon=horizon: TransformedEnv(
-                GymEnv(env_name, frame_skip=frame_skip),
-                StepCounter(horizon, truncated_key=truncated_key),
-            )
-        )
-    if parallel:
-        env = maybe_fork_ParallelEnv(3, envs)
-    else:
-        env = SerialEnv(3, envs)
-    env.set_seed(100)
-    out = env.rollout(100, break_when_any_done=False)
-    assert out.names[-1] == "time"
-    assert out.shape == torch.Size([3, 100])
-    assert (
-        out[..., -1]["step_count"].squeeze().cpu() == torch.tensor([19, 9, 19])
-    ).all()
-    assert (
-        out[..., -1]["next", "step_count"].squeeze().cpu() == torch.tensor([20, 10, 20])
-    ).all()
-    assert (
-        out["next", truncated_key].squeeze().sum(-1) == torch.tensor([5, 3, 2])
-    ).all()
 
 
 class TestModelBasedEnvBase:
@@ -3395,14 +3450,27 @@ class TestChessEnv:
     @pytest.mark.parametrize("include_pgn", [False, True])
     @pytest.mark.parametrize("include_fen", [False, True])
     @pytest.mark.parametrize("stateful", [False, True])
-    def test_env(self, stateful, include_pgn, include_fen):
+    @pytest.mark.parametrize("include_hash", [False, True])
+    @pytest.mark.parametrize("include_san", [False, True])
+    def test_env(self, stateful, include_pgn, include_fen, include_hash, include_san):
         with pytest.raises(
             RuntimeError, match="At least one state representation"
         ) if not stateful and not include_pgn and not include_fen else contextlib.nullcontext():
             env = ChessEnv(
-                stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
+                stateful=stateful,
+                include_pgn=include_pgn,
+                include_fen=include_fen,
+                include_hash=include_hash,
+                include_san=include_san,
             )
             check_env_specs(env)
+            if include_hash:
+                if include_fen:
+                    assert "fen_hash" in env.observation_spec.keys()
+                if include_pgn:
+                    assert "pgn_hash" in env.observation_spec.keys()
+                if include_san:
+                    assert "san_hash" in env.observation_spec.keys()
 
     def test_pgn_bijectivity(self):
         np.random.seed(0)
@@ -3443,6 +3511,32 @@ class TestChessEnv:
         assert (r0_stateless["action"] == r0_stateful["action"]).all()
         assert (r1_stateless["action"] == r1_stateful["action"]).all()
         assert (r2_stateless["action"] == r2_stateful["action"]).all()
+
+    @pytest.mark.parametrize(
+        "include_fen,include_pgn", [[True, False], [False, True], [True, True]]
+    )
+    @pytest.mark.parametrize("stateful", [False, True])
+    def test_san(self, stateful, include_fen, include_pgn):
+        torch.manual_seed(0)
+        env = ChessEnv(
+            stateful=stateful,
+            include_pgn=include_pgn,
+            include_fen=include_fen,
+            include_san=True,
+        )
+        r = env.rollout(100, break_when_any_done=False)
+        sans = r["next", "san"]
+        actions = [env.san_moves.index(san) for san in sans]
+        i = 0
+
+        def policy(td):
+            nonlocal i
+            td["action"] = actions[i]
+            i += 1
+            return td
+
+        r2 = env.rollout(100, policy=policy, break_when_any_done=False)
+        assert_allclose_td(r, r2)
 
     @pytest.mark.parametrize(
         "include_fen,include_pgn", [[True, False], [False, True], [True, True]]

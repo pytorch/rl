@@ -292,7 +292,10 @@ class GymLikeEnv(_EnvWrapper):
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get(self.action_key)
+        if len(self.action_keys) == 1:
+            action = tensordict.get(self.action_key)
+        else:
+            action = tensordict.select(*self.action_keys).to_dict()
         if self._convert_actions_to_numpy:
             action = self.read_action(action)
 

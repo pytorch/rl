@@ -20,76 +20,26 @@ import pytest
 
 import tensordict.tensordict
 import torch
-
-from torchrl.collectors import MultiSyncDataCollector
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (  # noqa
-        BREAKOUT_VERSIONED,
-        dtype_fixture,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-    )
-    from pytorch.rl.test.mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        CountingEnvWithString,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        EnvWithScalarAction,
-        IncrementingEnv,
-        MockBatchedLockedEnv,
-        MockBatchedUnLockedEnv,
-        MultiAgentCountingEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-    )
-else:
-    from _utils_internal import (  # noqa
-        BREAKOUT_VERSIONED,
-        dtype_fixture,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-    )
-    from mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        CountingEnvWithString,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        EnvWithScalarAction,
-        IncrementingEnv,
-        MockBatchedLockedEnv,
-        MockBatchedUnLockedEnv,
-        MultiAgentCountingEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-    )
-from tensordict import NonTensorData, TensorDict, TensorDictBase, unravel_key
+from tensordict import (
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.nn import TensorDictSequential
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod
+
+from torchrl.collectors import MultiSyncDataCollector
 from torchrl.data import (
     Bounded,
     BoundedContinuous,
     Categorical,
     Composite,
     LazyTensorStorage,
+    NonTensor,
     ReplayBuffer,
     TensorDictReplayBuffer,
     TensorSpec,
@@ -174,6 +124,63 @@ from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
 from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
 from torchrl.modules.utils import get_primers_from_module
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (  # noqa
+        BREAKOUT_VERSIONED,
+        dtype_fixture,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+    )
+    from pytorch.rl.test.mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        CountingEnvWithString,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        EnvWithScalarAction,
+        IncrementingEnv,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MultiAgentCountingEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
+else:
+    from _utils_internal import (  # noqa
+        BREAKOUT_VERSIONED,
+        dtype_fixture,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+    )
+    from mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        CountingEnvWithString,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        EnvWithScalarAction,
+        IncrementingEnv,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MultiAgentCountingEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
 
 IS_WIN = platform == "win32"
 if IS_WIN:
@@ -568,8 +575,10 @@ class TestClipTransform(TransformBase):
 
     def test_transform_inverse(self):
         t = ClipTransform(
-            in_keys_inv=["observation", "reward"],
-            out_keys_inv=["obs_clip", "reward_clip"],
+            # What the outside world sees
+            out_keys_inv=["observation", "reward"],
+            # What the env expects
+            in_keys_inv=["obs_clip", "reward_clip"],
             low=-0.1,
             high=0.1,
         )
@@ -2540,7 +2549,7 @@ class TestTokenizer(TransformBase):
 
         t = Tokenizer(in_keys=["observation"], out_keys=["tokens"])
         td_tokenized = t(td)
-        t_inv = Tokenizer([], [], in_keys_inv=["tokens"], out_keys_inv=["observation"])
+        t_inv = Tokenizer([], [], in_keys_inv=["observation"], out_keys_inv=["tokens"])
         td_recon = t_inv.inv(td_tokenized.clone().exclude("observation"))
         assert td_tokenized.get("observation") is td.get("observation")
         assert td_recon["observation"] == td["observation"]
@@ -2645,78 +2654,128 @@ class TestTokenizer(TransformBase):
         td_tokenized = t(td)
 
         assert td_tokenized["observation"] is td["observation"]
-        assert td_tokenized["tokens"] == t[0].tokenizer(obs, return_tensor="pt")
+        assert (
+            td_tokenized["tokens"]
+            == t[0].tokenizer.encode(
+                obs,
+                return_tensors="pt",
+                add_special_tokens=False,
+                padding="max_length",
+                max_length=5,
+            )
+        ).all()
 
-    # TODO
-    def test_transform_model(self):
-        t = Hash(
-            in_keys=[("next", "observation"), ("observation",)],
-            out_keys=[("next", "hashing"), ("hashing",)],
-            hash_fn=hash,
+    @pytest.mark.parametrize("n", [3, 5, 7])
+    def test_transform_model(self, n):
+        t = Tokenizer(
+            in_keys=["observation"],
+            out_keys=["tokens"],
+            max_length=n,
         )
         model = nn.Sequential(t, nn.Identity())
-        td = TensorDict(
-            {("next", "observation"): torch.randn(3), "observation": torch.randn(3)}, []
-        )
+        td = TensorDict({"observation": "a string!"})
         td_out = model(td)
-        assert ("next", "hashing") in td_out.keys(True)
-        assert ("hashing",) in td_out.keys(True)
-        assert td_out["next", "hashing"] == hash(td["next", "observation"])
-        assert td_out["hashing"] == hash(td["observation"])
+        assert (
+            td_out["tokens"] == torch.tensor([1037, 5164, 999] + [0] * (n - 3))
+        ).all()
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym not found")
     def test_transform_env(self):
-        t = Hash(
-            in_keys=["observation"],
-            out_keys=["hashing"],
-            hash_fn=hash,
+        import random
+
+        random.seed(0)
+        t = Tokenizer(
+            in_keys=["string"],
+            out_keys=["tokens"],
+            max_length=10,
         )
-        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), t)
-        assert env.observation_spec["hashing"]
-        assert "observation" in env.observation_spec
-        assert "observation" in env.base_env.observation_spec
-        check_env_specs(env)
+        base_env = CountingEnvWithString(max_steps=10, max_size=4, min_size=4)
+        env = TransformedEnv(base_env, t)
+        policy = lambda td: env.full_action_spec.one()
+        r = env.rollout(100, policy)
+        assert r["string"] == [
+            "mzjp",
+            "sgqe",
+            "eydt",
+            "rwzt",
+            "jdxc",
+            "prdl",
+            "ktug",
+            "oqib",
+            "cxmw",
+            "tpkh",
+            "wcgs",
+        ]
+        assert (
+            env.transform.tokenizer.batch_decode(r["tokens"], skip_special_tokens=True)
+            == r["string"]
+        )
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, rbclass):
-        t = Hash(
-            in_keys=[("next", "observation"), ("observation",)],
-            out_keys=[("next", "hashing"), ("hashing",)],
-            hash_fn=lambda x: [hash(x[0]), hash(x[1])],
+        t = Tokenizer(
+            in_keys=["observation"],
+            out_keys=["tokens"],
+            max_length=5,
         )
         rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict(
             {
-                "observation": torch.randn(3, 4),
-                "next": TensorDict(
-                    {"observation": torch.randn(3, 4)},
-                    [],
+                "observation": NonTensorStack(
+                    "mzjp",
+                    "sgqe",
+                    "eydt",
+                    "rwzt",
+                    "jdxc",
+                    "prdl",
+                    "ktug",
+                    "oqib",
+                    "cxmw",
+                    "tpkh",
                 ),
             },
-            [],
-        ).expand(10)
+            [10],
+        )
         rb.extend(td)
         td = rb.sample(2)
-        assert "hashing" in td.keys()
-        assert "observation" in td.keys()
-        assert ("next", "observation") in td.keys(True)
+        assert (
+            t.tokenizer.batch_decode(td["tokens"], skip_special_tokens=True)
+            == td["observation"]
+        )
 
     def test_transform_inverse(self):
-        env = CountingEnv()
-        env = env.append_transform(
-            Hash(
-                in_keys=[],
-                out_keys=[],
-                in_keys_inv=["action"],
-                out_keys_inv=["action_hash"],
-            )
+        torch.manual_seed(0)
+        t = Tokenizer(
+            in_keys=[],
+            out_keys=[],
+            # The policy produces tokens
+            out_keys_inv=["tokens"],
+            # The env must see strings
+            in_keys_inv=["strings"],
+            max_length=5,
         )
-        assert "action_hash" in env.action_keys
-        r = env.rollout(3)
+        base_env = CountingEnv()
+
+        class CheckString(Transform):
+            def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+                assert "strings" in tensordict
+                tensordict.pop("strings")
+                return tensordict
+
+            def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+                action_spec["strings"] = NonTensor(
+                    shape=action_spec.shape, example_data="a string!"
+                )
+                return action_spec
+
+        env = TransformedEnv(base_env, Compose(CheckString(), t))
+
+        def policy(td):
+            td.set("tokens", torch.randint(0, 10000, (10,)))
+            td.update(env.full_action_spec.one())
+            return td
+
         env.check_env_specs()
-        assert "action_hash" in r
-        assert isinstance(r[0]["action_hash"], torch.Tensor)
 
 
 class TestStack(TransformBase):
@@ -5575,28 +5634,33 @@ class TestObservationNorm(TransformBase):
     @pytest.mark.parametrize(
         "out_key", ["observation_out", ("nested", "observation_out")]
     )
-    def test_transform_inverse(self, out_key, out_key_inv):
+    @pytest.mark.parametrize("compose", [False, True])
+    def test_transform_inverse(self, out_key, out_key_inv, compose):
         standard_normal = True
         out_keys = [out_key]
         in_keys_inv = ["action"]
         out_keys_inv = [out_key_inv]
-        t = Compose(
-            ObservationNorm(
-                loc=torch.ones(()),
-                scale=0.5,
-                in_keys=["observation"],
-                out_keys=out_keys,
-                in_keys_inv=in_keys_inv,
-                out_keys_inv=out_keys_inv,
-                standard_normal=standard_normal,
-            )
+        t = ObservationNorm(
+            loc=torch.ones(()),
+            scale=0.5,
+            in_keys=["observation"],
+            out_keys=out_keys,
+            # What the env asks for
+            in_keys_inv=in_keys_inv,
+            # What the outside world sees
+            out_keys_inv=out_keys_inv,
+            standard_normal=standard_normal,
         )
+        if compose:
+            t = Compose(t)
         base_env = GymEnv(PENDULUM_VERSIONED())
         env = TransformedEnv(base_env, t)
+        assert out_keys_inv[0] in env.full_action_spec.keys(True, True)
         td = env.rollout(3)
         check_env_specs(env)
         env.set_seed(0)
-        assert torch.allclose(td["action"] * 0.5 + 1, t.inv(td)[out_key_inv])
+        a, a_ = td[out_key_inv] * 0.5 + 1, t.inv(td)["action"]
+        assert torch.allclose(a, a_), (a, a_)
         assert torch.allclose((td["observation"] - 1) / 0.5, td[out_key])
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
@@ -7132,13 +7196,13 @@ class TestUnsqueezeTransform(TransformBase):
             # the order is inverted
             Compose(
                 UnsqueezeTransform(
-                    -1, in_keys_inv=["action_t"], out_keys_inv=["action"]
+                    -1, in_keys_inv=["action"], out_keys_inv=["action_t"]
                 ),
-                SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
+                SqueezeTransform(-1, in_keys_inv=["action_t"], out_keys_inv=["action"]),
             ),
         )
         td = env.rollout(3)
-        assert env.action_spec.shape[-1] == 6
+        assert env.full_action_spec["action"].shape[-1] == 6
         assert td["action"].shape[-1] == 6
 
 
@@ -7253,8 +7317,10 @@ class TestSqueezeTransform(TransformBase):
     @property
     def _inv_circular_transform(self):
         return Compose(
-            UnsqueezeTransform(-1, in_keys_inv=["action_un"], out_keys_inv=["action"]),
-            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
+            # The env wants a squeezed action - the inv of unsqueeze
+            UnsqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
+            # The outsize world has an squeezed action that we unsqueeze - the inv of squeeze
+            SqueezeTransform(-1, in_keys_inv=["action_un"], out_keys_inv=["action"]),
         )
 
     def test_single_trans_env_check(self):
@@ -7412,7 +7478,7 @@ class TestSqueezeTransform(TransformBase):
         check_env_specs(env)
         r = env.rollout(3)
         r2 = GymEnv(HALFCHEETAH_VERSIONED()).rollout(3)
-        assert (r.zero_() == r2.zero_()).all()
+        assert_allclose_td(r.zero_(), r2.zero_(), intersection=True)
 
 
 class TestTargetReturn(TransformBase):
@@ -12107,12 +12173,14 @@ class TestSignTransform(TransformBase):
             SignTransform(
                 in_keys=["observation", "reward"],
                 out_keys=["obs_sign", "reward_sign"],
-                in_keys_inv=["input"],
-                out_keys_inv=["input_sign"],
+                # What is stored within
+                in_keys_inv=["input_signed"],
+                # What the outside world sees
+                out_keys_inv=["input_unsigned"],
             )
         )
         rb.append_transform(t)
-        data = TensorDict({"observation": 1, "reward": 2, "input": 3}, [])
+        data = TensorDict({"observation": 1, "reward": 2, "input_unsigned": 3}, [])
         rb.add(data)
         sample = rb.sample(20)
 
@@ -12122,8 +12190,8 @@ class TestSignTransform(TransformBase):
         assert (sample["reward"] == 2).all()
         assert self.check_sign_applied(sample["reward_sign"])
 
-        assert (sample["input"] == 3).all()
-        assert self.check_sign_applied(sample["input_sign"])
+        assert (sample["input_unsigned"] == 3).all()
+        assert self.check_sign_applied(sample["input_signed"])
 
     def test_single_trans_env_check(self):
         env = ContinuousActionVecMockEnv()
@@ -12168,15 +12236,17 @@ class TestSignTransform(TransformBase):
 
     def test_transform_inverse(self):
         t = SignTransform(
-            in_keys_inv=["observation", "reward"],
-            out_keys_inv=["obs_sign", "reward_sign"],
+            # What is seen inside
+            in_keys_inv=["obs_signed", "reward_signed"],
+            # What the outside world sees
+            out_keys_inv=["obs", "reward"],
         )
-        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = TensorDict({"obs": 1, "reward": 2}, [])
         data = t.inv(data)
-        assert data["observation"] == 1
-        assert self.check_sign_applied(data["obs_sign"])
+        assert data["obs"] == 1
+        assert self.check_sign_applied(data["obs_signed"])
         assert data["reward"] == 2
-        assert self.check_sign_applied(data["reward_sign"])
+        assert self.check_sign_applied(data["reward_signed"])
 
     def test_transform_model(self):
         t = nn.Sequential(
