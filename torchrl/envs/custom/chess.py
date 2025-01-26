@@ -7,12 +7,12 @@ from __future__ import annotations
 import importlib.util
 import io
 import pathlib
-from typing import Dict, Optional
+from typing import Dict
 
 import torch
 from PIL import Image
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data import Bounded, Categorical, Composite, NonTensor, Unbounded
+from torchrl.data import Binary, Bounded, Categorical, Composite, NonTensor, Unbounded
 
 from torchrl.envs import EnvBase
 from torchrl.envs.common import _EnvPostInit
@@ -20,7 +20,7 @@ from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty
 
 
-class _HashMeta(_EnvPostInit):
+class _ChessMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
         if kwargs.get("include_hash"):
@@ -37,11 +37,15 @@ class _HashMeta(_EnvPostInit):
             if instance.include_pgn:
                 in_keys.append("pgn")
                 out_keys.append("pgn_hash")
-            return instance.append_transform(Hash(in_keys, out_keys))
+            instance = instance.append_transform(Hash(in_keys, out_keys))
+        if kwargs.get("mask_actions", True):
+            from torchrl.envs import ActionMask
+
+            instance = instance.append_transform(ActionMask())
         return instance
 
 
-class ChessEnv(EnvBase, metaclass=_HashMeta):
+class ChessEnv(EnvBase, metaclass=_ChessMeta):
     r"""A chess environment that follows the TorchRL API.
 
     This environment simulates a chess game using the `chess` library. It supports various state representations
@@ -63,6 +67,8 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         include_pgn (bool): Whether to include PGN (Portable Game Notation) in the observations. Default: ``False``.
         include_legal_moves (bool): Whether to include legal moves in the observations. Default: ``False``.
         include_hash (bool): Whether to include hash transformations in the environment. Default: ``False``.
+        mask_actions (bool): if ``True``, a :class:`~torchrl.envs.ActionMask` transform will be appended
+            to the env to make sure that the actions are properly masked. Default: ``True``.
         pixels (bool): Whether to include pixel-based observations of the board. Default: ``False``.
 
     .. note:: The action spec is a :class:`~torchrl.data.Categorical` with a number of actions equal to the number of possible SAN moves.
@@ -202,16 +208,15 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
     ) -> torch.Tensor:
         if not self.stateful:
             if tensordict is None:
-                raise RuntimeError(
-                    "rand_action requires a tensordict when stateful is False."
-                )
-            if self.include_fen:
-                fen = self._get_fen(tensordict)
+                # trust the board
+                pass
+            elif self.include_fen:
+                fen = tensordict.get("fen", None)
                 fen = fen.data
                 self.board.set_fen(fen)
                 board = self.board
             elif self.include_pgn:
-                pgn = self._get_pgn(tensordict)
+                pgn = tensordict.get("pgn")
                 pgn = pgn.data
                 board = self._pgn_to_board(pgn, self.board)
 
@@ -224,14 +229,18 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         )
 
         if return_mask:
-            return torch.zeros(len(self.san_moves), dtype=torch.bool).index_fill_(
-                0, indices, True
-            )
+            return self._move_index_to_mask(indices)
         if pad:
             indices = torch.nn.functional.pad(
                 indices, [0, 218 - indices.numel() + 1], value=len(self.san_moves)
             )
         return indices
+
+    @classmethod
+    def _move_index_to_mask(cls, indices: torch.Tensor) -> torch.Tensor:
+        return torch.zeros(len(cls.san_moves), dtype=torch.bool).index_fill_(
+            0, indices, True
+        )
 
     def __init__(
         self,
@@ -242,6 +251,7 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         include_pgn: bool = False,
         include_legal_moves: bool = False,
         include_hash: bool = False,
+        mask_actions: bool = True,
         pixels: bool = False,
     ):
         chess = self.lib
@@ -252,6 +262,7 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         self.include_san = include_san
         self.include_fen = include_fen
         self.include_pgn = include_pgn
+        self.mask_actions = mask_actions
         self.include_legal_moves = include_legal_moves
         if include_legal_moves:
             # 218 max possible legal moves per chess board position
@@ -276,8 +287,10 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
 
         self.stateful = stateful
 
-        if not self.stateful:
-            self.full_state_spec = self.full_observation_spec.clone()
+        # state_spec is loosely defined as such - it's not really an issue that extra keys
+        # can go missing but it allows us to reset the env using fen passed to the reset
+        # method.
+        self.full_state_spec = self.full_observation_spec.clone()
 
         self.pixels = pixels
         if pixels:
@@ -297,15 +310,15 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         self.full_reward_spec = Composite(
             reward=Unbounded(shape=(1,), dtype=torch.float32)
         )
+        if self.mask_actions:
+            self.full_observation_spec["action_mask"] = Binary(
+                n=len(self.san_moves), dtype=torch.bool
+            )
+
         # done spec generated automatically
         self.board = chess.Board()
         if self.stateful:
             self.action_spec.set_provisional_n(len(list(self.board.legal_moves)))
-
-    def rand_action(self, tensordict: Optional[TensorDictBase] = None):
-        mask = self._legal_moves_to_index(tensordict, return_mask=True)
-        self.action_spec.update_mask(mask)
-        return super().rand_action(tensordict)
 
     def _is_done(self, board):
         return board.is_game_over() | board.is_fifty_moves()
@@ -316,11 +329,11 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         if tensordict is not None:
             dest = tensordict.empty()
             if self.include_fen:
-                fen = self._get_fen(tensordict)
+                fen = tensordict.get("fen", None)
                 if fen is not None:
                     fen = fen.data
             elif self.include_pgn:
-                pgn = self._get_pgn(tensordict)
+                pgn = tensordict.get("pgn", None)
                 if pgn is not None:
                     pgn = pgn.data
         else:
@@ -360,13 +373,18 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         if self.include_legal_moves:
             moves_idx = self._legal_moves_to_index(board=self.board, pad=True)
             dest.set("legal_moves", moves_idx)
+            if self.mask_actions:
+                dest.set("action_mask", self._move_index_to_mask(moves_idx))
+        elif self.mask_actions:
+            dest.set(
+                "action_mask",
+                self._legal_moves_to_index(
+                    board=self.board, pad=True, return_mask=True
+                ),
+            )
+
         if self.pixels:
             dest.set("pixels", self._get_tensor_image(board=self.board))
-
-        if self.stateful:
-            mask = self._legal_moves_to_index(dest, return_mask=True)
-            self.action_spec.update_mask(mask)
-
         return dest
 
     _cairosvg_lib = None
@@ -437,16 +455,6 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         pgn_string = str(game)
         return pgn_string
 
-    @classmethod
-    def _get_fen(cls, tensordict):
-        fen = tensordict.get("fen", None)
-        return fen
-
-    @classmethod
-    def _get_pgn(cls, tensordict):
-        pgn = tensordict.get("pgn", None)
-        return pgn
-
     def get_legal_moves(self, tensordict=None, uci=False):
         """List the legal moves in a position.
 
@@ -470,7 +478,7 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
                 raise ValueError(
                     "tensordict must be given since this env is not stateful"
                 )
-            fen = self._get_fen(tensordict).data
+            fen = tensordict.get("fen").data
             board.set_fen(fen)
         moves = board.legal_moves
 
@@ -488,10 +496,10 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         fen = None
         if not self.stateful:
             if self.include_fen:
-                fen = self._get_fen(tensordict).data
+                fen = tensordict.get("fen").data
                 board.set_fen(fen)
             elif self.include_pgn:
-                pgn = self._get_pgn(tensordict).data
+                pgn = tensordict.get("pgn").data
                 board = self._pgn_to_board(pgn, board)
             else:
                 raise RuntimeError(
@@ -521,6 +529,15 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         if self.include_legal_moves:
             moves_idx = self._legal_moves_to_index(board=board, pad=True)
             dest.set("legal_moves", moves_idx)
+            if self.mask_actions:
+                dest.set("action_mask", self._move_index_to_mask(moves_idx))
+        elif self.mask_actions:
+            dest.set(
+                "action_mask",
+                self._legal_moves_to_index(
+                    board=self.board, pad=True, return_mask=True
+                ),
+            )
 
         turn = torch.tensor(board.turn)
         done = self._is_done(board)
@@ -540,11 +557,6 @@ class ChessEnv(EnvBase, metaclass=_HashMeta):
         dest.set("terminated", [done])
         if self.pixels:
             dest.set("pixels", self._get_tensor_image(board=self.board))
-
-        if self.stateful:
-            mask = self._legal_moves_to_index(dest, return_mask=True)
-            self.action_spec.update_mask(mask)
-
         return dest
 
     def _set_seed(self, *args, **kwargs):
