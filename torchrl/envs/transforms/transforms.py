@@ -147,17 +147,23 @@ def _apply_to_composite_inv(function):
         in_keys_inv = self.in_keys_inv
         out_keys_inv = self.out_keys_inv
         for in_key, out_key in _zip_strict(in_keys_inv, out_keys_inv):
+            in_key = unravel_key(in_key)
+            out_key = unravel_key(out_key)
             # if in_key != out_key:
             #     # we only change the input spec if the key is the same
             #     continue
             if in_key in action_spec.keys(True, True):
                 action_spec[out_key] = function(self, action_spec[in_key].clone())
+                if in_key != out_key:
+                    del action_spec[in_key]
             elif in_key in state_spec.keys(True, True):
                 state_spec[out_key] = function(self, state_spec[in_key].clone())
+                if in_key != out_key:
+                    del state_spec[in_key]
             elif in_key in input_spec.keys(False, True):
                 input_spec[out_key] = function(self, input_spec[in_key].clone())
-            # else:
-            #     raise RuntimeError(f"Couldn't find key '{in_key}' in input spec {input_spec}")
+                if in_key != out_key:
+                    del input_spec[in_key]
         if skip:
             return input_spec
         return Composite(
@@ -4858,19 +4864,14 @@ class Hash(UnaryTransform):
         [torchrl][INFO] check_env_specs succeeded!
     """
 
-    _repertoire: Dict[Tuple[int], Any]
-
     def __init__(
         self,
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
-        in_keys_inv: Sequence[NestedKey] | None = None,
-        out_keys_inv: Sequence[NestedKey] | None = None,
         *,
         hash_fn: Callable = None,
         seed: Any | None = None,
         use_raw_nontensor: bool = False,
-        repertoire: Dict[Tuple[int], Any] | None = None,
     ):
         if hash_fn is None:
             hash_fn = Hash.reproducible_hash
@@ -4880,13 +4881,9 @@ class Hash(UnaryTransform):
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
-            in_keys_inv=in_keys_inv,
-            out_keys_inv=out_keys_inv,
             fn=self.call_hash_fn,
             use_raw_nontensor=use_raw_nontensor,
         )
-        if in_keys_inv is not None:
-            self._repertoire = repertoire if repertoire is not None else {}
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         inputs = tensordict.select(*self.in_keys_inv).detach().cpu()
