@@ -861,7 +861,9 @@ but got an object of type {type(transform)}."""
                     f"The rand_action method from the base env {self.base_env.__class__.__name__} "
                     "has been overwritten, but the transforms appended to the environment modify "
                     "the action. To call the base env rand_action method, we should then invert the "
-                    "action transform, which is (in general) not doable."
+                    "action transform, which is (in general) not doable. "
+                    f"The full action spec of the base env is: {self.base_env.full_action_spec}, \n"
+                    f"the full action spec of the transformed env is {self.full_action_spec}."
                 )
             return self.base_env.rand_action(tensordict)
         return super().rand_action(tensordict)
@@ -5070,22 +5072,72 @@ class Tokenizer(UnaryTransform):
         # We need to cap the spec to generate valid random strings
         for out_key in self.out_keys_inv:
             if out_key in input_spec["full_state_spec"].keys(True, True):
+                new_shape = input_spec["full_state_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
                 input_spec["full_state_spec"][out_key] = Bounded(
                     0,
                     self.tokenizer.vocab_size,
-                    shape=input_spec["full_state_spec"][out_key].shape,
+                    shape=new_shape,
                     device=input_spec["full_state_spec"][out_key].device,
                     dtype=input_spec["full_state_spec"][out_key].dtype,
                 )
             elif out_key in input_spec["full_action_spec"].keys(True, True):
+                new_shape = input_spec["full_action_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
                 input_spec["full_action_spec"][out_key] = Bounded(
                     0,
                     self.tokenizer.vocab_size,
-                    shape=input_spec["full_action_spec"][out_key].shape,
+                    shape=new_shape,
                     device=input_spec["full_action_spec"][out_key].device,
                     dtype=input_spec["full_action_spec"][out_key].dtype,
                 )
         return input_spec
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        output_spec = super().transform_output_spec(output_spec)
+        # We need to cap the spec to generate valid random strings
+        for out_key in self.out_keys:
+            if out_key in output_spec["full_observation_spec"].keys(True, True):
+                new_shape = output_spec["full_observation_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
+                output_spec["full_observation_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=new_shape,
+                    device=output_spec["full_observation_spec"][out_key].device,
+                    dtype=output_spec["full_observation_spec"][out_key].dtype,
+                )
+            elif out_key in output_spec["full_reward_spec"].keys(True, True):
+                new_shape = output_spec["full_reward_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
+                output_spec["full_reward_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=new_shape,
+                    device=output_spec["full_reward_spec"][out_key].device,
+                    dtype=output_spec["full_reward_spec"][out_key].dtype,
+                )
+            elif out_key in output_spec["full_done_spec"].keys(True, True):
+                new_shape = output_spec["full_done_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
+                output_spec["full_done_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=new_shape,
+                    device=output_spec["full_done_spec"][out_key].device,
+                    dtype=output_spec["full_done_spec"][out_key].dtype,
+                )
+        return output_spec
 
 
 class Stack(Transform):
