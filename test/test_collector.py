@@ -690,6 +690,39 @@ def test_collector_env_reset(constr, parallel):
         del env
 
 
+@pytest.mark.parametrize(
+    "break_when_any_done,break_when_all_done",
+    [[True, False], [False, True], [False, False]],
+)
+@pytest.mark.parametrize("n_envs", [1, 4])
+def test_collector_outplace_policy(n_envs, break_when_any_done, break_when_all_done):
+    def policy_inplace(td):
+        td.set("action", torch.ones(td.shape + (1,)))
+        return td
+
+    def policy_outplace(td):
+        return td.empty().set("action", torch.ones(td.shape + (1,)))
+
+    if n_envs == 1:
+        env = CountingEnv(10)
+    else:
+        env = SerialEnv(
+            n_envs,
+            [functools.partial(CountingEnv, 10 + i) for i in range(n_envs)],
+        )
+    env.reset()
+    c_inplace = SyncDataCollector(
+        env, policy_inplace, frames_per_batch=10, total_frames=100
+    )
+    d_inplace = torch.cat(list(c_inplace), dim=0)
+    env.reset()
+    c_outplace = SyncDataCollector(
+        env, policy_outplace, frames_per_batch=10, total_frames=100
+    )
+    d_outplace = torch.cat(list(c_outplace), dim=0)
+    assert_allclose_td(d_inplace, d_outplace)
+
+
 # Deprecated reset_when_done
 # @pytest.mark.parametrize("num_env", [1, 2])
 # @pytest.mark.parametrize("env_name", ["vec"])
