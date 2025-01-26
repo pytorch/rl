@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+093a159) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+2c19fcc) &#x25BC</span></a>
     </div>
     
 
@@ -431,30 +431,23 @@
 <h1>UnaryTransform<a class="headerlink" href="#unarytransform" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.UnaryTransform">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">UnaryTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_keys_inv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys_inv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inv_fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_raw_nontensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#UnaryTransform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.UnaryTransform" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">UnaryTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_raw_nontensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#UnaryTransform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.UnaryTransform" title="Permalink to this definition">¶</a></dt>
 <dd><p>Applies a unary operation on the specified inputs.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>in_keys</strong> (<em>sequence of NestedKey</em>) – the keys of inputs to the unary operation.</p></li>
 <li><p><strong>out_keys</strong> (<em>sequence of NestedKey</em>) – the keys of the outputs of the unary operation.</p></li>
-<li><p><strong>in_keys_inv</strong> (<em>sequence of NestedKey</em><em>, </em><em>optional</em>) – the keys of inputs to the unary operation during inverse call.</p></li>
-<li><p><strong>out_keys_inv</strong> (<em>sequence of NestedKey</em><em>, </em><em>optional</em>) – the keys of the outputs of the unary operation durin inverse call.</p></li>
+<li><p><strong>fn</strong> (<em>Callable</em>) – the function to use as the unary operation. If it accepts
+a non-tensor input, it must also accept <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>Any</em><em>]</em><em>, </em><em>Tensor</em><em> | </em><em>TensorDictBase</em><em>]</em>) – the function to use as the unary operation. If it accepts
-a non-tensor input, it must also accept <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>inv_fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>Any</em><em>]</em><em>, </em><em>Any</em><em>]</em><em>, </em><em>optional</em>) – the function to use as the unary operation during inverse calls.
-If it accepts a non-tensor input, it must also accept <code class="docutils literal notranslate"><span class="pre">None</span></code>.
-Can be ommitted, in which case <code class="xref py py-attr docutils literal notranslate"><span class="pre">fn</span></code> will be used for inverse maps.</p></li>
-<li><p><strong>use_raw_nontensor</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, data is extracted from
+<dd class="field-even"><p><strong>use_raw_nontensor</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, data is extracted from
 <code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code>/<code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code> inputs before <code class="docutils literal notranslate"><span class="pre">fn</span></code> is called
 on them. If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the raw <code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code>/<code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code>
 inputs are given directly to <code class="docutils literal notranslate"><span class="pre">fn</span></code>, which must support those
-inputs. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-</ul>
+inputs. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Example</p>
@@ -517,40 +510,12 @@ inputs. Default is <code class="docutils literal notranslate"><span class="pre">
 </pre></div>
 </div>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.envs.transforms.UnaryTransform.transform_action_spec">
-<span class="sig-name descname"><span class="pre">transform_action_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_input_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#UnaryTransform.transform_action_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.UnaryTransform.transform_action_spec" title="Permalink to this definition">¶</a></dt>
-<dd><p>Transforms the action spec such that the resulting spec matches transform mapping.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>action_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – spec before the transform</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>expected spec after the transform</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.UnaryTransform.transform_done_spec">
 <span class="sig-name descname"><span class="pre">transform_done_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">done_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_output_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#UnaryTransform.transform_done_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.UnaryTransform.transform_done_spec" title="Permalink to this definition">¶</a></dt>
 <dd><p>Transforms the done spec such that the resulting spec matches transform mapping.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>done_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – spec before the transform</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>expected spec after the transform</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.envs.transforms.UnaryTransform.transform_input_spec">
-<span class="sig-name descname"><span class="pre">transform_input_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#UnaryTransform.transform_input_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.UnaryTransform.transform_input_spec" title="Permalink to this definition">¶</a></dt>
-<dd><p>Transforms the input spec such that the resulting spec matches transform mapping.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – spec before the transform</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>expected spec after the transform</p>
@@ -594,20 +559,6 @@ inputs. Default is <code class="docutils literal notranslate"><span class="pre">
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>reward_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – spec before the transform</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>expected spec after the transform</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.envs.transforms.UnaryTransform.transform_state_spec">
-<span class="sig-name descname"><span class="pre">transform_state_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_input_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#UnaryTransform.transform_state_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.UnaryTransform.transform_state_spec" title="Permalink to this definition">¶</a></dt>
-<dd><p>Transforms the state spec such that the resulting spec matches transform mapping.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>state_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – spec before the transform</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>expected spec after the transform</p>
