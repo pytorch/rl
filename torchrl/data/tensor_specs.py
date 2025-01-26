@@ -5042,7 +5042,7 @@ class Composite(TensorSpec):
 
     def __eq__(self, other):
         return (
-            type(self) is type(other)
+            type(self) == type(other)
             and self.shape == other.shape
             and self._device == other._device
             and set(self._specs.keys()) == set(other._specs.keys())
