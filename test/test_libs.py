@@ -7,8 +7,6 @@ import gc
 import importlib.util
 import urllib.error
 
-from gym.core import ObsType
-
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
 if _has_isaac:
@@ -660,7 +658,7 @@ class TestGym:
                 *,
                 seed: Optional[int] = None,
                 options: Optional[dict] = None,
-            ) -> Tuple[ObsType, dict]:
+            ):
                 return (0.0, {})
 
         env = CompositeActionEnv()
@@ -693,7 +691,7 @@ class TestGym:
                 *,
                 seed: Optional[int] = None,
                 options: Optional[dict] = None,
-            ) -> Tuple[ObsType, dict]:
+            ):
                 return (0.0, {})
 
         env = CompositeActionEnv()
