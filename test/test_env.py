@@ -131,6 +131,7 @@ from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
     AutoResetTransform,
+    Tokenizer,
     Transform,
 )
 from torchrl.envs.utils import (
@@ -3346,10 +3347,6 @@ class TestEnvWithDynamicSpec:
         )
         del env_no_buffers
         gc.collect()
-        # print(dummy_rollouts)
-        # print(rollout_no_buffers_serial)
-        # # for a, b in zip(dummy_rollouts.exclude("action").unbind(0), rollout_no_buffers_serial.exclude("action").unbind(0)):
-        #     assert_allclose_td(a, b)
         assert_allclose_td(
             dummy_rollouts.exclude("action"),
             rollout_no_buffers_serial.exclude("action"),
@@ -3463,6 +3460,8 @@ class TestChessEnv:
                 include_hash=include_hash,
                 include_san=include_san,
             )
+            # Because we always use mask_actions=True
+            assert isinstance(env, TransformedEnv)
             check_env_specs(env)
             if include_hash:
                 if include_fen:
@@ -3560,8 +3559,8 @@ class TestChessEnv:
         )
         fen = "5k2/4r3/8/8/8/1Q6/2K5/8 w - - 0 1"
         td = env.reset(TensorDict({"fen": fen}))
-        assert td["fen"] == fen
         if include_fen:
+            assert td["fen"] == fen
             assert env.board.fen() == fen
         assert td["turn"] == env.lib.WHITE
         assert not td["done"]
@@ -3665,6 +3664,27 @@ class TestChessEnv:
         assert td["done"] == expected_done
         assert td["reward"] == expected_reward
         assert td["turn"] == (not expected_turn)
+
+    def test_chess_tokenized(self):
+        env = ChessEnv(include_fen=True, stateful=True, include_san=True)
+        assert isinstance(env.observation_spec["fen"], NonTensor)
+        env = env.append_transform(
+            Tokenizer(in_keys=["fen"], out_keys=["fen_tokenized"])
+        )
+        assert isinstance(env.observation_spec["fen"], NonTensor)
+        env.transform.transform_output_spec(env.base_env.output_spec)
+        env.transform.transform_input_spec(env.base_env.input_spec)
+        r = env.rollout(10, return_contiguous=False)
+        assert "fen_tokenized" in r
+        assert "fen" in r
+        assert "fen_tokenized" in r["next"]
+        assert "fen" in r["next"]
+        ftd = env.fake_tensordict()
+        assert "fen_tokenized" in ftd
+        assert "fen" in ftd
+        assert "fen_tokenized" in ftd["next"]
+        assert "fen" in ftd["next"]
+        env.check_env_specs()
 
 
 class TestCustomEnvs:
