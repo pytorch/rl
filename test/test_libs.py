@@ -23,7 +23,7 @@ import urllib
 from contextlib import nullcontext
 from pathlib import Path
 from sys import platform
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 from unittest import mock
 
 import numpy as np
@@ -651,6 +651,9 @@ class TestGym:
                 self.observation_space = gym.spaces.Box(-1, 1)
 
             def step(self, action):
+                assert isinstance(action, dict)
+                assert isinstance(action["a0"], np.ndarray)
+                assert isinstance(action["a1"], np.ndarray)
                 return (0.5, 0.0, False, False, {})
 
             def reset(
@@ -684,6 +687,9 @@ class TestGym:
                 self.observation_space = gym.spaces.Box(-1, 1)
 
             def step(self, action):
+                assert isinstance(action, dict)
+                assert isinstance(action["a0"], np.ndarray)
+                assert isinstance(action["a1"], np.ndarray)
                 return (0.5, 0.0, False, False, {})
 
             def reset(
