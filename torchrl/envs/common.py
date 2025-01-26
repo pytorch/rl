@@ -482,7 +482,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict = self.reset()
 
         # Input specs
-        tensordict = policy(tensordict)
+        tensordict.update(policy(tensordict))
         step_0 = self.step(tensordict.copy())
         tensordict2 = step_0.get("next").copy()
         step_1 = self.step(policy(tensordict2).copy())
@@ -3113,8 +3113,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     sync_func()
                 else:
                     tensordict.clear_device_()
-
-            tensordict = policy(tensordict)
+            # In case policy(..) does not modify in-place - no-op for TensorDict and related
+            tensordict.update(policy(tensordict))
             if auto_cast_to_device:
                 if env_device is not None:
                     tensordict = tensordict.to(env_device, non_blocking=True)
@@ -3190,7 +3190,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     sync_func()
                 else:
                     tensordict_.clear_device_()
-            tensordict_ = policy(tensordict_)
+            # In case policy(..) does not modify in-place - no-op for TensorDict and related
+            tensordict_.update(policy(tensordict_))
             if auto_cast_to_device:
                 if env_device is not None:
                     tensordict_ = tensordict_.to(env_device, non_blocking=True)
@@ -3618,7 +3619,7 @@ def make_tensordict(
     with torch.no_grad():
         tensordict = env.reset()
         if policy is not None:
-            tensordict = policy(tensordict)
+            tensordict.update(policy(tensordict))
         else:
             tensordict.set("action", env.action_spec.rand(), inplace=False)
         tensordict = env.step(tensordict)
