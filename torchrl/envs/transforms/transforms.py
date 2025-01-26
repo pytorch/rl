@@ -130,23 +130,36 @@ def _apply_to_composite_inv(function):
     # Now since EnvBase.step ignores new inputs (ie the root level of the
     # tensor is not updated) an out_key that does not match the in_key has
     # no effect on the spec.
+    @wraps(function)
     def new_fun(self, input_spec):
-        action_spec = input_spec["full_action_spec"].clone()
-        state_spec = input_spec["full_state_spec"]
-        if state_spec is None:
-            state_spec = Composite(shape=input_spec.shape, device=input_spec.device)
+        if "full_action_spec" in input_spec.keys():
+            skip = False
+            action_spec = input_spec["full_action_spec"].clone()
+            state_spec = input_spec["full_state_spec"]
+            if state_spec is None:
+                state_spec = Composite(shape=input_spec.shape, device=input_spec.device)
+            else:
+                state_spec = state_spec.clone()
         else:
-            state_spec = state_spec.clone()
+            skip = True
+            # In case we pass full_action_spec or full_state_spec directly
+            action_spec = state_spec = Composite()
         in_keys_inv = self.in_keys_inv
         out_keys_inv = self.out_keys_inv
         for in_key, out_key in _zip_strict(in_keys_inv, out_keys_inv):
-            if in_key != out_key:
-                # we only change the input spec if the key is the same
-                continue
+            # if in_key != out_key:
+            #     # we only change the input spec if the key is the same
+            #     continue
             if in_key in action_spec.keys(True, True):
                 action_spec[out_key] = function(self, action_spec[in_key].clone())
             elif in_key in state_spec.keys(True, True):
                 state_spec[out_key] = function(self, state_spec[in_key].clone())
+            elif in_key in input_spec.keys(False, True):
+                input_spec[out_key] = function(self, input_spec[in_key].clone())
+            # else:
+            #     raise RuntimeError(f"Couldn't find key '{in_key}' in input spec {input_spec}")
+        if skip:
+            return input_spec
         return Composite(
             full_state_spec=state_spec,
             full_action_spec=action_spec,
@@ -354,12 +367,12 @@ class Transform(nn.Module):
         if not self.in_keys_inv:
             return tensordict
         for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
-            data = tensordict.get(in_key, None)
+            data = tensordict.get(out_key, None)
             if data is not None:
                 item = self._inv_apply_transform(data)
-                tensordict.set(out_key, item)
+                tensordict.set(in_key, item)
             elif not self.missing_tolerance:
-                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
+                raise KeyError(f"'{out_key}' not found in tensordict {tensordict}")
         return tensordict
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
@@ -420,6 +433,13 @@ class Transform(nn.Module):
             expected spec after the transform
 
         """
+        input_spec = input_spec.clone()
+        input_spec["full_state_spec"] = self.transform_state_spec(
+            input_spec["full_state_spec"]
+        )
+        input_spec["full_action_spec"] = self.transform_action_spec(
+            input_spec["full_action_spec"]
+        )
         return input_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -457,6 +477,30 @@ class Transform(nn.Module):
 
         """
         return done_spec
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        """Transforms the action spec such that the resulting spec matches transform mapping.
+
+        Args:
+            action_spec (TensorSpec): spec before the transform
+
+        Returns:
+            expected spec after the transform
+
+        """
+        return action_spec
+
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        """Transforms the state spec such that the resulting spec matches transform mapping.
+
+        Args:
+            state_spec (TensorSpec): spec before the transform
+
+        Returns:
+            expected spec after the transform
+
+        """
+        return state_spec
 
     def dump(self, **kwargs) -> None:
         pass
@@ -796,13 +840,24 @@ but got an object of type {type(transform)}."""
         return input_spec
 
     def rand_action(self, tensordict: Optional[TensorDictBase] = None) -> TensorDict:
-        if self.base_env.rand_action is not EnvBase.rand_action:
+        if type(self.base_env).rand_action is not EnvBase.rand_action:
             # TODO: this will fail if the transform modifies the input.
-            #  For instance, if PendulumEnv overrides rand_action and we build a
+            #  For instance, if an env overrides rand_action and we build a
             #  env = PendulumEnv().append_transform(ActionDiscretizer(num_intervals=4))
             #  env.rand_action will NOT have a discrete action!
             #  Getting a discrete action would require coding the inverse transform of an action within
             #  ActionDiscretizer (ie, float->int, not int->float).
+            #  We can loosely check that the action_spec isn't altered - that doesn't mean the action is
+            #  intact but it covers part of these alterations.
+            #
+            # The following check may be expensive to run and could be cached.
+            if self.full_action_spec != self.base_env.full_action_spec:
+                raise RuntimeError(
+                    f"The rand_action method from the base env {self.base_env.__class__.__name__} "
+                    "has been overwritten, but the transforms appended to the environment modify "
+                    "the action. To call the base env rand_action method, we should then invert the "
+                    "action transform, which is (in general) not doable."
+                )
             return self.base_env.rand_action(tensordict)
         return super().rand_action(tensordict)
 
@@ -1125,9 +1180,33 @@ class Compose(Transform):
         return batch_size
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        # Input, action and state specs do NOT need to be reversed
+        # although applying these specs requires them to be called backward.
+        # To prove this, imagine we have 2 action transforms: t0 is an ActionDiscretizer, it maps float actions
+        # from the env to int actions for the policy. We add one more transform t1 that, if a == a_action_max,
+        # reduces its value by 1 (ie, the policy can sample actions from 0 to N + 1, and ActionDiscretizer
+        # has top N values).
+        # To apply this transform given an int action from the policy, we first call t1 to clamp the action to
+        # N (from N+1), then call t0 to map it to a float.
+        # We build this from TEnv(env, Compose(ActionDiscretizer, ActionClamp)) and call them starting with the
+        # last then the first.
+        # To know what the action spec is to the 'outside world' (ie, to the policy) we must take
+        # the action spec from the env, map it using t0 then t1 (going from in to out).
         for t in self.transforms:
             input_spec = t.transform_input_spec(input_spec)
         return input_spec
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        # To understand why we don't invert, look up at transform_input_spec
+        for t in self.transforms:
+            action_spec = t.transform_action_spec(action_spec)
+        return action_spec
+
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        # To understand why we don't invert, look up at transform_input_spec
+        for t in self.transforms:
+            state_spec = t.transform_state_spec(state_spec)
+        return state_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
@@ -2254,19 +2333,16 @@ class UnsqueezeTransform(Transform):
             spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
         return spec
 
-    def _inv_transform_spec(self, spec: TensorSpec) -> None:
-        space = spec.space
-        if isinstance(space, ContinuousBox):
-            space.low = self._inv_apply_transform(space.low)
-            space.high = self._inv_apply_transform(space.high)
-            spec.shape = space.low.shape
-        else:
-            spec.shape = self._inv_apply_transform(torch.zeros(spec.shape)).shape
-        return spec
+    # To map the specs, we actually use the forward call, not the inv
+    _inv_transform_spec = _transform_spec
 
     @_apply_to_composite_inv
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        return self._inv_transform_spec(input_spec)
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        return self._inv_transform_spec(action_spec)
+
+    @_apply_to_composite_inv
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        return self._inv_transform_spec(state_spec)
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
@@ -2816,13 +2892,29 @@ class ObservationNorm(ObservationTransform):
             space.high = self._apply_transform(space.high)
         return observation_spec
 
+    # @_apply_to_composite_inv
+    # def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+    #     space = input_spec.space
+    #     if isinstance(space, ContinuousBox):
+    #         space.low = self._apply_transform(space.low)
+    #         space.high = self._apply_transform(space.high)
+    #     return input_spec
+
     @_apply_to_composite_inv
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        space = input_spec.space
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        space = action_spec.space
         if isinstance(space, ContinuousBox):
             space.low = self._apply_transform(space.low)
             space.high = self._apply_transform(space.high)
-        return input_spec
+        return action_spec
+
+    @_apply_to_composite_inv
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        space = state_spec.space
+        if isinstance(space, ContinuousBox):
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
+        return state_spec
 
     def __repr__(self) -> str:
         if self.initialized and (self.loc.numel() == 1 and self.scale.numel() == 1):
@@ -4881,6 +4973,11 @@ class Tokenizer(UnaryTransform):
             function is called on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
             inputs are given directly to the tokenization function, which must support those inputs. Default is ``False``.
         additional_tokens (List[str], optional): list of additional tokens to add to the tokenizer's vocabulary.
+
+    .. note:: This transform can be used both to transform output strings into tokens and to transform back tokenized
+        actions or states into strings. If the environment has a string state-spec, the transformed version will have
+        a tokenized state-spec. If it is a string action spec, it will result in a tokenized action spec.
+
     """
 
     def __init__(
@@ -4971,6 +5068,28 @@ class Tokenizer(UnaryTransform):
         if isinstance(out, list):
             return NonTensorStack(*out)
         return NonTensorData(out)
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        input_spec = super().transform_input_spec(input_spec)
+        # We need to cap the spec to generate valid random strings
+        for out_key in self.out_keys_inv:
+            if out_key in input_spec["full_state_spec"].keys(True, True):
+                input_spec["full_state_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=input_spec["full_state_spec"][out_key].shape,
+                    device=input_spec["full_state_spec"][out_key].device,
+                    dtype=input_spec["full_state_spec"][out_key].dtype,
+                )
+            elif out_key in input_spec["full_action_spec"].keys(True, True):
+                input_spec["full_action_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=input_spec["full_action_spec"][out_key].shape,
+                    device=input_spec["full_action_spec"][out_key].device,
+                    dtype=input_spec["full_action_spec"][out_key].dtype,
+                )
+        return input_spec
 
 
 class Stack(Transform):
