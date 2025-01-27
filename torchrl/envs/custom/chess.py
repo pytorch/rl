@@ -316,7 +316,9 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
                 raise ImportError(
                     "Please install torchvision to use this environment with pixel rendering."
                 )
-            self.full_observation_spec["pixels"] = Unbounded(shape=())
+            self.full_observation_spec["pixels"] = Unbounded(
+                shape=(3, 390, 390), dtype=torch.uint8
+            )
 
         self.full_action_spec = Composite(
             action=Categorical(n=len(self.san_moves), shape=(), dtype=torch.int64)
