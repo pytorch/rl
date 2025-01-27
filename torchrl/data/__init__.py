@@ -23,6 +23,7 @@ from .replay_buffers import (
     H5StorageCheckpointer,
     ImmutableDatasetWriter,
     LazyMemmapStorage,
+    LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
     ListStorageCheckpointer,
