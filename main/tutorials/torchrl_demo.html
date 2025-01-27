@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+d628a50) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+dda0df1) &#x25BC</span></a>
     </div>
     
 
@@ -658,7 +658,7 @@ or <a class="reference internal" href="../reference/generated/torchrl.data.Repla
 <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[2, 1, 3]
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[3, 2, 1]
 </pre></div>
 </div>
 <p>Prioritized Replay Buffers can also be used:</p>
@@ -720,9 +720,9 @@ TensorDict(
     batch_size=torch.Size([2]),
     device=None,
     is_shared=False)
-tensor([0, 0])
-0 0.28791671991348267
-1 1.0
+tensor([1, 1])
+0 1.0
+1 0.28791671991348267
 2 0.0
 </pre></div>
 </div>
@@ -1591,8 +1591,8 @@ RL (or just curious), try it! Give us feedback: what will make the success of
 TorchRL is how well it covers researchers needs. To do that, we need their input!
 Since the library is nascent, it is a great time for you to shape it the way you want!</p>
 <p>See the <a class="reference external" href="https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md">Contributing guide</a> for more info.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (3 minutes 7.271 seconds)</p>
-<p><strong>Estimated memory usage:</strong>  431 MB</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (2 minutes 34.913 seconds)</p>
+<p><strong>Estimated memory usage:</strong>  325 MB</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-torchrl-demo-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">torchrl_demo.ipynb</span></code></a></p>

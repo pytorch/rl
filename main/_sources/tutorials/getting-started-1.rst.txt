@@ -633,7 +633,7 @@ Next steps:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 54.642 seconds)
+   **Total running time of the script:** (0 minutes 49.295 seconds)
 
 **Estimated memory usage:**  318 MB
 

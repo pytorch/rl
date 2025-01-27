@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d628a50) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+dda0df1) &#x25BC</span></a>
     </div>
     
 
@@ -737,7 +737,9 @@
                 <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                     <span class="s2">&quot;Please install torchvision to use this environment with pixel rendering.&quot;</span>
                 <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">())</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">390</span><span class="p">,</span> <span class="mi">390</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span>
+            <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
             <span class="n">action</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
