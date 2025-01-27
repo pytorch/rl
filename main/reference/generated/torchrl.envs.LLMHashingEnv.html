@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+2c19fcc) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+49d9897) &#x25BC</span></a>
     </div>
     
 
@@ -2349,6 +2349,11 @@ reset function.</p></li>
 <dd class="field-even"><p>a tensordict (or the input tensordict, if any), modified in place with the resulting observations.</p>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><cite>reset</cite> should not be overwritten by <a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> subclasses. The method to
+modify is <code class="xref py py-meth docutils literal notranslate"><span class="pre">_reset()</span></code>.</p>
+</div>
 </dd></dl>
 
 <dl class="py property">

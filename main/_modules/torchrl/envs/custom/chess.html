@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+2c19fcc) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+49d9897) &#x25BC</span></a>
     </div>
     
 
@@ -425,85 +425,177 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Categorical</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Binary</span><span class="p">,</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Categorical</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span><span class="p">,</span> <span class="n">Unbounded</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_EnvPostInit</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_classproperty</span>
 
 
-<div class="viewcode-block" id="ChessEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ChessEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A chess environment that follows the TorchRL API.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_ChessMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;include_hash&quot;</span><span class="p">):</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hash</span>
+
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="n">instance</span><span class="o">.</span><span class="n">include_san</span><span class="p">:</span>
+                <span class="n">in_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;san&quot;</span><span class="p">)</span>
+                <span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;san_hash&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">instance</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+                <span class="n">in_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">)</span>
+                <span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;fen_hash&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">instance</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+                <span class="n">in_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">)</span>
+                <span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;pgn_hash&quot;</span><span class="p">)</span>
+            <span class="n">instance</span> <span class="o">=</span> <span class="n">instance</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">Hash</span><span class="p">(</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mask_actions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionMask</span>
+
+            <span class="n">instance</span> <span class="o">=</span> <span class="n">instance</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">ActionMask</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">instance</span>
+
+
+<div class="viewcode-block" id="ChessEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ChessEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_ChessMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A chess environment that follows the TorchRL API.</span>
+
+<span class="sd">    This environment simulates a chess game using the `chess` library. It supports various state representations</span>
+<span class="sd">    and can be configured to include different types of observations such as SAN, FEN, PGN, and legal moves.</span>
 
 <span class="sd">    Requires: the `chess` library. More info `here &lt;https://python-chess.readthedocs.io/en/latest/&gt;`__.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        stateful (bool): Whether to keep track of the internal state of the board.</span>
 <span class="sd">            If False, the state will be stored in the observation and passed back</span>
-<span class="sd">            to the environment on each call. Default: ``False``.</span>
+<span class="sd">            to the environment on each call. Default: ``True``.</span>
+<span class="sd">        include_san (bool): Whether to include SAN (Standard Algebraic Notation) in the observations. Default: ``False``.</span>
 
-<span class="sd">    .. note:: the action spec is a :class:`~torchrl.data.Categorical` spec with a ``-1`` shape.</span>
-<span class="sd">        Unless :meth:`~torchrl.data.Categorical.set_provisional_n` is called with the cardinality of the legal moves,</span>
-<span class="sd">        valid random actions cannot be taken. :meth:`~torchrl.envs.EnvBase.rand_action` has been adapted to account for</span>
-<span class="sd">        this behavior.</span>
+<span class="sd">            .. note:: The `&quot;san&quot;` entry corresponding to `rollout[&quot;action&quot;]` will be found in `rollout[&quot;next&quot;, &quot;san&quot;]`,</span>
+<span class="sd">                whereas the value at the root `rollout[&quot;san&quot;]` will correspond to the value of the san preceding the</span>
+<span class="sd">                same index action.</span>
+
+<span class="sd">        include_fen (bool): Whether to include FEN (Forsyth-Edwards Notation) in the observations. Default: ``False``.</span>
+<span class="sd">        include_pgn (bool): Whether to include PGN (Portable Game Notation) in the observations. Default: ``False``.</span>
+<span class="sd">        include_legal_moves (bool): Whether to include legal moves in the observations. Default: ``False``.</span>
+<span class="sd">        include_hash (bool): Whether to include hash transformations in the environment. Default: ``False``.</span>
+<span class="sd">        mask_actions (bool): if ``True``, a :class:`~torchrl.envs.ActionMask` transform will be appended</span>
+<span class="sd">            to the env to make sure that the actions are properly masked. Default: ``True``.</span>
+<span class="sd">        pixels (bool): Whether to include pixel-based observations of the board. Default: ``False``.</span>
+
+<span class="sd">    .. note:: The action spec is a :class:`~torchrl.data.Categorical` with a number of actions equal to the number of possible SAN moves.</span>
+<span class="sd">        The action space is structured as a categorical distribution over all possible SAN moves, with the legal moves</span>
+<span class="sd">        being a subset of this space. The environment uses a mask to ensure only legal moves are selected.</span>
 
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; env = ChessEnv()</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import ChessEnv</span>
+<span class="sd">        &gt;&gt;&gt; _ = torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; env = ChessEnv(include_fen=True, include_san=True, include_pgn=True, include_legal_moves=True)</span>
+<span class="sd">        &gt;&gt;&gt; print(env)</span>
+<span class="sd">        TransformedEnv(</span>
+<span class="sd">            env=ChessEnv(),</span>
+<span class="sd">            transform=ActionMask(keys=[&#39;action&#39;, &#39;action_mask&#39;]))</span>
 <span class="sd">        &gt;&gt;&gt; r = env.reset()</span>
-<span class="sd">        &gt;&gt;&gt; env.rand_step(r)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rand_step(r))</span>
 <span class="sd">        TensorDict(</span>
 <span class="sd">            fields={</span>
 <span class="sd">                action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                action_mask: Tensor(shape=torch.Size([29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="sd">                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="sd">                fen: NonTensorData(data=rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1, batch_size=torch.Size([]), device=None),</span>
-<span class="sd">                hashing: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                legal_moves: Tensor(shape=torch.Size([219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="sd">                next: TensorDict(</span>
 <span class="sd">                    fields={</span>
+<span class="sd">                        action_mask: Tensor(shape=torch.Size([29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="sd">                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="sd">                        fen: NonTensorData(data=rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR b KQkq - 1 1, batch_size=torch.Size([]), device=None),</span>
-<span class="sd">                        hashing: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int32, is_shared=False),</span>
+<span class="sd">                        fen: NonTensorData(data=rnbqkbnr/pppppppp/8/8/5P2/8/PPPPP1PP/RNBQKBNR b KQkq - 0 1, batch_size=torch.Size([]), device=None),</span>
+<span class="sd">                        legal_moves: Tensor(shape=torch.Size([219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                        pgn: NonTensorData(data=[Event &quot;?&quot;]</span>
+<span class="sd">                        [Site &quot;?&quot;]</span>
+<span class="sd">                        [Date &quot;????.??.??&quot;]</span>
+<span class="sd">                        [Round &quot;?&quot;]</span>
+<span class="sd">                        [White &quot;?&quot;]</span>
+<span class="sd">                        [Black &quot;?&quot;]</span>
+<span class="sd">                        [Result &quot;*&quot;]</span>
+
+<span class="sd">                        1. f4 *, batch_size=torch.Size([]), device=None),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        san: NonTensorData(data=f4, batch_size=torch.Size([]), device=None),</span>
 <span class="sd">                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="sd">                        turn: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
 <span class="sd">                    batch_size=torch.Size([]),</span>
 <span class="sd">                    device=None,</span>
 <span class="sd">                    is_shared=False),</span>
+<span class="sd">                pgn: NonTensorData(data=[Event &quot;?&quot;]</span>
+<span class="sd">                [Site &quot;?&quot;]</span>
+<span class="sd">                [Date &quot;????.??.??&quot;]</span>
+<span class="sd">                [Round &quot;?&quot;]</span>
+<span class="sd">                [White &quot;?&quot;]</span>
+<span class="sd">                [Black &quot;?&quot;]</span>
+<span class="sd">                [Result &quot;*&quot;]</span>
+
+<span class="sd">                *, batch_size=torch.Size([]), device=None),</span>
+<span class="sd">                san: NonTensorData(data=&lt;start&gt;, batch_size=torch.Size([]), device=None),</span>
 <span class="sd">                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="sd">                turn: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
 <span class="sd">            batch_size=torch.Size([]),</span>
 <span class="sd">            device=None,</span>
 <span class="sd">            is_shared=False)</span>
-<span class="sd">        &gt;&gt;&gt; env.rollout(1000)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(1000))</span>
 <span class="sd">        TensorDict(</span>
 <span class="sd">            fields={</span>
-<span class="sd">                action: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                done: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                action: Tensor(shape=torch.Size([96]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                action_mask: Tensor(shape=torch.Size([96, 29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="sd">                fen: NonTensorStack(</span>
 <span class="sd">                    [&#39;rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ...,</span>
-<span class="sd">                    batch_size=torch.Size([322]),</span>
+<span class="sd">                    batch_size=torch.Size([96]),</span>
 <span class="sd">                    device=None),</span>
-<span class="sd">                hashing: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                legal_moves: Tensor(shape=torch.Size([96, 219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="sd">                next: TensorDict(</span>
 <span class="sd">                    fields={</span>
-<span class="sd">                        done: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        action_mask: Tensor(shape=torch.Size([96, 29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="sd">                        fen: NonTensorStack(</span>
-<span class="sd">                            [&#39;rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR b ...,</span>
-<span class="sd">                            batch_size=torch.Size([322]),</span>
+<span class="sd">                            [&#39;rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b ...,</span>
+<span class="sd">                            batch_size=torch.Size([96]),</span>
 <span class="sd">                            device=None),</span>
-<span class="sd">                        hashing: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                        reward: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.int32, is_shared=False),</span>
-<span class="sd">                        terminated: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="sd">                        turn: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="sd">                    batch_size=torch.Size([322]),</span>
+<span class="sd">                        legal_moves: Tensor(shape=torch.Size([96, 219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                        pgn: NonTensorStack(</span>
+<span class="sd">                            [&#39;[Event &quot;?&quot;]\n[Site &quot;?&quot;]\n[Date &quot;????.??.??&quot;]\n[R...,</span>
+<span class="sd">                            batch_size=torch.Size([96]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        san: NonTensorStack(</span>
+<span class="sd">                            [&#39;Nf3&#39;, &#39;Na6&#39;, &#39;c4&#39;, &#39;f6&#39;, &#39;h4&#39;, &#39;Rb8&#39;, &#39;Na3&#39;, &#39;Ra...,</span>
+<span class="sd">                            batch_size=torch.Size([96]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        turn: Tensor(shape=torch.Size([96]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([96]),</span>
 <span class="sd">                    device=None,</span>
 <span class="sd">                    is_shared=False),</span>
-<span class="sd">                terminated: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="sd">                turn: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="sd">            batch_size=torch.Size([322]),</span>
+<span class="sd">                pgn: NonTensorStack(</span>
+<span class="sd">                    [&#39;[Event &quot;?&quot;]\n[Site &quot;?&quot;]\n[Date &quot;????.??.??&quot;]\n[R...,</span>
+<span class="sd">                    batch_size=torch.Size([96]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                san: NonTensorStack(</span>
+<span class="sd">                    [&#39;&lt;start&gt;&#39;, &#39;Nf3&#39;, &#39;Na6&#39;, &#39;c4&#39;, &#39;f6&#39;, &#39;h4&#39;, &#39;Rb8&#39;,...,</span>
+<span class="sd">                    batch_size=torch.Size([96]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                turn: Tensor(shape=torch.Size([96]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([96]),</span>
 <span class="sd">            device=None,</span>
 <span class="sd">            is_shared=False)</span>
 
@@ -511,84 +603,296 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">_hash_table</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_PGN_RESTART</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;[Event &quot;?&quot;]</span>
+<span class="s2">[Site &quot;?&quot;]</span>
+<span class="s2">[Date &quot;????.??.??&quot;]</span>
+<span class="s2">[Round &quot;?&quot;]</span>
+<span class="s2">[White &quot;?&quot;]</span>
+<span class="s2">[Black &quot;?&quot;]</span>
+<span class="s2">[Result &quot;*&quot;]</span>
+
+<span class="s2">*&quot;&quot;&quot;</span>
 
     <span class="nd">@_classproperty</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">lib</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span><span class="w"> </span><span class="nn">chess</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">chess.pgn</span>
         <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;The `chess` library could not be found. Make sure you installed it through `pip install chess`.&quot;</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">chess</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stateful</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+    <span class="n">_san_moves</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">san_moves</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_san_moves</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;san_moves.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;r+&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">_san_moves</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_san_moves</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_legal_moves_to_index</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">board</span><span class="p">:</span> <span class="s2">&quot;chess.Board&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">return_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">pad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># trust the board</span>
+                <span class="k">pass</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+                <span class="n">fen</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="n">fen</span> <span class="o">=</span> <span class="n">fen</span><span class="o">.</span><span class="n">data</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
+                <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">)</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="n">pgn</span><span class="o">.</span><span class="n">data</span>
+                <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pgn_to_board</span><span class="p">(</span><span class="n">pgn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">board</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span>
+
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_san_moves</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">board</span><span class="o">.</span><span class="n">san</span><span class="p">(</span><span class="n">m</span><span class="p">))</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">board</span><span class="o">.</span><span class="n">legal_moves</span><span class="p">],</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">return_mask</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_move_index_to_mask</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pad</span><span class="p">:</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span>
+                <span class="n">indices</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">218</span> <span class="o">-</span> <span class="n">indices</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span> <span class="n">value</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_mask</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">indices</span><span class="p">,</span> <span class="n">mask</span>
+        <span class="k">return</span> <span class="n">indices</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_move_index_to_mask</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">san_moves</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span><span class="o">.</span><span class="n">index_fill_</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="kc">True</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">stateful</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">include_san</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_fen</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_pgn</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_legal_moves</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_hash</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">mask_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">pixels</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="n">chess</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
-            <span class="n">hashing</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
-            <span class="n">fen</span><span class="o">=</span><span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">()),</span>
             <span class="n">turn</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">()),</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_san</span> <span class="o">=</span> <span class="n">include_san</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span> <span class="o">=</span> <span class="n">include_fen</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span> <span class="o">=</span> <span class="n">include_pgn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span> <span class="o">=</span> <span class="n">mask_actions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_legal_moves</span> <span class="o">=</span> <span class="n">include_legal_moves</span>
+        <span class="k">if</span> <span class="n">include_legal_moves</span><span class="p">:</span>
+            <span class="c1"># 218 max possible legal moves per chess board position</span>
+            <span class="c1"># https://www.stmintz.com/ccc/index.php?id=424966</span>
+            <span class="c1"># len(self.san_moves)+1 is the padding value</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;legal_moves&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
+                <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">218</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_san</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;san&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;Nc6&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_pgn</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;pgn&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">example_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_PGN_RESTART</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_fen</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;fen&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;any&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">stateful</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="n">include_pgn</span> <span class="ow">or</span> <span class="n">include_fen</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;At least one state representation (pgn or fen) must be enabled when stateful &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;is </span><span class="si">{</span><span class="n">stateful</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span> <span class="o">=</span> <span class="n">stateful</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">full_state_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="c1"># state_spec is loosely defined as such - it&#39;s not really an issue that extra keys</span>
+        <span class="c1"># can go missing but it allows us to reset the env using fen passed to the reset</span>
+        <span class="c1"># method.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_state_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixels</span> <span class="o">=</span> <span class="n">pixels</span>
+        <span class="k">if</span> <span class="n">pixels</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;cairosvg&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">&quot;Please install cairosvg to use this environment with pixel rendering.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">&quot;Please install torchvision to use this environment with pixel rendering.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">())</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
-            <span class="n">action</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="n">n</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">full_reward_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
-            <span class="n">reward</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+            <span class="n">reward</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;action_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Binary</span><span class="p">(</span>
+                <span class="n">n</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
+            <span class="p">)</span>
+
         <span class="c1"># done spec generated automatically</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">board</span> <span class="o">=</span> <span class="n">chess</span><span class="o">.</span><span class="n">Board</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">set_provisional_n</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">legal_moves</span><span class="p">)))</span>
-
-<div class="viewcode-block" id="ChessEnv.rand_action"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.rand_action">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rand_action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_set_action_space</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">rand_action</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_is_done</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">board</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">board</span><span class="o">.</span><span class="n">is_game_over</span><span class="p">()</span> <span class="o">|</span> <span class="n">board</span><span class="o">.</span><span class="n">is_fifty_moves</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="n">fen</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">pgn</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">fen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_fen</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
             <span class="n">dest</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+                <span class="n">fen</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">fen</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">fen</span> <span class="o">=</span> <span class="n">fen</span><span class="o">.</span><span class="n">data</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">pgn</span> <span class="o">=</span> <span class="n">pgn</span><span class="o">.</span><span class="n">data</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">dest</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="n">fen</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">fen</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
-            <span class="n">fen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">fen</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="n">fen</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_done</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;Cannot reset to a fen that is a gameover state.&quot;</span> <span class="sa">f</span><span class="s2">&quot; fen: </span><span class="si">{</span><span class="n">fen</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pgn_to_board</span><span class="p">(</span><span class="n">pgn</span><span class="p">)</span>
 
-        <span class="n">hashing</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span> <span class="ow">and</span> <span class="n">fen</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">fen</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span> <span class="ow">and</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">pgn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_board_to_pgn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_set_action_space</span><span class="p">()</span>
         <span class="n">turn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">turn</span>
-        <span class="k">return</span> <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="n">fen</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;hashing&quot;</span><span class="p">,</span> <span class="n">hashing</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;turn&quot;</span><span class="p">,</span> <span class="n">turn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_san</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">move_stack</span><span class="p">:</span>
+                <span class="n">move</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">move</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">move</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;san&quot;</span><span class="p">,</span> <span class="s2">&quot;&lt;start&gt;&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;san&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">san</span><span class="p">(</span><span class="n">move</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="n">fen</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">,</span> <span class="n">pgn</span><span class="p">)</span>
+        <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;turn&quot;</span><span class="p">,</span> <span class="n">turn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_legal_moves</span><span class="p">:</span>
+            <span class="n">moves_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_legal_moves_to_index</span><span class="p">(</span>
+                <span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+                <span class="n">moves_idx</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">moves_idx</span>
+                <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;action_mask&quot;</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;legal_moves&quot;</span><span class="p">,</span> <span class="n">moves_idx</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;action_mask&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_legal_moves_to_index</span><span class="p">(</span>
+                    <span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_mask</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_set_action_space</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span> <span class="ow">and</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">fen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_fen</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">set_provisional_n</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">legal_moves</span><span class="o">.</span><span class="n">count</span><span class="p">())</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;pixels&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_tensor_image</span><span class="p">(</span><span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">dest</span>
+
+    <span class="n">_cairosvg_lib</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_cairosvg</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="n">csvg</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_cairosvg_lib</span>
+        <span class="k">if</span> <span class="n">csvg</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">cairosvg</span>
+
+            <span class="n">csvg</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_cairosvg_lib</span> <span class="o">=</span> <span class="n">cairosvg</span>
+        <span class="k">return</span> <span class="n">csvg</span>
+
+    <span class="n">_torchvision_lib</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_torchvision</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="n">tv</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_torchvision_lib</span>
+        <span class="k">if</span> <span class="n">tv</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">torchvision</span>
+
+            <span class="n">tv</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_torchvision_lib</span> <span class="o">=</span> <span class="n">torchvision</span>
+        <span class="k">return</span> <span class="n">tv</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_fen</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
-        <span class="n">fen</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">fen</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">hashing</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;hashing&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">hashing</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">fen</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_hash_table</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">hashing</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
-        <span class="k">return</span> <span class="n">fen</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_tensor_image</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">board</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">svg</span> <span class="o">=</span> <span class="n">board</span><span class="o">.</span><span class="n">_repr_svg_</span><span class="p">()</span>
+            <span class="c1"># Convert SVG to PNG using cairosvg</span>
+            <span class="n">png_data</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">_cairosvg</span><span class="o">.</span><span class="n">svg2png</span><span class="p">(</span><span class="n">bytestring</span><span class="o">=</span><span class="n">svg</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">),</span> <span class="n">write_to</span><span class="o">=</span><span class="n">png_data</span><span class="p">)</span>
+            <span class="n">png_data</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="c1"># Open the PNG image using Pillow</span>
+            <span class="n">img</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">png_data</span><span class="p">)</span>
+            <span class="n">img</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_torchvision</span><span class="o">.</span><span class="n">transforms</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">pil_to_tensor</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Chess rendering requires cairosvg and torchvision to be installed.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">img</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pgn_to_board</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">pgn_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">board</span><span class="p">:</span> <span class="s2">&quot;chess.Board&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># noqa: F821</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;chess.Board&quot;</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">pgn_io</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(</span><span class="n">pgn_string</span><span class="p">)</span>
+        <span class="n">game</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">pgn</span><span class="o">.</span><span class="n">read_game</span><span class="p">(</span><span class="n">pgn_io</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">board</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">board</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">Board</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">board</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">move</span> <span class="ow">in</span> <span class="n">game</span><span class="o">.</span><span class="n">mainline_moves</span><span class="p">():</span>
+            <span class="n">board</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">move</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">board</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_add_move_to_pgn</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">pgn_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">move</span><span class="p">:</span> <span class="s2">&quot;chess.Move&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">pgn_io</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(</span><span class="n">pgn_string</span><span class="p">)</span>
+        <span class="n">game</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">pgn</span><span class="o">.</span><span class="n">read_game</span><span class="p">(</span><span class="n">pgn_io</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">game</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid PGN string&quot;</span><span class="p">)</span>
+        <span class="n">game</span><span class="o">.</span><span class="n">end</span><span class="p">()</span><span class="o">.</span><span class="n">add_variation</span><span class="p">(</span><span class="n">move</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">game</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_board_to_pgn</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">board</span><span class="p">:</span> <span class="s2">&quot;chess.Board&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">game</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">pgn</span><span class="o">.</span><span class="n">Game</span><span class="o">.</span><span class="n">from_board</span><span class="p">(</span><span class="n">board</span><span class="p">)</span>
+        <span class="n">pgn_string</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">game</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pgn_string</span>
 
 <div class="viewcode-block" id="ChessEnv.get_legal_moves"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.get_legal_moves">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_legal_moves</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">uci</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;List the legal moves in a position.</span>
@@ -613,7 +917,7 @@
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;tensordict must be given since this env is not stateful&quot;</span>
                 <span class="p">)</span>
-            <span class="n">fen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_fen</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+            <span class="n">fen</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
             <span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
         <span class="n">moves</span> <span class="o">=</span> <span class="n">board</span><span class="o">.</span><span class="n">legal_moves</span>
 
@@ -626,33 +930,75 @@
         <span class="c1"># action</span>
         <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">)</span>
         <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span>
+
+        <span class="n">pgn</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">fen</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
-            <span class="n">fen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_fen</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-            <span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
-        <span class="n">action</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">board</span><span class="o">.</span><span class="n">legal_moves</span><span class="p">)[</span><span class="n">action</span><span class="p">]</span>
-        <span class="n">board</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_set_action_space</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+                <span class="n">fen</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+                <span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+                <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pgn_to_board</span><span class="p">(</span><span class="n">pgn</span><span class="p">,</span> <span class="n">board</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Not enough information to deduce the board. If stateful=False, include_pgn or include_fen must be True.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="n">san</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">[</span><span class="n">action</span><span class="p">]</span>
+        <span class="n">board</span><span class="o">.</span><span class="n">push_san</span><span class="p">(</span><span class="n">san</span><span class="p">)</span>
+
+        <span class="n">dest</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
 
         <span class="c1"># Collect data</span>
-        <span class="n">fen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">fen</span><span class="p">()</span>
-        <span class="n">dest</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-        <span class="n">hashing</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
-        <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="n">fen</span><span class="p">)</span>
-        <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;hashing&quot;</span><span class="p">,</span> <span class="n">hashing</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+            <span class="n">fen</span> <span class="o">=</span> <span class="n">board</span><span class="o">.</span><span class="n">fen</span><span class="p">()</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="n">fen</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_move_to_pgn</span><span class="p">(</span><span class="n">pgn</span><span class="p">,</span> <span class="n">board</span><span class="o">.</span><span class="n">move_stack</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_board_to_pgn</span><span class="p">(</span><span class="n">board</span><span class="p">)</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">,</span> <span class="n">pgn</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_san</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;san&quot;</span><span class="p">,</span> <span class="n">san</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_legal_moves</span><span class="p">:</span>
+            <span class="n">moves_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_legal_moves_to_index</span><span class="p">(</span>
+                <span class="n">board</span><span class="o">=</span><span class="n">board</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+                <span class="n">moves_idx</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">moves_idx</span>
+                <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;action_mask&quot;</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;legal_moves&quot;</span><span class="p">,</span> <span class="n">moves_idx</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;action_mask&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_legal_moves_to_index</span><span class="p">(</span>
+                    <span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_mask</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="p">)</span>
 
         <span class="n">turn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">board</span><span class="o">.</span><span class="n">turn</span><span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_done</span><span class="p">(</span><span class="n">board</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">board</span><span class="o">.</span><span class="n">is_checkmate</span><span class="p">():</span>
             <span class="c1"># turn flips after every move, even if the game is over</span>
-            <span class="n">winner</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">turn</span>
-            <span class="n">reward_val</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">winner</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">WHITE</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span>
+            <span class="c1"># winner = not turn</span>
+            <span class="n">reward_val</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># if winner == self.lib.WHITE else 0</span>
+        <span class="k">elif</span> <span class="n">done</span><span class="p">:</span>
+            <span class="n">reward_val</span> <span class="o">=</span> <span class="mf">0.5</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">reward_val</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">reward</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">reward_val</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
-        <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_done</span><span class="p">(</span><span class="n">board</span><span class="p">)</span>
+            <span class="n">reward_val</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="n">reward</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">reward_val</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
         <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="n">reward</span><span class="p">)</span>
         <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;turn&quot;</span><span class="p">,</span> <span class="n">turn</span><span class="p">)</span>
         <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">done</span><span class="p">])</span>
         <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;terminated&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">done</span><span class="p">])</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;pixels&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_tensor_image</span><span class="p">(</span><span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">dest</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>

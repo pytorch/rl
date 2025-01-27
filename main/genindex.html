@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (0.6.1+2c19fcc) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (0.6.1+49d9897) &#x25BC</span></a>
     </div>
     
 
@@ -6645,6 +6645,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.state_dict">(torchrl.envs.TicTacToeEnv method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash.state_dict">(torchrl.envs.transforms.Hash method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.state_dict">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.TrajCounter.html#torchrl.envs.transforms.TrajCounter.state_dict">(torchrl.envs.transforms.TrajCounter method)</a>
@@ -7184,8 +7186,6 @@
         <li><a href="reference/generated/torchrl.data.OneHotDiscreteTensorSpec.html#torchrl.data.OneHotDiscreteTensorSpec.to_one_hot_spec">(torchrl.data.OneHotDiscreteTensorSpec method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.to_tensordict">to_tensordict() (torchrl.data.PairwiseDataset method)</a>
 
       <ul>
@@ -7196,6 +7196,8 @@
         <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.to_tensordict">(torchrl.data.Tree method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader">TokenizedDatasetLoader (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.ToTensorImage.html#torchrl.envs.transforms.ToTensorImage">ToTensorImage (class in torchrl.envs.transforms)</a>
@@ -7244,6 +7246,22 @@
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform">Transform (class in torchrl.envs.transforms)</a>
 </li>
+      <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.transform_action_spec">transform_action_spec() (torchrl.envs.transforms.Compose method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.DeviceCastTransform.html#torchrl.envs.transforms.DeviceCastTransform.transform_action_spec">(torchrl.envs.transforms.DeviceCastTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm.transform_action_spec">(torchrl.envs.transforms.ObservationNorm method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.transform_action_spec">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform.transform_action_spec">(torchrl.envs.transforms.Transform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_action_spec">(torchrl.envs.transforms.UnaryTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.UnsqueezeTransform.html#torchrl.envs.transforms.UnsqueezeTransform.transform_action_spec">(torchrl.envs.transforms.UnsqueezeTransform method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.DeviceCastTransform.html#torchrl.envs.transforms.DeviceCastTransform.transform_done_spec">transform_done_spec() (torchrl.envs.transforms.DeviceCastTransform method)</a>
 
       <ul>
@@ -7289,8 +7307,6 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.DTypeCastTransform.html#torchrl.envs.transforms.DTypeCastTransform.transform_input_spec">(torchrl.envs.transforms.DTypeCastTransform method)</a>
 </li>
-        <li><a href="reference/generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm.transform_input_spec">(torchrl.envs.transforms.ObservationNorm method)</a>
-</li>
         <li><a href="reference/generated/torchrl.envs.transforms.PermuteTransform.html#torchrl.envs.transforms.PermuteTransform.transform_input_spec">(torchrl.envs.transforms.PermuteTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.transform_input_spec">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
@@ -7311,7 +7327,7 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform.transform_input_spec">(torchrl.envs.transforms.Transform method)</a>
 </li>
-        <li><a href="reference/generated/torchrl.envs.transforms.UnsqueezeTransform.html#torchrl.envs.transforms.UnsqueezeTransform.transform_input_spec">(torchrl.envs.transforms.UnsqueezeTransform method)</a>
+        <li><a href="reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_input_spec">(torchrl.envs.transforms.UnaryTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.VIPRewardTransform.html#torchrl.envs.transforms.VIPRewardTransform.transform_input_spec">(torchrl.envs.transforms.VIPRewardTransform method)</a>
 </li>
@@ -7434,6 +7450,22 @@
         <li><a href="reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_reward_spec">(torchrl.envs.transforms.UnaryTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.UnsqueezeTransform.html#torchrl.envs.transforms.UnsqueezeTransform.transform_reward_spec">(torchrl.envs.transforms.UnsqueezeTransform method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.transform_state_spec">transform_state_spec() (torchrl.envs.transforms.Compose method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.DeviceCastTransform.html#torchrl.envs.transforms.DeviceCastTransform.transform_state_spec">(torchrl.envs.transforms.DeviceCastTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm.transform_state_spec">(torchrl.envs.transforms.ObservationNorm method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.transform_state_spec">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform.transform_state_spec">(torchrl.envs.transforms.Transform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_state_spec">(torchrl.envs.transforms.UnaryTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.UnsqueezeTransform.html#torchrl.envs.transforms.UnsqueezeTransform.transform_state_spec">(torchrl.envs.transforms.UnsqueezeTransform method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.trainers.helpers.transformed_env_constructor.html#torchrl.trainers.helpers.transformed_env_constructor">transformed_env_constructor() (in module torchrl.trainers.helpers)</a>

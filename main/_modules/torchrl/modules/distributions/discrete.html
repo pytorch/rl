@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+2c19fcc) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+49d9897) &#x25BC</span></a>
     </div>
     
 
@@ -738,7 +738,11 @@
         <span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">padding_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">logits</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">padding_mask</span><span class="p">,</span> <span class="n">neg_inf</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">logits</span></div>
+        <span class="k">return</span> <span class="n">logits</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">deterministic_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span></div>
 
 
 <div class="viewcode-block" id="MaskedOneHotCategorical"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MaskedOneHotCategorical</span><span class="p">(</span><span class="n">MaskedCategorical</span><span class="p">):</span>

@@ -1896,9 +1896,9 @@ See the `Contributing guide <https://github.com/pytorch/rl/blob/main/CONTRIBUTIN
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (2 minutes 32.649 seconds)
+   **Total running time of the script:** (2 minutes 31.628 seconds)
 
-**Estimated memory usage:**  325 MB
+**Estimated memory usage:**  423 MB
 
 
 .. _sphx_glr_download_tutorials_torchrl_demo.py:

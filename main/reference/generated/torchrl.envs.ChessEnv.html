@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+2c19fcc) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.6.1+49d9897) &#x25BC</span></a>
     </div>
     
 
@@ -433,74 +433,147 @@
 <dt class="sig sig-object py" id="torchrl.envs.ChessEnv">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">ChessEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/custom/chess.html#ChessEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.ChessEnv" title="Permalink to this definition">¶</a></dt>
 <dd><p>A chess environment that follows the TorchRL API.</p>
+<p>This environment simulates a chess game using the <cite>chess</cite> library. It supports various state representations
+and can be configured to include different types of observations such as SAN, FEN, PGN, and legal moves.</p>
 <p>Requires: the <cite>chess</cite> library. More info <a class="reference external" href="https://python-chess.readthedocs.io/en/latest/">here</a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>stateful</strong> (<em>bool</em>) – Whether to keep track of the internal state of the board.
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>stateful</strong> (<em>bool</em>) – Whether to keep track of the internal state of the board.
 If False, the state will be stored in the observation and passed back
-to the environment on each call. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+to the environment on each call. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>include_san</strong> (<em>bool</em>) – <p>Whether to include SAN (Standard Algebraic Notation) in the observations. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <cite>“san”</cite> entry corresponding to <cite>rollout[“action”]</cite> will be found in <cite>rollout[“next”, “san”]</cite>,
+whereas the value at the root <cite>rollout[“san”]</cite> will correspond to the value of the san preceding the
+same index action.</p>
+</div>
+</p></li>
+<li><p><strong>include_fen</strong> (<em>bool</em>) – Whether to include FEN (Forsyth-Edwards Notation) in the observations. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>include_pgn</strong> (<em>bool</em>) – Whether to include PGN (Portable Game Notation) in the observations. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>include_legal_moves</strong> (<em>bool</em>) – Whether to include legal moves in the observations. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>include_hash</strong> (<em>bool</em>) – Whether to include hash transformations in the environment. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>mask_actions</strong> (<em>bool</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a <code class="xref py py-class docutils literal notranslate"><span class="pre">ActionMask</span></code> transform will be appended
+to the env to make sure that the actions are properly masked. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>pixels</strong> (<em>bool</em>) – Whether to include pixel-based observations of the board. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>the action spec is a <a class="reference internal" href="torchrl.data.Categorical.html#torchrl.data.Categorical" title="torchrl.data.Categorical"><code class="xref py py-class docutils literal notranslate"><span class="pre">Categorical</span></code></a> spec with a <code class="docutils literal notranslate"><span class="pre">-1</span></code> shape.
-Unless <a class="reference internal" href="torchrl.data.Categorical.html#torchrl.data.Categorical.set_provisional_n" title="torchrl.data.Categorical.set_provisional_n"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_provisional_n()</span></code></a> is called with the cardinality of the legal moves,
-valid random actions cannot be taken. <a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.rand_action" title="torchrl.envs.EnvBase.rand_action"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rand_action()</span></code></a> has been adapted to account for
-this behavior.</p>
+<p>The action spec is a <a class="reference internal" href="torchrl.data.Categorical.html#torchrl.data.Categorical" title="torchrl.data.Categorical"><code class="xref py py-class docutils literal notranslate"><span class="pre">Categorical</span></code></a> with a number of actions equal to the number of possible SAN moves.
+The action space is structured as a categorical distribution over all possible SAN moves, with the legal moves
+being a subset of this space. The environment uses a mask to ensure only legal moves are selected.</p>
 </div>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">ChessEnv</span><span class="p">()</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChessEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">ChessEnv</span><span class="p">(</span><span class="n">include_fen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">include_san</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">include_pgn</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">include_legal_moves</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+<span class="go">TransformedEnv(</span>
+<span class="go">    env=ChessEnv(),</span>
+<span class="go">    transform=ActionMask(keys=[&#39;action&#39;, &#39;action_mask&#39;]))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">r</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">(</span><span class="n">r</span><span class="p">))</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">        action_mask: Tensor(shape=torch.Size([29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="go">        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="go">        fen: NonTensorData(data=rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1, batch_size=torch.Size([]), device=None),</span>
-<span class="go">        hashing: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">        legal_moves: Tensor(shape=torch.Size([219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="go">        next: TensorDict(</span>
 <span class="go">            fields={</span>
+<span class="go">                action_mask: Tensor(shape=torch.Size([29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="go">                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                fen: NonTensorData(data=rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR b KQkq - 1 1, batch_size=torch.Size([]), device=None),</span>
-<span class="go">                hashing: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int32, is_shared=False),</span>
-<span class="go">                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                turn: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False),</span>
-<span class="go">        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        turn: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
+<span class="go">                fen: NonTensorData(data=rnbqkbnr/pppppppp/8/8/5P2/8/PPPPP1PP/RNBQKBNR b KQkq - 0 1, batch_size=torch.Size([]), device=None),</span>
+<span class="go">                legal_moves: Tensor(shape=torch.Size([219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">                pgn: NonTensorData(data=[Event &quot;?&quot;]</span>
+<span class="go">                [Site &quot;?&quot;]</span>
+<span class="go">                [Date &quot;????.??.??&quot;]</span>
+<span class="go">                [Round &quot;?&quot;]</span>
+<span class="go">                [White &quot;?&quot;]</span>
+<span class="go">                [Black &quot;?&quot;]</span>
+<span class="go">                [Result &quot;*&quot;]</span>
+</pre></div>
+</div>
+<blockquote>
+<div><blockquote>
+<div><blockquote>
+<div><blockquote>
+<div><p>1. f4 <a href="#id1"><span class="problematic" id="id2">*</span></a>, batch_size=torch.Size([]), device=None),
+reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+san: NonTensorData(data=f4, batch_size=torch.Size([]), device=None),
+terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+turn: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False)},</p>
+</div></blockquote>
+<p>batch_size=torch.Size([]),
+device=None,
+is_shared=False),</p>
+</div></blockquote>
+<p>pgn: NonTensorData(data=[Event “?”]
+[Site “?”]
+[Date “????.??.??”]
+[Round “?”]
+[White “?”]
+[Black “?”]
+[Result “*”]</p>
+<p><a href="#id3"><span class="problematic" id="id4">*</span></a>, batch_size=torch.Size([]), device=None),
+san: NonTensorData(data=&lt;start&gt;, batch_size=torch.Size([]), device=None),
+terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+turn: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False)},</p>
+</div></blockquote>
+<p>batch_size=torch.Size([]),
+device=None,
+is_shared=False)</p>
+</div></blockquote>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">1000</span><span class="p">))</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
-<span class="go">        action: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">        done: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">        action: Tensor(shape=torch.Size([96]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">        action_mask: Tensor(shape=torch.Size([96, 29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">        done: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="go">        fen: NonTensorStack(</span>
 <span class="go">            [&#39;rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ...,</span>
-<span class="go">            batch_size=torch.Size([322]),</span>
+<span class="go">            batch_size=torch.Size([96]),</span>
 <span class="go">            device=None),</span>
-<span class="go">        hashing: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">        legal_moves: Tensor(shape=torch.Size([96, 219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
 <span class="go">        next: TensorDict(</span>
 <span class="go">            fields={</span>
-<span class="go">                done: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">                action_mask: Tensor(shape=torch.Size([96, 29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">                done: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
 <span class="go">                fen: NonTensorStack(</span>
-<span class="go">                    [&#39;rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR b ...,</span>
-<span class="go">                    batch_size=torch.Size([322]),</span>
+<span class="go">                    [&#39;rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b ...,</span>
+<span class="go">                    batch_size=torch.Size([96]),</span>
 <span class="go">                    device=None),</span>
-<span class="go">                hashing: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                reward: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.int32, is_shared=False),</span>
-<span class="go">                terminated: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                turn: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([322]),</span>
+<span class="go">                legal_moves: Tensor(shape=torch.Size([96, 219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">                pgn: NonTensorStack(</span>
+<span class="go">                    [&#39;[Event &quot;?&quot;]\n[Site &quot;?&quot;]\n[Date &quot;????.??.??&quot;]\n[R...,</span>
+<span class="go">                    batch_size=torch.Size([96]),</span>
+<span class="go">                    device=None),</span>
+<span class="go">                reward: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">                san: NonTensorStack(</span>
+<span class="go">                    [&#39;Nf3&#39;, &#39;Na6&#39;, &#39;c4&#39;, &#39;f6&#39;, &#39;h4&#39;, &#39;Rb8&#39;, &#39;Na3&#39;, &#39;Ra...,</span>
+<span class="go">                    batch_size=torch.Size([96]),</span>
+<span class="go">                    device=None),</span>
+<span class="go">                terminated: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">                turn: Tensor(shape=torch.Size([96]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="go">            batch_size=torch.Size([96]),</span>
 <span class="go">            device=None,</span>
 <span class="go">            is_shared=False),</span>
-<span class="go">        terminated: Tensor(shape=torch.Size([322, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        turn: Tensor(shape=torch.Size([322]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([322]),</span>
+<span class="go">        pgn: NonTensorStack(</span>
+<span class="go">            [&#39;[Event &quot;?&quot;]\n[Site &quot;?&quot;]\n[Date &quot;????.??.??&quot;]\n[R...,</span>
+<span class="go">            batch_size=torch.Size([96]),</span>
+<span class="go">            device=None),</span>
+<span class="go">        san: NonTensorStack(</span>
+<span class="go">            [&#39;&lt;start&gt;&#39;, &#39;Nf3&#39;, &#39;Na6&#39;, &#39;c4&#39;, &#39;f6&#39;, &#39;h4&#39;, &#39;Rb8&#39;,...,</span>
+<span class="go">            batch_size=torch.Size([96]),</span>
+<span class="go">            device=None),</span>
+<span class="go">        terminated: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">        turn: Tensor(shape=torch.Size([96]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([96]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
 </pre></div>
@@ -1807,7 +1880,7 @@ are direct members of this module.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.ChessEnv.rand_action">
-<span class="sig-name descname"><span class="pre">rand_action</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">TensorDictBase</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/custom/chess.html#ChessEnv.rand_action"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.ChessEnv.rand_action" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">rand_action</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">TensorDictBase</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.ChessEnv.rand_action" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a random action given the action_spec attribute.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2379,6 +2452,11 @@ reset function.</p></li>
 <dd class="field-even"><p>a tensordict (or the input tensordict, if any), modified in place with the resulting observations.</p>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><cite>reset</cite> should not be overwritten by <a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> subclasses. The method to
+modify is <code class="xref py py-meth docutils literal notranslate"><span class="pre">_reset()</span></code>.</p>
+</div>
 </dd></dl>
 
 <dl class="py property">
@@ -2501,7 +2579,7 @@ the environment reaches a done state before max_steps have been executed.</p></l
 <li><p><strong>policy</strong> (<em>callable</em><em>, </em><em>optional</em>) – callable to be called to compute the desired action.
 If no policy is provided, actions will be called using <code class="xref py py-obj docutils literal notranslate"><span class="pre">env.rand_step()</span></code>.
 The policy can be any callable that reads either a tensordict or
-the entire sequence of observation entries __sorted <a href="#id1"><span class="problematic" id="id2">as__</span></a> the <code class="docutils literal notranslate"><span class="pre">env.observation_spec.keys()</span></code>.
+the entire sequence of observation entries __sorted <a href="#id5"><span class="problematic" id="id6">as__</span></a> the <code class="docutils literal notranslate"><span class="pre">env.observation_spec.keys()</span></code>.
 Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>callback</strong> (<em>Callable</em><em>[</em><em>[</em><em>TensorDict</em><em>]</em><em>, </em><em>Any</em><em>]</em><em>, </em><em>optional</em>) – function to be called at each iteration with the given
 TensorDict. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>. The output of <code class="docutils literal notranslate"><span class="pre">callback</span></code> will not be collected, it is the user
