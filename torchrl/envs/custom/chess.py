@@ -10,7 +10,6 @@ import pathlib
 from typing import Dict
 
 import torch
-from PIL import Image
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data import Binary, Bounded, Categorical, Composite, NonTensor, Unbounded
 
@@ -315,7 +314,9 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
                 raise ImportError(
                     "Please install torchvision to use this environment with pixel rendering."
                 )
-            self.full_observation_spec["pixels"] = Unbounded(shape=())
+            self.full_observation_spec["pixels"] = Unbounded(
+                shape=(3, 390, 390), dtype=torch.uint8
+            )
 
         self.full_action_spec = Composite(
             action=Categorical(n=len(self.san_moves), shape=(), dtype=torch.int64)
@@ -428,6 +429,8 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
     @classmethod
     def _get_tensor_image(cls, board):
         try:
+            from PIL import Image
+
             svg = board._repr_svg_()
             # Convert SVG to PNG using cairosvg
             png_data = io.BytesIO()
@@ -438,7 +441,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             img = cls._torchvision.transforms.functional.pil_to_tensor(img)
         except ImportError:
             raise ImportError(
-                "Chess rendering requires cairosvg and torchvision to be installed."
+                "Chess rendering requires cairosvg, PIL and torchvision to be installed."
             )
         return img
 

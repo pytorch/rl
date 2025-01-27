@@ -7,8 +7,6 @@ import gc
 import importlib.util
 import urllib.error
 
-from gym.core import ObsType
-
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
 if _has_isaac:
@@ -25,7 +23,7 @@ import urllib
 from contextlib import nullcontext
 from pathlib import Path
 from sys import platform
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 from unittest import mock
 
 import numpy as np
@@ -638,7 +636,8 @@ class TestGym:
 
     @implement_for("gym", None, "0.26")
     def test_gym_dict_action_space(self):
-        pytest.skip("tested for gym > 0.26 - no backward issue")
+        torchrl_logger.info("tested for gym > 0.26 - no backward issue")
+        return
 
     @implement_for("gym", "0.26", None)
     def test_gym_dict_action_space(self):  # noqa: F811
@@ -653,6 +652,9 @@ class TestGym:
                 self.observation_space = gym.spaces.Box(-1, 1)
 
             def step(self, action):
+                assert isinstance(action, dict)
+                assert isinstance(action["a0"], np.ndarray)
+                assert isinstance(action["a1"], np.ndarray)
                 return (0.5, 0.0, False, False, {})
 
             def reset(
@@ -660,7 +662,7 @@ class TestGym:
                 *,
                 seed: Optional[int] = None,
                 options: Optional[dict] = None,
-            ) -> Tuple[ObsType, dict]:
+            ):
                 return (0.0, {})
 
         env = CompositeActionEnv()
@@ -686,6 +688,9 @@ class TestGym:
                 self.observation_space = gym.spaces.Box(-1, 1)
 
             def step(self, action):
+                assert isinstance(action, dict)
+                assert isinstance(action["a0"], np.ndarray)
+                assert isinstance(action["a1"], np.ndarray)
                 return (0.5, 0.0, False, False, {})
 
             def reset(
@@ -693,7 +698,7 @@ class TestGym:
                 *,
                 seed: Optional[int] = None,
                 options: Optional[dict] = None,
-            ) -> Tuple[ObsType, dict]:
+            ):
                 return (0.0, {})
 
         env = CompositeActionEnv()
