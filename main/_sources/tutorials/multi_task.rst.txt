@@ -665,9 +665,9 @@ Rollout
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 53.528 seconds)
+   **Total running time of the script:** (0 minutes 59.924 seconds)
 
-**Estimated memory usage:**  331 MB
+**Estimated memory usage:**  320 MB
 
 
 .. _sphx_glr_download_tutorials_multi_task.py:

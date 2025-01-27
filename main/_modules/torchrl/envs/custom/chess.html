@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+49d9897) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+d628a50) &#x25BC</span></a>
     </div>
     
 
@@ -431,7 +431,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Binary</span><span class="p">,</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Categorical</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span><span class="p">,</span> <span class="n">Unbounded</span>
 
@@ -851,6 +850,8 @@
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_tensor_image</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">board</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
+
             <span class="n">svg</span> <span class="o">=</span> <span class="n">board</span><span class="o">.</span><span class="n">_repr_svg_</span><span class="p">()</span>
             <span class="c1"># Convert SVG to PNG using cairosvg</span>
             <span class="n">png_data</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
@@ -861,7 +862,7 @@
             <span class="n">img</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_torchvision</span><span class="o">.</span><span class="n">transforms</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">pil_to_tensor</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                <span class="s2">&quot;Chess rendering requires cairosvg and torchvision to be installed.&quot;</span>
+                <span class="s2">&quot;Chess rendering requires cairosvg, PIL and torchvision to be installed.&quot;</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">img</span>
 
