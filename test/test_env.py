@@ -172,7 +172,8 @@ else:
     mp_ctx = "fork"
 
 _has_chess = importlib.util.find_spec("chess") is not None
-
+_has_tv = importlib.util.find_spec("torchvision") is not None
+_has_cairosvg = importlib.util.find_spec("cairosvg") is not None
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
 # def _make_atari_env(atari_env):
@@ -3470,6 +3471,15 @@ class TestChessEnv:
                     assert "pgn_hash" in env.observation_spec.keys()
                 if include_san:
                     assert "san_hash" in env.observation_spec.keys()
+
+    @pytest.mark.skipif(not _has_tv, reason="torchvision not found.")
+    @pytest.mark.skipif(not _has_cairosvg, reason="cairosvg not found.")
+    @pytest.mark.parametrize("stateful", [False, True])
+    def test_chess_rendering(self, stateful):
+        env = ChessEnv(stateful=stateful, include_fen=True, pixels=True)
+        env.check_env_specs()
+        r = env.rollout(3)
+        assert "pixels" in r
 
     def test_pgn_bijectivity(self):
         np.random.seed(0)
