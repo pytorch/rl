@@ -636,7 +636,8 @@ class TestGym:
 
     @implement_for("gym", None, "0.26")
     def test_gym_dict_action_space(self):
-        pytest.skip("tested for gym > 0.26 - no backward issue")
+        torchrl_logger.info("tested for gym > 0.26 - no backward issue")
+        return
 
     @implement_for("gym", "0.26", None)
     def test_gym_dict_action_space(self):  # noqa: F811
