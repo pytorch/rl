@@ -297,7 +297,15 @@ class ListStorage(Storage):
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         if isinstance(index, (INT_CLASSES, slice)):
             return self._storage[index]
+        elif isinstance(index, tuple):
+            if len(index) > 1:
+                raise RuntimeError(
+                    f"{type(self).__name__} can only be indexed with one-length tuples."
+                )
+            return self.get(index[0])
         else:
+            if isinstance(index, torch.Tensor) and index.device.type != "cpu":
+                index = index.cpu().tolist()
             return [self._storage[i] for i in index]
 
     def __len__(self):
@@ -351,6 +359,35 @@ class ListStorage(Storage):
                 device=item.device,
             ).reshape_as(item)
         raise NotImplementedError(f"type {type(item)} is not supported yet.")
+
+
+class LazyStackStorage(ListStorage):
+    """A ListStorage that returns LazyStackTensorDict instances."""
+
+    def __init__(
+        self,
+        max_size,
+        compilable: bool = False,
+        stack_dim: int = -1,
+        densify: bool = False,
+        dense_layout: torch.layout = torch.jagged,
+    ):
+        super().__init__(max_size=max_size, compilable=compilable)
+        self.stack_dim = stack_dim
+        self.densify = densify
+        self.dense_layout = dense_layout
+
+    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+        out = super().get(index=index)
+        if isinstance(out, list):
+            stack_dim = self.stack_dim
+            if stack_dim < 0:
+                stack_dim = out[0].ndim + 1 + stack_dim
+            out = LazyStackedTensorDict(*out, stack_dim=stack_dim)
+            if self.densify:
+                return out.densify(layout=self.dense_layout)
+            return out
+        return out
 
 
 class TensorStorage(Storage):
