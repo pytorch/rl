@@ -523,7 +523,8 @@ class TestCollectorDevices:
             total_frames=1000,
             env_device=env_device,
             storing_device=storing_device,
-            policy_device="cuda:0"
+            policy_device="cuda:0",
+            no_cuda_sync=True,
         )
         assert collector.env.device == torch.device(env_device)
         i = 0
@@ -531,12 +532,12 @@ class TestCollectorDevices:
             for d in collector:
                 for _d in d.unbind(0):
                     u = _d["observation"].unique()
-                    assert u.numel() == 1
-                    assert u == i
+                    assert u.numel() == 1, i
+                    assert u == i, i
                     i += 1
                     u = _d["next", "observation"].unique()
-                    assert u.numel() == 1
-                    assert u == i
+                    assert u.numel() == 1, i
+                    assert u == i, i
                 mock_synchronize.assert_not_called()
 
 
