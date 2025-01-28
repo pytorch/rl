@@ -530,11 +530,11 @@ class TestCollectorDevices:
         with patch("torch.cuda.synchronize") as mock_synchronize:
             for d in collector:
                 for _d in d.unbind(0):
-                    u = _d["observation"].diag().unique()
+                    u = _d["observation"].unique()
                     assert u.numel() == 1
                     assert u == i
                     i += 1
-                    u = _d["next", "observation"].diag().unique()
+                    u = _d["next", "observation"].unique()
                     assert u.numel() == 1
                     assert u == i
                 mock_synchronize.assert_not_called()
