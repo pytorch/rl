@@ -2450,6 +2450,9 @@ class NonTensor(TensorSpec):
 
     :meth:`.rand` will return a :class:`~tensordict.NonTensorData` object with `None` data value.
     (same will go for :meth:`.zero` and :meth:`.one`).
+
+    .. note:: The default shape of `NonTensor` is `(1,)`.
+
     """
 
     example_data: Any = None

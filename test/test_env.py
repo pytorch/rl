@@ -57,6 +57,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
         NestedCountingEnv,
+        Str2StrEnv,
     )
 else:
     from _utils_internal import (
@@ -95,6 +96,7 @@ else:
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
         NestedCountingEnv,
+        Str2StrEnv,
     )
 from packaging import version
 from tensordict import (
@@ -133,6 +135,7 @@ from torchrl.envs.transforms.transforms import (
     AutoResetTransform,
     Tokenizer,
     Transform,
+    UnsqueezeTransform,
 )
 from torchrl.envs.utils import (
     _StepMDP,
@@ -174,6 +177,7 @@ else:
 _has_chess = importlib.util.find_spec("chess") is not None
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_cairosvg = importlib.util.find_spec("cairosvg") is not None
+_has_transformers = importlib.util.find_spec("transformers") is not None
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
 # def _make_atari_env(atari_env):
@@ -2614,6 +2618,7 @@ class TestMultiKeyEnvs:
         NestedCountingEnv,
         HeterogeneousCountingEnv,
         MultiKeyCountingEnv,
+        Str2StrEnv,
     ],
 )
 def test_mocking_envs(envclass):
@@ -3440,6 +3445,96 @@ class TestNonTensorEnv:
         assert s_["string"] == ["0", "6"]
         assert s["next", "string"] == ["6", "6"]
 
+    @pytest.mark.skipif(not _has_transformers, reason="transformers required")
+    def test_str2str_env_tokenizer(self):
+        env = Str2StrEnv()
+        env.set_seed(0)
+        env = env.append_transform(
+            Tokenizer(
+                in_keys=["observation"],
+                out_keys=["obs_tokens"],
+                in_keys_inv=["action"],
+                out_keys_inv=["action_tokens"],
+            )
+        )
+        env.check_env_specs()
+        assert env._has_dynamic_specs
+        r = env.rollout(3, return_contiguous=False)
+        assert len(r) == 3
+        assert isinstance(r["observation"], list)
+        r = r.densify(layout=torch.jagged)
+        assert isinstance(r["observation"], list)
+        assert isinstance(r["obs_tokens"], torch.Tensor)
+        assert isinstance(r["action_tokens"], torch.Tensor)
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers required")
+    def test_str2str_env_tokenizer_catframes(self):
+        """Tests that we can use Unsqueeze + CatFrames with tokenized strings of variable lengths."""
+        env = Str2StrEnv()
+        env.set_seed(0)
+        env = env.append_transform(
+            Tokenizer(
+                in_keys=["observation"],
+                out_keys=["obs_tokens"],
+                in_keys_inv=["action"],
+                out_keys_inv=["action_tokens"],
+                # We must use max_length otherwise we can't call cat
+                # Perhaps we could use NJT here?
+                max_length=10,
+            )
+        )
+        env = env.append_transform(
+            UnsqueezeTransform(
+                dim=-2, in_keys=["obs_tokens"], out_keys=["obs_tokens_cat"]
+            ),
+        )
+        env = env.append_transform(CatFrames(N=4, dim=-2, in_keys=["obs_tokens_cat"]))
+        r = env.rollout(3)
+        assert r["obs_tokens_cat"].shape == (3, 4, 10)
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers required")
+    def test_str2str_rb_slicesampler(self):
+        """Dedicated test for replay buffer sampling of trajectories with variable token length"""
+        from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
+        from torchrl.envs import TrajCounter
+
+        env = Str2StrEnv()
+        env.set_seed(0)
+        env = env.append_transform(
+            Tokenizer(
+                in_keys=["observation"],
+                out_keys=["obs_tokens"],
+                in_keys_inv=["action"],
+                out_keys_inv=["action_tokens"],
+            )
+        )
+        env = env.append_transform(StepCounter(max_steps=10))
+        env = env.append_transform(TrajCounter())
+        rb = ReplayBuffer(
+            storage=LazyStackStorage(100),
+            sampler=SliceSampler(slice_len=10, end_key=("next", "done")),
+        )
+        r0 = env.rollout(20, break_when_any_done=False)
+        rb.extend(r0)
+        has_0 = False
+        has_1 = False
+        for _ in range(100):
+            v0 = rb.sample(10)
+            assert (v0["step_count"].squeeze() == torch.arange(10)).all()
+            assert (v0["next", "step_count"].squeeze() == torch.arange(1, 11)).all()
+            try:
+                traj = v0["traj_count"].unique().item()
+            except Exception:
+                raise RuntimeError(
+                    f"More than one traj found in single slice: {v0['traj_count']}"
+                )
+            has_0 |= traj == 0
+            has_1 |= traj == 1
+            if has_0 and has_1:
+                break
+        else:
+            raise RuntimeError("Failed to sample both trajs")
+
 
 # fen strings for board positions generated with:
 # https://lichess.org/editor
@@ -3675,6 +3770,7 @@ class TestChessEnv:
         assert td["reward"] == expected_reward
         assert td["turn"] == (not expected_turn)
 
+    @pytest.mark.skipif(not _has_transformers, reason="transformers required")
     def test_chess_tokenized(self):
         env = ChessEnv(include_fen=True, stateful=True, include_san=True)
         assert isinstance(env.observation_spec["fen"], NonTensor)
