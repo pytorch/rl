@@ -32,6 +32,7 @@ from .libs import (
     OpenSpielWrapper,
     PettingZooEnv,
     PettingZooWrapper,
+    register_gym_spec_conversion,
     RoboHiveEnv,
     set_gym_backend,
     SMACv2Env,

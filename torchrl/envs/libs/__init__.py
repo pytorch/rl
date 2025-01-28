@@ -12,6 +12,7 @@ from .gym import (
     GymWrapper,
     MOGymEnv,
     MOGymWrapper,
+    register_gym_spec_conversion,
     set_gym_backend,
 )
 from .habitat import HabitatEnv
