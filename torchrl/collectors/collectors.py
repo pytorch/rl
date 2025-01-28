@@ -596,7 +596,7 @@ class SyncDataCollector(DataCollectorBase):
                 # self._sync_storage = torch.cuda.synchronize
                 def sync():
                     raise RuntimeError
-                self._sync_policy = sync
+                self._sync_storage = sync
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 # Will break for older PT versions which don't have torch.mps
                 self._sync_storage = torch.mps.synchronize
@@ -614,7 +614,7 @@ class SyncDataCollector(DataCollectorBase):
                 # self._sync_env = torch.cuda.synchronize
                 def sync():
                     raise RuntimeError
-                self._sync_policy = sync
+                self._sync_env = sync
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_env = torch.mps.synchronize
             elif self.env_device.type == "cpu":
