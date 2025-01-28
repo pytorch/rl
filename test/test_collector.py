@@ -11,6 +11,7 @@ import os
 
 import sys
 from typing import Optional
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -73,7 +74,6 @@ from torchrl.envs.utils import (
     RandomPolicy,
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
-from unittest.mock import patch
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
@@ -502,8 +502,10 @@ class TestCollectorDevices:
             out["reward"] = torch.zeros((1,), device=self.device)
             out["done"] = torch.zeros((1,), device=self.device, dtype=torch.bool)
             return out
+
         def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
             return self.full_done_specs.zeros().update(self.observation_spec.zeros())
+
         def _set_seed(self, seed: Optional[int]):
             return seed
 
@@ -513,7 +515,7 @@ class TestCollectorDevices:
     def test_no_synchronize(self, env_device, storing_device):
         """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
         collector = SyncDataCollector(
-            create_env_fn=functools.partial(self.GoesThroughEnv, n_obs=1000),
+            create_env_fn=functools.partial(self.GoesThroughEnv, n_obs=1000, device=None),
             policy=self.CudaPolicy(n_obs=1000),
             frames_per_batch=100,
             total_frames=1000,
@@ -521,7 +523,7 @@ class TestCollectorDevices:
             storing_device=storing_device,
         )
         i = 0
-        with patch('torch.cuda.synchronize') as mock_synchronize:
+        with patch("torch.cuda.synchronize") as mock_synchronize:
             for d in collector:
                 for _d in d.unbind(0):
                     u = _d["observation"].diag().unique()
