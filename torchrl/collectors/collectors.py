@@ -440,6 +440,8 @@ class SyncDataCollector(DataCollectorBase):
         cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped
             in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
             If a dictionary of kwargs is passed, it will be used to wrap the policy.
+        no_cuda_sync (bool): if ``True``, explicit CUDA synchronizations calls will be bypassed.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -532,6 +534,7 @@ class SyncDataCollector(DataCollectorBase):
         trust_policy: bool = None,
         compile_policy: bool | Dict[str, Any] | None = None,
         cudagraph_policy: bool | Dict[str, Any] | None = None,
+        no_cuda_sync: bool = False,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -625,6 +628,7 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self._sync_policy = _do_nothing
         self.device = device
+        self.no_cuda_sync = no_cuda_sync
         # Check if we need to cast things from device to device
         # If the policy has a None device and the env too, no need to cast (we don't know
         # and assume the user knows what she's doing).
@@ -1010,12 +1014,16 @@ class SyncDataCollector(DataCollectorBase):
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
-        if self.storing_device and self.storing_device.type == "cuda":
+        if (
+            not self.no_cuda_sync
+            and self.storing_device
+            and self.storing_device.type == "cuda"
+        ):
             stream = torch.cuda.Stream(self.storing_device, priority=-1)
             event = stream.record_event()
             streams = [stream]
             events = [event]
-        elif self.storing_device is None:
+        elif not self.no_cuda_sync and self.storing_device is None:
             streams = []
             events = []
             # this way of checking cuda is robust to lazy stacks with mismatching shapes
@@ -1558,6 +1566,8 @@ class _MultiDataCollector(DataCollectorBase):
         cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped
             in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
             If a dictionary of kwargs is passed, it will be used to wrap the policy.
+        no_cuda_sync (bool): if ``True``, explicit CUDA synchronizations calls will be bypassed.
+            Defaults to ``False``.
 
     """
 
@@ -1597,6 +1607,7 @@ class _MultiDataCollector(DataCollectorBase):
         trust_policy: bool = None,
         compile_policy: bool | Dict[str, Any] | None = None,
         cudagraph_policy: bool | Dict[str, Any] | None = None,
+        no_cuda_sync: bool=False,
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
@@ -1636,6 +1647,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.env_device = env_devices
 
         del storing_device, env_device, policy_device, device
+        self.no_cuda_sync = no_cuda_sync
 
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
@@ -1909,6 +1921,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "cudagraph_policy": self.cudagraphed_policy_kwargs
                     if self.cudagraphed_policy
                     else False,
+                    "no_cuda_sync": self.no_cuda_sync,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2914,6 +2927,7 @@ def _main_async_collector(
     trust_policy: bool = False,
     compile_policy: bool = False,
     cudagraph_policy: bool = False,
+no_cuda_sync: bool=False,
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
@@ -2943,6 +2957,7 @@ def _main_async_collector(
         trust_policy=trust_policy,
         compile_policy=compile_policy,
         cudagraph_policy=cudagraph_policy,
+        no_cuda_sync=no_cuda_sync,
     )
     use_buffers = inner_collector._use_buffers
     if verbose:
