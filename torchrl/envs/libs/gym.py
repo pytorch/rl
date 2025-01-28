@@ -234,6 +234,80 @@ def gym_backend(submodule=None):
 __all__ = ["GymWrapper", "GymEnv"]
 
 
+# Define a dictionary to store conversion functions for each spec type
+class _ConversionRegistry(collections.UserDict):
+    def __getitem__(self, cls):
+        if cls not in super().keys():
+            # We want to find the closest parent
+            parents = {}
+            for k in self.keys():
+                if not isinstance(k, str):
+                    parents[k] = k
+                    continue
+                try:
+                    space_cls = gym_backend("spaces")
+                    for sbsp in k.split("."):
+                        space_cls = getattr(space_cls, sbsp)
+                except AttributeError:
+                    # Some specs may be too recent
+                    continue
+                parents[space_cls] = k
+            mro = cls.mro()
+            for base in mro:
+                for p in parents:
+                    if issubclass(base, p):
+                        return self[parents[p]]
+            else:
+                raise KeyError(
+                    f"No conversion tool could be found with the gym space {cls}. "
+                    f"You can register your own with `torchrl.envs.libs.register_gym_spec_conversion.`"
+                )
+        return super().__getitem__(cls)
+
+
+_conversion_registry = _ConversionRegistry()
+
+
+def register_gym_spec_conversion(spec_type):
+    """Decorator to register a conversion function for a specific spec type.
+
+    The method must have the following signature:
+
+        >>> @register_gym_spec_conversion("spec.name")
+        ... def convert_specname(
+        ...     spec,
+        ...     dtype=None,
+        ...     device=None,
+        ...     categorical_action_encoding=None,
+        ...     remap_state_to_observation=None,
+        ...     batch_size=None,
+        ... ):
+
+    where `gym(nasium).spaces.spec.name` is the location of the spec in gym.
+
+    If the spec type is accessible, this will also work:
+
+        >>> @register_gym_spec_conversion(SpecType)
+        ... def convert_specname(
+        ...     spec,
+        ...     dtype=None,
+        ...     device=None,
+        ...     categorical_action_encoding=None,
+        ...     remap_state_to_observation=None,
+        ...     batch_size=None,
+        ... ):
+
+    ..note:: The wrapped function can be simplified, and unused kwargs can be wrapped in `**kwargs`.
+
+    """
+
+    def decorator(conversion_func):
+        _conversion_registry[spec_type] = conversion_func
+        return conversion_func
+
+    return decorator
+
+
 def _gym_to_torchrl_spec_transform(
     spec,
     dtype=None,
@@ -256,7 +330,6 @@ def _gym_to_torchrl_spec_transform(
             Dict specs to "observation". Default is true.
         batch_size (torch.Size): batch size to which expand the spec. Defaults to
             ``torch.Size([])``.
-
     """
     if batch_size:
         return _gym_to_torchrl_spec_transform(
@@ -267,139 +340,239 @@ def _gym_to_torchrl_spec_transform(
             remap_state_to_observation=remap_state_to_observation,
             batch_size=None,
         ).expand(batch_size)
-    gym_spaces = gym_backend("spaces")
-    if isinstance(spec, gym_spaces.tuple.Tuple):
-        result = torch.stack(
-            [
-                _gym_to_torchrl_spec_transform(
-                    s,
-                    device=device,
-                    categorical_action_encoding=categorical_action_encoding,
-                    remap_state_to_observation=remap_state_to_observation,
-                )
-                for s in spec
-            ],
-            dim=0,
-        )
-        return result
-    if isinstance(spec, gym_spaces.discrete.Discrete):
-        action_space_cls = Categorical if categorical_action_encoding else OneHot
+
+    # Get the conversion function from the registry
+    conversion_func = _conversion_registry[type(spec)]
+    # Call the conversion function with the provided arguments
+    return conversion_func(
+        spec,
+        dtype=dtype,
+        device=device,
+        categorical_action_encoding=categorical_action_encoding,
+        remap_state_to_observation=remap_state_to_observation,
+        batch_size=batch_size,
+    )
+
+
+# Register conversion functions for each spec type
+@register_gym_spec_conversion("tuple.Tuple")
+def convert_tuple_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    # Implementation for Tuple spec type
+    result = torch.stack(
+        [
+            _gym_to_torchrl_spec_transform(
+                s,
+                device=device,
+                categorical_action_encoding=categorical_action_encoding,
+                remap_state_to_observation=remap_state_to_observation,
+            )
+            for s in spec
+        ],
+        dim=0,
+    )
+    return result
+
+
+@register_gym_spec_conversion("discrete.Discrete")
+def convert_discrete_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    # Implementation for Discrete spec type
+    action_space_cls = Categorical if categorical_action_encoding else OneHot
+    dtype = (
+        numpy_to_torch_dtype_dict[spec.dtype]
+        if categorical_action_encoding
+        else torch.long
+    )
+    return action_space_cls(spec.n, device=device, dtype=dtype)
+
+
+@register_gym_spec_conversion("multi_binary.MultiBinary")
+def convert_multi_binary_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    # Implementation for MultiBinary spec type
+    return Binary(spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype])
+
+
+@register_gym_spec_conversion("multi_discrete.MultiDiscrete")
+def convert_multidiscrete_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
         dtype = (
             numpy_to_torch_dtype_dict[spec.dtype]
             if categorical_action_encoding
             else torch.long
         )
-        return action_space_cls(spec.n, device=device, dtype=dtype)
-    elif isinstance(spec, gym_spaces.multi_binary.MultiBinary):
-        return Binary(
-            spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
-        )
-    # a spec type cannot be a string, so we're sure that versions of gym that don't have Sequence will just skip through this
-    elif isinstance(spec, getattr(gym_spaces, "Sequence", str)):
-        if not hasattr(spec, "stack"):
-            # gym does not have a stack attribute in sequence
-            raise ValueError(
-                "gymnasium should be used whenever a Sequence is present, as it needs to be stacked. "
-                "If you need the gym backend at all price, please raise an issue on the TorchRL GitHub repository."
-            )
-        if not getattr(spec, "stack", False):
-            raise ValueError(
-                "Sequence spaces must have the stack argument set to ``True``. "
-            )
-        space = spec.feature_space
-        out = _gym_to_torchrl_spec_transform(space, device=device, dtype=dtype)
-        out = out.unsqueeze(0)
-        out.make_neg_dim(0)
-        return out
-    elif isinstance(spec, gym_spaces.multi_discrete.MultiDiscrete):
-        if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
-            dtype = (
-                numpy_to_torch_dtype_dict[spec.dtype]
-                if categorical_action_encoding
-                else torch.long
-            )
 
-            return (
-                MultiCategorical(spec.nvec, device=device, dtype=dtype)
-                if categorical_action_encoding
-                else MultiOneHot(spec.nvec, device=device, dtype=dtype)
-            )
-
-        return torch.stack(
-            [
-                _gym_to_torchrl_spec_transform(
-                    spec[i],
-                    device=device,
-                    categorical_action_encoding=categorical_action_encoding,
-                    remap_state_to_observation=remap_state_to_observation,
-                )
-                for i in range(len(spec.nvec))
-            ],
-            0,
-        )
-    elif isinstance(spec, gym_spaces.Box):
-        shape = spec.shape
-        if not len(shape):
-            shape = torch.Size([1])
-        if dtype is None:
-            dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        low = torch.as_tensor(spec.low, device=device, dtype=dtype)
-        high = torch.as_tensor(spec.high, device=device, dtype=dtype)
-        is_unbounded = low.isinf().all() and high.isinf().all()
-
-        minval, maxval = _minmax_dtype(dtype)
-        minval = torch.as_tensor(minval).to(low.device, dtype)
-        maxval = torch.as_tensor(maxval).to(low.device, dtype)
-        is_unbounded = is_unbounded or (
-            torch.isclose(low, torch.as_tensor(minval, dtype=dtype)).all()
-            and torch.isclose(high, torch.as_tensor(maxval, dtype=dtype)).all()
-        )
         return (
-            Unbounded(shape, device=device, dtype=dtype)
-            if is_unbounded
-            else Bounded(
-                low,
-                high,
-                shape,
-                dtype=dtype,
-                device=device,
-            )
+            MultiCategorical(spec.nvec, device=device, dtype=dtype)
+            if categorical_action_encoding
+            else MultiOneHot(spec.nvec, device=device, dtype=dtype)
         )
-    elif isinstance(spec, (Dict,)):
-        spec_out = {}
-        for k in spec.keys():
-            key = k
-            if (
-                remap_state_to_observation
-                and k == "state"
-                and "observation" not in spec.keys()
-            ):
-                # we rename "state" in "observation" as "observation" is the conventional name
-                # for single observation in torchrl.
-                # naming it 'state' will result in envs that have a different name for the state vector
-                # when queried with and without pixels
-                key = "observation"
-            spec_out[key] = _gym_to_torchrl_spec_transform(
-                spec[k],
+
+    return torch.stack(
+        [
+            _gym_to_torchrl_spec_transform(
+                spec[i],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,
                 remap_state_to_observation=remap_state_to_observation,
             )
-        # the batch-size must be set later
-        return Composite(spec_out, device=device)
-    elif isinstance(spec, gym_spaces.dict.Dict):
-        return _gym_to_torchrl_spec_transform(
-            spec.spaces,
+            for i in range(len(spec.nvec))
+        ],
+        0,
+    )
+
+
+@register_gym_spec_conversion("Box")
+def convert_box_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    shape = spec.shape
+    if not len(shape):
+        shape = torch.Size([1])
+    if dtype is None:
+        dtype = numpy_to_torch_dtype_dict[spec.dtype]
+    low = torch.as_tensor(spec.low, device=device, dtype=dtype)
+    high = torch.as_tensor(spec.high, device=device, dtype=dtype)
+    is_unbounded = low.isinf().all() and high.isinf().all()
+
+    minval, maxval = _minmax_dtype(dtype)
+    minval = torch.as_tensor(minval).to(low.device, dtype)
+    maxval = torch.as_tensor(maxval).to(low.device, dtype)
+    is_unbounded = is_unbounded or (
+        torch.isclose(low, torch.as_tensor(minval, dtype=dtype)).all()
+        and torch.isclose(high, torch.as_tensor(maxval, dtype=dtype)).all()
+    )
+    return (
+        Unbounded(shape, device=device, dtype=dtype)
+        if is_unbounded
+        else Bounded(
+            low,
+            high,
+            shape,
+            dtype=dtype,
+            device=device,
+        )
+    )
+
+
+@register_gym_spec_conversion("Sequence")
+def convert_sequence_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    if not hasattr(spec, "stack"):
+        # gym does not have a stack attribute in sequence
+        raise ValueError(
+            "gymnasium should be used whenever a Sequence is present, as it needs to be stacked. "
+            "If you need the gym backend at all price, please raise an issue on the TorchRL GitHub repository."
+        )
+    if not getattr(spec, "stack", False):
+        raise ValueError(
+            "Sequence spaces must have the stack argument set to ``True``. "
+        )
+    space = spec.feature_space
+    out = _gym_to_torchrl_spec_transform(space, device=device, dtype=dtype)
+    out = out.unsqueeze(0)
+    out.make_neg_dim(0)
+    return out
+
+
+@register_gym_spec_conversion(Dict)
+def convert_dict_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    spec_out = {}
+    for k in spec.keys():
+        key = k
+        if (
+            remap_state_to_observation
+            and k == "state"
+            and "observation" not in spec.keys()
+        ):
+            # we rename "state" in "observation" as "observation" is the conventional name
+            # for single observation in torchrl.
+            # naming it 'state' will result in envs that have a different name for the state vector
+            # when queried with and without pixels
+            key = "observation"
+        spec_out[key] = _gym_to_torchrl_spec_transform(
+            spec[k],
             device=device,
             categorical_action_encoding=categorical_action_encoding,
             remap_state_to_observation=remap_state_to_observation,
+            batch_size=batch_size,
         )
-    elif _has_minigrid and isinstance(spec, _minigrid_lib().core.mission.MissionSpace):
-        return NonTensor((), device=device)
-    else:
-        raise NotImplementedError(
-            f"spec of type {type(spec).__name__} is currently unaccounted for"
-        )
+    # the batch-size must be set later
+    return Composite(spec_out, device=device)
+
+
+@register_gym_spec_conversion("Text")
+def convert_text_soec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    return NonTensor((), device=device, example_data="a string")
+
+
+@register_gym_spec_conversion("dict.Dict")
+def convert_dict_spec2(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    return _gym_to_torchrl_spec_transform(
+        spec.spaces,
+        device=device,
+        categorical_action_encoding=categorical_action_encoding,
+        remap_state_to_observation=remap_state_to_observation,
+        batch_size=batch_size,
+    )
 
 
 @implement_for("gym", None, "0.18")
