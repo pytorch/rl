@@ -469,6 +469,62 @@ class TestCollectorDevices:
             break
         assert data.device == storing_device
 
+    class CudaPolicy(TensorDictSequential):
+        def __init__(self, n_obs):
+            module = torch.nn.Linear(n_obs, n_obs, device="cuda")
+            module.weight.data.copy_(torch.eye(n_obs))
+            module.bias.data.fill_(0)
+            m0 = TensorDictModule(module, in_keys=["observation"], out_keys=["hidden"])
+            m1 = TensorDictModule(
+                lambda a: a + 1, in_keys=["hidden"], out_keys=["action"]
+            )
+            super().__init__(m0, m1)
+
+    class GoesThroughEnv(EnvBase):
+        def __init__(self, n_obs, device):
+            self.observation_spec = Composite(observation=Unbounded(n_obs))
+            self.action_spec = Unbounded(n_obs)
+            self.reward_spec = Unbounded(1)
+            super().__init__(device=device)
+
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            a = tensordict["action"]
+            assert a.device == self.device
+            out = tensordict.empty()
+            out["observation"] = tensordict["observation"] + (
+                a - tensordict["observation"]
+            )
+            out["reward"] = torch.zeros((1,), device=self.device)
+            out["done"] = torch.zeros((1,), device=self.device, dtype=torch.bool)
+            return out
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+    @pytest.mark.parametrize("env_device", [None, "cuda:0", "cpu"])
+    @pytest.mark.parametrize("storing_device", [None, "cuda:0", "cpu"])
+    def test_no_synchronize(self, env_device, storing_device):
+        """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
+        collector = SyncDataCollector(
+            create_env_fn=functools.partial(self.GoesThroughEnv, n_obs=1000),
+            policy=self.CudaPolicy(),
+            frames_per_batch=100,
+            total_frames=1000,
+            env_device=env_device,
+            storing_device=storing_device,
+        )
+        i = 0
+        for d in collector:
+            for _d in d.unbind(0):
+                u = _d["observation"].diag().unique()
+                assert u.numel() == 1
+                assert u == i
+                i += 1
+                u = _d["next", "observation"].diag().unique()
+                assert u.numel() == 1
+                assert u == i
+
 
 # @pytest.mark.skipif(
 #     IS_WINDOWS and PYTHON_3_10,
