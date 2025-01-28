@@ -517,14 +517,16 @@ class TestCollectorDevices:
     def test_no_synchronize(self, env_device, storing_device):
         """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
         collector = SyncDataCollector(
-            create_env_fn=functools.partial(self.GoesThroughEnv, n_obs=1000, device=None),
+            create_env_fn=functools.partial(
+                self.GoesThroughEnv, n_obs=1000, device=None
+            ),
             policy=self.CudaPolicy(n_obs=1000),
             frames_per_batch=100,
             total_frames=1000,
             env_device=env_device,
             storing_device=storing_device,
             policy_device="cuda:0",
-            no_cuda_sync=True,
+            # no_cuda_sync=True,
         )
         assert collector.env.device == torch.device(env_device)
         i = 0

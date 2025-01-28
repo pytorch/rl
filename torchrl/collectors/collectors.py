@@ -593,10 +593,7 @@ class SyncDataCollector(DataCollectorBase):
         if self.storing_device is not None and self.storing_device.type != "cuda":
             # Cuda handles sync
             if torch.cuda.is_available():
-                # self._sync_storage = torch.cuda.synchronize
-                def sync():
-                    raise RuntimeError
-                self._sync_storage = sync
+                self._sync_storage = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 # Will break for older PT versions which don't have torch.mps
                 self._sync_storage = torch.mps.synchronize
@@ -611,10 +608,7 @@ class SyncDataCollector(DataCollectorBase):
         if self.env_device is not None and self.env_device.type != "cuda":
             # Cuda handles sync
             if torch.cuda.is_available():
-                # self._sync_env = torch.cuda.synchronize
-                def sync():
-                    raise RuntimeError
-                self._sync_env = sync
+                self._sync_env = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_env = torch.mps.synchronize
             elif self.env_device.type == "cpu":
@@ -627,10 +621,7 @@ class SyncDataCollector(DataCollectorBase):
         if self.policy_device is not None and self.policy_device.type != "cuda":
             # Cuda handles sync
             if torch.cuda.is_available():
-                # self._sync_policy = torch.cuda.synchronize
-                def sync():
-                    raise RuntimeError
-                self._sync_policy = sync
+                self._sync_policy = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_policy = torch.mps.synchronize
             elif self.policy_device.type == "cpu":
@@ -1187,7 +1178,8 @@ class SyncDataCollector(DataCollectorBase):
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
                             policy_input = self._shuttle.to(
-                                self.policy_device, non_blocking=not self.no_cuda_sync,
+                                self.policy_device,
+                                non_blocking=not self.no_cuda_sync,
                             )
                             if not self.no_cuda_sync:
                                 self._sync_policy()
@@ -1212,7 +1204,9 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self._cast_to_env_device:
                     if self.env_device is not None:
-                        env_input = self._shuttle.to(self.env_device, non_blocking=not self.no_cuda_sync)
+                        env_input = self._shuttle.to(
+                            self.env_device, non_blocking=not self.no_cuda_sync
+                        )
                         if not self.no_cuda_sync:
                             self._sync_env()
                     elif self.env_device is None:
@@ -1239,7 +1233,9 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     if self.storing_device is not None:
                         tensordicts.append(
-                            self._shuttle.to(self.storing_device, non_blocking=not self.no_cuda_sync)
+                            self._shuttle.to(
+                                self.storing_device, non_blocking=not self.no_cuda_sync
+                            )
                         )
                         if not self.no_cuda_sync:
                             self._sync_storage()
