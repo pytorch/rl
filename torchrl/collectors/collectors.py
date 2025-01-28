@@ -1187,9 +1187,10 @@ class SyncDataCollector(DataCollectorBase):
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
                             policy_input = self._shuttle.to(
-                                self.policy_device, non_blocking=True
+                                self.policy_device, non_blocking=not self.no_cuda_sync,
                             )
-                            self._sync_policy()
+                            if not self.no_cuda_sync:
+                                self._sync_policy()
                         elif self.policy_device is None:
                             # we know the tensordict has a device otherwise we would not be here
                             # we can pass this, clear_device_ must have been called earlier
@@ -1211,8 +1212,9 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self._cast_to_env_device:
                     if self.env_device is not None:
-                        env_input = self._shuttle.to(self.env_device, non_blocking=True)
-                        self._sync_env()
+                        env_input = self._shuttle.to(self.env_device, non_blocking=not self.no_cuda_sync)
+                        if not self.no_cuda_sync:
+                            self._sync_env()
                     elif self.env_device is None:
                         # we know the tensordict has a device otherwise we would not be here
                         # we can pass this, clear_device_ must have been called earlier
@@ -1237,9 +1239,10 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     if self.storing_device is not None:
                         tensordicts.append(
-                            self._shuttle.to(self.storing_device, non_blocking=True)
+                            self._shuttle.to(self.storing_device, non_blocking=not self.no_cuda_sync)
                         )
-                        self._sync_storage()
+                        if not self.no_cuda_sync:
+                            self._sync_storage()
                     else:
                         tensordicts.append(self._shuttle)
 
