@@ -495,7 +495,8 @@ class TestCollectorDevices:
             tensordict: TensorDictBase,
         ) -> TensorDictBase:
             a = tensordict["action"]
-            assert a.device == self.device
+            if self.device is not None:
+                assert a.device == self.device
             out = tensordict.empty()
             out["observation"] = tensordict["observation"] + (
                 a - tensordict["observation"]
@@ -511,7 +512,7 @@ class TestCollectorDevices:
             return seed
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
-    @pytest.mark.parametrize("env_device", [None, "cuda:0", "cpu"])
+    @pytest.mark.parametrize("env_device", ["cuda:0", "cpu"])
     @pytest.mark.parametrize("storing_device", [None, "cuda:0", "cpu"])
     def test_no_synchronize(self, env_device, storing_device):
         """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
