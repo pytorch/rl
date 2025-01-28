@@ -522,6 +522,7 @@ class TestCollectorDevices:
             env_device=env_device,
             storing_device=storing_device,
         )
+        assert collector.env.device == env_device
         i = 0
         with patch("torch.cuda.synchronize") as mock_synchronize:
             for d in collector:
