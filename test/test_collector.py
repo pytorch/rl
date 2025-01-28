@@ -522,6 +522,7 @@ class TestCollectorDevices:
             total_frames=1000,
             env_device=env_device,
             storing_device=storing_device,
+            policy_device="cuda:0"
         )
         assert collector.env.device == env_device
         i = 0
