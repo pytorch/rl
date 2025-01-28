@@ -10,6 +10,7 @@ import gc
 import os
 
 import sys
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -501,6 +502,10 @@ class TestCollectorDevices:
             out["reward"] = torch.zeros((1,), device=self.device)
             out["done"] = torch.zeros((1,), device=self.device, dtype=torch.bool)
             return out
+        def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+            return self.full_done_specs.zeros().update(self.observation_spec.zeros())
+        def _set_seed(self, seed: Optional[int]):
+            return seed
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
     @pytest.mark.parametrize("env_device", [None, "cuda:0", "cpu"])
