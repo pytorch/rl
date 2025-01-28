@@ -509,7 +509,7 @@ class TestCollectorDevices:
         """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
         collector = SyncDataCollector(
             create_env_fn=functools.partial(self.GoesThroughEnv, n_obs=1000),
-            policy=self.CudaPolicy(),
+            policy=self.CudaPolicy(n_obs=1000),
             frames_per_batch=100,
             total_frames=1000,
             env_device=env_device,
