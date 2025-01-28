@@ -487,6 +487,7 @@ class TestCollectorDevices:
             self.observation_spec = Composite(observation=Unbounded(n_obs))
             self.action_spec = Unbounded(n_obs)
             self.reward_spec = Unbounded(1)
+            self.full_done_specs = Unbounded(1, dtype=torch.bool)
             super().__init__(device=device)
 
         def _step(
