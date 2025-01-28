@@ -441,6 +441,9 @@ class SyncDataCollector(DataCollectorBase):
             in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
             If a dictionary of kwargs is passed, it will be used to wrap the policy.
         no_cuda_sync (bool): if ``True``, explicit CUDA synchronizations calls will be bypassed.
+            For environments running directly on CUDA (`IsaacLab <https://github.com/isaac-sim/IsaacLab/>`_
+            or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
+            crashes.
             Defaults to ``False``.
 
     Examples:
@@ -1567,6 +1570,9 @@ class _MultiDataCollector(DataCollectorBase):
             in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
             If a dictionary of kwargs is passed, it will be used to wrap the policy.
         no_cuda_sync (bool): if ``True``, explicit CUDA synchronizations calls will be bypassed.
+            For environments running directly on CUDA (`IsaacLab <https://github.com/isaac-sim/IsaacLab/>`_
+            or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
+            crashes.
             Defaults to ``False``.
 
     """
@@ -1607,7 +1613,7 @@ class _MultiDataCollector(DataCollectorBase):
         trust_policy: bool = None,
         compile_policy: bool | Dict[str, Any] | None = None,
         cudagraph_policy: bool | Dict[str, Any] | None = None,
-        no_cuda_sync: bool=False,
+        no_cuda_sync: bool = False,
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
@@ -2927,7 +2933,7 @@ def _main_async_collector(
     trust_policy: bool = False,
     compile_policy: bool = False,
     cudagraph_policy: bool = False,
-no_cuda_sync: bool=False,
+    no_cuda_sync: bool = False,
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
