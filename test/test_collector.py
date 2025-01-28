@@ -72,6 +72,7 @@ from torchrl.envs.utils import (
     RandomPolicy,
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
+from unittest.mock import patch
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
@@ -515,15 +516,17 @@ class TestCollectorDevices:
             storing_device=storing_device,
         )
         i = 0
-        for d in collector:
-            for _d in d.unbind(0):
-                u = _d["observation"].diag().unique()
-                assert u.numel() == 1
-                assert u == i
-                i += 1
-                u = _d["next", "observation"].diag().unique()
-                assert u.numel() == 1
-                assert u == i
+        with patch('torch.cuda.synchronize') as mock_synchronize:
+            for d in collector:
+                for _d in d.unbind(0):
+                    u = _d["observation"].diag().unique()
+                    assert u.numel() == 1
+                    assert u == i
+                    i += 1
+                    u = _d["next", "observation"].diag().unique()
+                    assert u.numel() == 1
+                    assert u == i
+                mock_synchronize.assert_not_called()
 
 
 # @pytest.mark.skipif(
