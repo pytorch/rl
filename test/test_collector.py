@@ -541,6 +541,9 @@ class TestCollectorDevices:
                     assert u.numel() == 1, i
                     assert u == i, i
                 mock_synchronize.assert_not_called()
+                assert (
+                    not mock_synchronize.called
+                ), "torch.cuda.synchronize should not be called"
 
 
 # @pytest.mark.skipif(
