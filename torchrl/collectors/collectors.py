@@ -1177,9 +1177,14 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
+                            # This is unsafe if the shuttle is in pin_memory -- otherwise cuda will be happy with non_blocking
+                            non_blocking = (
+                                not self.no_cuda_sync
+                                or self.policy_device.type == "cuda"
+                            )
                             policy_input = self._shuttle.to(
                                 self.policy_device,
-                                non_blocking=not self.no_cuda_sync,
+                                non_blocking=non_blocking,
                             )
                             if not self.no_cuda_sync:
                                 self._sync_policy()
@@ -1204,8 +1209,11 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self._cast_to_env_device:
                     if self.env_device is not None:
+                        non_blocking = (
+                            not self.no_cuda_sync or self.env_device.type == "cuda"
+                        )
                         env_input = self._shuttle.to(
-                            self.env_device, non_blocking=not self.no_cuda_sync
+                            self.env_device, non_blocking=non_blocking
                         )
                         if not self.no_cuda_sync:
                             self._sync_env()
@@ -1232,9 +1240,12 @@ class SyncDataCollector(DataCollectorBase):
                         return
                 else:
                     if self.storing_device is not None:
+                        non_blocking = (
+                            not self.no_cuda_sync or self.storing_device.type == "cuda"
+                        )
                         tensordicts.append(
                             self._shuttle.to(
-                                self.storing_device, non_blocking=not self.no_cuda_sync
+                                self.storing_device, non_blocking=non_blocking
                             )
                         )
                         if not self.no_cuda_sync:

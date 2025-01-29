@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import gc
 import os
@@ -514,9 +515,12 @@ class TestCollectorDevices:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
     @pytest.mark.parametrize("env_device", ["cuda:0", "cpu"])
     @pytest.mark.parametrize("storing_device", [None, "cuda:0", "cpu"])
-    def test_no_synchronize(self, env_device, storing_device):
+    @pytest.mark.parametrize("no_cuda_sync", [True, False])
+    def test_no_synchronize(self, env_device, storing_device, no_cuda_sync):
         """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
-        with patch("torch.cuda.synchronize") as mock_synchronize:
+        with patch("torch.cuda.synchronize") as mock_synchronize, pytest.raises(
+            AssertionError, match="torch.cuda.synchronize should not be called"
+        ) if not no_cuda_sync else contextlib.nullcontext():
             collector = SyncDataCollector(
                 create_env_fn=functools.partial(
                     self.GoesThroughEnv, n_obs=1000, device=None
@@ -527,7 +531,7 @@ class TestCollectorDevices:
                 env_device=env_device,
                 storing_device=storing_device,
                 policy_device="cuda:0",
-                # no_cuda_sync=True,
+                no_cuda_sync=no_cuda_sync,
             )
             assert collector.env.device == torch.device(env_device)
             i = 0
