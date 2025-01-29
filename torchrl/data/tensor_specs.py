@@ -4961,6 +4961,10 @@ class Composite(TensorSpec):
         return self.__class__(**kwargs, device=_device, shape=self.shape)
 
     def clone(self) -> Composite:
+        """Clones the Composite spec.
+
+        Locked specs will not produce locked clones.
+        """
         try:
             device = self.device
         except RuntimeError:

@@ -2294,8 +2294,9 @@ class TestStepMdp:
             env = SerialEnv(2, ContinuousActionVecMockEnv)
         else:
             env = ContinuousActionVecMockEnv()
+        env.set_spec_lock_()
         env.rollout(10)
-        assert env._step_mdp.validate(None)
+        assert env._step_mdp.validated
         c = SyncDataCollector(
             env, env.rand_action, frames_per_batch=10, total_frames=20
         )

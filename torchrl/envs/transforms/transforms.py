@@ -1718,7 +1718,7 @@ class TargetReturn(Transform):
                 f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
             )
         reset_key = reset_keys[0]
-        self._reset_key = reset_keys
+        self._reset_key = reset_key
         return reset_key
 
     @reset_key.setter
