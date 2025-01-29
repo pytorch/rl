@@ -1049,6 +1049,10 @@ class SliceSampler(Sampler):
             self._cache["stop-and-length"] = vals
 
         else:
+            if traj_key is not None:
+                self._fetch_traj = True
+            elif end_key is not None:
+                self._fetch_traj = False
             if end_key is None:
                 end_key = ("next", "done")
             if traj_key is None:
@@ -1331,7 +1335,7 @@ class SliceSampler(Sampler):
         if start_idx.shape[1] != storage.ndim:
             raise RuntimeError(
                 f"Expected the end-of-trajectory signal to be "
-                f"{storage.ndim}-dimensional. Got a {start_idx.shape[1]} tensor "
+                f"{storage.ndim}-dimensional. Got a tensor with shape[1]={start_idx.shape[1]} "
                 "instead."
             )
         seq_length, num_slices = self._adjusted_batch_size(batch_size)

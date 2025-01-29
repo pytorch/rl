@@ -80,9 +80,9 @@ class IsaacGymWrapper(GymWrapper):
         specs = make_composite_from_td(data)
 
         obs_spec = self.observation_spec
-        obs_spec.unlock_()
+        obs_spec.unlock_(recurse=True)
         obs_spec.update(specs)
-        obs_spec.lock_()
+        obs_spec.lock_(recurse=True)
 
     def _output_transform(self, output):
         obs, reward, done, info = output
