@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+dda0df1) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+280297a) &#x25BC</span></a>
     </div>
     
 
@@ -861,6 +861,11 @@
 <span class="sd">        cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped</span>
 <span class="sd">            in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.</span>
 <span class="sd">            If a dictionary of kwargs is passed, it will be used to wrap the policy.</span>
+<span class="sd">        no_cuda_sync (bool): if ``True``, explicit CUDA synchronizations calls will be bypassed.</span>
+<span class="sd">            For environments running directly on CUDA (`IsaacLab &lt;https://github.com/isaac-sim/IsaacLab/&gt;`_</span>
+<span class="sd">            or `ManiSkills &lt;https://github.com/haosulab/ManiSkill/&gt;`_) cuda synchronization may cause unexpected</span>
+<span class="sd">            crashes.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
@@ -953,6 +958,7 @@
         <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchedEnvBase</span>
@@ -1046,6 +1052,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_sync_policy</span> <span class="o">=</span> <span class="n">_do_nothing</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span> <span class="o">=</span> <span class="n">no_cuda_sync</span>
         <span class="c1"># Check if we need to cast things from device to device</span>
         <span class="c1"># If the policy has a None device and the env too, no need to cast (we don&#39;t know</span>
         <span class="c1"># and assume the user knows what she&#39;s doing).</span>
@@ -1431,12 +1438,16 @@
 <span class="sd">        Yields: TensorDictBase objects containing (chunks of) trajectories</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span>
+        <span class="p">):</span>
             <span class="n">stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">,</span> <span class="n">priority</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
             <span class="n">event</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">record_event</span><span class="p">()</span>
             <span class="n">streams</span> <span class="o">=</span> <span class="p">[</span><span class="n">stream</span><span class="p">]</span>
             <span class="n">events</span> <span class="o">=</span> <span class="p">[</span><span class="n">event</span><span class="p">]</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">streams</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="n">events</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="c1"># this way of checking cuda is robust to lazy stacks with mismatching shapes</span>
@@ -1587,10 +1598,17 @@
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cast_to_policy_device</span><span class="p">:</span>
                         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                            <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
-                                <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span>
+                            <span class="c1"># This is unsafe if the shuttle is in pin_memory -- otherwise cuda will be happy with non_blocking</span>
+                            <span class="n">non_blocking</span> <span class="o">=</span> <span class="p">(</span>
+                                <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span>
+                                <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span>
                             <span class="p">)</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_policy</span><span class="p">()</span>
+                            <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">,</span>
+                                <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">,</span>
+                            <span class="p">)</span>
+                            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span><span class="p">:</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">_sync_policy</span><span class="p">()</span>
                         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                             <span class="c1"># we know the tensordict has a device otherwise we would not be here</span>
                             <span class="c1"># we can pass this, clear_device_ must have been called earlier</span>
@@ -1612,8 +1630,14 @@
 
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cast_to_env_device</span><span class="p">:</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_sync_env</span><span class="p">()</span>
+                        <span class="n">non_blocking</span> <span class="o">=</span> <span class="p">(</span>
+                            <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span>
+                        <span class="p">)</span>
+                        <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span>
+                        <span class="p">)</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_env</span><span class="p">()</span>
                     <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="c1"># we know the tensordict has a device otherwise we would not be here</span>
                         <span class="c1"># we can pass this, clear_device_ must have been called earlier</span>
@@ -1637,10 +1661,16 @@
                         <span class="k">return</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="n">tensordicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                        <span class="n">non_blocking</span> <span class="o">=</span> <span class="p">(</span>
+                            <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span>
                         <span class="p">)</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_sync_storage</span><span class="p">()</span>
+                        <span class="n">tensordicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span>
+                            <span class="p">)</span>
+                        <span class="p">)</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_storage</span><span class="p">()</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">tensordicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="p">)</span>
 
@@ -1979,6 +2009,11 @@
 <span class="sd">        cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped</span>
 <span class="sd">            in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.</span>
 <span class="sd">            If a dictionary of kwargs is passed, it will be used to wrap the policy.</span>
+<span class="sd">        no_cuda_sync (bool): if ``True``, explicit CUDA synchronizations calls will be bypassed.</span>
+<span class="sd">            For environments running directly on CUDA (`IsaacLab &lt;https://github.com/isaac-sim/IsaacLab/&gt;`_</span>
+<span class="sd">            or `ManiSkills &lt;https://github.com/haosulab/ManiSkill/&gt;`_) cuda synchronization may cause unexpected</span>
+<span class="sd">            crashes.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -2018,6 +2053,7 @@
         <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
@@ -2057,6 +2093,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span> <span class="o">=</span> <span class="n">env_devices</span>
 
         <span class="k">del</span> <span class="n">storing_device</span><span class="p">,</span> <span class="n">env_device</span><span class="p">,</span> <span class="n">policy_device</span><span class="p">,</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span> <span class="o">=</span> <span class="n">no_cuda_sync</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="n">use_buffers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
@@ -2330,6 +2367,7 @@
                     <span class="s2">&quot;cudagraph_policy&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy_kwargs</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy</span>
                     <span class="k">else</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;no_cuda_sync&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span><span class="p">,</span>
                 <span class="p">}</span>
                 <span class="n">proc</span> <span class="o">=</span> <span class="n">_ProcessNoWarn</span><span class="p">(</span>
                     <span class="n">target</span><span class="o">=</span><span class="n">_main_async_collector</span><span class="p">,</span>
@@ -3335,6 +3373,7 @@
     <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="n">pipe_parent</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
     <span class="c1"># init variables that will be cleared when closing</span>
@@ -3364,6 +3403,7 @@
         <span class="n">trust_policy</span><span class="o">=</span><span class="n">trust_policy</span><span class="p">,</span>
         <span class="n">compile_policy</span><span class="o">=</span><span class="n">compile_policy</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="o">=</span><span class="n">cudagraph_policy</span><span class="p">,</span>
+        <span class="n">no_cuda_sync</span><span class="o">=</span><span class="n">no_cuda_sync</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">use_buffers</span> <span class="o">=</span> <span class="n">inner_collector</span><span class="o">.</span><span class="n">_use_buffers</span>
     <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
