@@ -518,9 +518,11 @@ class TestCollectorDevices:
     @pytest.mark.parametrize("no_cuda_sync", [True, False])
     def test_no_synchronize(self, env_device, storing_device, no_cuda_sync):
         """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
+        should_raise = not no_cuda_sync
+        should_raise = should_raise & (env_device == "cuda:0" or storing_device == "cuda:0")
         with patch("torch.cuda.synchronize") as mock_synchronize, pytest.raises(
             AssertionError, match="torch.cuda.synchronize should not be called"
-        ) if not no_cuda_sync else contextlib.nullcontext():
+        ) if should_raise else contextlib.nullcontext():
             collector = SyncDataCollector(
                 create_env_fn=functools.partial(
                     self.GoesThroughEnv, n_obs=1000, device=None
