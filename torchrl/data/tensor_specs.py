@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import abc
 import enum
+import gc
 import math
 import warnings
+import weakref
 from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
@@ -4428,7 +4430,7 @@ class Composite(TensorSpec):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._device = None
-        cls._locked = False
+        cls._is_locked = False
         return super().__new__(cls)
 
     @property
@@ -5170,14 +5172,67 @@ class Composite(TensorSpec):
             for i in range(self.shape[dim])
         )
 
-    def lock_(self, recurse=False):
+    # Locking functionality
+    @property
+    def is_locked(self) -> bool:
+        return self._is_locked
+
+    @is_locked.setter
+    def is_locked(self, value: bool) -> None:
+        if value:
+            self.lock_()
+        else:
+            self.unlock_()
+
+    def _propagate_lock(
+        self, *, recurse: bool, lock_parents_weakrefs=None, is_compiling
+    ):
+        """Registers the parent composite that handles the lock."""
+        self._is_locked = True
+        if lock_parents_weakrefs is not None:
+            lock_parents_weakrefs = [
+                ref
+                for ref in lock_parents_weakrefs
+                if not any(refref is ref for refref in self._lock_parents_weakrefs)
+            ]
+        if not is_compiling:
+            is_root = lock_parents_weakrefs is None
+            if is_root:
+                lock_parents_weakrefs = []
+            else:
+                self._lock_parents_weakrefs = (
+                    self._lock_parents_weakrefs + lock_parents_weakrefs
+                )
+            lock_parents_weakrefs = list(lock_parents_weakrefs)
+            lock_parents_weakrefs.append(weakref.ref(self))
+
+        if recurse:
+            for value in self.values():
+                if isinstance(value, Composite):
+                    value._propagate_lock(
+                        recurse=True,
+                        lock_parents_weakrefs=lock_parents_weakrefs,
+                        is_compiling=is_compiling,
+                    )
+
+    @property
+    def _lock_parents_weakrefs(self):
+        _lock_parents_weakrefs = self.__dict__.get("__lock_parents_weakrefs")
+        if _lock_parents_weakrefs is None:
+            self.__dict__["__lock_parents_weakrefs"] = []
+            _lock_parents_weakrefs = self.__dict__["__lock_parents_weakrefs"]
+        return _lock_parents_weakrefs
+
+    @_lock_parents_weakrefs.setter
+    def _lock_parents_weakrefs(self, value: list):
+        self.__dict__["__lock_parents_weakrefs"] = value
+
+    def lock_(self, recurse: bool | None = None) -> T:
         """Locks the Composite and prevents modification of its content.
 
-        This is only a first-level lock, unless specified otherwise through the
-        ``recurse`` arg.
-
-        Leaf specs can always be modified in place, but they cannot be replaced
-        in their Composite parent.
+        The recurse argument control whether the lock will be propagated to sub-specs.
+        The current default is ``False`` but it will be turned to ``True`` for consistency
+        with the TensorDict API in v0.8.
 
         Examples:
             >>> shape = [3, 4, 5]
@@ -5211,30 +5266,99 @@ class Composite(TensorSpec):
             failed!
 
         """
-        self._locked = True
-        if recurse:
-            for value in self.values():
-                if isinstance(value, Composite):
-                    value.lock_(recurse)
+        if self.is_locked:
+            return self
+        is_comp = is_compiling()
+        if is_comp:
+            # TODO: See what to do when compiling
+            pass
+        if recurse is None:
+            warnings.warn(
+                "You have not specified a value for recurse when calling CompositeSpec.lock_(). "
+                "The current default is False but it will be turned to True in v0.8. To adapt to these changes "
+                "and silence this warning, pass the value of recurse explicitly.",
+                category=DeprecationWarning,
+            )
+            recurse = False
+        self._propagate_lock(recurse=recurse, is_compiling=is_comp)
         return self
 
-    def unlock_(self, recurse=False):
+    def _propagate_unlock(self, recurse: bool):
+        # if we end up here, we can clear the graph associated with this td
+        self._is_locked = False
+
+        self._is_shared = False
+        self._is_memmap = False
+
+        if recurse:
+            sub_specs = []
+            for value in self.values():
+                if isinstance(value, Composite):
+                    sub_specs.extend(value._propagate_unlock(recurse=recurse))
+                    sub_specs.append(value)
+            return sub_specs
+        return []
+
+    def _check_unlock(self, first_attempt=True):
+        if not first_attempt:
+            gc.collect()
+        obj = None
+        for ref in self._lock_parents_weakrefs:
+            obj = ref()
+            # check if the locked parent exists and if it's locked
+            # we check _is_locked because it can be False or None in the case of Lazy stacks,
+            # but if we check obj.is_locked it will be True for this class.
+            if obj is not None and obj._is_locked:
+                break
+
+        else:
+            try:
+                self._lock_parents_weakrefs = []
+            except AttributeError:
+                # Some tds (eg, LazyStack) have an automated way of creating the _lock_parents_weakref
+                pass
+            return
+
+        if first_attempt:
+            del obj
+            return self._check_unlock(False)
+        raise RuntimeError(
+            "Cannot unlock a Composite that is part of a locked graph. "
+            "Graphs are locked when a Composite is locked with recurse=True. "
+            "Unlock the root Composite first. If the Composite is part of multiple graphs, "
+            "group the graphs under a common Composite an unlock this root. "
+            f"self: {self}, obj: {obj}"
+        )
+
+    def unlock_(self, recurse: bool | None = None) -> T:
         """Unlocks the Composite and allows modification of its content.
 
         This is only a first-level lock modification, unless specified
         otherwise through the ``recurse`` arg.
 
         """
-        self._locked = False
-        if recurse:
-            for value in self.values():
-                if isinstance(value, Composite):
-                    value.unlock_(recurse)
+        try:
+            if recurse is None:
+                warnings.warn(
+                    "You have not specified a value for recurse when calling CompositeSpec.unlock_(). "
+                    "The current default is False but it will be turned to True in v0.8. To adapt to these changes "
+                    "and silence this warning, pass the value of recurse explicitly.",
+                    category=DeprecationWarning,
+                )
+                recurse = False
+            sub_specs = self._propagate_unlock(recurse=recurse)
+            if recurse:
+                for sub_spec in sub_specs:
+                    sub_spec._check_unlock()
+            self._check_unlock()
+        except RuntimeError as err:
+            self.lock_()
+            raise err
         return self
 
     @property
     def locked(self):
-        return self._locked
+        return self._is_locked
 
 
 class StackedComposite(_LazyStackedMixin[Composite], Composite):
