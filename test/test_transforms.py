@@ -1033,7 +1033,7 @@ class TestCatFrames(TransformBase):
         catframes = CatFrames(
             in_keys=["observation"], out_keys=["observation_stack"], dim=-1, N=4
         )
-        env.append_transform(catframes)
+        env = env.append_transform(catframes)
         policy = lambda td: td.update(env.full_action_spec.zeros() + 1)
         rollout = env.rollout(150, policy, break_when_any_done=False)
         transform, sampler = catframes.make_rb_transform_and_sampler(batch_size=32)

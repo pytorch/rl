@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import multiprocessing as mp
 import warnings
+import weakref
 from copy import copy
 from enum import IntEnum
 from functools import wraps
@@ -60,6 +61,7 @@ from torchrl._utils import (
     _make_ordinal_device,
     _replace_last,
     implement_for,
+    logger as torchrl_logger,
 )
 
 from torchrl.data.tensor_specs import (
@@ -76,7 +78,12 @@ from torchrl.data.tensor_specs import (
     Unbounded,
     UnboundedContinuous,
 )
-from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, make_tensordict
+from torchrl.envs.common import (
+    _do_nothing,
+    _EnvPostInit,
+    EnvBase,
+    make_tensordict,
+)
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import (
     _get_reset,
@@ -519,7 +526,7 @@ class Transform(nn.Module):
                 f"parent of transform {type(self)} already set. "
                 "Call `transform.clone()` to get a similar transform with no parent set."
             )
-        self.__dict__["_container"] = container
+        self.__dict__["_container"] = weakref.ref(container)
         self.__dict__["_parent"] = None
 
     def reset_parent(self) -> None:
@@ -547,7 +554,11 @@ class Transform(nn.Module):
         """
         if "_container" not in self.__dict__:
             raise AttributeError("transform parent uninitialized")
-        container = self.__dict__["_container"]
+        container_weakref = self.__dict__["_container"]
+        if container_weakref is not None:
+            container = container_weakref()
+        else:
+            container = container_weakref
         if container is None:
             return container
         while not isinstance(container, EnvBase):
@@ -557,7 +568,12 @@ class Transform(nn.Module):
                     "A transform parent must be either another Compose transform or an environment object."
                 )
             compose = container
-            container = compose.__dict__.get("_container", None)
+            container_weakref = compose.__dict__.get("_container")
+            if container_weakref is not None:
+                # container is a weakref
+                container = container_weakref()
+            else:
+                container = container_weakref
         return container
 
     @property
@@ -577,26 +593,35 @@ class Transform(nn.Module):
                         RewardSum(keys=['reward'])))
 
         """
-        if self.__dict__.get("_parent", None) is None:
+        # TODO: ideally parent should be a weakref, like container, to avoid keeping track of a parent that
+        #  is de facto out of scope.
+        parent = self.__dict__.get("_parent")
+        if parent is None:
             if "_container" not in self.__dict__:
                 raise AttributeError("transform parent uninitialized")
-            container = self.__dict__["_container"]
+            container_weakref = self.__dict__["_container"]
+            if container_weakref is None:
+                return container_weakref
+            container = container_weakref()
             if container is None:
+                torchrl_logger.info(
+                    "transform container out of scope. Returning None for parent."
+                )
                 return container
-            out = None
+            parent = None
             if not isinstance(container, EnvBase):
                 # if it's not an env, it should be a Compose transform
                 if not isinstance(container, Compose):
                     raise ValueError(
                         "A transform parent must be either another Compose transform or an environment object."
                     )
-                out, _ = container._rebuild_up_to(self)
+                parent, _ = container._rebuild_up_to(self)
             elif isinstance(container, TransformedEnv):
-                out = TransformedEnv(container.base_env)
+                parent = TransformedEnv(container.base_env)
             else:
                 raise ValueError(f"container is of type {type(container)}")
-            self.__dict__["_parent"] = out
-        return self.__dict__["_parent"]
+            self.__dict__["_parent"] = parent
+        return parent
 
     def empty_cache(self):
         self.__dict__["_parent"] = None
@@ -1349,8 +1374,11 @@ class Compose(Transform):
         super().set_missing_tolerance(mode)
 
     def _rebuild_up_to(self, final_transform):
-        container = self.__dict__["_container"]
-
+        container_weakref = self.__dict__["_container"]
+        if container_weakref is not None:
+            container = container_weakref()
+        else:
+            container = container_weakref
         if isinstance(container, Compose):
             out, parent_compose = container._rebuild_up_to(self)
             if out is None:
@@ -1686,14 +1714,16 @@ class TargetReturn(Transform):
 
     @property
     def reset_key(self):
-        reset_key = self.__dict__.get("_reset_key", None)
-        if reset_key is None:
-            reset_keys = self.parent.reset_keys
-            if len(reset_keys) > 1:
-                raise RuntimeError(
-                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
-                )
-            reset_key = self._reset_key = reset_keys[0]
+        reset_key = getattr(self, "_reset_key", None)
+        if reset_key is not None:
+            return reset_key
+        reset_keys = self.parent.reset_keys
+        if len(reset_keys) > 1:
+            raise RuntimeError(
+                f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
+            )
+        reset_key = reset_keys[0]
+        self._reset_key = reset_keys
         return reset_key
 
     @reset_key.setter
@@ -3174,15 +3204,16 @@ class CatFrames(ObservationTransform):
 
     @property
     def reset_key(self):
-        reset_key = self.__dict__.get("_reset_key", None)
-        if reset_key is None:
-            reset_keys = self.parent.reset_keys
-            if len(reset_keys) > 1:
-                raise RuntimeError(
-                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. "
-                    f"Consider providing the reset key in the {type(self)} constructor."
-                )
-            reset_key = self._reset_key = reset_keys[0]
+        reset_key = getattr(self, "_reset_key", None)
+        if reset_key is not None:
+            return reset_key
+        reset_keys = self.parent.reset_keys
+        if len(reset_keys) > 1:
+            raise RuntimeError(
+                f"Got more than one reset key in env {self.container}, cannot infer which one to use. "
+                f"Consider providing the reset key in the {type(self)} constructor."
+            )
+        reset_key = reset_keys[0]
         return reset_key
 
     @reset_key.setter

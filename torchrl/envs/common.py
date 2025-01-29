@@ -63,6 +63,42 @@ dtype_map = {
 }
 
 
+def _cache_value(func):
+    """Caches the result of the decorated function in env._cache dictionary."""
+    # func_name = func.__name__
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        # result = self._cache.get(func_name, NO_DEFAULT)
+        # if result is NO_DEFAULT:
+        result = func(self, *args, **kwargs)
+        # Ideally we'd like to cache all the `_keys` attributes but there's a catch: one can modify the specs at
+        # any time so this will not run as expected.
+        # The solution should be:
+        # - optionally lock the specs in the env, like we do with tensordict.
+        # - Locked specs will behave like locked tensordict: we lock the root spec, meaning that all the sub-specs
+        #   will be locked, and no __setattr__ will be allowed within the env unless it's unlocked.
+        #   We cannot just guard spec.__setattr__ because `spec[key0][key1] = smth` will not call a setattr
+        #   on the root spec so there's a chance we miss it.
+        # self._cache[func_name] = result
+        return result
+
+    return wrapper
+
+
+def _clear_cache_when_set(func):
+    """A decorator for EnvBase methods that should clear the caches when called."""
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        self._cache.clear()
+        result = func(self, *args, **kwargs)
+        self._cache.clear()
+        return result
+
+    return wrapper
+
+
 class EnvMetaData:
     """A class for environment meta-data storage and passing in multiprocessed settings."""
 
@@ -432,6 +468,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.is_closed = True
         self._run_type_checks = run_type_checks
         self._allow_done_after_reset = allow_done_after_reset
+        self._cache = {}
 
     def auto_specs_(
         self,
@@ -838,6 +875,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         raise RuntimeError("output_spec is protected.")
 
     @property
+    @_cache_value
     def action_keys(self) -> List[NestedKey]:
         """The action keys of an environment.
 
@@ -845,15 +883,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        action_keys = self.__dict__.get("_action_keys")
-        if action_keys is not None:
-            return action_keys
         keys = self.full_action_spec.keys(True, True)
         keys = sorted(keys, key=_repr_by_depth)
-        self.__dict__["_action_keys"] = keys
         return keys
 
     @property
+    @_cache_value
     def state_keys(self) -> List[NestedKey]:
         """The state keys of an environment.
 
@@ -993,10 +1028,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         try:
             self.input_spec.unlock_()
             device = self.input_spec._device
-            try:
-                delattr(self, "_action_keys")
-            except AttributeError:
-                pass
             if not hasattr(value, "shape"):
                 raise TypeError(
                     f"action_spec of type {type(value)} do not have a shape attribute."
@@ -1054,6 +1085,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     # Reward spec
     @property
+    @_cache_value
     def reward_keys(self) -> List[NestedKey]:
         """The reward keys of an environment.
 
@@ -1061,11 +1093,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        reward_keys = self.__dict__.get("_reward_keys")
-        if reward_keys is not None:
-            return reward_keys
         reward_keys = sorted(self.full_reward_spec.keys(True, True), key=_repr_by_depth)
-        self.__dict__["_reward_keys"] = reward_keys
         return reward_keys
 
     @property
@@ -1183,14 +1211,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return reward_spec[self.reward_keys[0]]
 
     @reward_spec.setter
+    @_clear_cache_when_set
     def reward_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
             device = self.output_spec._device
-            try:
-                delattr(self, "_reward_keys")
-            except AttributeError:
-                pass
             if not hasattr(value, "shape"):
                 raise TypeError(
                     f"reward_spec of type {type(value)} do not have a shape "
@@ -1256,11 +1281,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return self.output_spec["full_reward_spec"]
 
     @full_reward_spec.setter
+    @_clear_cache_when_set
     def full_reward_spec(self, spec: Composite) -> None:
         self.reward_spec = spec.to(self.device) if self.device is not None else spec
 
     # done spec
     @property
+    @_cache_value
     def done_keys(self) -> List[NestedKey]:
         """The done keys of an environment.
 
@@ -1268,11 +1295,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        done_keys = self.__dict__.get("_done_keys")
-        if done_keys is not None:
-            return done_keys
         done_keys = sorted(self.full_done_spec.keys(True, True), key=_repr_by_depth)
-        self.__dict__["_done_keys"] = done_keys
         return done_keys
 
     @property
@@ -1321,6 +1344,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self.output_spec["full_done_spec"]
 
     @full_done_spec.setter
+    @_clear_cache_when_set
     def full_done_spec(self, spec: Composite) -> None:
         self.done_spec = spec.to(self.device) if self.device is not None else spec
 
@@ -1465,14 +1489,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return
 
     @done_spec.setter
+    @_clear_cache_when_set
     def done_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
             device = self.output_spec.device
-            try:
-                delattr(self, "_done_keys")
-            except AttributeError:
-                pass
             if not hasattr(value, "shape"):
                 raise TypeError(
                     f"done_spec of type {type(value)} do not have a shape "
@@ -1541,6 +1562,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return observation_spec
 
     @observation_spec.setter
+    @_clear_cache_when_set
     def observation_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
@@ -1566,6 +1588,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self.observation_spec
 
     @full_observation_spec.setter
+    @_clear_cache_when_set
     def full_observation_spec(self, spec: Composite):
         self.observation_spec = spec
 
@@ -1612,13 +1635,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return state_spec
 
     @state_spec.setter
+    @_clear_cache_when_set
     def state_spec(self, value: Composite) -> None:
         try:
             self.input_spec.unlock_()
-            try:
-                delattr(self, "_state_keys")
-            except AttributeError:
-                pass
             if value is None:
                 self.input_spec["full_state_spec"] = Composite(
                     device=self.device, shape=self.batch_size
@@ -2698,8 +2718,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         ).lock_()
 
     @property
+    @_cache_value
     def _has_dynamic_specs(self) -> bool:
-        # TODO: cache this value
         return _has_dynamic_specs(self.specs)
 
     def rollout(
@@ -3043,13 +3063,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         out_td.refine_names(..., "time")
         return out_td
 
+    @_clear_cache_when_set
     def add_truncated_keys(self) -> EnvBase:
         """Adds truncated keys to the environment."""
+        i = 0
         for key in self.done_keys:
-            self.full_done_spec[_replace_last(key, "truncated")] = self.full_done_spec[
-                key
-            ]
-        self.__dict__["_done_keys"] = None
+            i += 1
+            truncated_key = _replace_last(key, "truncated")
+            self.full_done_spec[truncated_key] = self.full_done_spec[key].clone()
+        if i == 0:
+            raise KeyError(f"Couldn't find done keys. done_spec={self.full_done_specs}")
+
         return self
 
     def step_mdp(self, next_tensordict: TensorDictBase) -> TensorDictBase:
@@ -3099,11 +3123,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._step_mdp(next_tensordict)
 
     @property
+    @_cache_value
     def _step_mdp(self):
-        step_func = self.__dict__.get("_step_mdp_value")
-        if step_func is None:
-            step_func = _StepMDP(self, exclude_action=False)
-            self.__dict__["_step_mdp_value"] = step_func
+        step_func = _StepMDP(self, exclude_action=False)
         return step_func
 
     def _rollout_stop_early(
@@ -3335,14 +3357,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         they may change during the execution of the code (eg, when adding a transform).
 
         """
-        self.__dict__["_step_mdp_value"] = None
-        self.__dict__["_reward_keys"] = None
-        self.__dict__["_done_keys"] = None
-        self.__dict__["_action_keys"] = None
-        self.__dict__["_state_keys"] = None
-        self.__dict__["_done_keys_group"] = None
+        self._cache.clear()
 
     @property
+    @_cache_value
     def reset_keys(self) -> List[NestedKey]:
         """Returns a list of reset keys.
 
@@ -3353,10 +3371,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        reset_keys = self.__dict__.get("_reset_keys")
-        if reset_keys is not None:
-            return reset_keys
-
         reset_keys = sorted(
             (
                 _replace_last(done_key, "_reset")
@@ -3364,7 +3378,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ),
             key=_repr_by_depth,
         )
-        self.__dict__["_reset_keys"] = reset_keys
         return reset_keys
 
     @property
@@ -3390,6 +3403,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return result
 
     @property
+    @_cache_value
     def done_keys_groups(self):
         """A list of done keys, grouped as the reset keys.
 
@@ -3397,10 +3411,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         inner lists contain the done keys (eg, done and truncated) that can
         be read to determine a reset when it is absent.
         """
-        done_keys_group = self.__dict__.get("_done_keys_group")
-        if done_keys_group is not None:
-            return done_keys_group
-
         # done keys, sorted as reset keys
         done_keys_group = []
         roots = set()
@@ -3417,7 +3427,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         for key in root.keys(include_nested=False, leaves_only=True)
                     ]
                 )
-        self.__dict__["_done_keys_group"] = done_keys_group
         return done_keys_group
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
