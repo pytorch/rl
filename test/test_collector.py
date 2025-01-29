@@ -521,7 +521,7 @@ class TestCollectorDevices:
         should_raise = not no_cuda_sync
         should_raise = should_raise & ((env_device == "cpu") or (storing_device == "cpu"))
         with patch("torch.cuda.synchronize") as mock_synchronize, pytest.raises(
-            AssertionError, match="torch.cuda.synchronize should not be called"
+            AssertionError, match="Expected 'synchronize' to not have been called."
         ) if should_raise else contextlib.nullcontext():
             collector = SyncDataCollector(
                 create_env_fn=functools.partial(
@@ -547,9 +547,6 @@ class TestCollectorDevices:
                     assert u.numel() == 1, i
                     assert u == i, i
                 mock_synchronize.assert_not_called()
-                assert (
-                    not mock_synchronize.called
-                ), "torch.cuda.synchronize should not be called"
 
 
 # @pytest.mark.skipif(
