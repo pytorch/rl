@@ -32,6 +32,7 @@ from .samplers import (
 )
 from .storages import (
     LazyMemmapStorage,
+    LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
     Storage,
