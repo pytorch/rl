@@ -516,21 +516,21 @@ class TestCollectorDevices:
     @pytest.mark.parametrize("storing_device", [None, "cuda:0", "cpu"])
     def test_no_synchronize(self, env_device, storing_device):
         """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
-        collector = SyncDataCollector(
-            create_env_fn=functools.partial(
-                self.GoesThroughEnv, n_obs=1000, device=None
-            ),
-            policy=self.CudaPolicy(n_obs=1000),
-            frames_per_batch=100,
-            total_frames=1000,
-            env_device=env_device,
-            storing_device=storing_device,
-            policy_device="cuda:0",
-            # no_cuda_sync=True,
-        )
-        assert collector.env.device == torch.device(env_device)
-        i = 0
         with patch("torch.cuda.synchronize") as mock_synchronize:
+            collector = SyncDataCollector(
+                create_env_fn=functools.partial(
+                    self.GoesThroughEnv, n_obs=1000, device=None
+                ),
+                policy=self.CudaPolicy(n_obs=1000),
+                frames_per_batch=100,
+                total_frames=1000,
+                env_device=env_device,
+                storing_device=storing_device,
+                policy_device="cuda:0",
+                # no_cuda_sync=True,
+            )
+            assert collector.env.device == torch.device(env_device)
+            i = 0
             for d in collector:
                 for _d in d.unbind(0):
                     u = _d["observation"].unique()
