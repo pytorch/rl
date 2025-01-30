@@ -5618,14 +5618,20 @@ class TensorDictPrimer(Transform):
             Defaults to `False`.
         default_value (float, Callable, Dict[NestedKey, float], Dict[NestedKey, Callable], optional): If non-random
             filling is chosen, `default_value` will be used to populate the tensors. If `default_value` is a float,
-            all elements of the tensors will be set to that value. If it is a callable, this callable is expected to
-            return a tensor fitting the specs, and it will be used to generate the tensors. Finally, if `default_value`
-            is a dictionary of tensors or a dictionary of callables with keys matching those of the specs, these will
-            be used to generate the corresponding tensors. Defaults to `0.0`.
+            all elements of the tensors will be set to that value.
+            If it is a callable and `single_default_value=False` (default), this callable is expected to return a tensor
+            fitting the specs (ie, ``default_value()`` will be called independently for each leaf spec). If it is a
+            callable and ``single_default_value=True``, then the callable will be called just once and it is expected
+            that the structure of its returned TensorDict instance or equivalent will match the provided specs.
+            Finally, if `default_value` is a dictionary of tensors or a dictionary of callables with keys matching
+            those of the specs, these will be used to generate the corresponding tensors. Defaults to `0.0`.
         reset_key (NestedKey, optional): the reset key to be used as partial
             reset indicator. Must be unique. If not provided, defaults to the
             only reset key of the parent environment (if it has only one)
             and raises an exception otherwise.
+        single_default_value (bool, optional): if ``True`` and `default_value` is a callable, it will be expected that
+            ``default_value`` returns a single tensordict matching the specs. If `False`, `default_value()` will be
+            called independently for each leaf. Defaults to ``False``.
         **kwargs: each keyword argument corresponds to a key in the tensordict.
             The corresponding value has to be a TensorSpec instance indicating
             what the value must be.
@@ -5725,6 +5731,7 @@ class TensorDictPrimer(Transform):
         | Dict[NestedKey, Callable] = None,
         reset_key: NestedKey | None = None,
         expand_specs: bool = None,
+        single_default_value: bool = False,
         **kwargs,
     ):
         self.device = kwargs.pop("device", None)
@@ -5765,10 +5772,13 @@ class TensorDictPrimer(Transform):
                 raise ValueError(
                     "If a default_value dictionary is provided, it must match the primers keys."
                 )
+        elif single_default_value:
+            pass
         else:
             default_value = {
                 key: default_value for key in self.primers.keys(True, True)
             }
+        self.single_default_value = single_default_value
         self.default_value = default_value
         self._validated = False
         self.reset_key = reset_key
@@ -5881,6 +5891,14 @@ class TensorDictPrimer(Transform):
         return True
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.single_default_value and callable(self.default_value):
+            tensordict.update(self.default_value())
+            for key, spec in self.primers.items(True, True):
+                if not self._validated:
+                    self._validate_value_tensor(tensordict.get(key), spec)
+            if not self._validated:
+                self._validated = True
+            return tensordict
         for key, spec in self.primers.items(True, True):
             if spec.shape[: len(tensordict.shape)] != tensordict.shape:
                 raise RuntimeError(
@@ -5935,6 +5953,14 @@ class TensorDictPrimer(Transform):
         ):
             self.primers = self._expand_shape(self.primers)
         if _reset.any():
+            if self.single_default_value and callable(self.default_value):
+                tensordict_reset.update(self.default_value())
+                for key, spec in self.primers.items(True, True):
+                    if not self._validated:
+                        self._validate_value_tensor(tensordict_reset.get(key), spec)
+                self._validated = True
+                return tensordict_reset
+
             for key, spec in self.primers.items(True, True):
                 if self.random:
                     shape = (
