@@ -233,11 +233,11 @@ class EnvMetaData:
 
 class _EnvPostInit(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
+        spec_locked = kwargs.pop("spec_locked", True)
         auto_reset = kwargs.pop("auto_reset", False)
         auto_reset_replace = kwargs.pop("auto_reset_replace", True)
         instance: EnvBase = super().__call__(*args, **kwargs)
 
-        spec_locked = kwargs.pop("spec_locked", True)
         if spec_locked:
             instance.input_spec.lock_(recurse=True)
             instance.output_spec.lock_(recurse=True)
@@ -301,6 +301,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             at every reset and every step. Defaults to ``False``.
         allow_done_after_reset (bool, optional): if ``True``, an environment can
             be done after a call to :meth:`~.reset` is made. Defaults to ``False``.
+        spec_locked (bool, optional): if ``True``, the specs are locked and can only be
+            modified if :meth:`~torchrl.envs.EnvBase.set_spec_lock_` is called.
+
+            .. note:: The locking is achieved by the `EnvBase` metaclass. It does not appear in the
+                `__init__` method and is included in the keyword arguments strictly for type-hinting purpose.
+
+            .. seealso:: :ref:`Locking environment specs <Environment-lock>`.
+
+            Defaults to ``True``.
+        auto_reset (bool, optional): if ``True``, the env is assumed to reset automatically
+            when done. Defaults to ``False``.
+
+            .. note:: The auto-resetting is achieved by the `EnvBase` metaclass. It does not appear in the
+                `__init__` method and is included in the keyword arguments strictly for type-hinting purpose.
 
     Attributes:
         done_spec (Composite): equivalent to ``full_done_spec`` as all
@@ -331,6 +345,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         batch_size (torch.Size): The batch-size of the environment.
         device (torch.device): the device where the input/outputs of the environment
             are to be expected. Can be ``None``.
+        is_spec_locked (bool): returns ``True`` if the specs are locked. See the :attr:`spec_locked`
+            argument above.
 
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
@@ -441,6 +457,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         run_type_checks: bool = False,
         allow_done_after_reset: bool = False,
         spec_locked: bool = True,
+        auto_reset: bool = False,
     ):
         super().__init__()
 
@@ -1639,7 +1656,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @_maybe_unlock
     def observation_spec(self, value: TensorSpec) -> None:
         if not isinstance(value, Composite):
-            raise TypeError("The type of an observation_spec must be Composite.")
+            value = Composite(
+                observation=value,
+                device=self.device,
+                batch_size=self.output_spec.batch_size,
+            )
         elif value.shape[: len(self.batch_size)] != self.batch_size:
             raise ValueError(
                 f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
@@ -3460,8 +3481,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ),
             key=_repr_by_depth,
         )
-        if not len(reset_keys):
-            raise RuntimeError("Could not find any done_key.")
         return reset_keys
 
     @property

@@ -9,11 +9,13 @@ import functools
 import gc
 import importlib
 import os.path
+import pickle
 import random
 import re
 from collections import defaultdict
 from functools import partial
 from sys import platform
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -245,6 +247,41 @@ class TestEnvBase:
         env.output_spec["full_observation_spec", "observation"].dtype = torch.float16
         with pytest.raises(TypeError):
             check_env_specs(env)
+
+    class MyEnv(EnvBase):
+        def __init__(self):
+            super().__init__()
+            self.observation_spec = Unbounded(())
+            self.action_spec = Unbounded(())
+
+        def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+            ...
+
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            ...
+
+        def _set_seed(self, seed: Optional[int]):
+            ...
+
+    def test_env_lock(self):
+
+        env = self.MyEnv()
+        for _ in range(2):
+            assert env.is_spec_locked
+            assert env.output_spec.is_locked
+            assert env.input_spec.is_locked
+            with pytest.raises(RuntimeError, match="lock"):
+                env.input_spec["full_action_spec", "action"] = Unbounded(())
+            env = pickle.loads(pickle.dumps(env))
+
+        env = self.MyEnv(spec_locked=False)
+        assert not env.is_spec_locked
+        assert not env.output_spec.is_locked
+        assert not env.input_spec.is_locked
+        env.input_spec["full_action_spec", "action"] = Unbounded(())
 
     def test_single_env_spec(self):
         env = NestedCountingEnv(batch_size=[3, 1, 7])
@@ -3388,12 +3425,15 @@ class TestAutoReset:
 class TestEnvWithDynamicSpec:
     def test_dynamic_rollout(self):
         env = EnvWithDynamicSpec()
+        rollout = env.rollout(4)
+        assert isinstance(rollout, LazyStackedTensorDict)
+        rollout = env.rollout(4, return_contiguous=False)
+        assert isinstance(rollout, LazyStackedTensorDict)
         with pytest.raises(
             RuntimeError,
             match="The environment specs are dynamic. Call rollout with return_contiguous=False",
         ):
-            rollout = env.rollout(4)
-        rollout = env.rollout(4, return_contiguous=False)
+            rollout = env.rollout(4, return_contiguous=True)
         check_env_specs(env, return_contiguous=False)
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym to be installed")

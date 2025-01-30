@@ -12,7 +12,7 @@ import gc
 import os
 import weakref
 from collections import OrderedDict
-from copy import copy, deepcopy
+from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
@@ -473,7 +473,7 @@ class BatchedEnvBase(EnvBase):
         return _do_nothing, _do_nothing
 
     def __getstate__(self):
-        out = copy(self.__dict__)
+        out = self.__dict__.copy()
         out["_sync_m2w_value"] = None
         out["_sync_w2m_value"] = None
         return out

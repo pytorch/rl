@@ -4057,7 +4057,7 @@ class TestDoubleToFloat(TransformBase):
             assert td_modif.get(key).dtype == torch.double
 
     def test_single_env_no_inkeys(self):
-        base_env = ContinuousActionVecMockEnv()
+        base_env = ContinuousActionVecMockEnv(spec_locked=False)
         for key, spec in list(base_env.observation_spec.items(True, True)):
             base_env.observation_spec[key] = spec.to(torch.float64)
         for key, spec in list(base_env.state_spec.items(True, True)):
@@ -4068,6 +4068,7 @@ class TestDoubleToFloat(TransformBase):
         env = TransformedEnv(
             base_env,
             DoubleToFloat(),
+            spec_locked=False,
         )
         for spec in env.observation_spec.values(True, True):
             assert spec.dtype == torch.float32
@@ -9572,7 +9573,8 @@ class TestVecNorm:
                 lambda: TransformedEnv(
                     GymEnv(PENDULUM_VERSIONED()),
                     Compose(
-                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                        self.rename_t,
+                        VecNorm(in_keys=[("some", "obs"), "reward"]),
                     ),
                 )
             )
@@ -9581,7 +9583,8 @@ class TestVecNorm:
                 lambda: TransformedEnv(
                     ContinuousActionVecMockEnv(),
                     Compose(
-                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                        self.rename_t,
+                        VecNorm(in_keys=[("some", "obs"), "reward"]),
                     ),
                 )
             )

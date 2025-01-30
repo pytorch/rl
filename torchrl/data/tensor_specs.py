@@ -5188,6 +5188,21 @@ class Composite(TensorSpec):
         else:
             self.unlock_()
 
+    def __getstate__(self):
+        result = self.__dict__.copy()
+        __lock_parents_weakrefs = result.pop("__lock_parents_weakrefs", None)
+        if __lock_parents_weakrefs is not None:
+            result["_lock_recurse"] = True
+        return result
+
+    def __setstate__(self, state):
+        _lock_recurse = state.pop("_lock_recurse", False)
+        for key, value in state.items():
+            setattr(self, key, value)
+        if self._is_locked:
+            self._is_locked = False
+            self.lock_(recurse=_lock_recurse)
+
     def _propagate_lock(
         self, *, recurse: bool, lock_parents_weakrefs=None, is_compiling
     ):
