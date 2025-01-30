@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+37a514d) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.6.1+dbc8e2e) &#x25BC</span></a>
     </div>
     
 
@@ -3120,6 +3120,7 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_has_dynamic_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="c1"># TODO: cache this value</span>
         <span class="k">return</span> <span class="n">_has_dynamic_specs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">specs</span><span class="p">)</span>
 
 <div class="viewcode-block" id="EnvBase.rollout"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.rollout">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rollout</span><span class="p">(</span>
@@ -3132,7 +3133,7 @@
         <span class="n">auto_cast_to_device</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">break_when_any_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">break_when_all_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">return_contiguous</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">return_contiguous</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">tensordict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">set_truncated</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -3167,7 +3168,8 @@
 <span class="sd">            break_when_all_done (bool, optional): if ``True``, break if all of the contained environments reach any</span>
 <span class="sd">                of the done states. If ``False``, break if at least one environment reaches any of the done states.</span>
 <span class="sd">                Default is ``False``.</span>
-<span class="sd">            return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.</span>
+<span class="sd">            return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is `True` if</span>
+<span class="sd">                the env does not have dynamic specs, otherwise `False`.</span>
 <span class="sd">            tensordict (TensorDict, optional): if ``auto_reset`` is False, an initial</span>
 <span class="sd">                tensordict must be provided. Rollout will check if this tensordict has done flags and reset the</span>
 <span class="sd">                environment in those dimensions (if needed).</span>
@@ -3378,7 +3380,8 @@
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                 <span class="s2">&quot;Cannot have both break_when_all_done and break_when_any_done True at the same time.&quot;</span>
             <span class="p">)</span>
-
+        <span class="k">if</span> <span class="n">return_contiguous</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">return_contiguous</span> <span class="o">=</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_dynamic_specs</span>
         <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">policy</span> <span class="o">=</span> <span class="n">_make_compatible_policy</span><span class="p">(</span>
                 <span class="n">policy</span><span class="p">,</span>

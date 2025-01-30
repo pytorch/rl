@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+37a514d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+dbc8e2e) &#x25BC</span></a>
     </div>
     
 
@@ -655,6 +655,80 @@
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;GymWrapper&quot;</span><span class="p">,</span> <span class="s2">&quot;GymEnv&quot;</span><span class="p">]</span>
 
 
+<span class="c1"># Define a dictionary to store conversion functions for each spec type</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_ConversionRegistry</span><span class="p">(</span><span class="n">collections</span><span class="o">.</span><span class="n">UserDict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">cls</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">cls</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="c1"># We want to find the closest parent</span>
+            <span class="n">parents</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">parents</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">k</span>
+                    <span class="k">continue</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">space_cls</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;spaces&quot;</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">sbsp</span> <span class="ow">in</span> <span class="n">k</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">):</span>
+                        <span class="n">space_cls</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">space_cls</span><span class="p">,</span> <span class="n">sbsp</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+                    <span class="c1"># Some specs may be too recent</span>
+                    <span class="k">continue</span>
+                <span class="n">parents</span><span class="p">[</span><span class="n">space_cls</span><span class="p">]</span> <span class="o">=</span> <span class="n">k</span>
+            <span class="n">mro</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">mro</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">base</span> <span class="ow">in</span> <span class="n">mro</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parents</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+                        <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="n">parents</span><span class="p">[</span><span class="n">p</span><span class="p">]]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;No conversion tool could be found with the gym space </span><span class="si">{</span><span class="bp">cls</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;You can register your own with `torchrl.envs.libs.register_gym_spec_conversion.`&quot;</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+
+
+<span class="n">_conversion_registry</span> <span class="o">=</span> <span class="n">_ConversionRegistry</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="register_gym_spec_conversion"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.register_gym_spec_conversion.html#torchrl.envs.register_gym_spec_conversion">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">register_gym_spec_conversion</span><span class="p">(</span><span class="n">spec_type</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorator to register a conversion function for a specific spec type.</span>
+
+<span class="sd">    The method must have the following signature:</span>
+
+<span class="sd">        &gt;&gt;&gt; @register_gym_spec_conversion(&quot;spec.name&quot;)</span>
+<span class="sd">        ... def convert_specname(</span>
+<span class="sd">        ...     spec,</span>
+<span class="sd">        ...     dtype=None,</span>
+<span class="sd">        ...     device=None,</span>
+<span class="sd">        ...     categorical_action_encoding=None,</span>
+<span class="sd">        ...     remap_state_to_observation=None,</span>
+<span class="sd">        ...     batch_size=None,</span>
+<span class="sd">        ... ):</span>
+
+<span class="sd">    where `gym(nasium).spaces.spec.name` is the location of the spec in gym.</span>
+
+<span class="sd">    If the spec type is accessible, this will also work:</span>
+
+<span class="sd">        &gt;&gt;&gt; @register_gym_spec_conversion(SpecType)</span>
+<span class="sd">        ... def convert_specname(</span>
+<span class="sd">        ...     spec,</span>
+<span class="sd">        ...     dtype=None,</span>
+<span class="sd">        ...     device=None,</span>
+<span class="sd">        ...     categorical_action_encoding=None,</span>
+<span class="sd">        ...     remap_state_to_observation=None,</span>
+<span class="sd">        ...     batch_size=None,</span>
+<span class="sd">        ... ):</span>
+
+<span class="sd">    ..note:: The wrapped function can be simplified, and unused kwargs can be wrapped in `**kwargs`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">decorator</span><span class="p">(</span><span class="n">conversion_func</span><span class="p">):</span>
+        <span class="n">_conversion_registry</span><span class="p">[</span><span class="n">spec_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">conversion_func</span>
+        <span class="k">return</span> <span class="n">conversion_func</span>
+
+    <span class="k">return</span> <span class="n">decorator</span></div>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
     <span class="n">spec</span><span class="p">,</span>
     <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -677,7 +751,6 @@
 <span class="sd">            Dict specs to &quot;observation&quot;. Default is true.</span>
 <span class="sd">        batch_size (torch.Size): batch size to which expand the spec. Defaults to</span>
 <span class="sd">            ``torch.Size([])``.</span>
-
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">batch_size</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
@@ -688,139 +761,239 @@
             <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="n">remap_state_to_observation</span><span class="p">,</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
-    <span class="n">gym_spaces</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;spaces&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">tuple</span><span class="o">.</span><span class="n">Tuple</span><span class="p">):</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
-                    <span class="n">s</span><span class="p">,</span>
-                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-                    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="n">categorical_action_encoding</span><span class="p">,</span>
-                    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="n">remap_state_to_observation</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">spec</span>
-            <span class="p">],</span>
-            <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">discrete</span><span class="o">.</span><span class="n">Discrete</span><span class="p">):</span>
-        <span class="n">action_space_cls</span> <span class="o">=</span> <span class="n">Categorical</span> <span class="k">if</span> <span class="n">categorical_action_encoding</span> <span class="k">else</span> <span class="n">OneHot</span>
+
+    <span class="c1"># Get the conversion function from the registry</span>
+    <span class="n">conversion_func</span> <span class="o">=</span> <span class="n">_conversion_registry</span><span class="p">[</span><span class="nb">type</span><span class="p">(</span><span class="n">spec</span><span class="p">)]</span>
+    <span class="c1"># Call the conversion function with the provided arguments</span>
+    <span class="k">return</span> <span class="n">conversion_func</span><span class="p">(</span>
+        <span class="n">spec</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="n">categorical_action_encoding</span><span class="p">,</span>
+        <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="n">remap_state_to_observation</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="c1"># Register conversion functions for each spec type</span>
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="s2">&quot;tuple.Tuple&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_tuple_spec</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="c1"># Implementation for Tuple spec type</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
+                <span class="n">s</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="n">categorical_action_encoding</span><span class="p">,</span>
+                <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="n">remap_state_to_observation</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">spec</span>
+        <span class="p">],</span>
+        <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="s2">&quot;discrete.Discrete&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_discrete_spec</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="c1"># Implementation for Discrete spec type</span>
+    <span class="n">action_space_cls</span> <span class="o">=</span> <span class="n">Categorical</span> <span class="k">if</span> <span class="n">categorical_action_encoding</span> <span class="k">else</span> <span class="n">OneHot</span>
+    <span class="n">dtype</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">categorical_action_encoding</span>
+        <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">long</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">action_space_cls</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+
+
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="s2">&quot;multi_binary.MultiBinary&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_multi_binary_spec</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="c1"># Implementation for MultiBinary spec type</span>
+    <span class="k">return</span> <span class="n">Binary</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">])</span>
+
+
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="s2">&quot;multi_discrete.MultiDiscrete&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_multidiscrete_spec</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
         <span class="n">dtype</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">categorical_action_encoding</span>
             <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">long</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="n">action_space_cls</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">multi_binary</span><span class="o">.</span><span class="n">MultiBinary</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">Binary</span><span class="p">(</span>
-            <span class="n">spec</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
-        <span class="p">)</span>
-    <span class="c1"># a spec type cannot be a string, so we&#39;re sure that versions of gym that don&#39;t have Sequence will just skip through this</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">gym_spaces</span><span class="p">,</span> <span class="s2">&quot;Sequence&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="s2">&quot;stack&quot;</span><span class="p">):</span>
-            <span class="c1"># gym does not have a stack attribute in sequence</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;gymnasium should be used whenever a Sequence is present, as it needs to be stacked. &quot;</span>
-                <span class="s2">&quot;If you need the gym backend at all price, please raise an issue on the TorchRL GitHub repository.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="s2">&quot;stack&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Sequence spaces must have the stack argument set to ``True``. &quot;</span>
-            <span class="p">)</span>
-        <span class="n">space</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">feature_space</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-        <span class="n">out</span><span class="o">.</span><span class="n">make_neg_dim</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">out</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">multi_discrete</span><span class="o">.</span><span class="n">MultiDiscrete</span><span class="p">):</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">dtype</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">categorical_action_encoding</span>
-                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">long</span>
-            <span class="p">)</span>
 
-            <span class="k">return</span> <span class="p">(</span>
-                <span class="n">MultiCategorical</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">categorical_action_encoding</span>
-                <span class="k">else</span> <span class="n">MultiOneHot</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-            <span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
-                    <span class="n">spec</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
-                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-                    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="n">categorical_action_encoding</span><span class="p">,</span>
-                    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="n">remap_state_to_observation</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">))</span>
-            <span class="p">],</span>
-            <span class="mi">0</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">Box</span><span class="p">):</span>
-        <span class="n">shape</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">):</span>
-            <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
-        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">dtype</span> <span class="o">=</span> <span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
-        <span class="n">low</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">low</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="n">high</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">high</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="n">is_unbounded</span> <span class="o">=</span> <span class="n">low</span><span class="o">.</span><span class="n">isinf</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="ow">and</span> <span class="n">high</span><span class="o">.</span><span class="n">isinf</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-
-        <span class="n">minval</span><span class="p">,</span> <span class="n">maxval</span> <span class="o">=</span> <span class="n">_minmax_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="n">minval</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">minval</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">low</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span>
-        <span class="n">maxval</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">maxval</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">low</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span>
-        <span class="n">is_unbounded</span> <span class="o">=</span> <span class="n">is_unbounded</span> <span class="ow">or</span> <span class="p">(</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">minval</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-            <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">high</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">maxval</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-        <span class="p">)</span>
         <span class="k">return</span> <span class="p">(</span>
-            <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">is_unbounded</span>
-            <span class="k">else</span> <span class="n">Bounded</span><span class="p">(</span>
-                <span class="n">low</span><span class="p">,</span>
-                <span class="n">high</span><span class="p">,</span>
-                <span class="n">shape</span><span class="p">,</span>
-                <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="n">MultiCategorical</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">categorical_action_encoding</span>
+            <span class="k">else</span> <span class="n">MultiOneHot</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
         <span class="p">)</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="p">(</span><span class="n">Dict</span><span class="p">,)):</span>
-        <span class="n">spec_out</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
-            <span class="n">key</span> <span class="o">=</span> <span class="n">k</span>
-            <span class="k">if</span> <span class="p">(</span>
-                <span class="n">remap_state_to_observation</span>
-                <span class="ow">and</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;state&quot;</span>
-                <span class="ow">and</span> <span class="s2">&quot;observation&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
-            <span class="p">):</span>
-                <span class="c1"># we rename &quot;state&quot; in &quot;observation&quot; as &quot;observation&quot; is the conventional name</span>
-                <span class="c1"># for single observation in torchrl.</span>
-                <span class="c1"># naming it &#39;state&#39; will result in envs that have a different name for the state vector</span>
-                <span class="c1"># when queried with and without pixels</span>
-                <span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span>
-            <span class="n">spec_out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
-                <span class="n">spec</span><span class="p">[</span><span class="n">k</span><span class="p">],</span>
+
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
+                <span class="n">spec</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
                 <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                 <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="n">categorical_action_encoding</span><span class="p">,</span>
                 <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="n">remap_state_to_observation</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="c1"># the batch-size must be set later</span>
-        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span><span class="n">spec_out</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">gym_spaces</span><span class="o">.</span><span class="n">dict</span><span class="o">.</span><span class="n">Dict</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
-            <span class="n">spec</span><span class="o">.</span><span class="n">spaces</span><span class="p">,</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">nvec</span><span class="p">))</span>
+        <span class="p">],</span>
+        <span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="s2">&quot;Box&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_box_spec</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">shape</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">):</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+    <span class="n">low</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">low</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">high</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">high</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">is_unbounded</span> <span class="o">=</span> <span class="n">low</span><span class="o">.</span><span class="n">isinf</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="ow">and</span> <span class="n">high</span><span class="o">.</span><span class="n">isinf</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+
+    <span class="n">minval</span><span class="p">,</span> <span class="n">maxval</span> <span class="o">=</span> <span class="n">_minmax_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">minval</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">minval</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">low</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span>
+    <span class="n">maxval</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">maxval</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">low</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span>
+    <span class="n">is_unbounded</span> <span class="o">=</span> <span class="n">is_unbounded</span> <span class="ow">or</span> <span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">minval</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">high</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">maxval</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_unbounded</span>
+        <span class="k">else</span> <span class="n">Bounded</span><span class="p">(</span>
+            <span class="n">low</span><span class="p">,</span>
+            <span class="n">high</span><span class="p">,</span>
+            <span class="n">shape</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="s2">&quot;Sequence&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_sequence_spec</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="s2">&quot;stack&quot;</span><span class="p">):</span>
+        <span class="c1"># gym does not have a stack attribute in sequence</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;gymnasium should be used whenever a Sequence is present, as it needs to be stacked. &quot;</span>
+            <span class="s2">&quot;If you need the gym backend at all price, please raise an issue on the TorchRL GitHub repository.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="s2">&quot;stack&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Sequence spaces must have the stack argument set to ``True``. &quot;</span>
+        <span class="p">)</span>
+    <span class="n">space</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">feature_space</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">out</span><span class="o">.</span><span class="n">make_neg_dim</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="n">Dict</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_dict_spec</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">spec_out</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">k</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">remap_state_to_observation</span>
+            <span class="ow">and</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;state&quot;</span>
+            <span class="ow">and</span> <span class="s2">&quot;observation&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="c1"># we rename &quot;state&quot; in &quot;observation&quot; as &quot;observation&quot; is the conventional name</span>
+            <span class="c1"># for single observation in torchrl.</span>
+            <span class="c1"># naming it &#39;state&#39; will result in envs that have a different name for the state vector</span>
+            <span class="c1"># when queried with and without pixels</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span>
+        <span class="n">spec_out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
+            <span class="n">spec</span><span class="p">[</span><span class="n">k</span><span class="p">],</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="n">categorical_action_encoding</span><span class="p">,</span>
             <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="n">remap_state_to_observation</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
         <span class="p">)</span>
-    <span class="k">elif</span> <span class="n">_has_minigrid</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">_minigrid_lib</span><span class="p">()</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">mission</span><span class="o">.</span><span class="n">MissionSpace</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">NonTensor</span><span class="p">((),</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;spec of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> is currently unaccounted for&quot;</span>
-        <span class="p">)</span>
+    <span class="c1"># the batch-size must be set later</span>
+    <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span><span class="n">spec_out</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="s2">&quot;Text&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_text_soec</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="k">return</span> <span class="n">NonTensor</span><span class="p">((),</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">)</span>
+
+
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="s2">&quot;dict.Dict&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_dict_spec2</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="k">return</span> <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
+        <span class="n">spec</span><span class="o">.</span><span class="n">spaces</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="n">categorical_action_encoding</span><span class="p">,</span>
+        <span class="n">remap_state_to_observation</span><span class="o">=</span><span class="n">remap_state_to_observation</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;0.18&quot;</span><span class="p">)</span>
