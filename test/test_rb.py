@@ -81,6 +81,7 @@ from torchrl.data.replay_buffers.scheduler import (
 
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
+    LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
     StorageEnsemble,
@@ -1115,6 +1116,31 @@ class TestStorages:
         )
         assert (rb[:, 10:20] == 0).all()
         assert len(rb) == 100
+
+    @pytest.mark.parametrize("max_size", [1000, None])
+    @pytest.mark.parametrize("stack_dim", [-1, 0])
+    def test_lazy_stack_storage(self, max_size, stack_dim):
+        # Create an instance of LazyStackStorage with given parameters
+        storage = LazyStackStorage(max_size=max_size, stack_dim=stack_dim)
+        # Create a ReplayBuffer using the created storage
+        rb = ReplayBuffer(storage=storage)
+        # Generate some random data to add to the buffer
+        torch.manual_seed(0)
+        data0 = TensorDict(a=torch.randn((10,)), b=torch.rand(4), c="a string!")
+        data1 = TensorDict(a=torch.randn((11,)), b=torch.rand(4), c="another string!")
+        # Add the data to the buffer
+        rb.add(data0)
+        rb.add(data1)
+        # Sample from the buffer
+        sample = rb.sample(10)
+        # Check that the sampled data has the correct shape and type
+        assert isinstance(sample, LazyStackedTensorDict)
+        assert sample["b"].shape[0] == 10
+        assert all(isinstance(item, str) for item in sample["c"])
+        # If densify is True, check that the sampled data is dense
+        sample = sample.densify(layout=torch.jagged)
+        assert isinstance(sample["a"], torch.Tensor)
+        assert sample["a"].shape[0] == 10
 
 
 @pytest.mark.parametrize("max_size", [1000])
