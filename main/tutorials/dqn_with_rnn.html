@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+280297a) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.6.1+fe3f00c) &#x25BC</span></a>
     </div>
     
 
@@ -619,7 +619,7 @@ backbone, an <a class="reference internal" href="../reference/generated/torchrl.
 action values.</p>
 <section id="convolutional-network">
 <h3>Convolutional network<a class="headerlink" href="#convolutional-network" title="Permalink to this heading">¶</a></h3>
-<p>We build a convolutional network flanked with a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.AdaptiveAvgPool2d.html#torch.nn.AdaptiveAvgPool2d" title="(in PyTorch v2.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.AdaptiveAvgPool2d</span></code></a>
+<p>We build a convolutional network flanked with a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.AdaptiveAvgPool2d.html#torch.nn.AdaptiveAvgPool2d" title="(in PyTorch v2.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.AdaptiveAvgPool2d</span></code></a>
 that will squash the output in a vector of size 64. The <a class="reference internal" href="../reference/generated/torchrl.modules.ConvNet.html#torchrl.modules.ConvNet" title="torchrl.modules.ConvNet"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvNet</span></code></a>
 can assist us with this:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">feature</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span>
@@ -822,7 +822,7 @@ This decay is achieved via a call to <a class="reference internal" href="../refe
 <section id="using-the-model-for-the-loss">
 <h3>Using the model for the loss<a class="headerlink" href="#using-the-model-for-the-loss" title="Permalink to this heading">¶</a></h3>
 <p>The model as we’ve built it is well-equipped to be used in sequential settings.
-However, the class <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> can use a cuDNN-optimized backend
+However, the class <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> can use a cuDNN-optimized backend
 to run the RNN sequence faster on GPU device. We would not want to miss
 such an opportunity to speed up our training loop!</p>
 <p>By default, torchrl losses will use this when executing any
@@ -985,15 +985,15 @@ Pay attention to the key names which will reflect what can be found in this data
     device=None,
     is_shared=False)
 
- 25%|██▌       | 50/200 [00:00&lt;00:01, 144.85it/s]
- 25%|██▌       | 50/200 [00:14&lt;00:01, 144.85it/s]
-steps: 12, loss_val:  0.0004, action_spread: tensor([46,  4]):  25%|██▌       | 50/200 [00:33&lt;00:01, 144.85it/s]
-steps: 12, loss_val:  0.0004, action_spread: tensor([46,  4]):  50%|█████     | 100/200 [00:34&lt;00:40,  2.48it/s]
-steps: 12, loss_val:  0.0005, action_spread: tensor([44,  6]):  50%|█████     | 100/200 [01:07&lt;00:40,  2.48it/s]
-steps: 12, loss_val:  0.0005, action_spread: tensor([44,  6]):  75%|███████▌  | 150/200 [01:08&lt;00:26,  1.88it/s]
-steps: 17, loss_val:  0.0005, action_spread: tensor([11, 39]):  75%|███████▌  | 150/200 [01:41&lt;00:26,  1.88it/s]
-steps: 17, loss_val:  0.0005, action_spread: tensor([11, 39]): 100%|██████████| 200/200 [01:42&lt;00:00,  1.70it/s]
-steps: 17, loss_val:  0.0004, action_spread: tensor([43,  7]): 100%|██████████| 200/200 [02:15&lt;00:00,  1.70it/s]
+ 25%|██▌       | 50/200 [00:00&lt;00:01, 132.04it/s]
+ 25%|██▌       | 50/200 [00:19&lt;00:01, 132.04it/s]
+steps: 12, loss_val:  0.0007, action_spread: tensor([46,  4]):  25%|██▌       | 50/200 [00:33&lt;00:01, 132.04it/s]
+steps: 12, loss_val:  0.0007, action_spread: tensor([46,  4]):  50%|█████     | 100/200 [00:34&lt;00:40,  2.49it/s]
+steps: 12, loss_val:  0.0004, action_spread: tensor([43,  7]):  50%|█████     | 100/200 [01:07&lt;00:40,  2.49it/s]
+steps: 12, loss_val:  0.0004, action_spread: tensor([43,  7]):  75%|███████▌  | 150/200 [01:08&lt;00:26,  1.89it/s]
+steps: 16, loss_val:  0.0002, action_spread: tensor([13, 37]):  75%|███████▌  | 150/200 [01:41&lt;00:26,  1.89it/s]
+steps: 16, loss_val:  0.0002, action_spread: tensor([13, 37]): 100%|██████████| 200/200 [01:42&lt;00:00,  1.70it/s]
+steps: 26, loss_val:  0.0004, action_spread: tensor([15, 35]): 100%|██████████| 200/200 [02:15&lt;00:00,  1.70it/s]
 </pre></div>
 </div>
 <p>Let’s plot our results:</p>
@@ -1025,8 +1025,8 @@ the data</p></li>
 <ul class="simple">
 <li><p>The TorchRL documentation can be found <a class="reference external" href="https://pytorch.org/rl/">here</a>.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (3 minutes 14.829 seconds)</p>
-<p><strong>Estimated memory usage:</strong>  2210 MB</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (3 minutes 17.553 seconds)</p>
+<p><strong>Estimated memory usage:</strong>  2207 MB</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-dqn-with-rnn-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/28be785bad9a380ed2a853d865b074b9/dqn_with_rnn.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">dqn_with_rnn.ipynb</span></code></a></p>

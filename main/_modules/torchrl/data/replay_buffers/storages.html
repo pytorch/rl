@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+280297a) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.6.1+fe3f00c) &#x25BC</span></a>
     </div>
     
 
@@ -718,7 +718,15 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="nb">slice</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">INT_CLASSES</span><span class="p">,</span> <span class="nb">slice</span><span class="p">)):</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> can only be indexed with one-length tuples.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">index</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
         <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">index</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
             <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">index</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -772,6 +780,77 @@
                 <span class="n">device</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span><span class="o">.</span><span class="n">reshape_as</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">}</span><span class="s2"> is not supported yet.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="LazyStackStorage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.LazyStackStorage.html#torchrl.data.replay_buffers.LazyStackStorage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LazyStackStorage</span><span class="p">(</span><span class="n">ListStorage</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A ListStorage that returns LazyStackTensorDict instances.</span>
+
+<span class="sd">    This storage allows for heterougeneous structures to be indexed as a single `TensorDict` representation.</span>
+<span class="sd">    It uses :class:`~tensordict.LazyStackedTensorDict` which operates on non-contiguous lists of tensordicts,</span>
+<span class="sd">    lazily stacking items when queried.</span>
+<span class="sd">    This means that this storage is going to be fast to sample but data access may be slow (as it requires a stack).</span>
+<span class="sd">    Tensors of heterogeneous shapes can also be stored within the storage and stacked together.</span>
+<span class="sd">    Because the storage is represented as a list, the number of tensors to store in memory will grow linearly with</span>
+<span class="sd">    the size of the buffer.</span>
+
+<span class="sd">    If possible, nested tensors can also be created via :meth:`~tensordict.LazyStackedTensorDict.densify`</span>
+<span class="sd">    (see :mod:`~torch.nested`).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        max_size (int, optional): the maximum number of elements stored in the storage.</span>
+<span class="sd">            If not provided, an unlimited storage is created.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        compilable (bool, optional): if ``True``, the storage will be made compatible with :func:`~torch.compile` at</span>
+<span class="sd">            the cost of being executable in multiprocessed settings.</span>
+<span class="sd">        stack_dim (int, optional): the stack dimension in terms of TensorDict batch sizes. Defaults to `-1`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import ReplayBuffer, LazyStackStorage</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; _ = torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; rb = ReplayBuffer(storage=LazyStackStorage(max_size=1000, stack_dim=-1))</span>
+<span class="sd">        &gt;&gt;&gt; data0 = TensorDict(a=torch.randn((10,)), b=torch.rand(4), c=&quot;a string!&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; data1 = TensorDict(a=torch.randn((11,)), b=torch.rand(4), c=&quot;another string!&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; _ = rb.add(data0)</span>
+<span class="sd">        &gt;&gt;&gt; _ = rb.add(data1)</span>
+<span class="sd">        &gt;&gt;&gt; rb.sample(10)</span>
+<span class="sd">        LazyStackedTensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                a: Tensor(shape=torch.Size([10, -1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                b: Tensor(shape=torch.Size([10, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                c: NonTensorStack(</span>
+<span class="sd">                    [&#39;another string!&#39;, &#39;another string!&#39;, &#39;another st...,</span>
+<span class="sd">                    batch_size=torch.Size([10]),</span>
+<span class="sd">                    device=None)},</span>
+<span class="sd">            exclusive_fields={</span>
+<span class="sd">            },</span>
+<span class="sd">            batch_size=torch.Size([10]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False,</span>
+<span class="sd">            stack_dim=0)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">max_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">stack_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="n">max_size</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_dim</span> <span class="o">=</span> <span class="n">stack_dim</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="nb">slice</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">stack_dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_dim</span>
+            <span class="k">if</span> <span class="n">stack_dim</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">stack_dim</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">stack_dim</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="p">(</span><span class="o">*</span><span class="n">out</span><span class="p">,</span> <span class="n">stack_dim</span><span class="o">=</span><span class="n">stack_dim</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">out</span>
+        <span class="k">return</span> <span class="n">out</span></div>
 
 
 <div class="viewcode-block" id="TensorStorage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">TensorStorage</span><span class="p">(</span><span class="n">Storage</span><span class="p">):</span>

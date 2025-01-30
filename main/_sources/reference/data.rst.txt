@@ -148,6 +148,7 @@ using the following components:
     LazyMemmapStorage
     LazyTensorStorage
     ListStorage
+    LazyStackStorage
     ListStorageCheckpointer
     NestedStorageCheckpointer
     PrioritizedSampler
