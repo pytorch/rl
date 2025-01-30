@@ -90,14 +90,6 @@ def _cache_value(func):
         result = self._cache.get(func_name, NO_DEFAULT)
         if result is NO_DEFAULT:
             result = func(self, *args, **kwargs)
-            # Ideally we'd like to cache all the `_keys` attributes but there's a catch: one can modify the specs at
-            # any time so this will not run as expected.
-            # The solution should be:
-            # - optionally lock the specs in the env, like we do with tensordict.
-            # - Locked specs will behave like locked tensordict: we lock the root spec, meaning that all the sub-specs
-            #   will be locked, and no __setattr__ will be allowed within the env unless it's unlocked.
-            #   We cannot just guard spec.__setattr__ because `spec[key0][key1] = smth` will not call a setattr
-            #   on the root spec so there's a chance we miss it.
             self._cache[func_name] = result
         return result
 
