@@ -5,11 +5,14 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import gc
 import os
 
 import sys
+from typing import Optional
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -468,6 +471,84 @@ class TestCollectorDevices:
         for data in collector:  # noqa: B007
             break
         assert data.device == storing_device
+
+    class CudaPolicy(TensorDictSequential):
+        def __init__(self, n_obs):
+            module = torch.nn.Linear(n_obs, n_obs, device="cuda")
+            module.weight.data.copy_(torch.eye(n_obs))
+            module.bias.data.fill_(0)
+            m0 = TensorDictModule(module, in_keys=["observation"], out_keys=["hidden"])
+            m1 = TensorDictModule(
+                lambda a: a + 1, in_keys=["hidden"], out_keys=["action"]
+            )
+            super().__init__(m0, m1)
+
+    class GoesThroughEnv(EnvBase):
+        def __init__(self, n_obs, device):
+            self.observation_spec = Composite(observation=Unbounded(n_obs))
+            self.action_spec = Unbounded(n_obs)
+            self.reward_spec = Unbounded(1)
+            self.full_done_specs = Composite(done=Unbounded(1, dtype=torch.bool))
+            super().__init__(device=device)
+
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            a = tensordict["action"]
+            if self.device is not None:
+                assert a.device == self.device
+            out = tensordict.empty()
+            out["observation"] = tensordict["observation"] + (
+                a - tensordict["observation"]
+            )
+            out["reward"] = torch.zeros((1,), device=self.device)
+            out["done"] = torch.zeros((1,), device=self.device, dtype=torch.bool)
+            return out
+
+        def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+            return self.full_done_specs.zeros().update(self.observation_spec.zeros())
+
+        def _set_seed(self, seed: Optional[int]):
+            return seed
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+    @pytest.mark.parametrize("env_device", ["cuda:0", "cpu"])
+    @pytest.mark.parametrize("storing_device", [None, "cuda:0", "cpu"])
+    @pytest.mark.parametrize("no_cuda_sync", [True, False])
+    def test_no_synchronize(self, env_device, storing_device, no_cuda_sync):
+        """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
+        should_raise = not no_cuda_sync
+        should_raise = should_raise & (
+            (env_device == "cpu") or (storing_device == "cpu")
+        )
+        with patch("torch.cuda.synchronize") as mock_synchronize, pytest.raises(
+            AssertionError, match="Expected 'synchronize' to not have been called."
+        ) if should_raise else contextlib.nullcontext():
+            collector = SyncDataCollector(
+                create_env_fn=functools.partial(
+                    self.GoesThroughEnv, n_obs=1000, device=None
+                ),
+                policy=self.CudaPolicy(n_obs=1000),
+                frames_per_batch=100,
+                total_frames=1000,
+                env_device=env_device,
+                storing_device=storing_device,
+                policy_device="cuda:0",
+                no_cuda_sync=no_cuda_sync,
+            )
+            assert collector.env.device == torch.device(env_device)
+            i = 0
+            for d in collector:
+                for _d in d.unbind(0):
+                    u = _d["observation"].unique()
+                    assert u.numel() == 1, i
+                    assert u == i, i
+                    i += 1
+                    u = _d["next", "observation"].unique()
+                    assert u.numel() == 1, i
+                    assert u == i, i
+                mock_synchronize.assert_not_called()
 
 
 # @pytest.mark.skipif(
