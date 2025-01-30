@@ -2,7 +2,7 @@ channels:
   - pytorch
   - defaults
 dependencies:
-  - pip
+  - pip<25.0
   - protobuf
   - pip:
     - hypothesis
@@ -22,6 +22,7 @@ dependencies:
     - scipy
     - hydra-core
     - dm_control -e git+https://github.com/deepmind/dm_control.git@c053360edea6170acfd9c8f65446703307d9d352#egg=dm_control
+    - mujoco
     - patchelf
     - pyopengl==3.1.4
     - ray
