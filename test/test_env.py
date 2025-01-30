@@ -3285,8 +3285,9 @@ class TestEnvWithDynamicSpec:
             RuntimeError,
             match="The environment specs are dynamic. Call rollout with return_contiguous=False",
         ):
-            rollout = env.rollout(4)
-        rollout = env.rollout(4, return_contiguous=False)
+            env.rollout(4, return_contiguous=True)
+        env.rollout(4)
+        env.rollout(4, return_contiguous=False)
         check_env_specs(env, return_contiguous=False)
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym to be installed")
