@@ -92,6 +92,7 @@ conda env config vars set \
   MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
-  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
+  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL \
+  TOKENIZERS_PARALLELISM=true
 
 conda env update --file "${this_dir}/environment.yml" --prune

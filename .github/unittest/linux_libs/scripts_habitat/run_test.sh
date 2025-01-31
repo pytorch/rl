@@ -10,7 +10,7 @@ conda activate ./env
 # https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin
 #conda install -y -c conda-forge gcc=12.1.0
 conda install -y -c conda-forge libstdcxx-ng=12
-conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
+conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC TOKENIZERS_PARALLELISM=true
 
 ## find libstdc
 STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
@@ -36,7 +36,7 @@ export MKL_THREADING_LAYER=GNU
 #wget https://github.com/openai/mujoco-py/blob/master/vendor/10_nvidia.json
 #mv 10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
-conda env config vars set MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet
+conda env config vars set MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet TOKENIZERS_PARALLELISM=true
 
 conda deactivate && conda activate ./env
 
