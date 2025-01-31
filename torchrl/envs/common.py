@@ -3229,13 +3229,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._step_mdp(next_tensordict)
 
     @property
-    # @_cache_value
+    @_cache_value
     def _step_mdp(self):
-        step_func = self._cache.get("_step_mdp_value")
-        if step_func is None:
-            step_func = _StepMDP(self, exclude_action=False)
-            self._cache["_step_mdp_value"] = step_func
-        return step_func
+        return _StepMDP(self, exclude_action=False)
 
     def _rollout_stop_early(
         self,
