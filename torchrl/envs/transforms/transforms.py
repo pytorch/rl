@@ -521,7 +521,9 @@ class Transform(nn.Module):
                 f"parent of transform {type(self)} already set. "
                 "Call `transform.clone()` to get a similar transform with no parent set."
             )
-        self.__dict__["_container"] = weakref.ref(container)
+        self.__dict__["_container"] = (
+            weakref.ref(container) if container is not None else None
+        )
         self.__dict__["_parent"] = None
 
     def reset_parent(self) -> None:
@@ -570,6 +572,22 @@ class Transform(nn.Module):
             else:
                 container = container_weakref
         return container
+
+    def __getstate__(self):
+        result = self.__dict__.copy()
+        container = result["_container"]
+        if container is not None:
+            container = container()
+        result["_container"] = container
+        return result
+
+    def __setstate__(self, state):
+        state["_container"] = (
+            weakref.ref(state["_container"])
+            if state["_container"] is not None
+            else None
+        )
+        self.__dict__.update(state)
 
     @property
     def parent(self) -> Optional[EnvBase]:
@@ -1718,7 +1736,7 @@ class TargetReturn(Transform):
                 f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
             )
         reset_key = reset_keys[0]
-        self._reset_key = reset_keys
+        self._reset_key = reset_key
         return reset_key
 
     @reset_key.setter
