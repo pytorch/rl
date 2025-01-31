@@ -697,36 +697,100 @@ def test_create_composite_nested(shape, device):
         assert c["a"].device == device
 
 
-@pytest.mark.parametrize("recurse", [True, False])
-def test_lock(recurse):
-    shape = [3, 4, 5]
-    spec = Composite(
-        a=Composite(b=Composite(shape=shape[:3], device="cpu"), shape=shape[:2]),
-        shape=shape[:1],
-    )
-    spec["a"] = spec["a"].clone()
-    spec["a", "b"] = spec["a", "b"].clone()
-    assert not spec.locked
-    spec.lock_(recurse=recurse)
-    assert spec.locked
-    with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+class TestLock:
+    @pytest.mark.parametrize("recurse", [None, True, False])
+    def test_lock(self, recurse):
+        catch_warn = (
+            pytest.warns(DeprecationWarning, match="recurse")
+            if recurse is None
+            else contextlib.nullcontext()
+        )
+
+        shape = [3, 4, 5]
+        spec = Composite(
+            a=Composite(b=Composite(shape=shape[:3], device="cpu"), shape=shape[:2]),
+            shape=shape[:1],
+        )
         spec["a"] = spec["a"].clone()
-    with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
-        spec.set("a", spec["a"].clone())
-    if recurse:
-        assert spec["a"].locked
+        spec["a", "b"] = spec["a", "b"].clone()
+        assert not spec.locked
+        with catch_warn:
+            spec.lock_(recurse=recurse)
+        assert spec.locked
         with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
-            spec["a"].set("b", spec["a", "b"].clone())
+            spec["a"] = spec["a"].clone()
         with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+            spec.set("a", spec["a"].clone())
+        if recurse:
+            assert spec["a"].locked
+            with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+                spec["a"].set("b", spec["a", "b"].clone())
+            with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+                spec["a", "b"] = spec["a", "b"].clone()
+        else:
+            assert not spec["a"].locked
             spec["a", "b"] = spec["a", "b"].clone()
-    else:
-        assert not spec["a"].locked
+            spec["a"].set("b", spec["a", "b"].clone())
+        with catch_warn:
+            spec.unlock_(recurse=recurse)
+        spec["a"] = spec["a"].clone()
         spec["a", "b"] = spec["a", "b"].clone()
         spec["a"].set("b", spec["a", "b"].clone())
-    spec.unlock_(recurse=recurse)
-    spec["a"] = spec["a"].clone()
-    spec["a", "b"] = spec["a", "b"].clone()
-    spec["a"].set("b", spec["a", "b"].clone())
+
+    def test_edge_cases(self):
+        level3 = Composite()
+        level2 = Composite(level3=level3)
+        level1 = Composite(level2=level2)
+        level0 = Composite(level1=level1)
+        # locking level0 locks them all
+        level0.lock_(recurse=True)
+        assert level3.is_locked
+        # We cannot unlock level3
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a Composite that is part of a locked graph",
+        ):
+            level3.unlock_(recurse=True)
+        assert level3.is_locked
+        # Adding level2 to a new spec and locking it makes it hard to unlock the level0 root
+        new_spec = Composite(level2=level2)
+        new_spec.lock_(recurse=True)
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a Composite that is part of a locked graph",
+        ):
+            level0.unlock_(recurse=True)
+        assert level0.is_locked
+
+    def test_lock_mix_recurse_nonrecurse(self):
+        # lock with recurse
+        level3 = Composite()
+        level2 = Composite(level3=level3)
+        level1 = Composite(level2=level2)
+        level0 = Composite(level1=level1)
+        # locking level0 locks them all
+        level0.lock_(recurse=True)
+        new_spec = Composite(level2=level2)
+        new_spec.lock_(recurse=True)
+
+        # Unlock with recurse=False
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            level3.unlock_(recurse=False)
+        assert level3.is_locked
+        assert level2.is_locked
+        assert new_spec.is_locked
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            level2.unlock_(recurse=False)
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            level1.unlock_(recurse=False)
+        level0.unlock_(recurse=False)
+        assert level3.is_locked
+        assert level2.is_locked
+        assert level1.is_locked
+        new_spec.unlock_(recurse=False)
+        assert level3.is_locked
+        assert level2.is_locked
+        assert level1.is_locked
 
 
 def test_keys_to_empty_composite_spec():
