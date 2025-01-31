@@ -60,7 +60,6 @@ from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
     _replace_last,
-    implement_for,
     logger as torchrl_logger,
 )
 
@@ -78,7 +77,13 @@ from torchrl.data.tensor_specs import (
     Unbounded,
     UnboundedContinuous,
 )
-from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, make_tensordict
+from torchrl.envs.common import (
+    _do_nothing,
+    _EnvPostInit,
+    _maybe_unlock,
+    EnvBase,
+    make_tensordict,
+)
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import (
     _get_reset,
@@ -850,36 +855,43 @@ but got an object of type {type(transform)}."""
     @property
     def output_spec(self) -> TensorSpec:
         """Observation spec of the transformed environment."""
-        if not self.cache_specs or self.__dict__.get("_output_spec", None) is None:
-            output_spec = self.base_env.output_spec.clone()
+        if self.cache_specs:
+            output_spec = self.__dict__.get("_output_spec")
+            if output_spec is not None:
+                return output_spec
+        output_spec = self._make_output_spec()
+        return output_spec
 
-            # remove cached key values, but not _input_spec
-            super().empty_cache()
-            output_spec = output_spec.unlock_()
-            output_spec = self.transform.transform_output_spec(output_spec)
-            output_spec.lock_()
-            if self.cache_specs:
-                self.__dict__["_output_spec"] = output_spec
-        else:
-            output_spec = self.__dict__.get("_output_spec", None)
+    @_maybe_unlock
+    def _make_output_spec(self):
+        output_spec = self.base_env.output_spec.clone()
+
+        # remove cached key values, but not _input_spec
+        super().empty_cache()
+        output_spec = self.transform.transform_output_spec(output_spec)
+        if self.cache_specs:
+            self.__dict__["_output_spec"] = output_spec
         return output_spec
 
     @property
     def input_spec(self) -> TensorSpec:
-        """Action spec of the transformed environment."""
-        if self.__dict__.get("_input_spec", None) is None or not self.cache_specs:
-            input_spec = self.base_env.input_spec.clone()
+        """Observation spec of the transformed environment."""
+        if self.cache_specs:
+            input_spec = self.__dict__.get("_input_spec")
+            if input_spec is not None:
+                return input_spec
+        input_spec = self._make_input_spec()
+        return input_spec
 
-            # remove cached key values but not _output_spec
-            super().empty_cache()
+    @_maybe_unlock
+    def _make_input_spec(self):
+        input_spec = self.base_env.input_spec.clone()
 
-            input_spec.unlock_()
-            input_spec = self.transform.transform_input_spec(input_spec)
-            input_spec.lock_()
-            if self.cache_specs:
-                self.__dict__["_input_spec"] = input_spec
-        else:
-            input_spec = self.__dict__.get("_input_spec", None)
+        # remove cached key values, but not _input_spec
+        super().empty_cache()
+        input_spec = self.transform.transform_input_spec(input_spec)
+        if self.cache_specs:
+            self.__dict__["_input_spec"] = input_spec
         return input_spec
 
     def rand_action(self, tensordict: Optional[TensorDictBase] = None) -> TensorDict:
@@ -6507,7 +6519,7 @@ class VecNorm(Transform):
         )
 
     def __getstate__(self) -> Dict[str, Any]:
-        state = self.__dict__.copy()
+        state = super().__getstate__()
         _lock = state.pop("lock", None)
         if _lock is not None:
             state["lock_placeholder"] = None
@@ -6518,7 +6530,7 @@ class VecNorm(Transform):
             state.pop("lock_placeholder")
             _lock = mp.Lock()
             state["lock"] = _lock
-        self.__dict__.update(state)
+        super().__setstate__(state)
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -9950,14 +9962,7 @@ class TrajCounter(Transform):
     def _make_shared_value(self):
         self._traj_count = mp.Value("i", 0)
 
-    @implement_for("torch", None, "2.1")
     def __getstate__(self):
-        state = self.__dict__.copy()
-        state["_traj_count"] = None
-        return state
-
-    @implement_for("torch", "2.1")
-    def __getstate__(self):  # noqa: F811
         state = super().__getstate__()
         state["_traj_count"] = None
         return state

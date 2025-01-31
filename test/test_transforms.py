@@ -1100,7 +1100,7 @@ class TestCatFrames(TransformBase):
             }
         )
 
-        result = cat_frames.transform_observation_spec(observation_spec)
+        result = cat_frames.transform_observation_spec(observation_spec.clone())
         observation_spec = Composite(
             {
                 key: Bounded(space_min, space_max, (1, 3, 3), dtype=torch.double)
@@ -1665,7 +1665,9 @@ class TestR3M(TransformBase):
                 {key: Unbounded(r3m_net.outdim, device) for key in out_keys}
             )
 
-            observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
+            observation_spec_out = r3m_net.transform_observation_spec(
+                observation_spec.clone()
+            )
 
             for key in in_keys:
                 assert key not in observation_spec_out
@@ -1681,7 +1683,9 @@ class TestR3M(TransformBase):
                 ts_dict[key] = Unbounded(r3m_net.outdim, device)
             exp_ts = Composite(ts_dict)
 
-            observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
+            observation_spec_out = r3m_net.transform_observation_spec(
+                observation_spec.clone()
+            )
 
             for key in in_keys + out_keys:
                 assert observation_spec_out[key].shape == exp_ts[key].shape
@@ -2059,7 +2063,7 @@ class TestTrajCounter(TransformBase):
     def test_single_trans_env_check(self):
         torch.manual_seed(0)
         env = TransformedEnv(CountingEnv(max_steps=4), TrajCounter())
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         check_env_specs(env)
 
     @pytest.mark.parametrize("predefined", [True, False])
@@ -2073,7 +2077,9 @@ class TestTrajCounter(TransformBase):
             if t is None:
                 t = TrajCounter()
             env = TransformedEnv(CountingEnv(max_steps=max_steps), t.clone())
-            env.transform.transform_observation_spec(env.base_env.observation_spec)
+            env.transform.transform_observation_spec(
+                env.base_env.observation_spec.clone()
+            )
             return env
 
         if predefined:
@@ -2109,7 +2115,9 @@ class TestTrajCounter(TransformBase):
             else:
                 t = t.clone()
             env = TransformedEnv(CountingEnv(max_steps=max_steps), t)
-            env.transform.transform_observation_spec(env.base_env.observation_spec)
+            env.transform.transform_observation_spec(
+                env.base_env.observation_spec.clone()
+            )
             return env
 
         if predefined:
@@ -2137,7 +2145,7 @@ class TestTrajCounter(TransformBase):
             ),
             TrajCounter(),
         )
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         r = env.rollout(
             100,
             lambda td: td.set("action", torch.ones(env.shape + (1,))),
@@ -2153,7 +2161,7 @@ class TestTrajCounter(TransformBase):
             ),
             TrajCounter(),
         )
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         r = env.rollout(
             100,
             lambda td: td.set("action", torch.ones(env.shape + (1,))),
@@ -2165,7 +2173,7 @@ class TestTrajCounter(TransformBase):
     def test_transform_env(self):
         torch.manual_seed(0)
         env = TransformedEnv(CountingEnv(max_steps=4), TrajCounter())
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         r = env.rollout(100, lambda td: td.set("action", 1), break_when_any_done=False)
         assert r["traj_count"].max() == 19
 
@@ -2178,7 +2186,7 @@ class TestTrajCounter(TransformBase):
                 TrajCounter(out_key=(("nested"), (("traj_count",),))),
             ),
         )
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         r = env.rollout(100, lambda td: td.set("action", 1), break_when_any_done=False)
         assert r["nested", "traj_count"].max() == 19
 
@@ -2210,7 +2218,9 @@ class TestTrajCounter(TransformBase):
 
         def make_env(max_steps=4):
             env = TransformedEnv(CountingEnv(max_steps=max_steps), t.clone())
-            env.transform.transform_observation_spec(env.base_env.observation_spec)
+            env.transform.transform_observation_spec(
+                env.base_env.observation_spec.clone()
+            )
             return env
 
         collector = MultiSyncDataCollector(
@@ -3283,13 +3293,17 @@ class TestCatTensors(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(0, 1, (1, 4, 32))
-            observation_spec = cattensors.transform_observation_spec(observation_spec)
+            observation_spec = cattensors.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == torch.Size([1, len(keys) * 4, 32])
         else:
             observation_spec = Composite(
                 {key: Bounded(0, 1, (1, 4, 32)) for key in keys}
             )
-            observation_spec = cattensors.transform_observation_spec(observation_spec)
+            observation_spec = cattensors.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec[out_key].shape == torch.Size([1, len(keys) * 4, 32])
 
     @pytest.mark.parametrize("device", get_default_devices())
@@ -3429,13 +3443,13 @@ class TestCrop(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = crop.transform_observation_spec(observation_spec)
+            observation_spec = crop.transform_observation_spec(observation_spec.clone())
             assert observation_spec.shape == torch.Size([nchannels, 20, h])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = crop.transform_observation_spec(observation_spec)
+            observation_spec = crop.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, h])
 
@@ -3636,13 +3650,13 @@ class TestCenterCrop(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = cc.transform_observation_spec(observation_spec)
+            observation_spec = cc.transform_observation_spec(observation_spec.clone())
             assert observation_spec.shape == torch.Size([nchannels, 20, h])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = cc.transform_observation_spec(observation_spec)
+            observation_spec = cc.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, h])
 
@@ -3994,7 +4008,9 @@ class TestDoubleToFloat(TransformBase):
             observation_spec = Composite(
                 {key: Bounded(0, 1, (1, 3, 3), dtype=torch.double) for key in keys}
             )
-            observation_spec = double2float.transform_observation_spec(observation_spec)
+            observation_spec = double2float.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].dtype == torch.float, key
 
@@ -4041,7 +4057,7 @@ class TestDoubleToFloat(TransformBase):
             assert td_modif.get(key).dtype == torch.double
 
     def test_single_env_no_inkeys(self):
-        base_env = ContinuousActionVecMockEnv()
+        base_env = ContinuousActionVecMockEnv(spec_locked=False)
         for key, spec in list(base_env.observation_spec.items(True, True)):
             base_env.observation_spec[key] = spec.to(torch.float64)
         for key, spec in list(base_env.state_spec.items(True, True)):
@@ -4052,6 +4068,7 @@ class TestDoubleToFloat(TransformBase):
         env = TransformedEnv(
             base_env,
             DoubleToFloat(),
+            spec_locked=False,
         )
         for spec in env.observation_spec.values(True, True):
             assert spec.dtype == torch.float32
@@ -4773,13 +4790,17 @@ class TestFlattenObservation(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (*size, nchannels, 16, 16))
-            observation_spec = flatten.transform_observation_spec(observation_spec)
+            observation_spec = flatten.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape[-3] == expected_size
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (*size, nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = flatten.transform_observation_spec(observation_spec)
+            observation_spec = flatten.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape[-3] == expected_size
 
@@ -4813,13 +4834,17 @@ class TestFlattenObservation(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (*size, nchannels, 16, 16))
-            observation_spec = flatten.transform_observation_spec(observation_spec)
+            observation_spec = flatten.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape[-3] == expected_size
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (*size, nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = flatten.transform_observation_spec(observation_spec)
+            observation_spec = flatten.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape[-3] == expected_size
 
@@ -5055,13 +5080,13 @@ class TestGrayScale(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = gs.transform_observation_spec(observation_spec)
+            observation_spec = gs.transform_observation_spec(observation_spec.clone())
             assert observation_spec.shape == torch.Size([1, 16, 16])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = gs.transform_observation_spec(observation_spec)
+            observation_spec = gs.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([1, 16, 16])
 
@@ -5092,13 +5117,13 @@ class TestGrayScale(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = gs.transform_observation_spec(observation_spec)
+            observation_spec = gs.transform_observation_spec(observation_spec.clone())
             assert observation_spec.shape == torch.Size([1, 16, 16])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = gs.transform_observation_spec(observation_spec)
+            observation_spec = gs.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([1, 16, 16])
 
@@ -5702,7 +5727,7 @@ class TestObservationNorm(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(0, 1, (nchannels, 16, 16), device=device)
-            observation_spec = on.transform_observation_spec(observation_spec)
+            observation_spec = on.transform_observation_spec(observation_spec.clone())
             if standard_normal:
                 assert (observation_spec.space.low == -loc / scale).all()
                 assert (observation_spec.space.high == (1 - loc) / scale).all()
@@ -5714,7 +5739,7 @@ class TestObservationNorm(TransformBase):
             observation_spec = Composite(
                 {key: Bounded(0, 1, (nchannels, 16, 16), device=device) for key in keys}
             )
-            observation_spec = on.transform_observation_spec(observation_spec)
+            observation_spec = on.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 if standard_normal:
                     assert (observation_spec[key].space.low == -loc / scale).all()
@@ -5919,13 +5944,17 @@ class TestResize(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = resize.transform_observation_spec(observation_spec)
+            observation_spec = resize.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == torch.Size([nchannels, 20, 21])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = resize.transform_observation_spec(observation_spec)
+            observation_spec = resize.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
 
@@ -5956,13 +5985,17 @@ class TestResize(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = resize.transform_observation_spec(observation_spec)
+            observation_spec = resize.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == torch.Size([nchannels, 20, 21])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = resize.transform_observation_spec(observation_spec)
+            observation_spec = resize.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
 
@@ -6951,7 +6984,9 @@ class TestUnsqueezeTransform(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (*batch, *size, nchannels, 16, 16))
-            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            observation_spec = unsqueeze.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == expected_size
         else:
             observation_spec = Composite(
@@ -6960,7 +6995,9 @@ class TestUnsqueezeTransform(TransformBase):
                     for key in keys
                 }
             )
-            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            observation_spec = unsqueeze.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == expected_size
 
@@ -7107,7 +7144,9 @@ class TestUnsqueezeTransform(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (*batch, *size, nchannels, 16, 16))
-            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            observation_spec = unsqueeze.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == expected_size
         else:
             observation_spec = Composite(
@@ -7116,7 +7155,9 @@ class TestUnsqueezeTransform(TransformBase):
                     for key in keys
                 }
             )
-            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            observation_spec = unsqueeze.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == expected_size
 
@@ -7713,7 +7754,7 @@ class TestToTensorImage(TransformBase):
         if len(keys) == 1:
             observation_spec = Bounded(0, 255, (16, 16, 3), dtype=torch.uint8)
             observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
+                observation_spec.clone()
             )
             assert observation_spec.shape == torch.Size([3, 16, 16])
             assert (observation_spec.space.low == 0).all()
@@ -7723,7 +7764,7 @@ class TestToTensorImage(TransformBase):
                 {key: Bounded(0, 255, (16, 16, 3), dtype=torch.uint8) for key in keys}
             )
             observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
+                observation_spec.clone()
             )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([3, 16, 16])
@@ -7759,7 +7800,7 @@ class TestToTensorImage(TransformBase):
         if len(keys) == 1:
             observation_spec = Bounded(0, 255, (16, 16, 3), dtype=torch.uint8)
             observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
+                observation_spec.clone()
             )
             assert observation_spec.shape == torch.Size([3, 16, 16])
             assert (observation_spec.space.low == 0).all()
@@ -7769,7 +7810,7 @@ class TestToTensorImage(TransformBase):
                 {key: Bounded(0, 255, (16, 16, 3), dtype=torch.uint8) for key in keys}
             )
             observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
+                observation_spec.clone()
             )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([3, 16, 16])
@@ -9048,7 +9089,9 @@ class TestVIP(TransformBase):
         if del_keys:
             exp_ts = Composite({key: Unbounded(1024, device) for key in out_keys})
 
-            observation_spec_out = vip_net.transform_observation_spec(observation_spec)
+            observation_spec_out = vip_net.transform_observation_spec(
+                observation_spec.clone()
+            )
 
             for key in in_keys:
                 assert key not in observation_spec_out
@@ -9064,7 +9107,9 @@ class TestVIP(TransformBase):
                 ts_dict[key] = Unbounded(1024, device)
             exp_ts = Composite(ts_dict)
 
-            observation_spec_out = vip_net.transform_observation_spec(observation_spec)
+            observation_spec_out = vip_net.transform_observation_spec(
+                observation_spec.clone()
+            )
 
             for key in in_keys + out_keys:
                 assert observation_spec_out[key].shape == exp_ts[key].shape
@@ -9528,7 +9573,8 @@ class TestVecNorm:
                 lambda: TransformedEnv(
                     GymEnv(PENDULUM_VERSIONED()),
                     Compose(
-                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                        self.rename_t,
+                        VecNorm(in_keys=[("some", "obs"), "reward"]),
                     ),
                 )
             )
@@ -9537,7 +9583,8 @@ class TestVecNorm:
                 lambda: TransformedEnv(
                     ContinuousActionVecMockEnv(),
                     Compose(
-                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                        self.rename_t,
+                        VecNorm(in_keys=[("some", "obs"), "reward"]),
                     ),
                 )
             )
@@ -9934,13 +9981,17 @@ class TestTransforms:
         if len(keys) == 1:
             observation_spec = Bounded(0, 255, (nchannels, 16, 16))
             # StepCounter does not want non composite specs
-            observation_spec = compose[:2].transform_observation_spec(observation_spec)
+            observation_spec = compose[:2].transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == torch.Size([nchannels * N, 16, 16])
         else:
             observation_spec = Composite(
                 {key: Bounded(0, 255, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = compose.transform_observation_spec(observation_spec)
+            observation_spec = compose.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size(
                     [nchannels * N, 16, 16]

@@ -69,7 +69,8 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
-  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
+  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL \
+  TOKENIZERS_PARALLELISM=true
 
 # Software rendering requires GLX and OSMesa.
 if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
