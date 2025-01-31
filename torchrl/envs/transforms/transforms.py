@@ -526,7 +526,9 @@ class Transform(nn.Module):
                 f"parent of transform {type(self)} already set. "
                 "Call `transform.clone()` to get a similar transform with no parent set."
             )
-        self.__dict__["_container"] = weakref.ref(container)
+        self.__dict__["_container"] = (
+            weakref.ref(container) if container is not None else None
+        )
         self.__dict__["_parent"] = None
 
     def reset_parent(self) -> None:
@@ -577,18 +579,19 @@ class Transform(nn.Module):
         return container
 
     def __getstate__(self):
-        state = self.__dict__.copy()
-        container_weakref = state.pop("_container", None)
-        if container_weakref is not None:
-            container = container_weakref()
-        else:
-            container = container_weakref
-        state["_container"] = container
-        return state
+        result = self.__dict__.copy()
+        container = result["_container"]
+        if container is not None:
+            container = container()
+        result["_container"] = container
+        return result
 
     def __setstate__(self, state):
-        container = state.pop("_container", None)
-        state["_container"] = weakref.ref(container) if container is not None else None
+        state["_container"] = (
+            weakref.ref(state["_container"])
+            if state["_container"] is not None
+            else None
+        )
         self.__dict__.update(state)
 
     @property

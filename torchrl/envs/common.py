@@ -73,6 +73,9 @@ def _maybe_unlock(func):
             result = func(self, *args, **kwargs)
         finally:
             if is_locked:
+                if not hasattr(self, "_cache"):
+                    self._cache = {}
+                self._cache.clear()
                 self.set_spec_lock_(True)
         return result
 
@@ -87,10 +90,10 @@ def _cache_value(func):
     def wrapper(self, *args, **kwargs):
         if not self.is_spec_locked:
             return func(self, *args, **kwargs)
-        result = self._cache.get(func_name, NO_DEFAULT)
+        result = self.__dict__.setdefault("_cache", {}).get(func_name, NO_DEFAULT)
         if result is NO_DEFAULT:
             result = func(self, *args, **kwargs)
-            self._cache[func_name] = result
+            self.__dict__.setdefault("_cache", {})[func_name] = result
         return result
 
     return wrapper
@@ -101,7 +104,11 @@ def _clear_cache_when_set(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        self._cache.clear()
+        # if there's no cache we'll just recompute the value
+        if "_cache" not in self.__dict__:
+            self._cache = {}
+        else:
+            self._cache.clear()
         result = func(self, *args, **kwargs)
         self._cache.clear()
         return result
@@ -229,6 +236,8 @@ class _EnvPostInit(abc.ABCMeta):
         auto_reset = kwargs.pop("auto_reset", False)
         auto_reset_replace = kwargs.pop("auto_reset_replace", True)
         instance: EnvBase = super().__call__(*args, **kwargs)
+        if "_cache" not in instance.__dict__:
+            instance._cache = {}
 
         if spec_locked:
             instance.input_spec.lock_(recurse=True)
@@ -451,6 +460,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         spec_locked: bool = True,
         auto_reset: bool = False,
     ):
+        if "_cache" not in self.__dict__:
+            self._cache = {}
         super().__init__()
 
         self.__dict__.setdefault("_batch_size", None)
@@ -502,7 +513,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.is_closed = True
         self._run_type_checks = run_type_checks
         self._allow_done_after_reset = allow_done_after_reset
-        self._cache = {}
 
     def set_spec_lock_(self, mode: bool = True) -> EnvBase:
         """Locks or unlocks the environment's specs.
@@ -1388,11 +1398,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         If there is more than one done key in the environment, this function will raise an exception.
         """
-        if len(self.done_keys) > 1:
+        done_keys = self.done_keys
+        if len(done_keys) > 1:
             raise KeyError(
                 "done_key requested but more than one key present in the environment"
             )
-        return self.done_keys[0]
+        return done_keys[0]
 
     @property
     def full_done_spec(self) -> Composite:
@@ -3218,9 +3229,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._step_mdp(next_tensordict)
 
     @property
-    @_cache_value
+    # @_cache_value
     def _step_mdp(self):
-        step_func = _StepMDP(self, exclude_action=False)
+        step_func = self._cache.get("_step_mdp_value")
+        if step_func is None:
+            step_func = _StepMDP(self, exclude_action=False)
+            self._cache["_step_mdp_value"] = step_func
         return step_func
 
     def _rollout_stop_early(
