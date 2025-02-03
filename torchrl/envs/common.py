@@ -538,7 +538,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if output_spec is not None:
                 output_spec.unlock_(recurse=True)
             if input_spec is not None:
-                input_spec.unlock_(recurse=False)
+                input_spec.unlock_(recurse=True)
         self.__dict__["_is_spec_locked"] = mode
         return self
 
