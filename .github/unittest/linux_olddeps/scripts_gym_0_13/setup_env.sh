@@ -62,12 +62,13 @@ cp mjkey.txt mujoco_py/binaries/
 pip install -e .
 cd ..
 
-# Install dm_control
-git clone https://github.com/deepmind/dm_control
-cd dm_control
-git checkout c053360edea6170acfd9c8f65446703307d9d352
-pip install -e .
-cd ..
+# OLD DM_CONTROL NOT SUPPORTED ANYMORE
+# # Install dm_control
+# git clone https://github.com/deepmind/dm_control
+# cd dm_control
+# git checkout c053360edea6170acfd9c8f65446703307d9d352
+# pip install -e .
+# cd ..
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
