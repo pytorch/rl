@@ -38,7 +38,7 @@ from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import _make_ordinal_device, accept_remote_rref_udf_invocation
+from torchrl._utils import accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -1574,33 +1574,12 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
 
 
 class InPlaceSampler:
-    """A sampler to write tennsordicts in-place.
-
-    .. warning:: This class is deprecated and will be removed in v0.7.
-
-    To be used cautiously as this may lead to unexpected behavior (i.e. tensordicts
-    overwritten during execution).
-
-    """
+    """[Deprecated] A sampler to write tennsordicts in-place."""
 
     def __init__(self, device: DEVICE_TYPING | None = None):
-        warnings.warn(
-            "InPlaceSampler has been deprecated and will be removed in v0.7.",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            "This class has been removed without replacement. In-place sampling should be avoided."
         )
-        self.out = None
-        if device is None:
-            device = "cpu"
-        self.device = _make_ordinal_device(torch.device(device))
-
-    def __call__(self, list_of_tds):
-        if self.out is None:
-            self.out = torch.stack(list_of_tds, 0).contiguous()
-            if self.device is not None:
-                self.out = self.out.to(self.device)
-        else:
-            torch.stack(list_of_tds, 0, out=self.out)
-        return self.out
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
