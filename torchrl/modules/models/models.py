@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import dataclasses
-import warnings
 
 from copy import deepcopy
 from numbers import Number
@@ -51,6 +50,7 @@ class MLP(nn.Sequential):
             argument (see below). If ``num_cells`` is an iterable and depth is
             indicated, both should match: ``len(num_cells)`` must be equal to
             ``depth``.
+            Defaults to ``0`` (no depth - the network contains a single linear layer).
         num_cells (int or sequence of int, optional): number of cells of every
             layer in between the input and output. If an integer is provided,
             every layer will have the same number of cells. If an iterable is provided,
@@ -181,17 +181,10 @@ class MLP(nn.Sequential):
             raise ValueError("out_features must be specified for MLP.")
 
         if num_cells is None:
-            warnings.warn(
-                "The current behavior of MLP when not providing `num_cells` is that the number of cells is "
-                "set to [default_num_cells] * depth, where `depth=3` by default and `default_num_cells=0`. "
-                "From v0.7, this behavior will switch and `depth=0` will be used. "
-                "To silence tis message, indicate what number of cells you desire.",
-                category=DeprecationWarning,
-            )
             default_num_cells = 32
             if depth is None:
-                num_cells = [default_num_cells] * 3
-                depth = 3
+                num_cells = []
+                depth = 0
             else:
                 num_cells = [default_num_cells] * depth
 
