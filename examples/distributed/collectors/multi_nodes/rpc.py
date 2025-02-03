@@ -74,7 +74,7 @@ if __name__ == "__main__":
         "slurm_gpus_per_task": args.slurm_gpus_per_task,
     }
     device_str = "device" if num_workers <= 1 else "devices"
-    if torch.cuda.device_count():
+    if torch.cuda.is_available():
         collector_kwargs = {device_str: "cuda:0", f"storing_{device_str}": "cuda:0"}
     else:
         collector_kwargs = {device_str: "cpu", "storing_{device_str}": "cpu"}
