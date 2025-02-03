@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import multiprocessing as mp
 import warnings
+import weakref
 from copy import copy
 from enum import IntEnum
 from functools import wraps
@@ -59,7 +60,7 @@ from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
     _replace_last,
-    implement_for,
+    logger as torchrl_logger,
 )
 
 from torchrl.data.tensor_specs import (
@@ -76,7 +77,13 @@ from torchrl.data.tensor_specs import (
     Unbounded,
     UnboundedContinuous,
 )
-from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, make_tensordict
+from torchrl.envs.common import (
+    _do_nothing,
+    _EnvPostInit,
+    _maybe_unlock,
+    EnvBase,
+    make_tensordict,
+)
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import (
     _get_reset,
@@ -129,23 +136,42 @@ def _apply_to_composite_inv(function):
     # Now since EnvBase.step ignores new inputs (ie the root level of the
     # tensor is not updated) an out_key that does not match the in_key has
     # no effect on the spec.
+    @wraps(function)
     def new_fun(self, input_spec):
-        action_spec = input_spec["full_action_spec"].clone()
-        state_spec = input_spec["full_state_spec"]
-        if state_spec is None:
-            state_spec = Composite(shape=input_spec.shape, device=input_spec.device)
+        if "full_action_spec" in input_spec.keys():
+            skip = False
+            action_spec = input_spec["full_action_spec"].clone()
+            state_spec = input_spec["full_state_spec"]
+            if state_spec is None:
+                state_spec = Composite(shape=input_spec.shape, device=input_spec.device)
+            else:
+                state_spec = state_spec.clone()
         else:
-            state_spec = state_spec.clone()
+            skip = True
+            # In case we pass full_action_spec or full_state_spec directly
+            action_spec = state_spec = Composite()
         in_keys_inv = self.in_keys_inv
         out_keys_inv = self.out_keys_inv
         for in_key, out_key in _zip_strict(in_keys_inv, out_keys_inv):
-            if in_key != out_key:
-                # we only change the input spec if the key is the same
-                continue
+            in_key = unravel_key(in_key)
+            out_key = unravel_key(out_key)
+            # if in_key != out_key:
+            #     # we only change the input spec if the key is the same
+            #     continue
             if in_key in action_spec.keys(True, True):
                 action_spec[out_key] = function(self, action_spec[in_key].clone())
+                if in_key != out_key:
+                    del action_spec[in_key]
             elif in_key in state_spec.keys(True, True):
                 state_spec[out_key] = function(self, state_spec[in_key].clone())
+                if in_key != out_key:
+                    del state_spec[in_key]
+            elif in_key in input_spec.keys(False, True):
+                input_spec[out_key] = function(self, input_spec[in_key].clone())
+                if in_key != out_key:
+                    del input_spec[in_key]
+        if skip:
+            return input_spec
         return Composite(
             full_state_spec=state_spec,
             full_action_spec=action_spec,
@@ -353,13 +379,12 @@ class Transform(nn.Module):
         if not self.in_keys_inv:
             return tensordict
         for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
-            data = tensordict.get(in_key, None)
+            data = tensordict.get(out_key, None)
             if data is not None:
                 item = self._inv_apply_transform(data)
-                tensordict.set(out_key, item)
+                tensordict.set(in_key, item)
             elif not self.missing_tolerance:
-                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
-
+                raise KeyError(f"'{out_key}' not found in tensordict {tensordict}")
         return tensordict
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
@@ -420,6 +445,13 @@ class Transform(nn.Module):
             expected spec after the transform
 
         """
+        input_spec = input_spec.clone()
+        input_spec["full_state_spec"] = self.transform_state_spec(
+            input_spec["full_state_spec"]
+        )
+        input_spec["full_action_spec"] = self.transform_action_spec(
+            input_spec["full_action_spec"]
+        )
         return input_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -458,6 +490,30 @@ class Transform(nn.Module):
         """
         return done_spec
 
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        """Transforms the action spec such that the resulting spec matches transform mapping.
+
+        Args:
+            action_spec (TensorSpec): spec before the transform
+
+        Returns:
+            expected spec after the transform
+
+        """
+        return action_spec
+
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        """Transforms the state spec such that the resulting spec matches transform mapping.
+
+        Args:
+            state_spec (TensorSpec): spec before the transform
+
+        Returns:
+            expected spec after the transform
+
+        """
+        return state_spec
+
     def dump(self, **kwargs) -> None:
         pass
 
@@ -470,7 +526,9 @@ class Transform(nn.Module):
                 f"parent of transform {type(self)} already set. "
                 "Call `transform.clone()` to get a similar transform with no parent set."
             )
-        self.__dict__["_container"] = container
+        self.__dict__["_container"] = (
+            weakref.ref(container) if container is not None else None
+        )
         self.__dict__["_parent"] = None
 
     def reset_parent(self) -> None:
@@ -498,7 +556,11 @@ class Transform(nn.Module):
         """
         if "_container" not in self.__dict__:
             raise AttributeError("transform parent uninitialized")
-        container = self.__dict__["_container"]
+        container_weakref = self.__dict__["_container"]
+        if container_weakref is not None:
+            container = container_weakref()
+        else:
+            container = container_weakref
         if container is None:
             return container
         while not isinstance(container, EnvBase):
@@ -508,8 +570,29 @@ class Transform(nn.Module):
                     "A transform parent must be either another Compose transform or an environment object."
                 )
             compose = container
-            container = compose.__dict__.get("_container", None)
+            container_weakref = compose.__dict__.get("_container")
+            if container_weakref is not None:
+                # container is a weakref
+                container = container_weakref()
+            else:
+                container = container_weakref
         return container
+
+    def __getstate__(self):
+        result = self.__dict__.copy()
+        container = result["_container"]
+        if container is not None:
+            container = container()
+        result["_container"] = container
+        return result
+
+    def __setstate__(self, state):
+        state["_container"] = (
+            weakref.ref(state["_container"])
+            if state["_container"] is not None
+            else None
+        )
+        self.__dict__.update(state)
 
     @property
     def parent(self) -> Optional[EnvBase]:
@@ -528,26 +611,35 @@ class Transform(nn.Module):
                         RewardSum(keys=['reward'])))
 
         """
-        if self.__dict__.get("_parent", None) is None:
+        # TODO: ideally parent should be a weakref, like container, to avoid keeping track of a parent that
+        #  is de facto out of scope.
+        parent = self.__dict__.get("_parent")
+        if parent is None:
             if "_container" not in self.__dict__:
                 raise AttributeError("transform parent uninitialized")
-            container = self.__dict__["_container"]
+            container_weakref = self.__dict__["_container"]
+            if container_weakref is None:
+                return container_weakref
+            container = container_weakref()
             if container is None:
+                torchrl_logger.info(
+                    "transform container out of scope. Returning None for parent."
+                )
                 return container
-            out = None
+            parent = None
             if not isinstance(container, EnvBase):
                 # if it's not an env, it should be a Compose transform
                 if not isinstance(container, Compose):
                     raise ValueError(
                         "A transform parent must be either another Compose transform or an environment object."
                     )
-                out, _ = container._rebuild_up_to(self)
+                parent, _ = container._rebuild_up_to(self)
             elif isinstance(container, TransformedEnv):
-                out = TransformedEnv(container.base_env)
+                parent = TransformedEnv(container.base_env)
             else:
                 raise ValueError(f"container is of type {type(container)}")
-            self.__dict__["_parent"] = out
-        return self.__dict__["_parent"]
+            self.__dict__["_parent"] = parent
+        return parent
 
     def empty_cache(self):
         self.__dict__["_parent"] = None
@@ -763,37 +855,68 @@ but got an object of type {type(transform)}."""
     @property
     def output_spec(self) -> TensorSpec:
         """Observation spec of the transformed environment."""
-        if not self.cache_specs or self.__dict__.get("_output_spec", None) is None:
-            output_spec = self.base_env.output_spec.clone()
+        if self.cache_specs:
+            output_spec = self.__dict__.get("_output_spec")
+            if output_spec is not None:
+                return output_spec
+        output_spec = self._make_output_spec()
+        return output_spec
 
-            # remove cached key values, but not _input_spec
-            super().empty_cache()
-            output_spec = output_spec.unlock_()
-            output_spec = self.transform.transform_output_spec(output_spec)
-            output_spec.lock_()
-            if self.cache_specs:
-                self.__dict__["_output_spec"] = output_spec
-        else:
-            output_spec = self.__dict__.get("_output_spec", None)
+    @_maybe_unlock
+    def _make_output_spec(self):
+        output_spec = self.base_env.output_spec.clone()
+
+        # remove cached key values, but not _input_spec
+        super().empty_cache()
+        output_spec = self.transform.transform_output_spec(output_spec)
+        if self.cache_specs:
+            self.__dict__["_output_spec"] = output_spec
         return output_spec
 
     @property
     def input_spec(self) -> TensorSpec:
-        """Action spec of the transformed environment."""
-        if self.__dict__.get("_input_spec", None) is None or not self.cache_specs:
-            input_spec = self.base_env.input_spec.clone()
-
-            # remove cached key values but not _output_spec
-            super().empty_cache()
-
-            input_spec.unlock_()
-            input_spec = self.transform.transform_input_spec(input_spec)
-            input_spec.lock_()
-            if self.cache_specs:
-                self.__dict__["_input_spec"] = input_spec
-        else:
-            input_spec = self.__dict__.get("_input_spec", None)
+        """Observation spec of the transformed environment."""
+        if self.cache_specs:
+            input_spec = self.__dict__.get("_input_spec")
+            if input_spec is not None:
+                return input_spec
+        input_spec = self._make_input_spec()
         return input_spec
+
+    @_maybe_unlock
+    def _make_input_spec(self):
+        input_spec = self.base_env.input_spec.clone()
+
+        # remove cached key values, but not _input_spec
+        super().empty_cache()
+        input_spec = self.transform.transform_input_spec(input_spec)
+        if self.cache_specs:
+            self.__dict__["_input_spec"] = input_spec
+        return input_spec
+
+    def rand_action(self, tensordict: Optional[TensorDictBase] = None) -> TensorDict:
+        if type(self.base_env).rand_action is not EnvBase.rand_action:
+            # TODO: this will fail if the transform modifies the input.
+            #  For instance, if an env overrides rand_action and we build a
+            #  env = PendulumEnv().append_transform(ActionDiscretizer(num_intervals=4))
+            #  env.rand_action will NOT have a discrete action!
+            #  Getting a discrete action would require coding the inverse transform of an action within
+            #  ActionDiscretizer (ie, float->int, not int->float).
+            #  We can loosely check that the action_spec isn't altered - that doesn't mean the action is
+            #  intact but it covers part of these alterations.
+            #
+            # The following check may be expensive to run and could be cached.
+            if self.full_action_spec != self.base_env.full_action_spec:
+                raise RuntimeError(
+                    f"The rand_action method from the base env {self.base_env.__class__.__name__} "
+                    "has been overwritten, but the transforms appended to the environment modify "
+                    "the action. To call the base env rand_action method, we should then invert the "
+                    "action transform, which is (in general) not doable. "
+                    f"The full action spec of the base env is: {self.base_env.full_action_spec}, \n"
+                    f"the full action spec of the transformed env is {self.full_action_spec}."
+                )
+            return self.base_env.rand_action(tensordict)
+        return super().rand_action(tensordict)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # No need to clone here because inv does it already
@@ -1114,9 +1237,33 @@ class Compose(Transform):
         return batch_size
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        # Input, action and state specs do NOT need to be reversed
+        # although applying these specs requires them to be called backward.
+        # To prove this, imagine we have 2 action transforms: t0 is an ActionDiscretizer, it maps float actions
+        # from the env to int actions for the policy. We add one more transform t1 that, if a == a_action_max,
+        # reduces its value by 1 (ie, the policy can sample actions from 0 to N + 1, and ActionDiscretizer
+        # has top N values).
+        # To apply this transform given an int action from the policy, we first call t1 to clamp the action to
+        # N (from N+1), then call t0 to map it to a float.
+        # We build this from TEnv(env, Compose(ActionDiscretizer, ActionClamp)) and call them starting with the
+        # last then the first.
+        # To know what the action spec is to the 'outside world' (ie, to the policy) we must take
+        # the action spec from the env, map it using t0 then t1 (going from in to out).
         for t in self.transforms:
             input_spec = t.transform_input_spec(input_spec)
         return input_spec
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        # To understand why we don't invert, look up at transform_input_spec
+        for t in self.transforms:
+            action_spec = t.transform_action_spec(action_spec)
+        return action_spec
+
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        # To understand why we don't invert, look up at transform_input_spec
+        for t in self.transforms:
+            state_spec = t.transform_state_spec(state_spec)
+        return state_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
@@ -1252,8 +1399,11 @@ class Compose(Transform):
         super().set_missing_tolerance(mode)
 
     def _rebuild_up_to(self, final_transform):
-        container = self.__dict__["_container"]
-
+        container_weakref = self.__dict__["_container"]
+        if container_weakref is not None:
+            container = container_weakref()
+        else:
+            container = container_weakref
         if isinstance(container, Compose):
             out, parent_compose = container._rebuild_up_to(self)
             if out is None:
@@ -1589,14 +1739,16 @@ class TargetReturn(Transform):
 
     @property
     def reset_key(self):
-        reset_key = self.__dict__.get("_reset_key", None)
-        if reset_key is None:
-            reset_keys = self.parent.reset_keys
-            if len(reset_keys) > 1:
-                raise RuntimeError(
-                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
-                )
-            reset_key = self._reset_key = reset_keys[0]
+        reset_key = getattr(self, "_reset_key", None)
+        if reset_key is not None:
+            return reset_key
+        reset_keys = self.parent.reset_keys
+        if len(reset_keys) > 1:
+            raise RuntimeError(
+                f"Got more than one reset key in env {self.container}, cannot infer which one to use. Consider providing the reset key in the {type(self)} constructor."
+            )
+        reset_key = reset_keys[0]
+        self._reset_key = reset_key
         return reset_key
 
     @reset_key.setter
@@ -2243,19 +2395,16 @@ class UnsqueezeTransform(Transform):
             spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
         return spec
 
-    def _inv_transform_spec(self, spec: TensorSpec) -> None:
-        space = spec.space
-        if isinstance(space, ContinuousBox):
-            space.low = self._inv_apply_transform(space.low)
-            space.high = self._inv_apply_transform(space.high)
-            spec.shape = space.low.shape
-        else:
-            spec.shape = self._inv_apply_transform(torch.zeros(spec.shape)).shape
-        return spec
+    # To map the specs, we actually use the forward call, not the inv
+    _inv_transform_spec = _transform_spec
 
     @_apply_to_composite_inv
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        return self._inv_transform_spec(input_spec)
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        return self._inv_transform_spec(action_spec)
+
+    @_apply_to_composite_inv
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        return self._inv_transform_spec(state_spec)
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
@@ -2805,13 +2954,29 @@ class ObservationNorm(ObservationTransform):
             space.high = self._apply_transform(space.high)
         return observation_spec
 
+    # @_apply_to_composite_inv
+    # def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+    #     space = input_spec.space
+    #     if isinstance(space, ContinuousBox):
+    #         space.low = self._apply_transform(space.low)
+    #         space.high = self._apply_transform(space.high)
+    #     return input_spec
+
     @_apply_to_composite_inv
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        space = input_spec.space
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        space = action_spec.space
         if isinstance(space, ContinuousBox):
             space.low = self._apply_transform(space.low)
             space.high = self._apply_transform(space.high)
-        return input_spec
+        return action_spec
+
+    @_apply_to_composite_inv
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        space = state_spec.space
+        if isinstance(space, ContinuousBox):
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
+        return state_spec
 
     def __repr__(self) -> str:
         if self.initialized and (self.loc.numel() == 1 and self.scale.numel() == 1):
@@ -3064,15 +3229,16 @@ class CatFrames(ObservationTransform):
 
     @property
     def reset_key(self):
-        reset_key = self.__dict__.get("_reset_key", None)
-        if reset_key is None:
-            reset_keys = self.parent.reset_keys
-            if len(reset_keys) > 1:
-                raise RuntimeError(
-                    f"Got more than one reset key in env {self.container}, cannot infer which one to use. "
-                    f"Consider providing the reset key in the {type(self)} constructor."
-                )
-            reset_key = self._reset_key = reset_keys[0]
+        reset_key = getattr(self, "_reset_key", None)
+        if reset_key is not None:
+            return reset_key
+        reset_keys = self.parent.reset_keys
+        if len(reset_keys) > 1:
+            raise RuntimeError(
+                f"Got more than one reset key in env {self.container}, cannot infer which one to use. "
+                f"Consider providing the reset key in the {type(self)} constructor."
+            )
+        reset_key = reset_keys[0]
         return reset_key
 
     @reset_key.setter
@@ -4415,10 +4581,15 @@ class UnaryTransform(Transform):
     Args:
         in_keys (sequence of NestedKey): the keys of inputs to the unary operation.
         out_keys (sequence of NestedKey): the keys of the outputs of the unary operation.
-        fn (Callable): the function to use as the unary operation. If it accepts
-            a non-tensor input, it must also accept ``None``.
+        in_keys_inv (sequence of NestedKey, optional): the keys of inputs to the unary operation during inverse call.
+        out_keys_inv (sequence of NestedKey, optional): the keys of the outputs of the unary operation durin inverse call.
 
     Keyword Args:
+        fn (Callable[[Any], Tensor | TensorDictBase]): the function to use as the unary operation. If it accepts
+            a non-tensor input, it must also accept ``None``.
+        inv_fn (Callable[[Any], Any], optional): the function to use as the unary operation during inverse calls.
+            If it accepts a non-tensor input, it must also accept ``None``.
+            Can be ommitted, in which case :attr:`fn` will be used for inverse maps.
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
             :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
             on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
@@ -4489,12 +4660,21 @@ class UnaryTransform(Transform):
         self,
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
-        fn: Callable,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
         *,
+        fn: Callable[[Any], Tensor | TensorDictBase],
+        inv_fn: Callable[[Any], Any] | None = None,
         use_raw_nontensor: bool = False,
     ):
-        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
         self._fn = fn
+        self._inv_fn = inv_fn
         self._use_raw_nontensor = use_raw_nontensor
 
     def _apply_transform(self, value):
@@ -4508,12 +4688,60 @@ class UnaryTransform(Transform):
                 value = value.tolist()
         return self._fn(value)
 
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
+        if not self._use_raw_nontensor:
+            if isinstance(state, NonTensorData):
+                if state.dim() == 0:
+                    state = state.get("data")
+                else:
+                    state = state.tolist()
+            elif isinstance(state, NonTensorStack):
+                state = state.tolist()
+        if self._inv_fn is not None:
+            return self._inv_fn(state)
+        return self._fn(state)
+
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         with _set_missing_tolerance(self, True):
             tensordict_reset = self._call(tensordict_reset)
         return tensordict_reset
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        input_spec = input_spec.clone()
+
+        # Make a generic input from the spec, call the transform with that
+        # input, and then generate the output spec from the output.
+        zero_input_ = input_spec.zero()
+        test_input = zero_input_["full_action_spec"].update(
+            zero_input_["full_state_spec"]
+        )
+        # We use forward and not inv because the spec comes from the base env and
+        # we are trying to infer what the spec looks like from the outside.
+        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+            data = test_input.get(in_key, None)
+            if data is not None:
+                data = self._apply_transform(data)
+                test_input.set(out_key, data)
+            elif not self.missing_tolerance:
+                raise KeyError(f"'{in_key}' not found in tensordict {test_input}")
+        test_output = test_input
+        # test_output = self.inv(test_input)
+        test_input_spec = make_composite_from_td(
+            test_output, unsqueeze_null_shapes=False
+        )
+
+        input_spec["full_action_spec"] = self.transform_action_spec(
+            input_spec["full_action_spec"],
+            test_input_spec,
+        )
+        if "full_state_spec" in input_spec.keys():
+            input_spec["full_state_spec"] = self.transform_state_spec(
+                input_spec["full_state_spec"],
+                test_input_spec,
+            )
+        return input_spec
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
         output_spec = output_spec.clone()
@@ -4548,14 +4776,19 @@ class UnaryTransform(Transform):
         return output_spec
 
     def _transform_spec(
-        self, spec: TensorSpec, test_output_spec: TensorSpec
+        self, spec: TensorSpec, test_output_spec: TensorSpec, inverse: bool = False
     ) -> TensorSpec:
         if not isinstance(spec, Composite):
             raise TypeError(f"{self}: Only specs of type Composite can be transformed")
 
         spec_keys = set(spec.keys(include_nested=True))
 
-        for in_key, out_key in zip(self.in_keys, self.out_keys):
+        iterator = (
+            zip(self.in_keys, self.out_keys)
+            if not inverse
+            else zip(self.in_keys_inv, self.out_keys_inv)
+        )
+        for in_key, out_key in iterator:
             if in_key in spec_keys:
                 spec.set(out_key, test_output_spec[out_key])
         return spec
@@ -4575,6 +4808,16 @@ class UnaryTransform(Transform):
     ) -> TensorSpec:
         return self._transform_spec(done_spec, test_output_spec)
 
+    def transform_action_spec(
+        self, action_spec: TensorSpec, test_input_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(action_spec, test_input_spec, inverse=True)
+
+    def transform_state_spec(
+        self, state_spec: TensorSpec, test_input_spec: TensorSpec
+    ) -> TensorSpec:
+        return self._transform_spec(state_spec, test_input_spec, inverse=True)
+
 
 class Hash(UnaryTransform):
     r"""Adds a hash value to a tensordict.
@@ -4582,12 +4825,21 @@ class Hash(UnaryTransform):
     Args:
         in_keys (sequence of NestedKey): the keys of the values to hash.
         out_keys (sequence of NestedKey): the keys of the resulting hashes.
+        in_keys_inv (sequence of NestedKey, optional): the keys of the values to hash during inv call.
+
+            .. note:: If an inverse map is required, a repertoire ``Dict[Tuple[int], Any]`` of hash to value should be
+                passed alongside the list of keys to let the ``Hash`` transform know how to recover a value from a
+                given hash. This repertoire isn't copied, so it can be modified in the same workspace after the
+                transform instantiation and these modifications will be reflected in the map. Missing hashes will be
+                mapped to ``None``.
+
+        out_keys_inv (sequence of NestedKey, optional): the keys of the resulting hashes during inv call.
+
+    Keyword Args:
         hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,
             the hash function must accept it as its second argument. Default is
             ``Hash.reproducible_hash``.
         seed (optional): seed to use for the hash function, if it requires one.
-
-    Keyword Args:
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
             :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
             on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
@@ -4673,9 +4925,9 @@ class Hash(UnaryTransform):
         self,
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
+        *,
         hash_fn: Callable = None,
         seed: Any | None = None,
-        *,
         use_raw_nontensor: bool = False,
     ):
         if hash_fn is None:
@@ -4689,6 +4941,35 @@ class Hash(UnaryTransform):
             fn=self.call_hash_fn,
             use_raw_nontensor=use_raw_nontensor,
         )
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        inputs = tensordict.select(*self.in_keys_inv).detach().cpu()
+        tensordict = super()._inv_call(tensordict)
+
+        def register_outcome(td):
+            # We need to treat each hash independently
+            if td.ndim:
+                if td.ndim > 1:
+                    td_r = td.reshape(-1)
+                elif td.ndim == 1:
+                    td_r = td
+                result = torch.stack([register_outcome(_td) for _td in td_r.unbind(0)])
+                if td_r is not td:
+                    return result.reshape(td.shape)
+                return result
+            for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+                inp = inputs.get(in_key)
+                inp = tuple(inp.tolist())
+                outp = self._repertoire.get(inp)
+                td[out_key] = outp
+            return td
+
+        return register_outcome(tensordict)
+
+    def state_dict(self, *args, destination=None, prefix="", keep_vars=False):
+        if self.in_keys_inv is not None:
+            return {"_repertoire": self._repertoire}
+        return {}
 
     def call_hash_fn(self, value):
         if self._seed is None:
@@ -4714,7 +4995,7 @@ class Hash(UnaryTransform):
         if seed is not None:
             seeded_string = seed + string
         else:
-            seeded_string = string
+            seeded_string = str(string)
 
         # Create a new SHA-256 hash object
         hash_object = hashlib.sha256()
@@ -4726,6 +5007,193 @@ class Hash(UnaryTransform):
         hash_bytes = bytearray(hash_object.digest())
 
         return torch.frombuffer(hash_bytes, dtype=torch.uint8)
+
+
+class Tokenizer(UnaryTransform):
+    r"""Applies a tokenization operation on the specified inputs.
+
+    Args:
+        in_keys (sequence of NestedKey): the keys of inputs to the tokenization operation.
+        out_keys (sequence of NestedKey): the keys of the outputs of the tokenization operation.
+        in_keys_inv (sequence of NestedKey, optional): the keys of inputs to the tokenization operation during inverse call.
+        out_keys_inv (sequence of NestedKey, optional): the keys of the outputs of the tokenization operation during inverse call.
+
+    Keyword Args:
+        tokenizer (transformers.PretrainedTokenizerBase or str, optional): the tokenizer to use. If ``None``,
+            "bert-base-uncased" will be used by default. If a string is provided, it should be the name of a
+            pre-trained tokenizer.
+        use_raw_nontensor (bool, optional): if ``False``, data is extracted from
+            :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before the tokenization
+            function is called on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
+            inputs are given directly to the tokenization function, which must support those inputs. Default is ``False``.
+        additional_tokens (List[str], optional): list of additional tokens to add to the tokenizer's vocabulary.
+
+    .. note:: This transform can be used both to transform output strings into tokens and to transform back tokenized
+        actions or states into strings. If the environment has a string state-spec, the transformed version will have
+        a tokenized state-spec. If it is a string action spec, it will result in a tokenized action spec.
+
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey],
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
+        *,
+        tokenizer: "transformers.PretrainedTokenizerBase" = None,  # noqa: F821
+        use_raw_nontensor: bool = False,
+        additional_tokens: List[str] | None = None,
+        skip_special_tokens: bool = True,
+        add_special_tokens: bool = False,
+        padding: bool = True,
+        max_length: int | None = None,
+    ):
+        if tokenizer is None:
+            from transformers import AutoTokenizer
+
+            tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        elif isinstance(tokenizer, str):
+            from transformers import AutoTokenizer
+
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+
+        self.tokenizer = tokenizer
+        self.add_special_tokens = add_special_tokens
+        self.skip_special_tokens = skip_special_tokens
+        self.padding = padding
+        self.max_length = max_length
+        if additional_tokens:
+            self.tokenizer.add_tokens(additional_tokens)
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+            fn=self.call_tokenizer_fn,
+            inv_fn=self.call_tokenizer_inv_fn,
+            use_raw_nontensor=use_raw_nontensor,
+        )
+
+    @property
+    def device(self):
+        if "_device" in self.__dict__:
+            return self._device
+        parent = self.parent
+        if parent is None:
+            return None
+        device = parent.device
+        self._device = device
+        return device
+
+    def call_tokenizer_fn(self, value: str | List[str]):
+        device = self.device
+        kwargs = {"add_special_tokens": self.add_special_tokens}
+        if self.max_length is not None:
+            kwargs["padding"] = "max_length"
+            kwargs["max_length"] = self.max_length
+        if isinstance(value, str):
+            out = self.tokenizer.encode(value, return_tensors="pt", **kwargs)[0]
+            # TODO: incorporate attention mask
+            # attention_mask = torch.ones_like(out, dtype=torch.bool)
+        else:
+            kwargs["padding"] = (
+                self.padding if self.max_length is None else "max_length"
+            )
+            # kwargs["return_attention_mask"] = False
+            # kwargs["return_token_type_ids"] = False
+            out = self.tokenizer.batch_encode_plus(value, return_tensors="pt", **kwargs)
+            # attention_mask = out["attention_mask"]
+            out = out["input_ids"]
+
+        if device is not None and out.device != device:
+            out = out.to(device)
+        return out
+
+    def call_tokenizer_inv_fn(self, value: Tensor):
+        if value.ndim == 1:
+            out = self.tokenizer.decode(
+                value, skip_special_tokens=self.skip_special_tokens
+            )
+        else:
+            out = self.tokenizer.batch_decode(
+                value, skip_special_tokens=self.skip_special_tokens
+            )
+        if isinstance(out, list):
+            return NonTensorStack(*out)
+        return NonTensorData(out)
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        input_spec = super().transform_input_spec(input_spec)
+        # We need to cap the spec to generate valid random strings
+        for out_key in self.out_keys_inv:
+            if out_key in input_spec["full_state_spec"].keys(True, True):
+                new_shape = input_spec["full_state_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
+                input_spec["full_state_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=new_shape,
+                    device=input_spec["full_state_spec"][out_key].device,
+                    dtype=input_spec["full_state_spec"][out_key].dtype,
+                )
+            elif out_key in input_spec["full_action_spec"].keys(True, True):
+                new_shape = input_spec["full_action_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
+                input_spec["full_action_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=new_shape,
+                    device=input_spec["full_action_spec"][out_key].device,
+                    dtype=input_spec["full_action_spec"][out_key].dtype,
+                )
+        return input_spec
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        output_spec = super().transform_output_spec(output_spec)
+        # We need to cap the spec to generate valid random strings
+        for out_key in self.out_keys:
+            if out_key in output_spec["full_observation_spec"].keys(True, True):
+                new_shape = output_spec["full_observation_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
+                output_spec["full_observation_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=new_shape,
+                    device=output_spec["full_observation_spec"][out_key].device,
+                    dtype=output_spec["full_observation_spec"][out_key].dtype,
+                )
+            elif out_key in output_spec["full_reward_spec"].keys(True, True):
+                new_shape = output_spec["full_reward_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
+                output_spec["full_reward_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=new_shape,
+                    device=output_spec["full_reward_spec"][out_key].device,
+                    dtype=output_spec["full_reward_spec"][out_key].dtype,
+                )
+            elif out_key in output_spec["full_done_spec"].keys(True, True):
+                new_shape = output_spec["full_done_spec"][out_key].shape
+                if self.max_length is None:
+                    # Then we can't tell what the shape will be
+                    new_shape = new_shape[:-1] + torch.Size((-1,))
+                output_spec["full_done_spec"][out_key] = Bounded(
+                    0,
+                    self.tokenizer.vocab_size,
+                    shape=new_shape,
+                    device=output_spec["full_done_spec"][out_key].device,
+                    dtype=output_spec["full_done_spec"][out_key].dtype,
+                )
+        return output_spec
 
 
 class Stack(Transform):
@@ -6051,7 +6519,7 @@ class VecNorm(Transform):
         )
 
     def __getstate__(self) -> Dict[str, Any]:
-        state = self.__dict__.copy()
+        state = super().__getstate__()
         _lock = state.pop("lock", None)
         if _lock is not None:
             state["lock_placeholder"] = None
@@ -6062,7 +6530,7 @@ class VecNorm(Transform):
             state.pop("lock_placeholder")
             _lock = mp.Lock()
             state["lock"] = _lock
-        self.__dict__.update(state)
+        super().__setstate__(state)
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -9494,14 +9962,7 @@ class TrajCounter(Transform):
     def _make_shared_value(self):
         self._traj_count = mp.Value("i", 0)
 
-    @implement_for("torch", None, "2.1")
     def __getstate__(self):
-        state = self.__dict__.copy()
-        state["_traj_count"] = None
-        return state
-
-    @implement_for("torch", "2.1")
-    def __getstate__(self):  # noqa: F811
         state = super().__getstate__()
         state["_traj_count"] = None
         return state

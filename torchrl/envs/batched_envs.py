@@ -12,7 +12,7 @@ import gc
 import os
 import weakref
 from collections import OrderedDict
-from copy import copy, deepcopy
+from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
@@ -371,6 +371,8 @@ class BatchedEnvBase(EnvBase):
             )
         self._mp_start_method = mp_start_method
 
+    is_spec_locked = EnvBase.is_spec_locked
+
     @property
     def non_blocking(self):
         nb = self._non_blocking
@@ -471,7 +473,7 @@ class BatchedEnvBase(EnvBase):
         return _do_nothing, _do_nothing
 
     def __getstate__(self):
-        out = copy(self.__dict__)
+        out = self.__dict__.copy()
         out["_sync_m2w_value"] = None
         out["_sync_w2m_value"] = None
         return out
@@ -718,17 +720,13 @@ class BatchedEnvBase(EnvBase):
             env_output_keys = set()
             env_obs_keys = set()
             for meta_data in self.meta_data:
-                env_obs_keys = env_obs_keys.union(
-                    key
-                    for key in meta_data.specs["output_spec"][
-                        "full_observation_spec"
-                    ].keys(True, True)
+                keys = meta_data.specs["output_spec"]["full_observation_spec"].keys(
+                    True, True
                 )
-                env_output_keys = env_output_keys.union(
-                    meta_data.specs["output_spec"]["full_observation_spec"].keys(
-                        True, True
-                    )
-                )
+                keys = list(keys)
+                env_obs_keys = env_obs_keys.union(keys)
+
+                env_output_keys = env_output_keys.union(keys)
             env_output_keys = env_output_keys.union(self.reward_keys + self.done_keys)
             self._env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self._env_input_keys = sorted(env_input_keys, key=_sort_keys)
@@ -937,8 +935,9 @@ class SerialEnv(BatchedEnvBase):
                         "environments!"
                     )
             weakref_set.add(wr)
-            self._envs.append(env)
+            self._envs.append(env.set_spec_lock_())
         self.is_closed = False
+        self.set_spec_lock_()
 
     @_check_start
     def state_dict(self) -> OrderedDict:
@@ -1003,7 +1002,12 @@ class SerialEnv(BatchedEnvBase):
         for i, _env in enumerate(self._envs):
             if not needs_resetting[i]:
                 if out_tds is not None and tensordict is not None:
-                    out_tds[i] = tensordict[i].exclude(*self._envs[i].reset_keys)
+                    ftd = _env.observation_spec.zero()
+                    if self.device is None:
+                        ftd.clear_device_()
+                    else:
+                        ftd = ftd.to(self.device)
+                    out_tds[i] = ftd
                 continue
             if tensordict is not None:
                 tensordict_ = tensordict[i]
@@ -1457,6 +1461,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         for channel in self.parent_channels:
             channel.send(("init", None))
         self.is_closed = False
+        self.set_spec_lock_()
 
     @_check_start
     def state_dict(self) -> OrderedDict:
@@ -2163,6 +2168,7 @@ def _run_worker_pipe_shared_mem(
             )
         env = env_fun
     del env_fun
+    env.set_spec_lock_()
 
     i = -1
     import torchrl

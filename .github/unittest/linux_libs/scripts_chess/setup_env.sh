@@ -9,6 +9,8 @@ set -e
 set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+yum install cairo-devel -y
+
 # Avoid error: "fatal: unsafe repository"
 
 git config --global --add safe.directory '*'
@@ -45,5 +47,8 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 pip install pip --upgrade
+
+conda install anaconda::cmake -y
+conda install conda-forge::cairo -y
 
 conda env update --file "${this_dir}/environment.yml" --prune

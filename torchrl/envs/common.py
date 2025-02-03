@@ -20,7 +20,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
-from tensordict.base import _is_leaf_nontensor
+from tensordict.base import _is_leaf_nontensor, NO_DEFAULT
 from tensordict.utils import is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
@@ -61,6 +61,59 @@ dtype_map = {
     torch.double: np.float64,
     torch.bool: bool,
 }
+
+
+def _maybe_unlock(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        is_locked = self.is_spec_locked
+        try:
+            if is_locked:
+                self.set_spec_lock_(False)
+            result = func(self, *args, **kwargs)
+        finally:
+            if is_locked:
+                if not hasattr(self, "_cache"):
+                    self._cache = {}
+                self._cache.clear()
+                self.set_spec_lock_(True)
+        return result
+
+    return wrapper
+
+
+def _cache_value(func):
+    """Caches the result of the decorated function in env._cache dictionary."""
+    func_name = func.__name__
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not self.is_spec_locked:
+            return func(self, *args, **kwargs)
+        result = self.__dict__.setdefault("_cache", {}).get(func_name, NO_DEFAULT)
+        if result is NO_DEFAULT:
+            result = func(self, *args, **kwargs)
+            self.__dict__.setdefault("_cache", {})[func_name] = result
+        return result
+
+    return wrapper
+
+
+def _clear_cache_when_set(func):
+    """A decorator for EnvBase methods that should clear the caches when called."""
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        # if there's no cache we'll just recompute the value
+        if "_cache" not in self.__dict__:
+            self._cache = {}
+        else:
+            self._cache.clear()
+        result = func(self, *args, **kwargs)
+        self._cache.clear()
+        return result
+
+    return wrapper
 
 
 class EnvMetaData:
@@ -179,9 +232,18 @@ class EnvMetaData:
 
 class _EnvPostInit(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
+        spec_locked = kwargs.pop("spec_locked", True)
         auto_reset = kwargs.pop("auto_reset", False)
         auto_reset_replace = kwargs.pop("auto_reset_replace", True)
         instance: EnvBase = super().__call__(*args, **kwargs)
+        if "_cache" not in instance.__dict__:
+            instance._cache = {}
+
+        if spec_locked:
+            instance.input_spec.lock_(recurse=True)
+            instance.output_spec.lock_(recurse=True)
+        instance._is_spec_locked = spec_locked
+
         # we create the done spec by adding a done/terminated entry if one is missing
         instance._create_done_specs()
         # we access lazy attributed to make sure they're built properly.
@@ -240,6 +302,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             at every reset and every step. Defaults to ``False``.
         allow_done_after_reset (bool, optional): if ``True``, an environment can
             be done after a call to :meth:`~.reset` is made. Defaults to ``False``.
+        spec_locked (bool, optional): if ``True``, the specs are locked and can only be
+            modified if :meth:`~torchrl.envs.EnvBase.set_spec_lock_` is called.
+
+            .. note:: The locking is achieved by the `EnvBase` metaclass. It does not appear in the
+                `__init__` method and is included in the keyword arguments strictly for type-hinting purpose.
+
+            .. seealso:: :ref:`Locking environment specs <Environment-lock>`.
+
+            Defaults to ``True``.
+        auto_reset (bool, optional): if ``True``, the env is assumed to reset automatically
+            when done. Defaults to ``False``.
+
+            .. note:: The auto-resetting is achieved by the `EnvBase` metaclass. It does not appear in the
+                `__init__` method and is included in the keyword arguments strictly for type-hinting purpose.
 
     Attributes:
         done_spec (Composite): equivalent to ``full_done_spec`` as all
@@ -270,6 +346,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         batch_size (torch.Size): The batch-size of the environment.
         device (torch.device): the device where the input/outputs of the environment
             are to be expected. Can be ``None``.
+        is_spec_locked (bool): returns ``True`` if the specs are locked. See the :attr:`spec_locked`
+            argument above.
 
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
@@ -370,6 +448,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     _batch_size: torch.Size | None
     _device: torch.device | None
+    _is_spec_locked: bool = False
 
     def __init__(
         self,
@@ -378,7 +457,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
         allow_done_after_reset: bool = False,
+        spec_locked: bool = True,
+        auto_reset: bool = False,
     ):
+        if "_cache" not in self.__dict__:
+            self._cache = {}
         super().__init__()
 
         self.__dict__.setdefault("_batch_size", None)
@@ -400,7 +483,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if output_spec is None:
             output_spec = self.__dict__["_output_spec"] = Composite(
                 shape=batch_size, device=device
-            ).lock_()
+            )
         elif self._output_spec.device != device and device is not None:
             self.__dict__["_output_spec"] = self.__dict__["_output_spec"].to(
                 self.device
@@ -409,12 +492,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if input_spec is None:
             input_spec = self.__dict__["_input_spec"] = Composite(
                 shape=batch_size, device=device
-            ).lock_()
+            )
         elif self._input_spec.device != device and device is not None:
             self.__dict__["_input_spec"] = self.__dict__["_input_spec"].to(self.device)
 
-        output_spec.unlock_()
-        input_spec.unlock_()
+        output_spec.unlock_(recurse=True)
+        input_spec.unlock_(recurse=True)
         if "full_observation_spec" not in output_spec:
             output_spec["full_observation_spec"] = Composite()
         if "full_done_spec" not in output_spec:
@@ -425,13 +508,57 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             input_spec["full_state_spec"] = Composite()
         if "full_action_spec" not in input_spec:
             input_spec["full_action_spec"] = Composite()
-        output_spec.lock_()
-        input_spec.lock_()
 
         if "is_closed" not in self.__dir__():
             self.is_closed = True
         self._run_type_checks = run_type_checks
         self._allow_done_after_reset = allow_done_after_reset
+
+    def set_spec_lock_(self, mode: bool = True) -> EnvBase:
+        """Locks or unlocks the environment's specs.
+
+        Args:
+            mode (bool): Whether to lock (`True`) or unlock (`False`) the specs. Defaults to `True`.
+
+        Returns:
+            EnvBase: The environment instance itself.
+
+        .. seealso:: :ref:`Locking environment specs <Environment-lock>`.
+
+        """
+        output_spec = self.__dict__.get("_output_spec")
+        input_spec = self.__dict__.get("_input_spec")
+        if mode:
+            if output_spec is not None:
+                output_spec.lock_(recurse=True)
+            if input_spec is not None:
+                input_spec.lock_(recurse=True)
+        else:
+            self._cache.clear()
+            if output_spec is not None:
+                output_spec.unlock_(recurse=True)
+            if input_spec is not None:
+                input_spec.unlock_(recurse=True)
+        self.__dict__["_is_spec_locked"] = mode
+        return self
+
+    @property
+    def is_spec_locked(self):
+        """Gets whether the environment's specs are locked.
+
+        This property can be modified directly.
+
+        Returns:
+            bool: True if the specs are locked, False otherwise.
+
+        .. seealso:: :ref:`Locking environment specs <Environment-lock>`.
+
+        """
+        return self.__dict__.get("_is_spec_locked", False)
+
+    @is_spec_locked.setter
+    def is_spec_locked(self, value: bool):
+        self.set_spec_lock_(value)
 
     def auto_specs_(
         self,
@@ -482,7 +609,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict = self.reset()
 
         # Input specs
-        tensordict = policy(tensordict)
+        tensordict.update(policy(tensordict))
         step_0 = self.step(tensordict.copy())
         tensordict2 = step_0.get("next").copy()
         step_1 = self.step(policy(tensordict2).copy())
@@ -663,19 +790,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return _batch_size
 
     @batch_size.setter
+    @_maybe_unlock
     def batch_size(self, value: torch.Size) -> None:
         self._batch_size = torch.Size(value)
         if (
             hasattr(self, "output_spec")
             and self.output_spec.shape[: len(value)] != value
         ):
-            self.output_spec.unlock_()
             self.output_spec.shape = value
-            self.output_spec.lock_()
         if hasattr(self, "input_spec") and self.input_spec.shape[: len(value)] != value:
-            self.input_spec.unlock_()
             self.input_spec.shape = value
-            self.input_spec.lock_()
 
     @property
     def shape(self):
@@ -766,12 +890,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         input_spec = self.__dict__.get("_input_spec")
         if input_spec is None:
+            is_locked = self.is_spec_locked
+            if is_locked:
+                self.set_spec_lock_(False)
             input_spec = Composite(
                 full_state_spec=None,
                 shape=self.batch_size,
                 device=self.device,
-            ).lock_()
+            )
             self.__dict__["_input_spec"] = input_spec
+            if is_locked:
+                self.set_spec_lock_(True)
         return input_spec
 
     @input_spec.setter
@@ -826,11 +955,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         output_spec = self.__dict__.get("_output_spec")
         if output_spec is None:
+            is_locked = self.is_spec_locked
+            if is_locked:
+                self.set_spec_lock_(False)
             output_spec = Composite(
                 shape=self.batch_size,
                 device=self.device,
-            ).lock_()
+            )
             self.__dict__["_output_spec"] = output_spec
+            if is_locked:
+                self.set_spec_lock_(True)
         return output_spec
 
     @output_spec.setter
@@ -838,6 +972,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         raise RuntimeError("output_spec is protected.")
 
     @property
+    @_cache_value
     def action_keys(self) -> List[NestedKey]:
         """The action keys of an environment.
 
@@ -845,15 +980,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        action_keys = self.__dict__.get("_action_keys")
-        if action_keys is not None:
-            return action_keys
         keys = self.full_action_spec.keys(True, True)
         keys = sorted(keys, key=_repr_by_depth)
-        self.__dict__["_action_keys"] = keys
         return keys
 
     @property
+    @_cache_value
     def state_keys(self) -> List[NestedKey]:
         """The state keys of an environment.
 
@@ -989,32 +1121,25 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return out
 
     @action_spec.setter
+    @_maybe_unlock
     def action_spec(self, value: TensorSpec) -> None:
-        try:
-            self.input_spec.unlock_()
-            device = self.input_spec._device
-            try:
-                delattr(self, "_action_keys")
-            except AttributeError:
-                pass
-            if not hasattr(value, "shape"):
-                raise TypeError(
-                    f"action_spec of type {type(value)} do not have a shape attribute."
-                )
-            if value.shape[: len(self.batch_size)] != self.batch_size:
-                raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size}). "
-                    "Please use `env.action_spec_unbatched = value` to set unbatched versions instead."
-                )
+        device = self.input_spec._device
+        if not hasattr(value, "shape"):
+            raise TypeError(
+                f"action_spec of type {type(value)} do not have a shape attribute."
+            )
+        if value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError(
+                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size}). "
+                "Please use `env.action_spec_unbatched = value` to set unbatched versions instead."
+            )
 
-            if not isinstance(value, Composite):
-                value = Composite(
-                    action=value.to(device), shape=self.batch_size, device=device
-                )
+        if not isinstance(value, Composite):
+            value = Composite(
+                action=value.to(device), shape=self.batch_size, device=device
+            )
 
-            self.input_spec["full_action_spec"] = value.to(device)
-        finally:
-            self.input_spec.lock_()
+        self.input_spec["full_action_spec"] = value.to(device)
 
     @property
     def full_action_spec(self) -> Composite:
@@ -1042,10 +1167,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         full_action_spec = self.input_spec.get("full_action_spec", None)
         if full_action_spec is None:
+            is_locked = self.is_spec_locked
+            if is_locked:
+                self.set_spec_lock_(False)
             full_action_spec = Composite(shape=self.batch_size, device=self.device)
-            self.input_spec.unlock_()
             self.input_spec["full_action_spec"] = full_action_spec
-            self.input_spec.lock_()
+            if is_locked:
+                self.set_spec_lock_(True)
         return full_action_spec
 
     @full_action_spec.setter
@@ -1054,6 +1182,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     # Reward spec
     @property
+    @_cache_value
     def reward_keys(self) -> List[NestedKey]:
         """The reward keys of an environment.
 
@@ -1061,11 +1190,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        reward_keys = self.__dict__.get("_reward_keys")
-        if reward_keys is not None:
-            return reward_keys
         reward_keys = sorted(self.full_reward_spec.keys(True, True), key=_repr_by_depth)
-        self.__dict__["_reward_keys"] = reward_keys
         return reward_keys
 
     @property
@@ -1183,39 +1308,31 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return reward_spec[self.reward_keys[0]]
 
     @reward_spec.setter
+    @_maybe_unlock
     def reward_spec(self, value: TensorSpec) -> None:
-        try:
-            self.output_spec.unlock_()
-            device = self.output_spec._device
-            try:
-                delattr(self, "_reward_keys")
-            except AttributeError:
-                pass
-            if not hasattr(value, "shape"):
-                raise TypeError(
-                    f"reward_spec of type {type(value)} do not have a shape "
-                    f"attribute."
+        device = self.output_spec._device
+        if not hasattr(value, "shape"):
+            raise TypeError(
+                f"reward_spec of type {type(value)} do not have a shape " f"attribute."
+            )
+        if value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError(
+                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size}). "
+                "Please use `env.reward_spec_unbatched = value` to set unbatched versions instead."
+            )
+        if not isinstance(value, Composite):
+            value = Composite(
+                reward=value.to(device), shape=self.batch_size, device=device
+            )
+        for leaf in value.values(True, True):
+            if len(leaf.shape) == 0:
+                raise RuntimeError(
+                    "the reward_spec's leafs shape cannot be empty (this error"
+                    " usually comes from trying to set a reward_spec"
+                    " with a null number of dimensions. Try using a multidimensional"
+                    " spec instead, for instance with a singleton dimension at the tail)."
                 )
-            if value.shape[: len(self.batch_size)] != self.batch_size:
-                raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size}). "
-                    "Please use `env.reward_spec_unbatched = value` to set unbatched versions instead."
-                )
-            if not isinstance(value, Composite):
-                value = Composite(
-                    reward=value.to(device), shape=self.batch_size, device=device
-                )
-            for leaf in value.values(True, True):
-                if len(leaf.shape) == 0:
-                    raise RuntimeError(
-                        "the reward_spec's leafs shape cannot be empty (this error"
-                        " usually comes from trying to set a reward_spec"
-                        " with a null number of dimensions. Try using a multidimensional"
-                        " spec instead, for instance with a singleton dimension at the tail)."
-                    )
-            self.output_spec["full_reward_spec"] = value.to(device)
-        finally:
-            self.output_spec.lock_()
+        self.output_spec["full_reward_spec"] = value.to(device)
 
     @property
     def full_reward_spec(self) -> Composite:
@@ -1256,11 +1373,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return self.output_spec["full_reward_spec"]
 
     @full_reward_spec.setter
+    @_maybe_unlock
     def full_reward_spec(self, spec: Composite) -> None:
         self.reward_spec = spec.to(self.device) if self.device is not None else spec
 
     # done spec
     @property
+    @_cache_value
     def done_keys(self) -> List[NestedKey]:
         """The done keys of an environment.
 
@@ -1268,11 +1387,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        done_keys = self.__dict__.get("_done_keys")
-        if done_keys is not None:
-            return done_keys
         done_keys = sorted(self.full_done_spec.keys(True, True), key=_repr_by_depth)
-        self.__dict__["_done_keys"] = done_keys
         return done_keys
 
     @property
@@ -1283,11 +1398,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         If there is more than one done key in the environment, this function will raise an exception.
         """
-        if len(self.done_keys) > 1:
+        done_keys = self.done_keys
+        if len(done_keys) > 1:
             raise KeyError(
                 "done_key requested but more than one key present in the environment"
             )
-        return self.done_keys[0]
+        return done_keys[0]
 
     @property
     def full_done_spec(self) -> Composite:
@@ -1321,6 +1437,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self.output_spec["full_done_spec"]
 
     @full_done_spec.setter
+    @_maybe_unlock
     def full_done_spec(self, spec: Composite) -> None:
         self.done_spec = spec.to(self.device) if self.device is not None else spec
 
@@ -1394,6 +1511,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         done_spec = self.output_spec["full_done_spec"]
         return done_spec
 
+    @_maybe_unlock
     def _create_done_specs(self):
         """Reads through the done specs and makes it so that it's complete.
 
@@ -1422,9 +1540,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 dtype=torch.bool,
                 device=self.device,
             )
-            self.output_spec.unlock_()
             self.output_spec["full_done_spec"] = full_done_spec
-            self.output_spec.lock_()
             return
 
         def check_local_done(spec):
@@ -1458,49 +1574,44 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     n=2, shape=(*spec.shape, 1), dtype=torch.bool, device=self.device
                 )
 
-        self.output_spec.unlock_()
+        if_locked = self.is_spec_locked
+        if if_locked:
+            self.is_spec_locked = False
         check_local_done(full_done_spec)
         self.output_spec["full_done_spec"] = full_done_spec
-        self.output_spec.lock_()
+        if if_locked:
+            self.is_spec_locked = True
         return
 
     @done_spec.setter
+    @_maybe_unlock
     def done_spec(self, value: TensorSpec) -> None:
-        try:
-            self.output_spec.unlock_()
-            device = self.output_spec.device
-            try:
-                delattr(self, "_done_keys")
-            except AttributeError:
-                pass
-            if not hasattr(value, "shape"):
-                raise TypeError(
-                    f"done_spec of type {type(value)} do not have a shape "
-                    f"attribute."
+        device = self.output_spec.device
+        if not hasattr(value, "shape"):
+            raise TypeError(
+                f"done_spec of type {type(value)} do not have a shape " f"attribute."
+            )
+        if value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError(
+                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+            )
+        if not isinstance(value, Composite):
+            value = Composite(
+                done=value.to(device),
+                terminated=value.to(device),
+                shape=self.batch_size,
+                device=device,
+            )
+        for leaf in value.values(True, True):
+            if len(leaf.shape) == 0:
+                raise RuntimeError(
+                    "the done_spec's leafs shape cannot be empty (this error"
+                    " usually comes from trying to set a reward_spec"
+                    " with a null number of dimensions. Try using a multidimensional"
+                    " spec instead, for instance with a singleton dimension at the tail)."
                 )
-            if value.shape[: len(self.batch_size)] != self.batch_size:
-                raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-                )
-            if not isinstance(value, Composite):
-                value = Composite(
-                    done=value.to(device),
-                    terminated=value.to(device),
-                    shape=self.batch_size,
-                    device=device,
-                )
-            for leaf in value.values(True, True):
-                if len(leaf.shape) == 0:
-                    raise RuntimeError(
-                        "the done_spec's leafs shape cannot be empty (this error"
-                        " usually comes from trying to set a reward_spec"
-                        " with a null number of dimensions. Try using a multidimensional"
-                        " spec instead, for instance with a singleton dimension at the tail)."
-                    )
-            self.output_spec["full_done_spec"] = value.to(device)
-            self._create_done_specs()
-        finally:
-            self.output_spec.lock_()
+        self.output_spec["full_done_spec"] = value.to(device)
+        self._create_done_specs()
 
     # observation spec: observation specs belong to output_spec
     @property
@@ -1534,38 +1645,44 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         observation_spec = self.output_spec.get("full_observation_spec", default=None)
         if observation_spec is None:
+            is_locked = self.is_spec_locked
+            if is_locked:
+                self.set_spec_lock_(False)
             observation_spec = Composite(shape=self.batch_size, device=self.device)
-            self.output_spec.unlock_()
             self.output_spec["full_observation_spec"] = observation_spec
-            self.output_spec.lock_()
+            if is_locked:
+                self.set_spec_lock_(True)
+
         return observation_spec
 
     @observation_spec.setter
+    @_maybe_unlock
     def observation_spec(self, value: TensorSpec) -> None:
-        try:
-            self.output_spec.unlock_()
-            if not isinstance(value, Composite):
-                raise TypeError("The type of an observation_spec must be Composite.")
-            elif value.shape[: len(self.batch_size)] != self.batch_size:
-                raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-                )
-            if value.shape[: len(self.batch_size)] != self.batch_size:
-                raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-                )
-            device = self.output_spec._device
-            self.output_spec["full_observation_spec"] = (
-                value.to(device) if device is not None else value
+        if not isinstance(value, Composite):
+            value = Composite(
+                observation=value,
+                device=self.device,
+                batch_size=self.output_spec.batch_size,
             )
-        finally:
-            self.output_spec.lock_()
+        elif value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError(
+                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+            )
+        if value.shape[: len(self.batch_size)] != self.batch_size:
+            raise ValueError(
+                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+            )
+        device = self.output_spec._device
+        self.output_spec["full_observation_spec"] = (
+            value.to(device) if device is not None else value
+        )
 
     @property
     def full_observation_spec(self) -> Composite:
         return self.observation_spec
 
     @full_observation_spec.setter
+    @_maybe_unlock
     def full_observation_spec(self, spec: Composite):
         self.observation_spec = spec
 
@@ -1605,41 +1722,37 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         state_spec = self.input_spec["full_state_spec"]
         if state_spec is None:
+            is_locked = self.is_spec_locked
+            if is_locked:
+                self.set_spec_lock_(False)
             state_spec = Composite(shape=self.batch_size, device=self.device)
-            self.input_spec.unlock_()
             self.input_spec["full_state_spec"] = state_spec
-            self.input_spec.lock_()
+            if is_locked:
+                self.set_spec_lock_(True)
         return state_spec
 
     @state_spec.setter
+    @_maybe_unlock
     def state_spec(self, value: Composite) -> None:
-        try:
-            self.input_spec.unlock_()
-            try:
-                delattr(self, "_state_keys")
-            except AttributeError:
-                pass
-            if value is None:
-                self.input_spec["full_state_spec"] = Composite(
-                    device=self.device, shape=self.batch_size
+        if value is None:
+            self.input_spec["full_state_spec"] = Composite(
+                device=self.device, shape=self.batch_size
+            )
+        else:
+            device = self.input_spec.device
+            if not isinstance(value, Composite):
+                raise TypeError("The type of an state_spec must be Composite.")
+            elif value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
-            else:
-                device = self.input_spec.device
-                if not isinstance(value, Composite):
-                    raise TypeError("The type of an state_spec must be Composite.")
-                elif value.shape[: len(self.batch_size)] != self.batch_size:
-                    raise ValueError(
-                        f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-                    )
-                if value.shape[: len(self.batch_size)] != self.batch_size:
-                    raise ValueError(
-                        f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-                    )
-                self.input_spec["full_state_spec"] = (
-                    value.to(device) if device is not None else value
+            if value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
-        finally:
-            self.input_spec.lock_()
+            self.input_spec["full_state_spec"] = (
+                value.to(device) if device is not None else value
+            )
 
     @property
     def full_state_spec(self) -> Composite:
@@ -1669,6 +1782,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self.state_spec
 
     @full_state_spec.setter
+    @_maybe_unlock
     def full_state_spec(self, spec: Composite) -> None:
         self.state_spec = spec
 
@@ -1690,6 +1804,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.full_action_spec)
 
     @full_action_spec_unbatched.setter
+    @_maybe_unlock
     def full_action_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.full_action_spec = spec
@@ -1700,6 +1815,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.action_spec)
 
     @action_spec_unbatched.setter
+    @_maybe_unlock
     def action_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.action_spec = spec
@@ -1710,6 +1826,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.full_observation_spec)
 
     @full_observation_spec_unbatched.setter
+    @_maybe_unlock
     def full_observation_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.full_observation_spec = spec
@@ -1720,6 +1837,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.observation_spec)
 
     @observation_spec_unbatched.setter
+    @_maybe_unlock
     def observation_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.observation_spec = spec
@@ -1730,6 +1848,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.full_reward_spec)
 
     @full_reward_spec_unbatched.setter
+    @_maybe_unlock
     def full_reward_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.full_reward_spec = spec
@@ -1740,6 +1859,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.reward_spec)
 
     @reward_spec_unbatched.setter
+    @_maybe_unlock
     def reward_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.reward_spec = spec
@@ -1750,6 +1870,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.full_done_spec)
 
     @full_done_spec_unbatched.setter
+    @_maybe_unlock
     def full_done_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.full_done_spec = spec
@@ -1760,6 +1881,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.done_spec)
 
     @done_spec_unbatched.setter
+    @_maybe_unlock
     def done_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.done_spec = spec
@@ -1770,6 +1892,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.output_spec)
 
     @output_spec_unbatched.setter
+    @_maybe_unlock
     def output_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.output_spec = spec
@@ -1780,6 +1903,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.input_spec)
 
     @input_spec_unbatched.setter
+    @_maybe_unlock
     def input_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.input_spec = spec
@@ -1790,6 +1914,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.full_state_spec)
 
     @full_state_spec_unbatched.setter
+    @_maybe_unlock
     def full_state_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.full_state_spec = spec
@@ -1800,6 +1925,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._make_single_env_spec(self.state_spec)
 
     @state_spec_unbatched.setter
+    @_maybe_unlock
     def state_spec_unbatched(self, spec: Composite):
         spec = spec.expand(self.batch_size + spec.shape)
         self.state_spec = spec
@@ -2505,11 +2631,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         Returns:
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
+        .. note:: `reset` should not be overwritten by :class:`~torchrl.envs.EnvBase` subclasses. The method to
+            modify is :meth:`~torchrl.envs.EnvBase._reset`.
+
         """
         if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
 
-        tensordict_reset = self._reset(tensordict, **kwargs)
+        select_reset_only = kwargs.pop("select_reset_only", False)
+        if select_reset_only and tensordict is not None:
+            # When making rollouts with step_and_maybe_reset, it can happen that a tensordict has
+            # keys that are used by reset to optionally set the reset state (eg, the fen in chess). If that's the
+            # case and we don't throw them away here, reset will just be a no-op (put the env in the state reached
+            # during the previous step).
+            # Therefore, maybe_reset tells reset to temporarily hide the non-reset keys.
+            # To make step_and_maybe_reset handle custom reset states, some version of TensorDictPrimer should be used.
+            tensordict_reset = self._reset(
+                tensordict.select(*self.reset_keys, strict=False), **kwargs
+            )
+        else:
+            tensordict_reset = self._reset(tensordict, **kwargs)
         # We assume that this is done properly
         # if reset.device != self.device:
         #     reset = reset.to(self.device, non_blocking=True)
@@ -2680,9 +2821,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             output_spec=self.output_spec,
             input_spec=self.input_spec,
             shape=self.batch_size,
-        ).lock_()
+        )
 
     @property
+    @_cache_value
     def _has_dynamic_specs(self) -> bool:
         return _has_dynamic_specs(self.specs)
 
@@ -2696,7 +2838,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         auto_cast_to_device: bool = False,
         break_when_any_done: bool | None = None,
         break_when_all_done: bool | None = None,
-        return_contiguous: bool = True,
+        return_contiguous: bool | None = False,
         tensordict: Optional[TensorDictBase] = None,
         set_truncated: bool = False,
         out=None,
@@ -2731,7 +2873,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             break_when_all_done (bool, optional): if ``True``, break if all of the contained environments reach any
                 of the done states. If ``False``, break if at least one environment reaches any of the done states.
                 Default is ``False``.
-            return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
+            return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is `True` if
+                the env does not have dynamic specs, otherwise `False`.
             tensordict (TensorDict, optional): if ``auto_reset`` is False, an initial
                 tensordict must be provided. Rollout will check if this tensordict has done flags and reset the
                 environment in those dimensions (if needed).
@@ -2942,7 +3085,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise TypeError(
                 "Cannot have both break_when_all_done and break_when_any_done True at the same time."
             )
-
+        if return_contiguous is None:
+            return_contiguous = not self._has_dynamic_specs
         if policy is not None:
             policy = _make_compatible_policy(
                 policy,
@@ -3025,13 +3169,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         out_td.refine_names(..., "time")
         return out_td
 
+    @_maybe_unlock
     def add_truncated_keys(self) -> EnvBase:
         """Adds truncated keys to the environment."""
+        i = 0
         for key in self.done_keys:
-            self.full_done_spec[_replace_last(key, "truncated")] = self.full_done_spec[
-                key
-            ]
-        self.__dict__["_done_keys"] = None
+            i += 1
+            truncated_key = _replace_last(key, "truncated")
+            self.full_done_spec[truncated_key] = self.full_done_spec[key].clone()
+        if i == 0:
+            raise KeyError(f"Couldn't find done keys. done_spec={self.full_done_specs}")
+
         return self
 
     def step_mdp(self, next_tensordict: TensorDictBase) -> TensorDictBase:
@@ -3081,12 +3229,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self._step_mdp(next_tensordict)
 
     @property
+    @_cache_value
     def _step_mdp(self):
-        step_func = self.__dict__.get("_step_mdp_value")
-        if step_func is None:
-            step_func = _StepMDP(self, exclude_action=False)
-            self.__dict__["_step_mdp_value"] = step_func
-        return step_func
+        return _StepMDP(self, exclude_action=False)
 
     def _rollout_stop_early(
         self,
@@ -3113,8 +3258,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     sync_func()
                 else:
                     tensordict.clear_device_()
-
-            tensordict = policy(tensordict)
+            # In case policy(..) does not modify in-place - no-op for TensorDict and related
+            tensordict.update(policy(tensordict))
             if auto_cast_to_device:
                 if env_device is not None:
                     tensordict = tensordict.to(env_device, non_blocking=True)
@@ -3190,7 +3335,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     sync_func()
                 else:
                     tensordict_.clear_device_()
-            tensordict_ = policy(tensordict_)
+            # In case policy(..) does not modify in-place - no-op for TensorDict and related
+            tensordict_.update(policy(tensordict_))
             if auto_cast_to_device:
                 if env_device is not None:
                     tensordict_ = tensordict_.to(env_device, non_blocking=True)
@@ -3292,7 +3438,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             else:
                 any_done = False
             if any_done:
-                tensordict._set_str(
+                tensordict = tensordict._set_str(
                     "_reset",
                     done.clone(),
                     validated=True,
@@ -3306,7 +3452,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 key="_reset",
             )
         if any_done:
-            tensordict = self.reset(tensordict)
+            return self.reset(tensordict, select_reset_only=True)
         return tensordict
 
     def empty_cache(self):
@@ -3316,14 +3462,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         they may change during the execution of the code (eg, when adding a transform).
 
         """
-        self.__dict__["_step_mdp_value"] = None
-        self.__dict__["_reward_keys"] = None
-        self.__dict__["_done_keys"] = None
-        self.__dict__["_action_keys"] = None
-        self.__dict__["_state_keys"] = None
-        self.__dict__["_done_keys_group"] = None
+        self._cache.clear()
 
     @property
+    @_cache_value
     def reset_keys(self) -> List[NestedKey]:
         """Returns a list of reset keys.
 
@@ -3334,10 +3476,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Keys are sorted by depth in the data tree.
         """
-        reset_keys = self.__dict__.get("_reset_keys")
-        if reset_keys is not None:
-            return reset_keys
-
         reset_keys = sorted(
             (
                 _replace_last(done_key, "_reset")
@@ -3345,7 +3483,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             ),
             key=_repr_by_depth,
         )
-        self.__dict__["_reset_keys"] = reset_keys
         return reset_keys
 
     @property
@@ -3371,6 +3508,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return result
 
     @property
+    @_cache_value
     def done_keys_groups(self):
         """A list of done keys, grouped as the reset keys.
 
@@ -3378,10 +3516,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         inner lists contain the done keys (eg, done and truncated) that can
         be read to determine a reset when it is absent.
         """
-        done_keys_group = self.__dict__.get("_done_keys_group")
-        if done_keys_group is not None:
-            return done_keys_group
-
         # done keys, sorted as reset keys
         done_keys_group = []
         roots = set()
@@ -3398,7 +3532,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         for key in root.keys(include_nested=False, leaves_only=True)
                     ]
                 )
-        self.__dict__["_done_keys_group"] = done_keys_group
         return done_keys_group
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
@@ -3422,12 +3555,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 # __del__ will not affect the program.
                 pass
 
+    @_maybe_unlock
     def to(self, device: DEVICE_TYPING) -> EnvBase:
         device = _make_ordinal_device(torch.device(device))
         if device == self.device:
             return self
-        self.__dict__["_input_spec"] = self.input_spec.to(device).lock_()
-        self.__dict__["_output_spec"] = self.output_spec.to(device).lock_()
+        self.__dict__["_input_spec"] = self.input_spec.to(device)
+        self.__dict__["_output_spec"] = self.output_spec.to(device)
         self._device = device
         return super().to(device)
 
@@ -3498,12 +3632,14 @@ class _EnvWrapper(EnvBase):
         device: DEVICE_TYPING = None,
         batch_size: Optional[torch.Size] = None,
         allow_done_after_reset: bool = False,
+        spec_locked: bool = True,
         **kwargs,
     ):
         super().__init__(
             device=device,
             batch_size=batch_size,
             allow_done_after_reset=allow_done_after_reset,
+            spec_locked=spec_locked,
         )
         if len(args):
             raise ValueError(
@@ -3618,7 +3754,7 @@ def make_tensordict(
     with torch.no_grad():
         tensordict = env.reset()
         if policy is not None:
-            tensordict = policy(tensordict)
+            tensordict.update(policy(tensordict))
         else:
             tensordict.set("action", env.action_spec.rand(), inplace=False)
         tensordict = env.step(tensordict)

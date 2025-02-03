@@ -542,6 +542,14 @@ class CrossQLoss(LossModule):
             **value_metadata,
         }
         td_out = TensorDict(out)
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return td_out
 
     @property

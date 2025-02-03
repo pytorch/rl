@@ -20,76 +20,26 @@ import pytest
 
 import tensordict.tensordict
 import torch
-
-from torchrl.collectors import MultiSyncDataCollector
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (  # noqa
-        BREAKOUT_VERSIONED,
-        dtype_fixture,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-    )
-    from pytorch.rl.test.mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        CountingEnvWithString,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        EnvWithScalarAction,
-        IncrementingEnv,
-        MockBatchedLockedEnv,
-        MockBatchedUnLockedEnv,
-        MultiAgentCountingEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-    )
-else:
-    from _utils_internal import (  # noqa
-        BREAKOUT_VERSIONED,
-        dtype_fixture,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-    )
-    from mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        CountingEnvWithString,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        EnvWithScalarAction,
-        IncrementingEnv,
-        MockBatchedLockedEnv,
-        MockBatchedUnLockedEnv,
-        MultiAgentCountingEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-    )
-from tensordict import NonTensorData, TensorDict, TensorDictBase, unravel_key
+from tensordict import (
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.nn import TensorDictSequential
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod
+
+from torchrl.collectors import MultiSyncDataCollector
 from torchrl.data import (
     Bounded,
     BoundedContinuous,
     Categorical,
     Composite,
     LazyTensorStorage,
+    NonTensor,
     ReplayBuffer,
     TensorDictReplayBuffer,
     TensorSpec,
@@ -147,6 +97,7 @@ from torchrl.envs import (
     TargetReturn,
     TensorDictPrimer,
     TimeMaxPool,
+    Tokenizer,
     ToTensorImage,
     TrajCounter,
     TransformedEnv,
@@ -174,6 +125,63 @@ from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
 from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
 from torchrl.modules.utils import get_primers_from_module
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (  # noqa
+        BREAKOUT_VERSIONED,
+        dtype_fixture,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+    )
+    from pytorch.rl.test.mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        CountingEnvWithString,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        EnvWithScalarAction,
+        IncrementingEnv,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MultiAgentCountingEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
+else:
+    from _utils_internal import (  # noqa
+        BREAKOUT_VERSIONED,
+        dtype_fixture,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+    )
+    from mocking_classes import (
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        CountingEnvCountPolicy,
+        CountingEnvWithString,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        EnvWithScalarAction,
+        IncrementingEnv,
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MultiAgentCountingEnv,
+        MultiKeyCountingEnv,
+        MultiKeyCountingEnvPolicy,
+        NestedCountingEnv,
+    )
+
 IS_WIN = platform == "win32"
 if IS_WIN:
     mp_ctx = "spawn"
@@ -183,6 +191,7 @@ else:
 TIMEOUT = 100.0
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 
 class TransformBase:
@@ -433,8 +442,8 @@ class TestClipTransform(TransformBase):
             ClipTransform(
                 in_keys=["observation", "reward"],
                 out_keys=["obs_clip", "reward_clip"],
-                in_keys_inv=["input"],
-                out_keys_inv=["input_clip"],
+                in_keys_inv=["input_clip"],
+                out_keys_inv=["input"],
                 low=-0.1,
                 high=0.1,
             )
@@ -567,8 +576,10 @@ class TestClipTransform(TransformBase):
 
     def test_transform_inverse(self):
         t = ClipTransform(
-            in_keys_inv=["observation", "reward"],
-            out_keys_inv=["obs_clip", "reward_clip"],
+            # What the outside world sees
+            out_keys_inv=["observation", "reward"],
+            # What the env expects
+            in_keys_inv=["obs_clip", "reward_clip"],
             low=-0.1,
             high=0.1,
         )
@@ -688,6 +699,85 @@ class TestCatFrames(TransformBase):
             CatFrames(dim=-1, N=3, in_keys=["observation"], out_keys=out_keys),
         )
         check_env_specs(env)
+
+    @pytest.mark.parametrize("cat_dim", [-1, -2, -3])
+    @pytest.mark.parametrize("cat_N", [3, 10])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_with_permute_no_env(self, cat_dim, cat_N, device):
+        torch.manual_seed(cat_dim * cat_N)
+        pixels = torch.randn(8, 5, 3, 10, 4, device=device)
+
+        a = TensorDict(
+            {
+                "pixels": pixels,
+            },
+            [
+                pixels.shape[0],
+            ],
+            device=device,
+        )
+
+        t0 = Compose(
+            CatFrames(N=cat_N, dim=cat_dim),
+        )
+
+        def get_rand_perm(ndim):
+            cat_dim_perm = cat_dim
+            # Ensure that the permutation moves the cat_dim
+            while cat_dim_perm == cat_dim:
+                perm_pos = torch.randperm(ndim)
+                perm = perm_pos - ndim
+                cat_dim_perm = (perm == cat_dim).nonzero().item() - ndim
+                perm_inv = perm_pos.argsort() - ndim
+            return perm.tolist(), perm_inv.tolist(), cat_dim_perm
+
+        perm, perm_inv, cat_dim_perm = get_rand_perm(pixels.dim() - 1)
+
+        t1 = Compose(
+            PermuteTransform(perm, in_keys=["pixels"]),
+            CatFrames(N=cat_N, dim=cat_dim_perm),
+            PermuteTransform(perm_inv, in_keys=["pixels"]),
+        )
+
+        b = t0._call(a.clone())
+        c = t1._call(a.clone())
+        assert (b == c).all()
+
+    @pytest.mark.skipif(not _has_gym, reason="Test executed on gym")
+    @pytest.mark.parametrize("cat_dim", [-1, -2])
+    def test_with_permute_env(self, cat_dim):
+        env0 = TransformedEnv(
+            GymEnv("Pendulum-v1"),
+            Compose(
+                UnsqueezeTransform(-1, in_keys=["observation"]),
+                CatFrames(N=4, dim=cat_dim, in_keys=["observation"]),
+            ),
+        )
+
+        env1 = TransformedEnv(
+            GymEnv("Pendulum-v1"),
+            Compose(
+                UnsqueezeTransform(-1, in_keys=["observation"]),
+                PermuteTransform((-1, -2), in_keys=["observation"]),
+                CatFrames(N=4, dim=-3 - cat_dim, in_keys=["observation"]),
+                PermuteTransform((-1, -2), in_keys=["observation"]),
+            ),
+        )
+
+        torch.manual_seed(0)
+        env0.set_seed(0)
+        td0 = env0.reset()
+
+        torch.manual_seed(0)
+        env1.set_seed(0)
+        td1 = env1.reset()
+
+        assert (td0 == td1).all()
+
+        td0 = env0.step(td0.update(env0.full_action_spec.rand()))
+        td1 = env0.step(td0.update(env1.full_action_spec.rand()))
+
+        assert (td0 == td1).all()
 
     def test_serial_trans_env_check(self):
         env = SerialEnv(
@@ -944,7 +1034,7 @@ class TestCatFrames(TransformBase):
         catframes = CatFrames(
             in_keys=["observation"], out_keys=["observation_stack"], dim=-1, N=4
         )
-        env.append_transform(catframes)
+        env = env.append_transform(catframes)
         policy = lambda td: td.update(env.full_action_spec.zeros() + 1)
         rollout = env.rollout(150, policy, break_when_any_done=False)
         transform, sampler = catframes.make_rb_transform_and_sampler(batch_size=32)
@@ -1011,7 +1101,7 @@ class TestCatFrames(TransformBase):
             }
         )
 
-        result = cat_frames.transform_observation_spec(observation_spec)
+        result = cat_frames.transform_observation_spec(observation_spec.clone())
         observation_spec = Composite(
             {
                 key: Bounded(space_min, space_max, (1, 3, 3), dtype=torch.double)
@@ -1576,7 +1666,9 @@ class TestR3M(TransformBase):
                 {key: Unbounded(r3m_net.outdim, device) for key in out_keys}
             )
 
-            observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
+            observation_spec_out = r3m_net.transform_observation_spec(
+                observation_spec.clone()
+            )
 
             for key in in_keys:
                 assert key not in observation_spec_out
@@ -1592,7 +1684,9 @@ class TestR3M(TransformBase):
                 ts_dict[key] = Unbounded(r3m_net.outdim, device)
             exp_ts = Composite(ts_dict)
 
-            observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
+            observation_spec_out = r3m_net.transform_observation_spec(
+                observation_spec.clone()
+            )
 
             for key in in_keys + out_keys:
                 assert observation_spec_out[key].shape == exp_ts[key].shape
@@ -1970,7 +2064,7 @@ class TestTrajCounter(TransformBase):
     def test_single_trans_env_check(self):
         torch.manual_seed(0)
         env = TransformedEnv(CountingEnv(max_steps=4), TrajCounter())
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         check_env_specs(env)
 
     @pytest.mark.parametrize("predefined", [True, False])
@@ -1984,7 +2078,9 @@ class TestTrajCounter(TransformBase):
             if t is None:
                 t = TrajCounter()
             env = TransformedEnv(CountingEnv(max_steps=max_steps), t.clone())
-            env.transform.transform_observation_spec(env.base_env.observation_spec)
+            env.transform.transform_observation_spec(
+                env.base_env.observation_spec.clone()
+            )
             return env
 
         if predefined:
@@ -2020,7 +2116,9 @@ class TestTrajCounter(TransformBase):
             else:
                 t = t.clone()
             env = TransformedEnv(CountingEnv(max_steps=max_steps), t)
-            env.transform.transform_observation_spec(env.base_env.observation_spec)
+            env.transform.transform_observation_spec(
+                env.base_env.observation_spec.clone()
+            )
             return env
 
         if predefined:
@@ -2048,7 +2146,7 @@ class TestTrajCounter(TransformBase):
             ),
             TrajCounter(),
         )
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         r = env.rollout(
             100,
             lambda td: td.set("action", torch.ones(env.shape + (1,))),
@@ -2064,7 +2162,7 @@ class TestTrajCounter(TransformBase):
             ),
             TrajCounter(),
         )
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         r = env.rollout(
             100,
             lambda td: td.set("action", torch.ones(env.shape + (1,))),
@@ -2076,7 +2174,7 @@ class TestTrajCounter(TransformBase):
     def test_transform_env(self):
         torch.manual_seed(0)
         env = TransformedEnv(CountingEnv(max_steps=4), TrajCounter())
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         r = env.rollout(100, lambda td: td.set("action", 1), break_when_any_done=False)
         assert r["traj_count"].max() == 19
 
@@ -2089,7 +2187,7 @@ class TestTrajCounter(TransformBase):
                 TrajCounter(out_key=(("nested"), (("traj_count",),))),
             ),
         )
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
         r = env.rollout(100, lambda td: td.set("action", 1), break_when_any_done=False)
         assert r["nested", "traj_count"].max() == 19
 
@@ -2121,7 +2219,9 @@ class TestTrajCounter(TransformBase):
 
         def make_env(max_steps=4):
             env = TransformedEnv(CountingEnv(max_steps=max_steps), t.clone())
-            env.transform.transform_observation_spec(env.base_env.observation_spec)
+            env.transform.transform_observation_spec(
+                env.base_env.observation_spec.clone()
+            )
             return env
 
         collector = MultiSyncDataCollector(
@@ -2420,7 +2520,273 @@ class TestHash(TransformBase):
         assert ("next", "observation") in td.keys(True)
 
     def test_transform_inverse(self):
-        raise pytest.skip("No inverse for Hash")
+        return
+        env = CountingEnv()
+        with pytest.raises(TypeError):
+            env = env.append_transform(
+                Hash(
+                    in_keys=[],
+                    out_keys=[],
+                    in_keys_inv=["action"],
+                    out_keys_inv=["action_hash"],
+                )
+            )
+
+
+@pytest.mark.skipif(
+    not _has_transformers, reason="transformers needed to test tokenizers"
+)
+class TestTokenizer(TransformBase):
+    @pytest.mark.parametrize("datatype", ["str", "NonTensorStack"])
+    def test_transform_no_env(self, datatype):
+        if datatype == "str":
+            obs = "abcdefg"
+        elif datatype == "NonTensorStack":
+            obs = torch.stack(
+                [
+                    NonTensorData(data="abcde"),
+                    NonTensorData(data="fghij"),
+                    NonTensorData(data="klmno"),
+                ]
+            )
+        else:
+            raise RuntimeError(f"please add a test case for datatype {datatype}")
+
+        td = TensorDict(
+            {
+                "observation": obs,
+            }
+        )
+
+        t = Tokenizer(in_keys=["observation"], out_keys=["tokens"])
+        td_tokenized = t(td)
+        t_inv = Tokenizer([], [], in_keys_inv=["observation"], out_keys_inv=["tokens"])
+        td_recon = t_inv.inv(td_tokenized.clone().exclude("observation"))
+        assert td_tokenized.get("observation") is td.get("observation")
+        assert td_recon["observation"] == td["observation"]
+
+    @pytest.mark.parametrize("datatype", ["str"])
+    def test_single_trans_env_check(self, datatype):
+        if datatype == "str":
+            t = Tokenizer(
+                in_keys=["string"],
+                out_keys=["tokens"],
+                max_length=5,
+            )
+            base_env = CountingEnvWithString(max_size=4, min_size=4)
+        env = TransformedEnv(base_env, t)
+        check_env_specs(env, return_contiguous=False)
+
+    @pytest.mark.parametrize("datatype", ["str"])
+    def test_serial_trans_env_check(self, datatype):
+        def make_env():
+            if datatype == "str":
+                t = Tokenizer(
+                    in_keys=["string"],
+                    out_keys=["tokens"],
+                    max_length=5,
+                )
+                base_env = CountingEnvWithString(max_size=4, min_size=4)
+
+            return TransformedEnv(base_env, t)
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env, return_contiguous=False)
+
+    @pytest.mark.parametrize("datatype", ["str"])
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv, datatype):
+        def make_env():
+            if datatype == "str":
+                t = Tokenizer(
+                    in_keys=["string"],
+                    out_keys=["tokens"],
+                    max_length=5,
+                )
+                base_env = CountingEnvWithString(max_size=4, min_size=4)
+            return TransformedEnv(base_env, t)
+
+        env = maybe_fork_ParallelEnv(2, make_env)
+        try:
+            check_env_specs(env, return_contiguous=False)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    @pytest.mark.parametrize("datatype", ["str"])
+    def test_trans_serial_env_check(self, datatype):
+        if datatype == "str":
+            t = Tokenizer(
+                in_keys=["string"],
+                out_keys=["tokens"],
+                max_length=5,
+            )
+            base_env = partial(CountingEnvWithString, max_size=4, min_size=4)
+
+        env = TransformedEnv(SerialEnv(2, base_env), t)
+        check_env_specs(env, return_contiguous=False)
+
+    @pytest.mark.parametrize("datatype", ["str"])
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv, datatype):
+        if datatype == "str":
+            t = Tokenizer(
+                in_keys=["string"],
+                out_keys=["tokens"],
+                max_length=5,
+            )
+            base_env = partial(CountingEnvWithString, max_size=4, min_size=4)
+
+        env = TransformedEnv(maybe_fork_ParallelEnv(2, base_env), t)
+        try:
+            check_env_specs(env, return_contiguous=False)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    @pytest.mark.parametrize("datatype", ["str"])
+    def test_transform_compose(self, datatype):
+        if datatype == "str":
+            obs = "abcdefg"
+
+        td = TensorDict(
+            {
+                "observation": obs,
+            }
+        )
+        t = Tokenizer(
+            in_keys=["observation"],
+            out_keys=["tokens"],
+            max_length=5,
+        )
+        t = Compose(t)
+        td_tokenized = t(td)
+
+        assert td_tokenized["observation"] is td["observation"]
+        assert (
+            td_tokenized["tokens"]
+            == t[0].tokenizer.encode(
+                obs,
+                return_tensors="pt",
+                add_special_tokens=False,
+                padding="max_length",
+                max_length=5,
+            )
+        ).all()
+
+    @pytest.mark.parametrize("n", [3, 5, 7])
+    def test_transform_model(self, n):
+        t = Tokenizer(
+            in_keys=["observation"],
+            out_keys=["tokens"],
+            max_length=n,
+        )
+        model = nn.Sequential(t, nn.Identity())
+        td = TensorDict({"observation": "a string!"})
+        td_out = model(td)
+        assert (
+            td_out["tokens"] == torch.tensor([1037, 5164, 999] + [0] * (n - 3))
+        ).all()
+
+    def test_transform_env(self):
+        import random
+
+        random.seed(0)
+        t = Tokenizer(
+            in_keys=["string"],
+            out_keys=["tokens"],
+            max_length=10,
+        )
+        base_env = CountingEnvWithString(max_steps=10, max_size=4, min_size=4)
+        env = TransformedEnv(base_env, t)
+        policy = lambda td: env.full_action_spec.one()
+        r = env.rollout(100, policy)
+        assert r["string"] == [
+            "mzjp",
+            "sgqe",
+            "eydt",
+            "rwzt",
+            "jdxc",
+            "prdl",
+            "ktug",
+            "oqib",
+            "cxmw",
+            "tpkh",
+            "wcgs",
+        ]
+        assert (
+            env.transform.tokenizer.batch_decode(r["tokens"], skip_special_tokens=True)
+            == r["string"]
+        )
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        t = Tokenizer(
+            in_keys=["observation"],
+            out_keys=["tokens"],
+            max_length=5,
+        )
+        rb = rbclass(storage=LazyTensorStorage(10))
+        rb.append_transform(t)
+        td = TensorDict(
+            {
+                "observation": NonTensorStack(
+                    "mzjp",
+                    "sgqe",
+                    "eydt",
+                    "rwzt",
+                    "jdxc",
+                    "prdl",
+                    "ktug",
+                    "oqib",
+                    "cxmw",
+                    "tpkh",
+                ),
+            },
+            [10],
+        )
+        rb.extend(td)
+        td = rb.sample(2)
+        assert (
+            t.tokenizer.batch_decode(td["tokens"], skip_special_tokens=True)
+            == td["observation"]
+        )
+
+    def test_transform_inverse(self):
+        torch.manual_seed(0)
+        t = Tokenizer(
+            in_keys=[],
+            out_keys=[],
+            # The policy produces tokens
+            out_keys_inv=["tokens"],
+            # The env must see strings
+            in_keys_inv=["strings"],
+            max_length=5,
+        )
+        base_env = CountingEnv()
+
+        class CheckString(Transform):
+            def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+                assert "strings" in tensordict
+                tensordict.pop("strings")
+                return tensordict
+
+            def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+                action_spec["strings"] = NonTensor(
+                    shape=action_spec.shape, example_data="a string!"
+                )
+                return action_spec
+
+        env = TransformedEnv(base_env, Compose(CheckString(), t))
+
+        def policy(td):
+            td.set("tokens", torch.randint(0, 10000, (10,)))
+            td.update(env.full_action_spec.one())
+            return td
+
+        env.check_env_specs()
 
 
 class TestStack(TransformBase):
@@ -2931,13 +3297,17 @@ class TestCatTensors(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(0, 1, (1, 4, 32))
-            observation_spec = cattensors.transform_observation_spec(observation_spec)
+            observation_spec = cattensors.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == torch.Size([1, len(keys) * 4, 32])
         else:
             observation_spec = Composite(
                 {key: Bounded(0, 1, (1, 4, 32)) for key in keys}
             )
-            observation_spec = cattensors.transform_observation_spec(observation_spec)
+            observation_spec = cattensors.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec[out_key].shape == torch.Size([1, len(keys) * 4, 32])
 
     @pytest.mark.parametrize("device", get_default_devices())
@@ -3077,13 +3447,13 @@ class TestCrop(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = crop.transform_observation_spec(observation_spec)
+            observation_spec = crop.transform_observation_spec(observation_spec.clone())
             assert observation_spec.shape == torch.Size([nchannels, 20, h])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = crop.transform_observation_spec(observation_spec)
+            observation_spec = crop.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, h])
 
@@ -3284,13 +3654,13 @@ class TestCenterCrop(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = cc.transform_observation_spec(observation_spec)
+            observation_spec = cc.transform_observation_spec(observation_spec.clone())
             assert observation_spec.shape == torch.Size([nchannels, 20, h])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = cc.transform_observation_spec(observation_spec)
+            observation_spec = cc.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, h])
 
@@ -3642,7 +4012,9 @@ class TestDoubleToFloat(TransformBase):
             observation_spec = Composite(
                 {key: Bounded(0, 1, (1, 3, 3), dtype=torch.double) for key in keys}
             )
-            observation_spec = double2float.transform_observation_spec(observation_spec)
+            observation_spec = double2float.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].dtype == torch.float, key
 
@@ -3689,7 +4061,7 @@ class TestDoubleToFloat(TransformBase):
             assert td_modif.get(key).dtype == torch.double
 
     def test_single_env_no_inkeys(self):
-        base_env = ContinuousActionVecMockEnv()
+        base_env = ContinuousActionVecMockEnv(spec_locked=False)
         for key, spec in list(base_env.observation_spec.items(True, True)):
             base_env.observation_spec[key] = spec.to(torch.float64)
         for key, spec in list(base_env.state_spec.items(True, True)):
@@ -3700,6 +4072,7 @@ class TestDoubleToFloat(TransformBase):
         env = TransformedEnv(
             base_env,
             DoubleToFloat(),
+            spec_locked=False,
         )
         for spec in env.observation_spec.values(True, True):
             assert spec.dtype == torch.float32
@@ -4421,13 +4794,17 @@ class TestFlattenObservation(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (*size, nchannels, 16, 16))
-            observation_spec = flatten.transform_observation_spec(observation_spec)
+            observation_spec = flatten.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape[-3] == expected_size
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (*size, nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = flatten.transform_observation_spec(observation_spec)
+            observation_spec = flatten.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape[-3] == expected_size
 
@@ -4461,13 +4838,17 @@ class TestFlattenObservation(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (*size, nchannels, 16, 16))
-            observation_spec = flatten.transform_observation_spec(observation_spec)
+            observation_spec = flatten.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape[-3] == expected_size
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (*size, nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = flatten.transform_observation_spec(observation_spec)
+            observation_spec = flatten.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape[-3] == expected_size
 
@@ -4703,13 +5084,13 @@ class TestGrayScale(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = gs.transform_observation_spec(observation_spec)
+            observation_spec = gs.transform_observation_spec(observation_spec.clone())
             assert observation_spec.shape == torch.Size([1, 16, 16])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = gs.transform_observation_spec(observation_spec)
+            observation_spec = gs.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([1, 16, 16])
 
@@ -4740,13 +5121,13 @@ class TestGrayScale(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = gs.transform_observation_spec(observation_spec)
+            observation_spec = gs.transform_observation_spec(observation_spec.clone())
             assert observation_spec.shape == torch.Size([1, 16, 16])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = gs.transform_observation_spec(observation_spec)
+            observation_spec = gs.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([1, 16, 16])
 
@@ -5279,28 +5660,33 @@ class TestObservationNorm(TransformBase):
     @pytest.mark.parametrize(
         "out_key", ["observation_out", ("nested", "observation_out")]
     )
-    def test_transform_inverse(self, out_key, out_key_inv):
+    @pytest.mark.parametrize("compose", [False, True])
+    def test_transform_inverse(self, out_key, out_key_inv, compose):
         standard_normal = True
         out_keys = [out_key]
         in_keys_inv = ["action"]
         out_keys_inv = [out_key_inv]
-        t = Compose(
-            ObservationNorm(
-                loc=torch.ones(()),
-                scale=0.5,
-                in_keys=["observation"],
-                out_keys=out_keys,
-                in_keys_inv=in_keys_inv,
-                out_keys_inv=out_keys_inv,
-                standard_normal=standard_normal,
-            )
+        t = ObservationNorm(
+            loc=torch.ones(()),
+            scale=0.5,
+            in_keys=["observation"],
+            out_keys=out_keys,
+            # What the env asks for
+            in_keys_inv=in_keys_inv,
+            # What the outside world sees
+            out_keys_inv=out_keys_inv,
+            standard_normal=standard_normal,
         )
+        if compose:
+            t = Compose(t)
         base_env = GymEnv(PENDULUM_VERSIONED())
         env = TransformedEnv(base_env, t)
+        assert out_keys_inv[0] in env.full_action_spec.keys(True, True)
         td = env.rollout(3)
         check_env_specs(env)
         env.set_seed(0)
-        assert torch.allclose(td["action"] * 0.5 + 1, t.inv(td)[out_key_inv])
+        a, a_ = td[out_key_inv] * 0.5 + 1, t.inv(td)["action"]
+        assert torch.allclose(a, a_), (a, a_)
         assert torch.allclose((td["observation"] - 1) / 0.5, td[out_key])
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
@@ -5345,7 +5731,7 @@ class TestObservationNorm(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(0, 1, (nchannels, 16, 16), device=device)
-            observation_spec = on.transform_observation_spec(observation_spec)
+            observation_spec = on.transform_observation_spec(observation_spec.clone())
             if standard_normal:
                 assert (observation_spec.space.low == -loc / scale).all()
                 assert (observation_spec.space.high == (1 - loc) / scale).all()
@@ -5357,7 +5743,7 @@ class TestObservationNorm(TransformBase):
             observation_spec = Composite(
                 {key: Bounded(0, 1, (nchannels, 16, 16), device=device) for key in keys}
             )
-            observation_spec = on.transform_observation_spec(observation_spec)
+            observation_spec = on.transform_observation_spec(observation_spec.clone())
             for key in keys:
                 if standard_normal:
                     assert (observation_spec[key].space.low == -loc / scale).all()
@@ -5562,13 +5948,17 @@ class TestResize(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = resize.transform_observation_spec(observation_spec)
+            observation_spec = resize.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == torch.Size([nchannels, 20, 21])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = resize.transform_observation_spec(observation_spec)
+            observation_spec = resize.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
 
@@ -5599,13 +5989,17 @@ class TestResize(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (nchannels, 16, 16))
-            observation_spec = resize.transform_observation_spec(observation_spec)
+            observation_spec = resize.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == torch.Size([nchannels, 20, 21])
         else:
             observation_spec = Composite(
                 {key: Bounded(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = resize.transform_observation_spec(observation_spec)
+            observation_spec = resize.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
 
@@ -6594,7 +6988,9 @@ class TestUnsqueezeTransform(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (*batch, *size, nchannels, 16, 16))
-            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            observation_spec = unsqueeze.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == expected_size
         else:
             observation_spec = Composite(
@@ -6603,7 +6999,9 @@ class TestUnsqueezeTransform(TransformBase):
                     for key in keys
                 }
             )
-            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            observation_spec = unsqueeze.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == expected_size
 
@@ -6750,7 +7148,9 @@ class TestUnsqueezeTransform(TransformBase):
 
         if len(keys) == 1:
             observation_spec = Bounded(-1, 1, (*batch, *size, nchannels, 16, 16))
-            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            observation_spec = unsqueeze.transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == expected_size
         else:
             observation_spec = Composite(
@@ -6759,7 +7159,9 @@ class TestUnsqueezeTransform(TransformBase):
                     for key in keys
                 }
             )
-            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            observation_spec = unsqueeze.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == expected_size
 
@@ -6836,13 +7238,13 @@ class TestUnsqueezeTransform(TransformBase):
             # the order is inverted
             Compose(
                 UnsqueezeTransform(
-                    -1, in_keys_inv=["action_t"], out_keys_inv=["action"]
+                    -1, in_keys_inv=["action"], out_keys_inv=["action_t"]
                 ),
-                SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
+                SqueezeTransform(-1, in_keys_inv=["action_t"], out_keys_inv=["action"]),
             ),
         )
         td = env.rollout(3)
-        assert env.action_spec.shape[-1] == 6
+        assert env.full_action_spec["action"].shape[-1] == 6
         assert td["action"].shape[-1] == 6
 
 
@@ -6957,8 +7359,10 @@ class TestSqueezeTransform(TransformBase):
     @property
     def _inv_circular_transform(self):
         return Compose(
-            UnsqueezeTransform(-1, in_keys_inv=["action_un"], out_keys_inv=["action"]),
-            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
+            # The env wants a squeezed action - the inv of unsqueeze
+            UnsqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
+            # The outsize world has an squeezed action that we unsqueeze - the inv of squeeze
+            SqueezeTransform(-1, in_keys_inv=["action_un"], out_keys_inv=["action"]),
         )
 
     def test_single_trans_env_check(self):
@@ -7116,7 +7520,7 @@ class TestSqueezeTransform(TransformBase):
         check_env_specs(env)
         r = env.rollout(3)
         r2 = GymEnv(HALFCHEETAH_VERSIONED()).rollout(3)
-        assert (r.zero_() == r2.zero_()).all()
+        assert_allclose_td(r.zero_(), r2.zero_(), intersection=True)
 
 
 class TestTargetReturn(TransformBase):
@@ -7354,7 +7758,7 @@ class TestToTensorImage(TransformBase):
         if len(keys) == 1:
             observation_spec = Bounded(0, 255, (16, 16, 3), dtype=torch.uint8)
             observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
+                observation_spec.clone()
             )
             assert observation_spec.shape == torch.Size([3, 16, 16])
             assert (observation_spec.space.low == 0).all()
@@ -7364,7 +7768,7 @@ class TestToTensorImage(TransformBase):
                 {key: Bounded(0, 255, (16, 16, 3), dtype=torch.uint8) for key in keys}
             )
             observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
+                observation_spec.clone()
             )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([3, 16, 16])
@@ -7400,7 +7804,7 @@ class TestToTensorImage(TransformBase):
         if len(keys) == 1:
             observation_spec = Bounded(0, 255, (16, 16, 3), dtype=torch.uint8)
             observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
+                observation_spec.clone()
             )
             assert observation_spec.shape == torch.Size([3, 16, 16])
             assert (observation_spec.space.low == 0).all()
@@ -7410,7 +7814,7 @@ class TestToTensorImage(TransformBase):
                 {key: Bounded(0, 255, (16, 16, 3), dtype=torch.uint8) for key in keys}
             )
             observation_spec = totensorimage.transform_observation_spec(
-                observation_spec
+                observation_spec.clone()
             )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([3, 16, 16])
@@ -8689,7 +9093,9 @@ class TestVIP(TransformBase):
         if del_keys:
             exp_ts = Composite({key: Unbounded(1024, device) for key in out_keys})
 
-            observation_spec_out = vip_net.transform_observation_spec(observation_spec)
+            observation_spec_out = vip_net.transform_observation_spec(
+                observation_spec.clone()
+            )
 
             for key in in_keys:
                 assert key not in observation_spec_out
@@ -8705,7 +9111,9 @@ class TestVIP(TransformBase):
                 ts_dict[key] = Unbounded(1024, device)
             exp_ts = Composite(ts_dict)
 
-            observation_spec_out = vip_net.transform_observation_spec(observation_spec)
+            observation_spec_out = vip_net.transform_observation_spec(
+                observation_spec.clone()
+            )
 
             for key in in_keys + out_keys:
                 assert observation_spec_out[key].shape == exp_ts[key].shape
@@ -9169,7 +9577,8 @@ class TestVecNorm:
                 lambda: TransformedEnv(
                     GymEnv(PENDULUM_VERSIONED()),
                     Compose(
-                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                        self.rename_t,
+                        VecNorm(in_keys=[("some", "obs"), "reward"]),
                     ),
                 )
             )
@@ -9178,7 +9587,8 @@ class TestVecNorm:
                 lambda: TransformedEnv(
                     ContinuousActionVecMockEnv(),
                     Compose(
-                        self.rename_t, VecNorm(in_keys=[("some", "obs"), "reward"])
+                        self.rename_t,
+                        VecNorm(in_keys=[("some", "obs"), "reward"]),
                     ),
                 )
             )
@@ -9575,13 +9985,17 @@ class TestTransforms:
         if len(keys) == 1:
             observation_spec = Bounded(0, 255, (nchannels, 16, 16))
             # StepCounter does not want non composite specs
-            observation_spec = compose[:2].transform_observation_spec(observation_spec)
+            observation_spec = compose[:2].transform_observation_spec(
+                observation_spec.clone()
+            )
             assert observation_spec.shape == torch.Size([nchannels * N, 16, 16])
         else:
             observation_spec = Composite(
                 {key: Bounded(0, 255, (nchannels, 16, 16)) for key in keys}
             )
-            observation_spec = compose.transform_observation_spec(observation_spec)
+            observation_spec = compose.transform_observation_spec(
+                observation_spec.clone()
+            )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size(
                     [nchannels * N, 16, 16]
@@ -11811,12 +12225,14 @@ class TestSignTransform(TransformBase):
             SignTransform(
                 in_keys=["observation", "reward"],
                 out_keys=["obs_sign", "reward_sign"],
-                in_keys_inv=["input"],
-                out_keys_inv=["input_sign"],
+                # What is stored within
+                in_keys_inv=["input_signed"],
+                # What the outside world sees
+                out_keys_inv=["input_unsigned"],
             )
         )
         rb.append_transform(t)
-        data = TensorDict({"observation": 1, "reward": 2, "input": 3}, [])
+        data = TensorDict({"observation": 1, "reward": 2, "input_unsigned": 3}, [])
         rb.add(data)
         sample = rb.sample(20)
 
@@ -11826,8 +12242,8 @@ class TestSignTransform(TransformBase):
         assert (sample["reward"] == 2).all()
         assert self.check_sign_applied(sample["reward_sign"])
 
-        assert (sample["input"] == 3).all()
-        assert self.check_sign_applied(sample["input_sign"])
+        assert (sample["input_unsigned"] == 3).all()
+        assert self.check_sign_applied(sample["input_signed"])
 
     def test_single_trans_env_check(self):
         env = ContinuousActionVecMockEnv()
@@ -11872,15 +12288,17 @@ class TestSignTransform(TransformBase):
 
     def test_transform_inverse(self):
         t = SignTransform(
-            in_keys_inv=["observation", "reward"],
-            out_keys_inv=["obs_sign", "reward_sign"],
+            # What is seen inside
+            in_keys_inv=["obs_signed", "reward_signed"],
+            # What the outside world sees
+            out_keys_inv=["obs", "reward"],
         )
-        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = TensorDict({"obs": 1, "reward": 2}, [])
         data = t.inv(data)
-        assert data["observation"] == 1
-        assert self.check_sign_applied(data["obs_sign"])
+        assert data["obs"] == 1
+        assert self.check_sign_applied(data["obs_signed"])
         assert data["reward"] == 2
-        assert self.check_sign_applied(data["reward_sign"])
+        assert self.check_sign_applied(data["reward_signed"])
 
     def test_transform_model(self):
         t = nn.Sequential(

@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import abc
 import enum
+import gc
 import math
 import warnings
+import weakref
 from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
@@ -2450,13 +2452,19 @@ class NonTensor(TensorSpec):
 
     :meth:`.rand` will return a :class:`~tensordict.NonTensorData` object with `None` data value.
     (same will go for :meth:`.zero` and :meth:`.one`).
+
+    .. note:: The default shape of `NonTensor` is `(1,)`.
+
     """
+
+    example_data: Any = None
 
     def __init__(
         self,
         shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
         device: Optional[DEVICE_TYPING] = None,
         dtype: torch.dtype | None = None,
+        example_data: Any = None,
         **kwargs,
     ):
         if isinstance(shape, int):
@@ -2467,6 +2475,12 @@ class NonTensor(TensorSpec):
         super().__init__(
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
         )
+        self.example_data = example_data
+
+    def __eq__(self, other):
+        eq = super().__eq__(other)
+        eq = eq & (self.example_data == getattr(other, "example_data", None))
+        return eq
 
     def cardinality(self) -> Any:
         raise RuntimeError("Cannot enumerate a NonTensorSpec.")
@@ -2485,30 +2499,46 @@ class NonTensor(TensorSpec):
             dest_device = torch.device(dest)
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
-        return self.__class__(shape=self.shape, device=dest_device, dtype=None)
+        return self.__class__(
+            shape=self.shape,
+            device=dest_device,
+            dtype=None,
+            example_data=self.example_data,
+        )
 
     def clone(self) -> NonTensor:
-        return self.__class__(shape=self.shape, device=self.device, dtype=self.dtype)
+        return self.__class__(
+            shape=self.shape,
+            device=self.device,
+            dtype=self.dtype,
+            example_data=self.example_data,
+        )
 
     def rand(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
+            data=self.example_data,
+            batch_size=(*shape, *self._safe_shape),
+            device=self.device,
         )
 
     def zero(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
+            data=self.example_data,
+            batch_size=(*shape, *self._safe_shape),
+            device=self.device,
         )
 
     def one(self, shape=None):
         if shape is None:
             shape = ()
         return NonTensorData(
-            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
+            data=self.example_data,
+            batch_size=(*shape, *self._safe_shape),
+            device=self.device,
         )
 
     def is_in(self, val: Any) -> bool:
@@ -2533,10 +2563,27 @@ class NonTensor(TensorSpec):
             raise ValueError(
                 f"The last elements of the expanded shape must match the current one. Got shape={shape} while self.shape={self.shape}."
             )
-        return self.__class__(shape=shape, device=self.device, dtype=None)
+        return self.__class__(
+            shape=shape, device=self.device, dtype=None, example_data=self.example_data
+        )
+
+    def unsqueeze(self, dim: int) -> NonTensor:
+        unsq = super().unsqueeze(dim=dim)
+        unsq.example_data = self.example_data
+        return unsq
+
+    def squeeze(self, dim: int | None = None) -> NonTensor:
+        sq = super().squeeze(dim=dim)
+        sq.example_data = self.example_data
+        return sq
 
     def _reshape(self, shape):
-        return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+        return self.__class__(
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            example_data=self.example_data,
+        )
 
     def _unflatten(self, dim, sizes):
         shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
@@ -2544,12 +2591,18 @@ class NonTensor(TensorSpec):
             shape=shape,
             device=self.device,
             dtype=self.dtype,
+            example_data=self.example_data,
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
         indexed_shape = _size(_shape_indexing(self.shape, idx))
-        return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
+        return self.__class__(
+            shape=indexed_shape,
+            device=self.device,
+            dtype=self.dtype,
+            example_data=self.example_data,
+        )
 
     def unbind(self, dim: int = 0):
         orig_dim = dim
@@ -2565,6 +2618,7 @@ class NonTensor(TensorSpec):
                 shape=shape,
                 device=self.device,
                 dtype=self.dtype,
+                example_data=self.example_data,
             )
             for i in range(self.shape[dim])
         )
@@ -4376,7 +4430,7 @@ class Composite(TensorSpec):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._device = None
-        cls._locked = False
+        cls._is_locked = False
         return super().__new__(cls)
 
     @property
@@ -4491,6 +4545,18 @@ class Composite(TensorSpec):
     def set(self, name, spec):
         if self.locked:
             raise RuntimeError("Cannot modify a locked Composite.")
+        if spec is not None and self.device is not None and spec.device != self.device:
+            if isinstance(spec, Composite) and spec.device is None:
+                # We make a clone not to mess up the spec that was provided.
+                # in set() we do the same for shape - these two ops should be grouped.
+                # we don't care about the overhead of cloning twice though because in theory
+                # we don't set specs often.
+                spec = spec.clone().to(self._device)
+            else:
+                raise RuntimeError(
+                    f"Setting a new attribute ({name}) on another device ({spec.device} against {self.device}). "
+                    f"All devices of Composite must match."
+                )
         if spec is not None:
             shape = spec.shape
             if shape[: self.ndim] != self.shape:
@@ -4524,28 +4590,10 @@ class Composite(TensorSpec):
             shape = _size(())
         self._shape = _size(shape)
         self._specs = {}
-        for key, value in kwargs.items():
-            self.set(key, value)
 
         _device = (
             _make_ordinal_device(torch.device(device)) if device is not None else device
         )
-        if len(kwargs):
-            for key, item in self.items():
-                if item is None:
-                    continue
-                if (
-                    isinstance(item, Composite)
-                    and item.device is None
-                    and _device is not None
-                ):
-                    item = item.clone().to(_device)
-                elif (_device is not None) and (item.device != _device):
-                    raise RuntimeError(
-                        f"Setting a new attribute ({key}) on another device "
-                        f"({item.device} against {_device}). All devices of "
-                        "Composite must match."
-                    )
         self._device = _device
         if len(args):
             if len(args) > 1:
@@ -4561,6 +4609,8 @@ class Composite(TensorSpec):
                 if isinstance(item, dict):
                     item = Composite(item, shape=shape, device=_device)
                 self[k] = item
+        for k, item in kwargs.items():
+            self[k] = item
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -4643,10 +4693,17 @@ class Composite(TensorSpec):
             raise
 
     def __setitem__(self, key, value):
+        dest = self
         if isinstance(key, tuple) and len(key) > 1:
-            if key[0] not in self.keys(True):
-                self[key[0]] = Composite(shape=self.shape, device=self.device)
-            self[key[0]][key[1:]] = value
+            while key[0] not in self.keys():
+                dest[key[0]] = dest = Composite(shape=self.shape, device=self.device)
+                if len(key) > 2:
+                    key = key[1:]
+                else:
+                    break
+            else:
+                dest = self[key[0]]
+            dest[key[1:]] = value
             return
         elif isinstance(key, tuple):
             self[key[0]] = value
@@ -4657,22 +4714,6 @@ class Composite(TensorSpec):
             raise AttributeError(f"Composite[{key}] cannot be set")
         if isinstance(value, dict):
             value = Composite(value, device=self._device, shape=self.shape)
-        if (
-            value is not None
-            and self.device is not None
-            and value.device != self.device
-        ):
-            if isinstance(value, Composite) and value.device is None:
-                # We make a clone not to mess up the spec that was provided.
-                # in set() we do the same for shape - these two ops should be grouped.
-                # we don't care about the overhead of cloning twice though because in theory
-                # we don't set specs often.
-                value = value.clone().to(self.device)
-            else:
-                raise RuntimeError(
-                    f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
-                    f"All devices of Composite must match."
-                )
 
         self.set(key, value)
 
@@ -4907,6 +4948,10 @@ class Composite(TensorSpec):
         return self.__class__(**kwargs, device=_device, shape=self.shape)
 
     def clone(self) -> Composite:
+        """Clones the Composite spec.
+
+        Locked specs will not produce locked clones.
+        """
         try:
             device = self.device
         except RuntimeError:
@@ -4993,7 +5038,7 @@ class Composite(TensorSpec):
 
     def __eq__(self, other):
         return (
-            type(self) is type(other)
+            type(self) == type(other)
             and self.shape == other.shape
             and self._device == other._device
             and set(self._specs.keys()) == set(other._specs.keys())
@@ -5118,14 +5163,82 @@ class Composite(TensorSpec):
             for i in range(self.shape[dim])
         )
 
-    def lock_(self, recurse=False):
+    # Locking functionality
+    @property
+    def is_locked(self) -> bool:
+        return self._is_locked
+
+    @is_locked.setter
+    def is_locked(self, value: bool) -> None:
+        if value:
+            self.lock_()
+        else:
+            self.unlock_()
+
+    def __getstate__(self):
+        result = self.__dict__.copy()
+        __lock_parents_weakrefs = result.pop("__lock_parents_weakrefs", None)
+        if __lock_parents_weakrefs is not None:
+            result["_lock_recurse"] = True
+        return result
+
+    def __setstate__(self, state):
+        _lock_recurse = state.pop("_lock_recurse", False)
+        for key, value in state.items():
+            setattr(self, key, value)
+        if self._is_locked:
+            self._is_locked = False
+            self.lock_(recurse=_lock_recurse)
+
+    def _propagate_lock(
+        self, *, recurse: bool, lock_parents_weakrefs=None, is_compiling
+    ):
+        """Registers the parent composite that handles the lock."""
+        self._is_locked = True
+        if lock_parents_weakrefs is not None:
+            lock_parents_weakrefs = [
+                ref
+                for ref in lock_parents_weakrefs
+                if not any(refref is ref for refref in self._lock_parents_weakrefs)
+            ]
+        if not is_compiling:
+            is_root = lock_parents_weakrefs is None
+            if is_root:
+                lock_parents_weakrefs = []
+            else:
+                self._lock_parents_weakrefs = (
+                    self._lock_parents_weakrefs + lock_parents_weakrefs
+                )
+            lock_parents_weakrefs = list(lock_parents_weakrefs)
+            lock_parents_weakrefs.append(weakref.ref(self))
+
+        if recurse:
+            for value in self.values():
+                if isinstance(value, Composite):
+                    value._propagate_lock(
+                        recurse=True,
+                        lock_parents_weakrefs=lock_parents_weakrefs,
+                        is_compiling=is_compiling,
+                    )
+
+    @property
+    def _lock_parents_weakrefs(self):
+        _lock_parents_weakrefs = self.__dict__.get("__lock_parents_weakrefs")
+        if _lock_parents_weakrefs is None:
+            self.__dict__["__lock_parents_weakrefs"] = []
+            _lock_parents_weakrefs = self.__dict__["__lock_parents_weakrefs"]
+        return _lock_parents_weakrefs
+
+    @_lock_parents_weakrefs.setter
+    def _lock_parents_weakrefs(self, value: list):
+        self.__dict__["__lock_parents_weakrefs"] = value
+
+    def lock_(self, recurse: bool | None = None) -> T:
         """Locks the Composite and prevents modification of its content.
 
-        This is only a first-level lock, unless specified otherwise through the
-        ``recurse`` arg.
-
-        Leaf specs can always be modified in place, but they cannot be replaced
-        in their Composite parent.
+        The recurse argument control whether the lock will be propagated to sub-specs.
+        The current default is ``False`` but it will be turned to ``True`` for consistency
+        with the TensorDict API in v0.8.
 
         Examples:
             >>> shape = [3, 4, 5]
@@ -5159,30 +5272,99 @@ class Composite(TensorSpec):
             failed!
 
         """
-        self._locked = True
-        if recurse:
-            for value in self.values():
-                if isinstance(value, Composite):
-                    value.lock_(recurse)
+        if self.is_locked:
+            return self
+        is_comp = is_compiling()
+        if is_comp:
+            # TODO: See what to do when compiling
+            pass
+        if recurse is None:
+            warnings.warn(
+                "You have not specified a value for recurse when calling CompositeSpec.lock_(). "
+                "The current default is False but it will be turned to True in v0.8. To adapt to these changes "
+                "and silence this warning, pass the value of recurse explicitly.",
+                category=DeprecationWarning,
+            )
+            recurse = False
+        self._propagate_lock(recurse=recurse, is_compiling=is_comp)
         return self
 
-    def unlock_(self, recurse=False):
+    def _propagate_unlock(self, recurse: bool):
+        # if we end up here, we can clear the graph associated with this td
+        self._is_locked = False
+
+        self._is_shared = False
+        self._is_memmap = False
+
+        if recurse:
+            sub_specs = []
+            for value in self.values():
+                if isinstance(value, Composite):
+                    sub_specs.extend(value._propagate_unlock(recurse=recurse))
+                    sub_specs.append(value)
+            return sub_specs
+        return []
+
+    def _check_unlock(self, first_attempt=True):
+        if not first_attempt:
+            gc.collect()
+        obj = None
+        for ref in self._lock_parents_weakrefs:
+            obj = ref()
+            # check if the locked parent exists and if it's locked
+            # we check _is_locked because it can be False or None in the case of Lazy stacks,
+            # but if we check obj.is_locked it will be True for this class.
+            if obj is not None and obj._is_locked:
+                break
+
+        else:
+            try:
+                self._lock_parents_weakrefs = []
+            except AttributeError:
+                # Some tds (eg, LazyStack) have an automated way of creating the _lock_parents_weakref
+                pass
+            return
+
+        if first_attempt:
+            del obj
+            return self._check_unlock(False)
+        raise RuntimeError(
+            "Cannot unlock a Composite that is part of a locked graph. "
+            "Graphs are locked when a Composite is locked with recurse=True. "
+            "Unlock the root Composite first. If the Composite is part of multiple graphs, "
+            "group the graphs under a common Composite an unlock this root. "
+            f"self: {self}, obj: {obj}"
+        )
+
+    def unlock_(self, recurse: bool | None = None) -> T:
         """Unlocks the Composite and allows modification of its content.
 
         This is only a first-level lock modification, unless specified
         otherwise through the ``recurse`` arg.
 
         """
-        self._locked = False
-        if recurse:
-            for value in self.values():
-                if isinstance(value, Composite):
-                    value.unlock_(recurse)
+        try:
+            if recurse is None:
+                warnings.warn(
+                    "You have not specified a value for recurse when calling CompositeSpec.unlock_(). "
+                    "The current default is False but it will be turned to True in v0.8. To adapt to these changes "
+                    "and silence this warning, pass the value of recurse explicitly.",
+                    category=DeprecationWarning,
+                )
+                recurse = False
+            sub_specs = self._propagate_unlock(recurse=recurse)
+            if recurse:
+                for sub_spec in sub_specs:
+                    sub_spec._check_unlock()
+            self._check_unlock()
+        except RuntimeError as err:
+            self.lock_()
+            raise err
         return self
 
     @property
     def locked(self):
-        return self._locked
+        return self._is_locked
 
 
 class StackedComposite(_LazyStackedMixin[Composite], Composite):

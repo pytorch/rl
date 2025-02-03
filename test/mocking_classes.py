@@ -1068,20 +1068,27 @@ class CountingEnv(EnvBase):
         return tensordict
 
 
+def get_random_string(min_size, max_size):
+    size = random.randint(min_size, max_size)
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(size))
+
+
 class CountingEnvWithString(CountingEnv):
     def __init__(self, *args, **kwargs):
+        self.max_size = kwargs.pop("max_size", 30)
+        self.min_size = kwargs.pop("min_size", 4)
         super().__init__(*args, **kwargs)
         self.observation_spec.set(
             "string",
             NonTensor(
                 shape=self.batch_size,
                 device=self.device,
+                example_data=self.get_random_string(),
             ),
         )
 
     def get_random_string(self):
-        size = random.randint(4, 30)
-        return "".join(random.choice(string.ascii_lowercase) for _ in range(size))
+        return get_random_string(self.min_size, self.max_size)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         res = super()._reset(tensordict, **kwargs)
@@ -2199,3 +2206,39 @@ class EnvThatDoesNothing(EnvBase):
 
     def _set_seed(self, seed):
         ...
+
+
+class Str2StrEnv(EnvBase):
+    def __init__(self, min_size=4, max_size=10, **kwargs):
+        self.observation_spec = Composite(
+            observation=NonTensor(example_data="an observation!", shape=())
+        )
+        self.full_action_spec = Composite(
+            action=NonTensor(example_data="an action!", shape=())
+        )
+        self.reward_spec = Unbounded(shape=(1,), dtype=torch.float)
+        self.min_size = min_size
+        self.max_size = max_size
+        super().__init__(**kwargs)
+
+    def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        assert isinstance(tensordict["action"], str)
+        out = tensordict.empty()
+        out.set("observation", self.get_random_string())
+        out.set("done", torch.zeros(1, dtype=torch.bool).bernoulli_(0.01))
+        out.set("reward", torch.zeros(1, dtype=torch.float).bernoulli_(0.01))
+        return out
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        out = tensordict.empty() if tensordict is not None else TensorDict()
+        out.set("observation", self.get_random_string())
+        out.set("done", torch.zeros(1, dtype=torch.bool).bernoulli_(0.01))
+        return out
+
+    def get_random_string(self):
+        return get_random_string(self.min_size, self.max_size)
+
+    def _set_seed(self, seed: Optional[int]):
+        random.seed(seed)
+        torch.manual_seed(0)
+        return seed

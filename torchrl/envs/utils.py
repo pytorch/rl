@@ -148,13 +148,14 @@ class _StepMDP:
         self.exclude_from_root = self._repr_key_list_as_tree(self.exclude_from_root)
         self.keys_from_root = self._repr_key_list_as_tree(self.keys_from_root)
         self.keys_from_next = self._repr_key_list_as_tree(self.keys_from_next)
-        self.validated = None
+        self.validated = True
 
         # Model based envs can have missing keys
         # TODO: do we want to always allow this? check_env_specs should catch these or downstream ops
         self._allow_absent_keys = True
 
     def validate(self, tensordict):
+        # Deprecated - leaving dormant
         if self.validated:
             return True
         if self.validated is None:
@@ -180,14 +181,16 @@ class _StepMDP:
                 if not _is_reset(key)
             }
             expected = set(expected)
+            # Actual (the input td) can have more keys, like loc and scale etc
+            # But we cannot have keys missing: if there's a key in expected that is not in actual
+            # it is a problem.
             self.validated = expected.intersection(actual) == expected
             if not self.validated:
                 warnings.warn(
-                    "The expected key set and actual key set differ. "
-                    "This will work but with a slower throughput than "
-                    "when the specs match exactly the actual key set "
-                    "in the data. "
-                    f"{{Expected keys}}-{{Actual keys}}={set(expected) - actual}, \n"
+                    "The expected key set and actual key set differ (all expected keys must be present, "
+                    "extra keys can be present in the input TensorDict). "
+                    "As a result, step_mdp will need to run extra key checks at each iteration. "
+                    f"{{Expected keys}}-{{Actual keys}}={set(expected) - actual} (<= this set should be empty), \n"
                     f"{{Actual keys}}-{{Expected keys}}={actual- set(expected)}."
                 )
         return self.validated
@@ -285,52 +288,38 @@ class _StepMDP:
             )
             return out
         next_td = tensordict._get_str("next", None)
-        if self.validate(tensordict):
-            if self.keep_other:
-                out = self._exclude(self.exclude_from_root, tensordict, out=None)
-                if out is None:
-                    out = tensordict.empty()
-            else:
-                out = next_td.empty()
-                self._grab_and_place(
-                    self.keys_from_root,
-                    tensordict,
-                    out,
-                    _allow_absent_keys=self._allow_absent_keys,
-                )
-            if isinstance(next_td, LazyStackedTensorDict):
-                if not isinstance(out, LazyStackedTensorDict):
-                    out = LazyStackedTensorDict(
-                        *out.unbind(next_td.stack_dim), stack_dim=next_td.stack_dim
-                    )
-                for _next_td, _out in zip(next_td.tensordicts, out.tensordicts):
-                    self._grab_and_place(
-                        self.keys_from_next,
-                        _next_td,
-                        _out,
-                        _allow_absent_keys=self._allow_absent_keys,
-                    )
-            else:
-                self._grab_and_place(
-                    self.keys_from_next,
-                    next_td,
-                    out,
-                    _allow_absent_keys=self._allow_absent_keys,
-                )
-            return out
+        if self.keep_other:
+            out = self._exclude(self.exclude_from_root, tensordict, out=None)
+            if out is None:
+                out = tensordict.empty()
         else:
             out = next_td.empty()
-            total_key = ()
-            if self.keep_other:
-                for key in tensordict.keys():
-                    if key != "next":
-                        _set(tensordict, out, key, total_key, self.excluded)
-            elif not self.exclude_action:
-                for action_key in self.action_keys:
-                    _set_single_key(tensordict, out, action_key)
-            for key in next_td.keys():
-                _set(next_td, out, key, total_key, self.excluded)
-            return out
+            self._grab_and_place(
+                self.keys_from_root,
+                tensordict,
+                out,
+                _allow_absent_keys=self._allow_absent_keys,
+            )
+        if isinstance(next_td, LazyStackedTensorDict):
+            if not isinstance(out, LazyStackedTensorDict):
+                out = LazyStackedTensorDict(
+                    *out.unbind(next_td.stack_dim), stack_dim=next_td.stack_dim
+                )
+            for _next_td, _out in zip(next_td.tensordicts, out.tensordicts):
+                self._grab_and_place(
+                    self.keys_from_next,
+                    _next_td,
+                    _out,
+                    _allow_absent_keys=self._allow_absent_keys,
+                )
+        else:
+            self._grab_and_place(
+                self.keys_from_next,
+                next_td,
+                out,
+                _allow_absent_keys=self._allow_absent_keys,
+            )
+        return out
 
 
 def step_mdp(
@@ -1391,7 +1380,7 @@ def _update_during_reset(
         # get the reset signal
         reset = tensordict.pop(reset_key, None)
 
-        # check if this reset should be ignored -- this happens whenever the a
+        # check if this reset should be ignored -- this happens whenever the
         # root node has already been updated
         root = () if isinstance(reset_key, str) else reset_key[:-1]
         processed = any(reset_key_tuple[: len(x)] == x for x in roots)
