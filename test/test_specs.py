@@ -410,6 +410,30 @@ class TestComposite:
             )
             assert ts["bad"].device == (device if device is not None else dest)
 
+    def test_setitem_nested(self, shape, is_complete, device, dtype):
+        f = Unbounded(shape=shape, device=device, dtype=dtype)
+        g = (
+            None
+            if not is_complete
+            else Unbounded(shape=shape, device=device, dtype=dtype)
+        )
+        test = Composite(
+            a=Composite(b=Composite(c=Composite(d=Composite(e=Composite(f=f, g=g))))),
+            shape=shape,
+            device=device,
+        )
+        trials = Composite(shape=shape, device=device)
+        assert trials != test
+        trials["a", "b", "c", "d", "e", "f"] = Unbounded(
+            shape=shape, device=device, dtype=dtype
+        )
+        trials["a", "b", "c", "d", "e", "g"] = (
+            None
+            if not is_complete
+            else Unbounded(shape=shape, device=device, dtype=dtype)
+        )
+        assert trials == test
+
     def test_del(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
         assert "obs" in ts.keys()
