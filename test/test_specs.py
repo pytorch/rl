@@ -724,9 +724,10 @@ class TestChoiceSpec:
             choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
             example_in = NonTensorStack("a", "b", "c")
             example_out = NonTensorStack("a", "c", "b")
-
-        spec = Choice(choices)
-        res = spec.rand()
+        torch.manual_seed(0)
+        for _ in range(10):
+            spec = Choice(choices)
+            res = spec.rand()
         assert spec.is_in(res)
         assert spec.is_in(example_in)
         assert not spec.is_in(example_out)
@@ -755,7 +756,7 @@ class TestChoiceSpec:
                 ]
             )
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             with pytest.raises(ValueError, match="must have the same device"):
                 Choice(
                     [
@@ -914,7 +915,7 @@ class TestEquality:
 
         ts_other = Bounded(minimum, maximum + 1, torch.Size((1,)), device, dtype)
         assert ts != ts_other
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Bounded(minimum, maximum, torch.Size((1,)), "cuda:0", dtype)
             assert ts != ts_other
 
@@ -942,7 +943,7 @@ class TestEquality:
         )
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = OneHot(
                 n=n, device="cuda:0", dtype=dtype, use_register=use_register
             )
@@ -972,7 +973,7 @@ class TestEquality:
         ts_same = Unbounded(device=device, dtype=dtype)
         assert ts == ts_same
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Unbounded(device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1005,7 +1006,7 @@ class TestEquality:
         ts_other = Bounded(low=minimum, high=maximum + 1, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Bounded(low=minimum, high=maximum, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1033,7 +1034,7 @@ class TestEquality:
         ts_other = Categorical(n=n + 1, shape=shape, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Categorical(n=n, shape=shape, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1071,7 +1072,7 @@ class TestEquality:
         ts_other = Unbounded(shape=other_shape, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Unbounded(shape=shape, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1097,7 +1098,7 @@ class TestEquality:
         ts_other = Binary(n=n + 5, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Binary(n=n, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1131,7 +1132,7 @@ class TestEquality:
         ts_other = MultiOneHot(nvec=other_nvec, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = MultiOneHot(nvec=nvec, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1165,7 +1166,7 @@ class TestEquality:
         ts_other = MultiCategorical(nvec=other_nvec, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = MultiCategorical(nvec=nvec, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1571,16 +1572,8 @@ class TestExpand:
             choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
 
         spec = Choice(choices)
-        res = spec.expand(
-            [
-                3,
-            ]
-        )
-        assert res.shape == torch.Size(
-            [
-                3,
-            ]
-        )
+        res = spec.expand([3])
+        assert res.shape == torch.Size([3])
 
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
