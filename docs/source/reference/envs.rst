@@ -41,18 +41,34 @@ Each env will have the following attributes:
   the done-flag spec. See the section on trajectory termination below.
 - :obj:`env.input_spec`: a :class:`~torchrl.data.Composite` object containing
   all the input keys (:obj:`"full_action_spec"` and :obj:`"full_state_spec"`).
-  It is locked and should not be modified directly.
 - :obj:`env.output_spec`: a :class:`~torchrl.data.Composite` object containing
   all the output keys (:obj:`"full_observation_spec"`, :obj:`"full_reward_spec"` and :obj:`"full_done_spec"`).
-  It is locked and should not be modified directly.
 
-If the environment carries non-tensor data, a :class:`~torchrl.data.NonTensorSpec`
+If the environment carries non-tensor data, a :class:`~torchrl.data.NonTensor`
 instance can be used.
+
+Env specs: locks and batch size
+-------------------------------
+
+.. _Environment-lock:
+
+Environment specs are locked by default (through a ``spec_locked`` arg passed to the env constructor).
+Locking specs means that any modification of the spec (or its children if it is a :class:`~torchrl.data.Composite`
+instance) will require to unlock it. This can be done via the :meth:`~torchrl.envs.EnvBase.set_spec_lock_`.
+The reason specs are locked by default is that it makes it easy to cache values such as action or reset keys and the
+likes.
+Unlocking an env should only be done if it expected that the specs will be modified often (which, in principle, should
+be avoided).
+Modifications of the specs such as `env.observation_spec = new_spec` are allowed: under the hood, TorchRL will erase
+the cache, unlock the specs, make the modification and relock the specs if the env was previously locked.
 
 Importantly, the environment spec shapes should contain the batch size, e.g.
 an environment with :obj:`env.batch_size == torch.Size([4])` should have
 an :obj:`env.action_spec` with shape :obj:`torch.Size([4, action_size])`.
 This is helpful when preallocation tensors, checking shape consistency etc.
+
+Env methods
+-----------
 
 With these, the following methods are implemented:
 

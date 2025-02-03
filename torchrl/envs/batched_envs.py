@@ -12,7 +12,7 @@ import gc
 import os
 import weakref
 from collections import OrderedDict
-from copy import copy, deepcopy
+from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
@@ -371,6 +371,8 @@ class BatchedEnvBase(EnvBase):
             )
         self._mp_start_method = mp_start_method
 
+    is_spec_locked = EnvBase.is_spec_locked
+
     @property
     def non_blocking(self):
         nb = self._non_blocking
@@ -471,7 +473,7 @@ class BatchedEnvBase(EnvBase):
         return _do_nothing, _do_nothing
 
     def __getstate__(self):
-        out = copy(self.__dict__)
+        out = self.__dict__.copy()
         out["_sync_m2w_value"] = None
         out["_sync_w2m_value"] = None
         return out
@@ -933,8 +935,9 @@ class SerialEnv(BatchedEnvBase):
                         "environments!"
                     )
             weakref_set.add(wr)
-            self._envs.append(env)
+            self._envs.append(env.set_spec_lock_())
         self.is_closed = False
+        self.set_spec_lock_()
 
     @_check_start
     def state_dict(self) -> OrderedDict:
@@ -1458,6 +1461,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         for channel in self.parent_channels:
             channel.send(("init", None))
         self.is_closed = False
+        self.set_spec_lock_()
 
     @_check_start
     def state_dict(self) -> OrderedDict:
@@ -2164,6 +2168,7 @@ def _run_worker_pipe_shared_mem(
             )
         env = env_fun
     del env_fun
+    env.set_spec_lock_()
 
     i = -1
     import torchrl
