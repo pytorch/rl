@@ -158,15 +158,14 @@ class DreamerModelLoss(LossModule):
         reward_loss = reward_loss.mean().unsqueeze(-1)
         # import ipdb; ipdb.set_trace()
 
+        td_out = TensorDict(
+            loss_model_kl=self.lambda_kl * kl_loss,
+            loss_model_reco=self.lambda_reco * reco_loss,
+            loss_model_reward=self.lambda_reward * reward_loss,
+        )
+        self._clear_weakrefs(tensordict, td_out)
         return (
-            TensorDict(
-                {
-                    "loss_model_kl": self.lambda_kl * kl_loss,
-                    "loss_model_reco": self.lambda_reco * reco_loss,
-                    "loss_model_reward": self.lambda_reward * reward_loss,
-                },
-                [],
-            ),
+            td_out,
             tensordict.detach(),
         )
 
@@ -310,6 +309,7 @@ class DreamerActorLoss(LossModule):
         else:
             actor_loss = -lambda_target.sum((-2, -1)).mean()
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
+        self._clear_weakrefs(tensordict, loss_tensordict)
         return loss_tensordict, fake_data.detach()
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
@@ -454,5 +454,6 @@ class DreamerValueLoss(LossModule):
                 .sum((-1, -2))
                 .mean()
             )
-        loss_tensordict = TensorDict({"loss_value": value_loss}, [])
+        loss_tensordict = TensorDict({"loss_value": value_loss})
+        self._clear_weakrefs(fake_data, loss_tensordict)
         return loss_tensordict, fake_data
