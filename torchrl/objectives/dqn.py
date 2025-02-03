@@ -373,8 +373,8 @@ class DQNLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.value_network_params,
-            self.target_value_network_params,
+            "value_network_params",
+            "target_value_network_params",
         )
 
         return td_out
@@ -619,8 +619,8 @@ class DistributionalDQNLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.value_network_params,
-            self.target_value_network_params,
+            "value_network_params",
+            "target_value_network_params",
         )
         return td_out
 

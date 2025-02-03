@@ -245,8 +245,8 @@ class OnlineDTLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.actor_network_params,
-            self.target_actor_network_params,
+            "actor_network_params",
+            "target_actor_network_params",
         )
         return td_out
 
@@ -368,7 +368,7 @@ class DTLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.actor_network_params,
-            self.target_actor_network_params,
+            "actor_network_params",
+            "target_actor_network_params",
         )
         return td_out

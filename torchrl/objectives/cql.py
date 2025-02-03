@@ -546,10 +546,10 @@ class CQLLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_loss,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return td_loss
 
@@ -574,10 +574,10 @@ class CQLLoss(LossModule):
         metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return bc_actor_loss, metadata
 
@@ -614,10 +614,10 @@ class CQLLoss(LossModule):
         actor_loss = _reduce(actor_loss, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return actor_loss, metadata
 
@@ -736,10 +736,10 @@ class CQLLoss(LossModule):
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return loss_qval, metadata
 
@@ -886,10 +886,10 @@ class CQLLoss(LossModule):
 
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return cql_q_loss, {}
 
@@ -916,10 +916,10 @@ class CQLLoss(LossModule):
         alpha_prime_loss = _reduce(alpha_prime_loss, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return alpha_prime_loss, {}
 
@@ -934,10 +934,10 @@ class CQLLoss(LossModule):
         alpha_loss = _reduce(alpha_loss, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return alpha_loss, {}
 

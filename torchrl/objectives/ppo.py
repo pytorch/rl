@@ -641,10 +641,10 @@ class PPOLoss(LossModule):
 
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.critic_network_params,
-            self.target_actor_network_params,
-            self.target_critic_network_params,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
         if self.critic_coef is not None:
             return self.critic_coef * loss_value, clip_fraction
@@ -708,10 +708,10 @@ class PPOLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.actor_network_params,
-            self.critic_network_params,
-            self.target_actor_network_params,
-            self.target_critic_network_params,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
         return td_out
 
@@ -1017,10 +1017,10 @@ class ClipPPOLoss(PPOLoss):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.actor_network_params,
-            self.critic_network_params,
-            self.target_actor_network_params,
-            self.target_critic_network_params,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
         return td_out
 
@@ -1334,10 +1334,10 @@ class KLPENPPOLoss(PPOLoss):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.actor_network_params,
-            self.critic_network_params,
-            self.target_actor_network_params,
-            self.target_critic_network_params,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
         return td_out
 

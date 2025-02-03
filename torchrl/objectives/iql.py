@@ -401,12 +401,12 @@ class IQLLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.value_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
-            self.target_value_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
         return td_out
 
@@ -446,12 +446,12 @@ class IQLLoss(LossModule):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.value_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
-            self.target_value_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
         return loss_actor, {}
 
@@ -469,12 +469,12 @@ class IQLLoss(LossModule):
         value_loss = _reduce(value_loss, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.value_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
-            self.target_value_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
         return value_loss, {}
 
@@ -504,12 +504,12 @@ class IQLLoss(LossModule):
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.value_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
-            self.target_value_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
         return loss_qval, metadata
 
@@ -861,12 +861,12 @@ class DiscreteIQLLoss(IQLLoss):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.value_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
-            self.target_value_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
         return loss_actor, {}
 
@@ -905,12 +905,12 @@ class DiscreteIQLLoss(IQLLoss):
         value_loss = _reduce(value_loss, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.value_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
-            self.target_value_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
         return value_loss, {}
 
@@ -955,11 +955,11 @@ class DiscreteIQLLoss(IQLLoss):
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.value_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
-            self.target_value_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
         return loss_qval, metadata

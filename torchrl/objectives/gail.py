@@ -252,7 +252,7 @@ class GAILLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.target_discriminator_network_params,
-            self.discriminator_network_params,
+            "target_discriminator_network_params",
+            "discriminator_network_params",
         )
         return td_out

@@ -415,6 +415,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 params.set(key, parameter.data)
 
         setattr(self, param_name, params)
+        assert getattr(self, param_name) is params, getattr(self, param_name)
 
         # Set the module in the __dict__ directly to avoid listing its params
         # A deepcopy with meta device could be used but that assumes that the model is copyable!
@@ -437,6 +438,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if is_compiling():
             # Waiting for weakrefs reconstruct to be supported by compile
             for td in tds:
+                if isinstance(td, str):
+                    td = getattr(self, td, None)
                 if not is_tensor_collection(td):
                     continue
                 td.clear_refs_for_compile_()

@@ -262,10 +262,10 @@ class A2CLoss(LossModule):
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule
-    actor_network_params: TensorDictParams
-    critic_network_params: TensorDictParams
-    target_actor_network_params: TensorDictParams
-    target_critic_network_params: TensorDictParams
+    actor_network_params: TensorDictParams | None
+    critic_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams | None
+    target_critic_network_params: TensorDictParams | None
 
     def __init__(
         self,
@@ -523,10 +523,10 @@ class A2CLoss(LossModule):
             )
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.critic_network_params,
-            self.target_actor_network_params,
-            self.target_critic_network_params,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
         if self.critic_coef is not None:
             return self.critic_coef * loss_value, clip_fraction
@@ -570,10 +570,10 @@ class A2CLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.actor_network_params,
-            self.critic_network_params,
-            self.target_actor_network_params,
-            self.target_critic_network_params,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
         return td_out
 

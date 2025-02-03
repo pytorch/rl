@@ -231,10 +231,10 @@ class ReinforceLoss(LossModule):
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule
-    actor_network_params: TensorDictParams
-    critic_network_params: TensorDictParams
-    target_actor_network_params: TensorDictParams
-    target_critic_network_params: TensorDictParams
+    actor_network_params: TensorDictParams | None
+    critic_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams | None
+    target_critic_network_params: TensorDictParams | None
 
     @classmethod
     def __new__(cls, *args, **kwargs):
@@ -408,10 +408,10 @@ class ReinforceLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.actor_network_params,
-            self.critic_network_params,
-            self.target_actor_network_params,
-            self.target_critic_network_params,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
         return td_out
 
@@ -467,10 +467,10 @@ class ReinforceLoss(LossModule):
             )
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.critic_network_params,
-            self.target_actor_network_params,
-            self.target_critic_network_params,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
 
         return loss_value, clip_fraction

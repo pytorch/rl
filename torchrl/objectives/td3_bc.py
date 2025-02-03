@@ -434,10 +434,10 @@ class TD3BCLoss(LossModule):
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return loss_actor, metadata
 
@@ -528,10 +528,10 @@ class TD3BCLoss(LossModule):
         loss_qval = _reduce(loss_qval, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return loss_qval, metadata
 
@@ -565,10 +565,10 @@ class TD3BCLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.actor_network_params,
-            self.qvalue_network_params,
-            self.target_actor_network_params,
-            self.target_qvalue_network_params,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return td_out
 

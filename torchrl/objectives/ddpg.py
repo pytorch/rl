@@ -306,10 +306,10 @@ class DDPGLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             td_out,
-            self.value_network_params,
-            self.target_value_network_params,
-            self.target_actor_network_params,
-            self.actor_network_params,
+            "value_network_params",
+            "target_value_network_params",
+            "target_actor_network_params",
+            "actor_network_params",
         )
         return td_out
 
@@ -330,10 +330,10 @@ class DDPGLoss(LossModule):
         self._clear_weakrefs(
             tensordict,
             loss_actor,
-            self.value_network_params,
-            self.target_value_network_params,
-            self.target_actor_network_params,
-            self.actor_network_params,
+            "value_network_params",
+            "target_value_network_params",
+            "target_actor_network_params",
+            "actor_network_params",
         )
         return loss_actor, metadata
 
@@ -376,10 +376,10 @@ class DDPGLoss(LossModule):
         loss_value = _reduce(loss_value, self.reduction)
         self._clear_weakrefs(
             tensordict,
-            self.value_network_params,
-            self.target_value_network_params,
-            self.target_actor_network_params,
-            self.actor_network_params,
+            "value_network_params",
+            "target_value_network_params",
+            "target_actor_network_params",
+            "actor_network_params",
         )
         return loss_value, metadata
 
