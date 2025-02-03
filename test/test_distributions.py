@@ -13,10 +13,10 @@ import torch
 import torch.nn.functional as F
 
 from tensordict import TensorDictBase
+from tensordict.nn import NormalParamExtractor
 from torch import autograd, nn
 from torch.utils._pytree import tree_map
 from torchrl.modules import (
-    NormalParamWrapper,
     OneHotCategorical,
     OneHotOrdinal,
     Ordinal,
@@ -310,14 +310,19 @@ def test_normal_mapping(batch_size, device, scale_mapping, action_dim=11, state_
     torch.manual_seed(0)
     for _ in range(100):
         module = nn.LazyLinear(2 * action_dim).to(device)
-        module = NormalParamWrapper(module, scale_mapping=scale_mapping).to(device)
         if scale_mapping != "raise_error":
+            module = nn.Sequential(
+                module, NormalParamExtractor(scale_mapping=scale_mapping)
+            ).to(device)
             loc, scale = module(torch.randn(*batch_size, state_dim, device=device))
             assert (scale > 0).all()
         else:
             with pytest.raises(
                 NotImplementedError, match="Unknown mapping " "raise_error"
             ):
+                module = nn.Sequential(
+                    module, NormalParamExtractor(scale_mapping=scale_mapping)
+                ).to(device)
                 loc, scale = module(torch.randn(*batch_size, state_dim, device=device))
 
 
