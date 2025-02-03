@@ -16,7 +16,7 @@ from tensordict import NonTensorData, TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
-from torchrl.envs.common import _EnvWrapper, EnvBase
+from torchrl.envs.common import _EnvWrapper, _maybe_unlock, EnvBase
 
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
@@ -292,7 +292,10 @@ class GymLikeEnv(_EnvWrapper):
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get(self.action_key)
+        if len(self.action_keys) == 1:
+            action = tensordict.get(self.action_key)
+        else:
+            action = tensordict.select(*self.action_keys).to_dict()
         if self._convert_actions_to_numpy:
             action = self.read_action(action)
 
@@ -431,6 +434,7 @@ class GymLikeEnv(_EnvWrapper):
     def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
         ...
 
+    @_maybe_unlock
     def set_info_dict_reader(
         self,
         info_dict_reader: BaseInfoDictReader | None = None,

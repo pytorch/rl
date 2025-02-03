@@ -417,6 +417,30 @@ class TestComposite:
             )
             assert ts["bad"].device == (device if device is not None else dest)
 
+    def test_setitem_nested(self, shape, is_complete, device, dtype):
+        f = Unbounded(shape=shape, device=device, dtype=dtype)
+        g = (
+            None
+            if not is_complete
+            else Unbounded(shape=shape, device=device, dtype=dtype)
+        )
+        test = Composite(
+            a=Composite(b=Composite(c=Composite(d=Composite(e=Composite(f=f, g=g))))),
+            shape=shape,
+            device=device,
+        )
+        trials = Composite(shape=shape, device=device)
+        assert trials != test
+        trials["a", "b", "c", "d", "e", "f"] = Unbounded(
+            shape=shape, device=device, dtype=dtype
+        )
+        trials["a", "b", "c", "d", "e", "g"] = (
+            None
+            if not is_complete
+            else Unbounded(shape=shape, device=device, dtype=dtype)
+        )
+        assert trials == test
+
     def test_del(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
         assert "obs" in ts.keys()
@@ -760,36 +784,100 @@ def test_create_composite_nested(shape, device):
         assert c["a"].device == device
 
 
-@pytest.mark.parametrize("recurse", [True, False])
-def test_lock(recurse):
-    shape = [3, 4, 5]
-    spec = Composite(
-        a=Composite(b=Composite(shape=shape[:3], device="cpu"), shape=shape[:2]),
-        shape=shape[:1],
-    )
-    spec["a"] = spec["a"].clone()
-    spec["a", "b"] = spec["a", "b"].clone()
-    assert not spec.locked
-    spec.lock_(recurse=recurse)
-    assert spec.locked
-    with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+class TestLock:
+    @pytest.mark.parametrize("recurse", [None, True, False])
+    def test_lock(self, recurse):
+        catch_warn = (
+            pytest.warns(DeprecationWarning, match="recurse")
+            if recurse is None
+            else contextlib.nullcontext()
+        )
+
+        shape = [3, 4, 5]
+        spec = Composite(
+            a=Composite(b=Composite(shape=shape[:3], device="cpu"), shape=shape[:2]),
+            shape=shape[:1],
+        )
         spec["a"] = spec["a"].clone()
-    with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
-        spec.set("a", spec["a"].clone())
-    if recurse:
-        assert spec["a"].locked
+        spec["a", "b"] = spec["a", "b"].clone()
+        assert not spec.locked
+        with catch_warn:
+            spec.lock_(recurse=recurse)
+        assert spec.locked
         with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
-            spec["a"].set("b", spec["a", "b"].clone())
+            spec["a"] = spec["a"].clone()
         with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+            spec.set("a", spec["a"].clone())
+        if recurse:
+            assert spec["a"].locked
+            with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+                spec["a"].set("b", spec["a", "b"].clone())
+            with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+                spec["a", "b"] = spec["a", "b"].clone()
+        else:
+            assert not spec["a"].locked
             spec["a", "b"] = spec["a", "b"].clone()
-    else:
-        assert not spec["a"].locked
+            spec["a"].set("b", spec["a", "b"].clone())
+        with catch_warn:
+            spec.unlock_(recurse=recurse)
+        spec["a"] = spec["a"].clone()
         spec["a", "b"] = spec["a", "b"].clone()
         spec["a"].set("b", spec["a", "b"].clone())
-    spec.unlock_(recurse=recurse)
-    spec["a"] = spec["a"].clone()
-    spec["a", "b"] = spec["a", "b"].clone()
-    spec["a"].set("b", spec["a", "b"].clone())
+
+    def test_edge_cases(self):
+        level3 = Composite()
+        level2 = Composite(level3=level3)
+        level1 = Composite(level2=level2)
+        level0 = Composite(level1=level1)
+        # locking level0 locks them all
+        level0.lock_(recurse=True)
+        assert level3.is_locked
+        # We cannot unlock level3
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a Composite that is part of a locked graph",
+        ):
+            level3.unlock_(recurse=True)
+        assert level3.is_locked
+        # Adding level2 to a new spec and locking it makes it hard to unlock the level0 root
+        new_spec = Composite(level2=level2)
+        new_spec.lock_(recurse=True)
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a Composite that is part of a locked graph",
+        ):
+            level0.unlock_(recurse=True)
+        assert level0.is_locked
+
+    def test_lock_mix_recurse_nonrecurse(self):
+        # lock with recurse
+        level3 = Composite()
+        level2 = Composite(level3=level3)
+        level1 = Composite(level2=level2)
+        level0 = Composite(level1=level1)
+        # locking level0 locks them all
+        level0.lock_(recurse=True)
+        new_spec = Composite(level2=level2)
+        new_spec.lock_(recurse=True)
+
+        # Unlock with recurse=False
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            level3.unlock_(recurse=False)
+        assert level3.is_locked
+        assert level2.is_locked
+        assert new_spec.is_locked
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            level2.unlock_(recurse=False)
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            level1.unlock_(recurse=False)
+        level0.unlock_(recurse=False)
+        assert level3.is_locked
+        assert level2.is_locked
+        assert level1.is_locked
+        new_spec.unlock_(recurse=False)
+        assert level3.is_locked
+        assert level2.is_locked
+        assert level1.is_locked
 
 
 def test_keys_to_empty_composite_spec():
@@ -1465,12 +1553,13 @@ class TestExpand:
         assert spec2.zero().shape == spec2.shape
 
     def test_non_tensor(self):
-        spec = NonTensor((3, 4), device="cpu")
+        spec = NonTensor((3, 4), device="cpu", example_data="example_data")
         assert (
             spec.expand(2, 3, 4)
             == spec.expand((2, 3, 4))
-            == NonTensor((2, 3, 4), device="cpu")
+            == NonTensor((2, 3, 4), device="cpu", example_data="example_data")
         )
+        assert spec.expand(2, 3, 4).example_data == "example_data"
 
     @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
     def test_choice(self, input_type):
@@ -1691,9 +1780,10 @@ class TestClone:
         assert spec is not spec.clone()
 
     def test_non_tensor(self):
-        spec = NonTensor(shape=(3, 4), device="cpu")
+        spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
         assert spec.clone() == spec
         assert spec.clone() is not spec
+        assert spec.clone().example_data == "example_data"
 
     @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
     def test_choice(self, input_type):
@@ -1962,9 +2052,10 @@ class TestUnbind:
             spec.unbind(-1)
 
     def test_non_tensor(self):
-        spec = NonTensor(shape=(3, 4), device="cpu")
+        spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
         assert spec.unbind(1)[0] == spec[:, 0]
         assert spec.unbind(1)[0] is not spec[:, 0]
+        assert spec.unbind(1)[0].example_data == "example_data"
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_onehot(
@@ -2123,8 +2214,9 @@ class TestTo:
         assert spec.to(device).device == device
 
     def test_non_tensor(self, device):
-        spec = NonTensor(shape=(3, 4), device="cpu")
+        spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
         assert spec.to(device).device == device
+        assert spec.to(device).example_data == "example_data"
 
     @pytest.mark.parametrize(
         "input_type",
@@ -2401,13 +2493,14 @@ class TestStack:
         assert r.shape == c.shape
 
     def test_stack_non_tensor(self, shape, stack_dim):
-        spec0 = NonTensor(shape=shape, device="cpu")
-        spec1 = NonTensor(shape=shape, device="cpu")
+        spec0 = NonTensor(shape=shape, device="cpu", example_data="example_data")
+        spec1 = NonTensor(shape=shape, device="cpu", example_data="example_data")
         new_spec = torch.stack([spec0, spec1], stack_dim)
         shape_insert = list(shape)
         shape_insert.insert(stack_dim, 2)
         assert new_spec.shape == torch.Size(shape_insert)
         assert new_spec.device == torch.device("cpu")
+        assert new_spec.example_data == "example_data"
 
     @pytest.mark.parametrize(
         "input_type",
@@ -3808,10 +3901,18 @@ class TestDynamicSpec:
 
 class TestNonTensorSpec:
     def test_sample(self):
-        nts = NonTensor(shape=(3, 4))
+        nts = NonTensor(shape=(3, 4), example_data="example_data")
         assert nts.one((2,)).shape == (2, 3, 4)
         assert nts.rand((2,)).shape == (2, 3, 4)
         assert nts.zero((2,)).shape == (2, 3, 4)
+        assert nts.one((2,)).data == "example_data"
+        assert nts.rand((2,)).data == "example_data"
+        assert nts.zero((2,)).data == "example_data"
+
+    def test_example_data_ineq(self):
+        nts0 = NonTensor(shape=(3, 4), example_data="example_data")
+        nts1 = NonTensor(shape=(3, 4), example_data="example_data 2")
+        assert nts0 != nts1
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="not cuda device")

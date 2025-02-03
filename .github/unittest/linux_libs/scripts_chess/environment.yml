@@ -18,3 +18,6 @@ dependencies:
     - scipy
     - hydra-core
     - chess
+    - transformers
+    - cairosvg
+    - pycairo

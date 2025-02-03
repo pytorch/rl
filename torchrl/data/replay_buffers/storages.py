@@ -297,7 +297,15 @@ class ListStorage(Storage):
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         if isinstance(index, (INT_CLASSES, slice)):
             return self._storage[index]
+        elif isinstance(index, tuple):
+            if len(index) > 1:
+                raise RuntimeError(
+                    f"{type(self).__name__} can only be indexed with one-length tuples."
+                )
+            return self.get(index[0])
         else:
+            if isinstance(index, torch.Tensor) and index.device.type != "cpu":
+                index = index.cpu().tolist()
             return [self._storage[i] for i in index]
 
     def __len__(self):
@@ -351,6 +359,77 @@ class ListStorage(Storage):
                 device=item.device,
             ).reshape_as(item)
         raise NotImplementedError(f"type {type(item)} is not supported yet.")
+
+
+class LazyStackStorage(ListStorage):
+    """A ListStorage that returns LazyStackTensorDict instances.
+
+    This storage allows for heterougeneous structures to be indexed as a single `TensorDict` representation.
+    It uses :class:`~tensordict.LazyStackedTensorDict` which operates on non-contiguous lists of tensordicts,
+    lazily stacking items when queried.
+    This means that this storage is going to be fast to sample but data access may be slow (as it requires a stack).
+    Tensors of heterogeneous shapes can also be stored within the storage and stacked together.
+    Because the storage is represented as a list, the number of tensors to store in memory will grow linearly with
+    the size of the buffer.
+
+    If possible, nested tensors can also be created via :meth:`~tensordict.LazyStackedTensorDict.densify`
+    (see :mod:`~torch.nested`).
+
+    Args:
+        max_size (int, optional): the maximum number of elements stored in the storage.
+            If not provided, an unlimited storage is created.
+
+    Keyword Args:
+        compilable (bool, optional): if ``True``, the storage will be made compatible with :func:`~torch.compile` at
+            the cost of being executable in multiprocessed settings.
+        stack_dim (int, optional): the stack dimension in terms of TensorDict batch sizes. Defaults to `-1`.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.data import ReplayBuffer, LazyStackStorage
+        >>> from tensordict import TensorDict
+        >>> _ = torch.manual_seed(0)
+        >>> rb = ReplayBuffer(storage=LazyStackStorage(max_size=1000, stack_dim=-1))
+        >>> data0 = TensorDict(a=torch.randn((10,)), b=torch.rand(4), c="a string!")
+        >>> data1 = TensorDict(a=torch.randn((11,)), b=torch.rand(4), c="another string!")
+        >>> _ = rb.add(data0)
+        >>> _ = rb.add(data1)
+        >>> rb.sample(10)
+        LazyStackedTensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([10, -1]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: Tensor(shape=torch.Size([10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                c: NonTensorStack(
+                    ['another string!', 'another string!', 'another st...,
+                    batch_size=torch.Size([10]),
+                    device=None)},
+            exclusive_fields={
+            },
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False,
+            stack_dim=0)
+    """
+
+    def __init__(
+        self,
+        max_size: int | None = None,
+        *,
+        compilable: bool = False,
+        stack_dim: int = -1,
+    ):
+        super().__init__(max_size=max_size, compilable=compilable)
+        self.stack_dim = stack_dim
+
+    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+        out = super().get(index=index)
+        if isinstance(out, list):
+            stack_dim = self.stack_dim
+            if stack_dim < 0:
+                stack_dim = out[0].ndim + 1 + stack_dim
+            out = LazyStackedTensorDict(*out, stack_dim=stack_dim)
+            return out
+        return out
 
 
 class TensorStorage(Storage):

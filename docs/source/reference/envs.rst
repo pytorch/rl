@@ -41,18 +41,34 @@ Each env will have the following attributes:
   the done-flag spec. See the section on trajectory termination below.
 - :obj:`env.input_spec`: a :class:`~torchrl.data.Composite` object containing
   all the input keys (:obj:`"full_action_spec"` and :obj:`"full_state_spec"`).
-  It is locked and should not be modified directly.
 - :obj:`env.output_spec`: a :class:`~torchrl.data.Composite` object containing
   all the output keys (:obj:`"full_observation_spec"`, :obj:`"full_reward_spec"` and :obj:`"full_done_spec"`).
-  It is locked and should not be modified directly.
 
-If the environment carries non-tensor data, a :class:`~torchrl.data.NonTensorSpec`
+If the environment carries non-tensor data, a :class:`~torchrl.data.NonTensor`
 instance can be used.
+
+Env specs: locks and batch size
+-------------------------------
+
+.. _Environment-lock:
+
+Environment specs are locked by default (through a ``spec_locked`` arg passed to the env constructor).
+Locking specs means that any modification of the spec (or its children if it is a :class:`~torchrl.data.Composite`
+instance) will require to unlock it. This can be done via the :meth:`~torchrl.envs.EnvBase.set_spec_lock_`.
+The reason specs are locked by default is that it makes it easy to cache values such as action or reset keys and the
+likes.
+Unlocking an env should only be done if it expected that the specs will be modified often (which, in principle, should
+be avoided).
+Modifications of the specs such as `env.observation_spec = new_spec` are allowed: under the hood, TorchRL will erase
+the cache, unlock the specs, make the modification and relock the specs if the env was previously locked.
 
 Importantly, the environment spec shapes should contain the batch size, e.g.
 an environment with :obj:`env.batch_size == torch.Size([4])` should have
 an :obj:`env.action_spec` with shape :obj:`torch.Size([4, action_size])`.
 This is helpful when preallocation tensors, checking shape consistency etc.
+
+Env methods
+-----------
 
 With these, the following methods are implemented:
 
@@ -731,29 +747,80 @@ pixels or states etc).
 Forward and inverse transforms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Transforms also have an ``inv`` method that is called before
-the action is applied in reverse order over the composed transform chain:
-this allows to apply transforms to data in the environment before the action is taken
-in the environment. The keys to be included in this inverse transform are passed through the
-``"in_keys_inv"`` keyword argument:
+Transforms also have an :meth:`~torchrl.envs.Transform.inv` method that is called before the action is applied in reverse
+order over the composed transform chain. This allows applying transforms to data in the environment before the action is
+taken in the environment. The keys to be included in this inverse transform are passed through the `"in_keys_inv"`
+keyword argument, and the out-keys default to these values in most cases:
 
 .. code-block::
    :caption: Inverse transform
 
         >>> env.append_transform(DoubleToFloat(in_keys_inv=["action"]))  # will map the action from float32 to float64 before calling the base_env.step
 
-The way ``in_keys`` relates to ``in_keys_inv`` can be understood by considering the base environment as the "inner" part
-of the transform. In constrast, the user inputs and outputs to and from the transform are to be considered as the
-outside world. The following figure shows what this means in practice for the :class:`~torchrl.envs.RenameTransform`
-class: the input ``TensorDict`` of the ``step`` function must have the ``out_keys_inv`` listed in its entries as they
-are part of the outside world. The transform changes these names to make them match the names of the inner, base
-environment using the ``in_keys_inv``. The inverse process is executed with the output tensordict, where the ``in_keys``
-are mapped to the corresponding ``out_keys``.
+The following paragraphs detail how one can think about what is to be considered `in_` or `out_` features.
+
+Understanding Transform Keys
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In transforms, `in_keys` and `out_keys` define the interaction between the base environment and the outside world
+(e.g., your policy):
+
+- `in_keys` refers to the base environment's perspective (inner = `base_env` of the
+  :class:`~torchrl.envs.TransformedEnv`).
+- `out_keys` refers to the outside world (outer = `policy`, `agent`, etc.).
+
+For example, with `in_keys=["obs"]` and `out_keys=["obs_standardized"]`, the policy will "see" a standardized
+observation, while the base environment outputs a regular observation.
+
+Similarly, for inverse keys:
+
+- `in_keys_inv` refers to entries as seen by the base environment.
+- `out_keys_inv` refers to entries as seen or produced by the policy.
+
+The following figure illustrates this concept for the :class:`~torchrl.envs.RenameTransform` class: the input
+`TensorDict` of the `step` function must include the `out_keys_inv` as they are part of the outside world. The
+transform changes these names to match the names of the inner, base environment using the `in_keys_inv`.
+The inverse process is executed with the output tensordict, where the `in_keys` are mapped to the corresponding
+`out_keys`.
 
 .. figure:: /_static/img/rename_transform.png
 
    Rename transform logic
 
+Transforming Tensors and Specs
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When transforming actual tensors (coming from the policy), the process is schematically represented as:
+
+    >>> for t in reversed(self.transform):
+    ...     td = t.inv(td)
+
+This starts with the outermost transform to the innermost transform, ensuring the action value exposed to the policy
+is properly transformed.
+
+For transforming the action spec, the process should go from innermost to outermost (similar to observation specs):
+
+    >>> def transform_action_spec(self, action_spec):
+    ...     for t in self.transform:
+    ...         action_spec = t.transform_action_spec(action_spec)
+    ...     return action_spec
+
+A pseudocode for a single transform_action_spec could be:
+
+    >>> def transform_action_spec(self, action_spec):
+    ...    return spec_from_random_values(self._apply_transform(action_spec.rand()))
+
+This approach ensures that the "outside" spec is inferred from the "inside" spec. Note that we did not call
+`_inv_apply_transform` but `_apply_transform` on purpose!
+
+Exposing Specs to the Outside World
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+`TransformedEnv` will expose the specs corresponding to the `out_keys_inv` for actions and states.
+For example, with :class:`~torchrl.envs.ActionDiscretizer`, the environment's action (e.g., `"action"`) is a float-valued
+tensor that should not be generated when using :meth:`~torchrl.envs.EnvBase.rand_action` with the transformed
+environment. Instead, `"action_discrete"` should be generated, and its continuous counterpart obtained from the
+transform. Therefore, the user should see the `"action_discrete"` entry being exposed, but not `"action"`.
 
 
 Cloning transforms
@@ -1066,7 +1133,7 @@ in the relevant functions:
     >>> print(env2._env.env.env)
     <gym.envs.classic_control.pendulum.PendulumEnv at 0x1629916a0>
 
-We can see that the two libraries modify the value returned by :func:`~.gym.gym_backend()`
+We can see that the two libraries modify the value returned by :func:`~torchrl.envs.gym.gym_backend()`
 which can be further used to indicate which library needs to be used for
 the current computation. :class:`~.gym.set_gym_backend` is also a decorator:
 we can use it to tell to a specific function what gym backend needs to be used
@@ -1137,3 +1204,4 @@ the following function will return ``1`` when queried:
     VmasWrapper
     gym_backend
     set_gym_backend
+    register_gym_spec_conversion

@@ -241,7 +241,12 @@ class OnlineDTLoss(LossModule):
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "target_actor_network_params",
         )
         return td_out
 
@@ -360,4 +365,10 @@ class DTLoss(LossModule):
         )
         loss = _reduce(loss, reduction=self.reduction)
         td_out = TensorDict(loss=loss)
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "target_actor_network_params",
+        )
         return td_out

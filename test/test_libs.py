@@ -79,6 +79,7 @@ from torchrl.data import (
     Composite,
     MultiCategorical,
     MultiOneHot,
+    NonTensor,
     OneHot,
     ReplayBuffer,
     ReplayBufferEnsemble,
@@ -119,6 +120,7 @@ from torchrl.envs.libs.gym import (
     GymWrapper,
     MOGymEnv,
     MOGymWrapper,
+    register_gym_spec_conversion,
     set_gym_backend,
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
@@ -336,6 +338,39 @@ class TestGym:
             assert spec0 == spec1, (key0, key1, spec0, spec1)
         assert spec == recon
         assert recon.shape == spec.shape
+
+    def test_gym_new_spec_reg(self):
+        Space = gym_backend("spaces").Space
+
+        class MySpaceParent(Space):
+            ...
+
+        s_parent = MySpaceParent()
+
+        class MySpaceChild(MySpaceParent):
+            ...
+
+        # We intentionally register first the child then the parent
+        @register_gym_spec_conversion(MySpaceChild)
+        def convert_myspace_child(spec, **kwargs):
+            return NonTensor((), example_data="child")
+
+        @register_gym_spec_conversion(MySpaceParent)
+        def convert_myspace_parent(spec, **kwargs):
+            return NonTensor((), example_data="parent")
+
+        s_child = MySpaceChild()
+        assert _gym_to_torchrl_spec_transform(s_parent).example_data == "parent"
+        assert _gym_to_torchrl_spec_transform(s_child).example_data == "child"
+
+        class NoConversionSpace(Space):
+            ...
+
+        s_no_conv = NoConversionSpace()
+        with pytest.raises(
+            KeyError, match="No conversion tool could be found with the gym space"
+        ):
+            _gym_to_torchrl_spec_transform(s_no_conv)
 
     @pytest.mark.parametrize("order", ["tuple_seq"])
     @implement_for("gym")
@@ -633,6 +668,83 @@ class TestGym:
                     )
         finally:
             set_gym_backend(gb).set()
+
+    @implement_for("gym", None, "0.26")
+    def test_gym_dict_action_space(self):
+        torchrl_logger.info("tested for gym > 0.26 - no backward issue")
+        return
+
+    @implement_for("gym", "0.26", None)
+    def test_gym_dict_action_space(self):  # noqa: F811
+        import gym
+        from gym import Env
+
+        class CompositeActionEnv(Env):
+            def __init__(self):
+                self.action_space = gym.spaces.Dict(
+                    a0=gym.spaces.Discrete(2), a1=gym.spaces.Box(-1, 1)
+                )
+                self.observation_space = gym.spaces.Box(-1, 1)
+
+            def step(self, action):
+                assert isinstance(action, dict)
+                assert isinstance(action["a0"], np.ndarray)
+                assert isinstance(action["a1"], np.ndarray)
+                return (0.5, 0.0, False, False, {})
+
+            def reset(
+                self,
+                *,
+                seed: Optional[int] = None,
+                options: Optional[dict] = None,
+            ):
+                return (0.0, {})
+
+        env = CompositeActionEnv()
+        torchrl_env = GymWrapper(env)
+        assert isinstance(torchrl_env.action_spec, Composite)
+        assert len(torchrl_env.action_keys) == 2
+        r = torchrl_env.rollout(10)
+        assert isinstance(r[0]["a0"], torch.Tensor)
+        assert isinstance(r[0]["a1"], torch.Tensor)
+        assert r[0]["observation"] == 0
+        assert r[1]["observation"] == 0.5
+
+    @implement_for("gymnasium")
+    def test_gym_dict_action_space(self):  # noqa: F811
+        import gymnasium as gym
+        from gymnasium import Env
+
+        class CompositeActionEnv(Env):
+            def __init__(self):
+                self.action_space = gym.spaces.Dict(
+                    a0=gym.spaces.Discrete(2), a1=gym.spaces.Box(-1, 1)
+                )
+                self.observation_space = gym.spaces.Box(-1, 1)
+
+            def step(self, action):
+                assert isinstance(action, dict)
+                assert isinstance(action["a0"], np.ndarray)
+                assert isinstance(action["a1"], np.ndarray)
+                return (0.5, 0.0, False, False, {})
+
+            def reset(
+                self,
+                *,
+                seed: Optional[int] = None,
+                options: Optional[dict] = None,
+            ):
+                return (0.0, {})
+
+        env = CompositeActionEnv()
+        torchrl_env = GymWrapper(env)
+        assert isinstance(torchrl_env.action_spec, Composite)
+        assert len(torchrl_env.action_keys) == 2
+        r = torchrl_env.rollout(10)
+        assert isinstance(r[0]["a0"], torch.Tensor)
+        assert isinstance(r[0]["a1"], torch.Tensor)
+        assert r[0]["observation"] == 0
+        assert r[1]["observation"] == 0.5
 
     @pytest.mark.parametrize(
         "env_name",
@@ -1667,7 +1779,7 @@ class TestJumanji:
         # check that this works with a batch-size
         env = JumanjiEnv(envname, from_pixels=True, batch_size=batch_size, jit=True)
         env.set_seed(0)
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
 
         r = env.rollout(10)
         pixels = r["pixels"]

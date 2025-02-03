@@ -542,7 +542,16 @@ class CQLLoss(LossModule):
         }
         if self.with_lagrange:
             out["loss_alpha_prime"] = alpha_prime_loss.mean()
-        return TensorDict(out, [])
+        td_loss = TensorDict(out)
+        self._clear_weakrefs(
+            tensordict,
+            td_loss,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
+        return td_loss
 
     @property
     @_cache_values
@@ -563,6 +572,13 @@ class CQLLoss(LossModule):
         bc_actor_loss = self._alpha * log_prob - bc_log_prob
         bc_actor_loss = _reduce(bc_actor_loss, reduction=self.reduction)
         metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return bc_actor_loss, metadata
 
     def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
@@ -596,7 +612,13 @@ class CQLLoss(LossModule):
         metadata[self.tensor_keys.log_prob] = log_prob.detach()
         actor_loss = self._alpha * log_prob - min_q_logprob
         actor_loss = _reduce(actor_loss, reduction=self.reduction)
-
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return actor_loss, metadata
 
     def _get_policy_actions(self, data, actor_params, num_actions=10):
@@ -712,6 +734,13 @@ class CQLLoss(LossModule):
         loss_qval = _reduce(loss_qval, reduction=self.reduction)
         td_error = (q_pred - target_value).pow(2)
         metadata = {"td_error": td_error.detach()}
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return loss_qval, metadata
 
     def cql_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
@@ -855,6 +884,13 @@ class CQLLoss(LossModule):
         cql_q_loss = (cql_q1_loss + cql_q2_loss).mean(-1)
         cql_q_loss = _reduce(cql_q_loss, reduction=self.reduction)
 
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return cql_q_loss, {}
 
     def alpha_prime_loss(self, tensordict: TensorDictBase) -> Tensor:
@@ -878,6 +914,13 @@ class CQLLoss(LossModule):
 
         alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
         alpha_prime_loss = _reduce(alpha_prime_loss, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return alpha_prime_loss, {}
 
     def alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
@@ -889,6 +932,13 @@ class CQLLoss(LossModule):
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
         alpha_loss = _reduce(alpha_loss, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return alpha_loss, {}
 
     @property

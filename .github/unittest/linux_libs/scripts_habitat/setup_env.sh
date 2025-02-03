@@ -41,7 +41,7 @@ fi
 conda activate "${env_dir}"
 
 # set debug variables
-conda env config vars set MAGNUM_LOG=debug HABITAT_SIM_LOG=debug
+conda env config vars set MAGNUM_LOG=debug HABITAT_SIM_LOG=debug TOKENIZERS_PARALLELISM=true
 conda deactivate && conda activate "${env_dir}"
 
 pip3 install "cython<3"
