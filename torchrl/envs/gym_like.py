@@ -16,7 +16,7 @@ from tensordict import NonTensorData, TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
-from torchrl.envs.common import _EnvWrapper, EnvBase
+from torchrl.envs.common import _EnvWrapper, _maybe_unlock, EnvBase
 
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
@@ -434,6 +434,7 @@ class GymLikeEnv(_EnvWrapper):
     def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
         ...
 
+    @_maybe_unlock
     def set_info_dict_reader(
         self,
         info_dict_reader: BaseInfoDictReader | None = None,

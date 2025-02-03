@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from tensordict import TensorDict
 from torchrl.data.tensor_specs import Unbounded
+from torchrl.envs.common import _maybe_unlock
 from torchrl.envs.libs.gym import (
     _AsyncMeta,
     _gym_to_torchrl_spec_transform,
@@ -251,6 +252,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             cls.env_list += [env_name]
             return env_name
 
+    @_maybe_unlock
     def _refine_specs(self) -> None:  # noqa: F821
         env = self._env
         self.action_spec = _gym_to_torchrl_spec_transform(

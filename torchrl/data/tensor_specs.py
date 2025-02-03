@@ -4545,6 +4545,18 @@ class Composite(TensorSpec):
     def set(self, name, spec):
         if self.locked:
             raise RuntimeError("Cannot modify a locked Composite.")
+        if spec is not None and self.device is not None and spec.device != self.device:
+            if isinstance(spec, Composite) and spec.device is None:
+                # We make a clone not to mess up the spec that was provided.
+                # in set() we do the same for shape - these two ops should be grouped.
+                # we don't care about the overhead of cloning twice though because in theory
+                # we don't set specs often.
+                spec = spec.clone().to(self._device)
+            else:
+                raise RuntimeError(
+                    f"Setting a new attribute ({name}) on another device ({spec.device} against {self.device}). "
+                    f"All devices of Composite must match."
+                )
         if spec is not None:
             shape = spec.shape
             if shape[: self.ndim] != self.shape:
@@ -4578,28 +4590,10 @@ class Composite(TensorSpec):
             shape = _size(())
         self._shape = _size(shape)
         self._specs = {}
-        for key, value in kwargs.items():
-            self.set(key, value)
 
         _device = (
             _make_ordinal_device(torch.device(device)) if device is not None else device
         )
-        if len(kwargs):
-            for key, item in self.items():
-                if item is None:
-                    continue
-                if (
-                    isinstance(item, Composite)
-                    and item.device is None
-                    and _device is not None
-                ):
-                    item = item.clone().to(_device)
-                elif (_device is not None) and (item.device != _device):
-                    raise RuntimeError(
-                        f"Setting a new attribute ({key}) on another device "
-                        f"({item.device} against {_device}). All devices of "
-                        "Composite must match."
-                    )
         self._device = _device
         if len(args):
             if len(args) > 1:
@@ -4615,6 +4609,8 @@ class Composite(TensorSpec):
                 if isinstance(item, dict):
                     item = Composite(item, shape=shape, device=_device)
                 self[k] = item
+        for k, item in kwargs.items():
+            self[k] = item
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -4697,10 +4693,17 @@ class Composite(TensorSpec):
             raise
 
     def __setitem__(self, key, value):
+        dest = self
         if isinstance(key, tuple) and len(key) > 1:
-            if key[0] not in self.keys(True):
-                self[key[0]] = Composite(shape=self.shape, device=self.device)
-            self[key[0]][key[1:]] = value
+            while key[0] not in self.keys():
+                dest[key[0]] = dest = Composite(shape=self.shape, device=self.device)
+                if len(key) > 2:
+                    key = key[1:]
+                else:
+                    break
+            else:
+                dest = self[key[0]]
+            dest[key[1:]] = value
             return
         elif isinstance(key, tuple):
             self[key[0]] = value
@@ -4711,22 +4714,6 @@ class Composite(TensorSpec):
             raise AttributeError(f"Composite[{key}] cannot be set")
         if isinstance(value, dict):
             value = Composite(value, device=self._device, shape=self.shape)
-        if (
-            value is not None
-            and self.device is not None
-            and value.device != self.device
-        ):
-            if isinstance(value, Composite) and value.device is None:
-                # We make a clone not to mess up the spec that was provided.
-                # in set() we do the same for shape - these two ops should be grouped.
-                # we don't care about the overhead of cloning twice though because in theory
-                # we don't set specs often.
-                value = value.clone().to(self.device)
-            else:
-                raise RuntimeError(
-                    f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
-                    f"All devices of Composite must match."
-                )
 
         self.set(key, value)
 

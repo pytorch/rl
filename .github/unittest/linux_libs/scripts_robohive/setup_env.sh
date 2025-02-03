@@ -67,7 +67,8 @@ conda env config vars set \
   PYOPENGL_PLATFORM=egl \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
   sim_backend=MUJOCO \
-  LAZY_LEGACY_OP=False
+  LAZY_LEGACY_OP=False \
+  TOKENIZERS_PARALLELISM=true
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
