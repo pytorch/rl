@@ -78,7 +78,6 @@ other cases, the action written in the tensordict is simply the network output.
     :template: rl_template_noinherit.rst
 
     AdditiveGaussianModule
-    AdditiveGaussianWrapper
     ConsistentDropoutModule
     EGreedyModule
     EGreedyWrapper
@@ -439,7 +438,6 @@ Some distributions are typically used in RL scripts.
 
     Delta
     IndependentNormal
-    NormalParamWrapper
     TanhNormal
     TruncatedNormal
     TanhDelta
