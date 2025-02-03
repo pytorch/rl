@@ -439,7 +439,6 @@ Some distributions are typically used in RL scripts.
 
     Delta
     IndependentNormal
-    NormalParamWrapper
     TanhNormal
     TruncatedNormal
     TanhDelta

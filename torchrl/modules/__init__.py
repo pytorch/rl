@@ -12,7 +12,6 @@ from .distributions import (
     MaskedCategorical,
     MaskedOneHotCategorical,
     NormalParamExtractor,
-    NormalParamWrapper,
     OneHotCategorical,
     OneHotOrdinal,
     Ordinal,
