@@ -1779,7 +1779,7 @@ class TestJumanji:
         # check that this works with a batch-size
         env = JumanjiEnv(envname, from_pixels=True, batch_size=batch_size, jit=True)
         env.set_seed(0)
-        env.transform.transform_observation_spec(env.base_env.observation_spec)
+        env.transform.transform_observation_spec(env.base_env.observation_spec.clone())
 
         r = env.rollout(10)
         pixels = r["pixels"]
