@@ -370,6 +370,8 @@ class SACLoss(LossModule):
             )
         else:
             self._version = 2
+            self.value_network_params = None
+            self.target_value_network_params = None
 
         # Q value
         self.delay_qvalue = delay_qvalue
@@ -631,7 +633,16 @@ class SACLoss(LossModule):
             lambda name, value: _reduce(value, reduction=self.reduction)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
         return td_out
 
@@ -1236,7 +1247,16 @@ class DiscreteSACLoss(LossModule):
             lambda name, value: _reduce(value, reduction=self.reduction)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+            "value_network_params",
         )
         return td_out
 
