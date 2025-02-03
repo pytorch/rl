@@ -449,7 +449,7 @@ class RPCDataCollector(DataCollectorBase):
     ):
         """Init RPC on main node."""
         options = rpc.TensorPipeRpcBackendOptions(**self.tensorpipe_options)
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             if self.visible_devices:
                 for i in range(self.num_workers):
                     rank = i + 1
