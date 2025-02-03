@@ -396,11 +396,19 @@ class IQLLoss(LossModule):
             "loss_value": loss_value,
             "entropy": entropy.mean(),
         }
+        td_out = TensorDict(out)
 
-        return TensorDict(
-            out,
-            [],
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
+        return td_out
 
     def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
         # KL loss
@@ -436,6 +444,15 @@ class IQLLoss(LossModule):
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         loss_actor = -(exp_a * log_prob)
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return loss_actor, {}
 
     def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
@@ -450,6 +467,15 @@ class IQLLoss(LossModule):
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile)
         value_loss = _reduce(value_loss, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return value_loss, {}
 
     def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
@@ -476,6 +502,15 @@ class IQLLoss(LossModule):
         ).sum(0)
         loss_qval = _reduce(loss_qval, reduction=self.reduction)
         metadata = {"td_error": td_error.detach()}
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return loss_qval, metadata
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
@@ -824,6 +859,15 @@ class DiscreteIQLLoss(IQLLoss):
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         loss_actor = -(exp_a * log_prob)
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return loss_actor, {}
 
     def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
@@ -859,6 +903,15 @@ class DiscreteIQLLoss(IQLLoss):
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_Q - value, self.expectile)
         value_loss = _reduce(value_loss, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return value_loss, {}
 
     def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
@@ -900,4 +953,13 @@ class DiscreteIQLLoss(IQLLoss):
         ).sum(0)
         loss_qval = _reduce(loss_qval, reduction=self.reduction)
         metadata = {"td_error": td_error.detach()}
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return loss_qval, metadata
