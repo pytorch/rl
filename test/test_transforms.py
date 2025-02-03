@@ -191,6 +191,7 @@ else:
 TIMEOUT = 100.0
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 
 class TransformBase:
@@ -2532,6 +2533,9 @@ class TestHash(TransformBase):
             )
 
 
+@pytest.mark.skipif(
+    not _has_transformers, reason="transformers needed to test tokenizers"
+)
 class TestTokenizer(TransformBase):
     @pytest.mark.parametrize("datatype", ["str", "NonTensorStack"])
     def test_transform_no_env(self, datatype):
