@@ -9,7 +9,7 @@ set -e
 set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-yum install cairo-devel
+yum install cairo-devel -y
 
 # Avoid error: "fatal: unsafe repository"
 
