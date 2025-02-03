@@ -62,7 +62,13 @@ cp mjkey.txt mujoco_py/binaries/
 pip install -e .
 cd ..
 
-#cd $this_dir
+# OLD DM_CONTROL NOT SUPPORTED ANYMORE
+# # Install dm_control
+# git clone https://github.com/deepmind/dm_control
+# cd dm_control
+# git checkout c053360edea6170acfd9c8f65446703307d9d352
+# pip install -e .
+# cd ..
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
@@ -79,7 +85,8 @@ conda env config vars set \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
   MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
   MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
+  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin \
+  TOKENIZERS_PARALLELISM=true
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"

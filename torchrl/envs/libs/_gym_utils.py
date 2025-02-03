@@ -39,7 +39,7 @@ class _BaseGymWrapper:
         self.observation_space = _torchrl_to_gym_spec_transform(
             Composite(
                 {
-                    key: self.torchrl_env.full_observation_spec[key]
+                    key: self.torchrl_env.full_observation_spec[key].clone()
                     for key in self._observation_keys
                 }
             ),

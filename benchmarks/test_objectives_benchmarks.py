@@ -10,6 +10,7 @@ from packaging import version
 
 from tensordict import TensorDict
 from tensordict.nn import (
+    composite_lp_aggregate,
     InteractionType,
     NormalParamExtractor,
     ProbabilisticTensorDictModule as ProbMod,
@@ -785,11 +786,15 @@ def test_a2c_speed(
         device=device,
     )
     batch = [batch, T]
+    if composite_lp_aggregate():
+        raise RuntimeError(
+            "Expected composite_lp_aggregate() to return False. Use set_composite_lp_aggregate or COMPOSITE_LP_AGGREGATE env variable."
+        )
     td = TensorDict(
         {
             "obs": torch.randn(*batch, n_obs),
             "action": torch.randn(*batch, n_act),
-            "sample_log_prob": torch.randn(*batch),
+            "action_log_prob": torch.randn(*batch),
             "done": torch.zeros(*batch, 1, dtype=torch.bool),
             "next": {
                 "obs": torch.randn(*batch, n_obs),
@@ -884,11 +889,15 @@ def test_ppo_speed(
         device=device,
     )
     batch = [batch, T]
+    if composite_lp_aggregate():
+        raise RuntimeError(
+            "Expected composite_lp_aggregate() to return False. Use set_composite_lp_aggregate or COMPOSITE_LP_AGGREGATE env variable."
+        )
     td = TensorDict(
         {
             "obs": torch.randn(*batch, n_obs),
             "action": torch.randn(*batch, n_act),
-            "sample_log_prob": torch.randn(*batch),
+            "action_log_prob": torch.randn(*batch),
             "done": torch.zeros(*batch, 1, dtype=torch.bool),
             "next": {
                 "obs": torch.randn(*batch, n_obs),
@@ -983,11 +992,15 @@ def test_reinforce_speed(
         device=device,
     )
     batch = [batch, T]
+    if composite_lp_aggregate():
+        raise RuntimeError(
+            "Expected composite_lp_aggregate() to return False. Use set_composite_lp_aggregate or COMPOSITE_LP_AGGREGATE env variable."
+        )
     td = TensorDict(
         {
             "obs": torch.randn(*batch, n_obs),
             "action": torch.randn(*batch, n_act),
-            "sample_log_prob": torch.randn(*batch),
+            "action_log_prob": torch.randn(*batch),
             "done": torch.zeros(*batch, 1, dtype=torch.bool),
             "next": {
                 "obs": torch.randn(*batch, n_obs),
@@ -1089,11 +1102,15 @@ def test_iql_speed(
         device=device,
     )
     batch = [batch, T]
+    if composite_lp_aggregate():
+        raise RuntimeError(
+            "Expected composite_lp_aggregate() to return False. Use set_composite_lp_aggregate or COMPOSITE_LP_AGGREGATE env variable."
+        )
     td = TensorDict(
         {
             "obs": torch.randn(*batch, n_obs),
             "action": torch.randn(*batch, n_act),
-            "sample_log_prob": torch.randn(*batch),
+            "action_log_prob": torch.randn(*batch),
             "done": torch.zeros(*batch, 1, dtype=torch.bool),
             "next": {
                 "obs": torch.randn(*batch, n_obs),
