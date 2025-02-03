@@ -27,16 +27,16 @@ from torchrl.objectives.utils import RANDOM_MODULE_LIST, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 
 def _updater_check_forward_prehook(module, *args, **kwargs):
     if (
         not all(module._has_update_associated.values())
         and RL_WARNINGS
-        and not is_dynamo_compiling()
+        and not is_compiling()
     ):
         warnings.warn(
             module.TARGET_NET_WARNING,
@@ -433,6 +433,14 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             setattr(self, name_params_target + "_params", target_params)
         self._has_update_associated[module_name] = not create_target_params
 
+    def _clear_weakrefs(self, *tds):
+        if is_compiling():
+            # Waiting for weakrefs reconstruct to be supported by compile
+            for td in tds:
+                if not is_tensor_collection(td):
+                    continue
+                td.clear_refs_for_compile_()
+
     def __getattr__(self, item):
         if item.startswith("target_") and item.endswith("_params"):
             params = self._modules.get(item, None)
@@ -443,7 +451,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             elif (
                 not self._has_update_associated[item[7:-7]]
                 and RL_WARNINGS
-                and not is_dynamo_compiling()
+                and not is_compiling()
             ):
                 # no updater associated
                 warnings.warn(

@@ -347,6 +347,14 @@ class REDQLoss_deprecated(LossModule):
             else value,
             batch_size=[],
         )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            self.actor_network_params,
+            self.qvalue_network_params,
+            self.target_actor_network_params,
+            self.target_qvalue_network_params,
+        )
         return td_out
 
     @property

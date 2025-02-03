@@ -368,7 +368,15 @@ class DQNLoss(LossModule):
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
         loss = _reduce(loss, reduction=self.reduction)
-        td_out = TensorDict({"loss": loss}, [])
+        td_out = TensorDict(loss=loss)
+
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            self.value_network_params,
+            self.target_value_network_params,
+        )
+
         return td_out
 
 
@@ -607,7 +615,13 @@ class DistributionalDQNLoss(LossModule):
             inplace=True,
         )
         loss = _reduce(loss, reduction=self.reduction)
-        td_out = TensorDict({"loss": loss}, [])
+        td_out = TensorDict(loss=loss)
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            self.value_network_params,
+            self.target_value_network_params,
+        )
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

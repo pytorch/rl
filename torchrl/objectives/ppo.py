@@ -639,6 +639,13 @@ class PPOLoss(LossModule):
                 self.loss_critic_type,
             )
 
+        self._clear_weakrefs(
+            tensordict,
+            self.actor_network_params,
+            self.critic_network_params,
+            self.target_actor_network_params,
+            self.target_critic_network_params,
+        )
         if self.critic_coef is not None:
             return self.critic_coef * loss_value, clip_fraction
         return loss_value, clip_fraction
@@ -678,7 +685,7 @@ class PPOLoss(LossModule):
             log_weight = _sum_td_features(log_weight)
             log_weight = log_weight.view(advantage.shape)
         neg_loss = log_weight.exp() * advantage
-        td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
+        td_out = TensorDict({"loss_objective": -neg_loss})
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
         if self.entropy_bonus:
             entropy = self._get_entropy(dist)
@@ -697,7 +704,14 @@ class PPOLoss(LossModule):
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            self.actor_network_params,
+            self.critic_network_params,
+            self.target_actor_network_params,
+            self.target_critic_network_params,
         )
         return td_out
 
@@ -976,7 +990,7 @@ class ClipPPOLoss(PPOLoss):
         gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
         if is_tensor_collection(gain):
             gain = _sum_td_features(gain)
-        td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
+        td_out = TensorDict({"loss_objective": -gain})
         td_out.set("clip_fraction", clip_fraction)
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
 
@@ -999,7 +1013,14 @@ class ClipPPOLoss(PPOLoss):
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            self.actor_network_params,
+            self.critic_network_params,
+            self.target_actor_network_params,
+            self.target_critic_network_params,
         )
         return td_out
 
@@ -1290,7 +1311,6 @@ class KLPENPPOLoss(PPOLoss):
                 "kl": kl.detach(),
                 "kl_approx": kl_approx.detach().mean(),
             },
-            batch_size=[],
         )
 
         if self.entropy_bonus:
@@ -1310,9 +1330,15 @@ class KLPENPPOLoss(PPOLoss):
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
         )
-
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            self.actor_network_params,
+            self.critic_network_params,
+            self.target_actor_network_params,
+            self.target_critic_network_params,
+        )
         return td_out
 
     def reset(self) -> None:

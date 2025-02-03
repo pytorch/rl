@@ -248,5 +248,11 @@ class GAILLoss(LossModule):
             out["gp_loss"] = gp_loss.detach()
         loss = _reduce(loss, reduction=self.reduction)
         out["loss"] = loss
-        td_out = TensorDict(out, [])
+        td_out = TensorDict(out)
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            self.target_discriminator_network_params,
+            self.discriminator_network_params,
+        )
         return td_out
