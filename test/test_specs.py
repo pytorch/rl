@@ -12,7 +12,13 @@ import pytest
 import torch
 import torchrl.data.tensor_specs
 from scipy.stats import chisquare
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.utils import _unravel_key_to_tuple
 from torchrl._utils import _make_ordinal_device
 
@@ -23,6 +29,7 @@ from torchrl.data.tensor_specs import (
     Bounded,
     BoundedTensorSpec,
     Categorical,
+    Choice,
     Composite,
     CompositeSpec,
     ContinuousBox,
@@ -702,6 +709,63 @@ class TestComposite:
         assert ts["nested"].shape == (3,)
 
 
+class TestChoiceSpec:
+    @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
+    def test_choice(self, input_type):
+        if input_type == "spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+            example_in = torch.tensor(11.0)
+            example_out = torch.tensor(9.0)
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b")]
+            example_in = NonTensorData("b")
+            example_out = NonTensorData("c")
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+            example_in = NonTensorStack("a", "b", "c")
+            example_out = NonTensorStack("a", "c", "b")
+        torch.manual_seed(0)
+        for _ in range(10):
+            spec = Choice(choices)
+            res = spec.rand()
+        assert spec.is_in(res)
+        assert spec.is_in(example_in)
+        assert not spec.is_in(example_out)
+
+    def test_errors(self):
+        with pytest.raises(TypeError, match="must be a list"):
+            Choice("abc")
+
+        with pytest.raises(
+            TypeError,
+            match="must be either a TensorSpec, NonTensorData, or NonTensorStack",
+        ):
+            Choice(["abc"])
+
+        with pytest.raises(TypeError, match="must be the same type"):
+            Choice([Bounded(0, 1, (1,)), Categorical(10, (1,))])
+
+        with pytest.raises(ValueError, match="must have the same shape"):
+            Choice([Categorical(10, (1,)), Categorical(10, (2,))])
+
+        with pytest.raises(ValueError, match="must have the same dtype"):
+            Choice(
+                [
+                    Categorical(10, (2,), dtype=torch.long),
+                    Categorical(10, (2,), dtype=torch.float),
+                ]
+            )
+
+        if torch.cuda.is_available():
+            with pytest.raises(ValueError, match="must have the same device"):
+                Choice(
+                    [
+                        Categorical(10, (2,), device="cpu"),
+                        Categorical(10, (2,), device="cuda"),
+                    ]
+                )
+
+
 @pytest.mark.parametrize("shape", [(), (2, 3)])
 @pytest.mark.parametrize("device", get_default_devices())
 def test_create_composite_nested(shape, device):
@@ -851,7 +915,7 @@ class TestEquality:
 
         ts_other = Bounded(minimum, maximum + 1, torch.Size((1,)), device, dtype)
         assert ts != ts_other
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Bounded(minimum, maximum, torch.Size((1,)), "cuda:0", dtype)
             assert ts != ts_other
 
@@ -879,7 +943,7 @@ class TestEquality:
         )
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = OneHot(
                 n=n, device="cuda:0", dtype=dtype, use_register=use_register
             )
@@ -909,7 +973,7 @@ class TestEquality:
         ts_same = Unbounded(device=device, dtype=dtype)
         assert ts == ts_same
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Unbounded(device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -942,7 +1006,7 @@ class TestEquality:
         ts_other = Bounded(low=minimum, high=maximum + 1, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Bounded(low=minimum, high=maximum, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -970,7 +1034,7 @@ class TestEquality:
         ts_other = Categorical(n=n + 1, shape=shape, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Categorical(n=n, shape=shape, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1008,7 +1072,7 @@ class TestEquality:
         ts_other = Unbounded(shape=other_shape, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Unbounded(shape=shape, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1034,7 +1098,7 @@ class TestEquality:
         ts_other = Binary(n=n + 5, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Binary(n=n, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1068,7 +1132,7 @@ class TestEquality:
         ts_other = MultiOneHot(nvec=other_nvec, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = MultiOneHot(nvec=nvec, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1102,7 +1166,7 @@ class TestEquality:
         ts_other = MultiCategorical(nvec=other_nvec, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = MultiCategorical(nvec=nvec, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1498,6 +1562,19 @@ class TestExpand:
         )
         assert spec.expand(2, 3, 4).example_data == "example_data"
 
+    @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
+    def test_choice(self, input_type):
+        if input_type == "spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b")]
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+
+        spec = Choice(choices)
+        res = spec.expand([3])
+        assert res.shape == torch.Size([3])
+
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_onehot(self, shape1, shape2):
@@ -1701,6 +1778,19 @@ class TestClone:
         assert spec.clone() is not spec
         assert spec.clone().example_data == "example_data"
 
+    @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
+    def test_choice(self, input_type):
+        if input_type == "spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b")]
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+
+        spec = Choice(choices)
+        assert spec.clone() == spec
+        assert spec.clone() is not spec
+
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_onehot(
         self,
@@ -1785,6 +1875,31 @@ class TestCardinality:
         spec = NonTensor(shape=(3, 4), device="cpu")
         with pytest.raises(RuntimeError, match="Cannot enumerate a NonTensorSpec."):
             spec.cardinality()
+
+    @pytest.mark.parametrize(
+        "input_type",
+        ["bounded_spec", "categorical_spec", "nontensor", "nontensorstack"],
+    )
+    def test_choice(self, input_type):
+        if input_type == "bounded_spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+        elif input_type == "categorical_spec":
+            choices = [Categorical(10), Categorical(20)]
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+
+        spec = Choice(choices)
+
+        if input_type == "bounded_spec":
+            assert spec.cardinality() == float("inf")
+        elif input_type == "categorical_spec":
+            assert spec.cardinality() == 30
+        elif input_type == "nontensor":
+            assert spec.cardinality() == 3
+        elif input_type == "nontensorstack":
+            assert spec.cardinality() == 2
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_onehot(
@@ -2096,6 +2211,23 @@ class TestTo:
         assert spec.to(device).device == device
         assert spec.to(device).example_data == "example_data"
 
+    @pytest.mark.parametrize(
+        "input_type",
+        ["bounded_spec", "categorical_spec", "nontensor", "nontensorstack"],
+    )
+    def test_choice(self, input_type, device):
+        if input_type == "bounded_spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+        elif input_type == "categorical_spec":
+            choices = [Categorical(10), Categorical(20)]
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b")]
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+
+        spec = Choice(choices)
+        assert spec.to(device).device == device
+
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_onehot(self, shape1, device):
         if shape1 is None:
@@ -2362,6 +2494,33 @@ class TestStack:
         assert new_spec.shape == torch.Size(shape_insert)
         assert new_spec.device == torch.device("cpu")
         assert new_spec.example_data == "example_data"
+
+    @pytest.mark.parametrize(
+        "input_type",
+        ["bounded_spec", "categorical_spec", "nontensor"],
+    )
+    def test_stack_choice(self, input_type, shape, stack_dim):
+        if input_type == "bounded_spec":
+            choices = [Bounded(0, 2.5, shape), Bounded(10, 12, shape)]
+        elif input_type == "categorical_spec":
+            choices = [Categorical(10, shape), Categorical(20, shape)]
+        elif input_type == "nontensor":
+            if len(shape) == 0:
+                choices = [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
+            else:
+                choices = [
+                    NonTensorStack("a").expand(shape + (1,)).squeeze(-1),
+                    NonTensorStack("d").expand(shape + (1,)).squeeze(-1),
+                ]
+
+        spec0 = Choice(choices)
+        spec1 = Choice(choices)
+        res = torch.stack([spec0, spec1], stack_dim)
+        assert isinstance(res, Choice)
+        assert (
+            res.shape
+            == torch.stack([torch.empty(shape), torch.empty(shape)], stack_dim).shape
+        )
 
     def test_stack_onehot(self, shape, stack_dim):
         n = 5
