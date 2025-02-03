@@ -20,7 +20,7 @@ jobs:
         run: |
           echo "Action triggered by ${{ github.event.pull_request.html_url }}"
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 50 # this is to make sure we obtain the target base commit
       - name: Python Setup
@@ -93,7 +93,7 @@ jobs:
       - name: Check ldd --version
         run: ldd --version
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 50 # this is to make sure we obtain the target base commit
       - name: Python Setup
