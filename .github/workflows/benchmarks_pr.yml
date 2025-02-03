@@ -20,7 +20,7 @@ jobs:
         run: |
           echo "Action triggered by ${{ github.event.pull_request.html_url }}"
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 50 # this is to make sure we obtain the target base commit
       - name: Python Setup
@@ -55,7 +55,7 @@ jobs:
           git checkout ${{ github.event.pull_request.head.sha }}
           $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
       - name: Publish results
-        uses: apbard/pytest-benchmark-commenter@v3
+        uses: apbard/pytest-benchmark-commenter@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           benchmark-file: ${{ env.CONTENDER_JSON }}
@@ -93,7 +93,7 @@ jobs:
       - name: Check ldd --version
         run: ldd --version
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 50 # this is to make sure we obtain the target base commit
       - name: Python Setup
@@ -148,7 +148,7 @@ jobs:
           git checkout ${{ github.event.pull_request.head.sha }}
           $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
       - name: Publish results
-        uses: apbard/pytest-benchmark-commenter@v3
+        uses: apbard/pytest-benchmark-commenter@v4
         env:
           GIT_WORK_TREE: /__w/rl/rl
         with:
