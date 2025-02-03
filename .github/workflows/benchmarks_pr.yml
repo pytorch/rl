@@ -55,7 +55,7 @@ jobs:
           git checkout ${{ github.event.pull_request.head.sha }}
           $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
       - name: Publish results
-        uses: apbard/pytest-benchmark-commenter@v4
+        uses: apbard/pytest-benchmark-commenter@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           benchmark-file: ${{ env.CONTENDER_JSON }}
@@ -148,7 +148,7 @@ jobs:
           git checkout ${{ github.event.pull_request.head.sha }}
           $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
       - name: Publish results
-        uses: apbard/pytest-benchmark-commenter@v4
+        uses: apbard/pytest-benchmark-commenter@v3
         env:
           GIT_WORK_TREE: /__w/rl/rl
         with:
