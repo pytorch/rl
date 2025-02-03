@@ -80,9 +80,7 @@ other cases, the action written in the tensordict is simply the network output.
     AdditiveGaussianModule
     ConsistentDropoutModule
     EGreedyModule
-    EGreedyWrapper
     OrnsteinUhlenbeckProcessModule
-    OrnsteinUhlenbeckProcessWrapper
 
 Probabilistic actors
 ~~~~~~~~~~~~~~~~~~~~
