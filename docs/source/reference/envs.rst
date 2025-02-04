@@ -509,6 +509,8 @@ single agent standards.
 Auto-resetting Envs
 -------------------
 
+.. _autoresetting_envs:
+
 Auto-resetting environments are environments where calls to :meth:`~torchrl.envs.EnvBase.reset` are not expected when
 the environment reaches a ``"done"`` state during a rollout, as the reset happens automatically.
 Usually, in such cases the observations delivered with the done and reward (which effectively result from performing the
@@ -920,6 +922,7 @@ to be able to create this other composition:
     TargetReturn
     TensorDictPrimer
     TimeMaxPool
+    Tokenizer
     ToTensorImage
     TrajCounter
     UnaryTransform

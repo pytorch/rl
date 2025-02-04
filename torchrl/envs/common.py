@@ -317,6 +317,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             .. note:: The auto-resetting is achieved by the `EnvBase` metaclass. It does not appear in the
                 `__init__` method and is included in the keyword arguments strictly for type-hinting purpose.
 
+            .. seealso:: The :ref:`auto-resetting environments API <autoresetting_envs>` section in the API
+                documentation.
+
     Attributes:
         done_spec (Composite): equivalent to ``full_done_spec`` as all
             ``done_specs`` contain at least a ``"done"`` and a ``"terminated"`` entry
