@@ -38,7 +38,6 @@ from torchrl.modules.tensordict_module.exploration import (
     EGreedyModule,
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessModule,
-    OrnsteinUhlenbeckProcessWrapper,
 )
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -235,7 +234,7 @@ class TestOrnsteinUhlenbeckProcess:
         assert pval_acc > 0.05
         assert pval_reg < 0.1
 
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_ou(
         self, device, interface, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
     ):
@@ -257,8 +256,7 @@ class TestOrnsteinUhlenbeckProcess:
             ou = OrnsteinUhlenbeckProcessModule(spec=action_spec, device=device)
             exploratory_policy = TensorDictSequential(policy, ou)
         else:
-            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy, device=device)
-            ou = exploratory_policy
+            raise NotImplementedError
 
         tensordict = TensorDict(
             batch_size=[batch],
@@ -299,7 +297,7 @@ class TestOrnsteinUhlenbeckProcess:
 
     @pytest.mark.parametrize("parallel_spec", [True, False])
     @pytest.mark.parametrize("probabilistic", [True, False])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_collector(self, device, parallel_spec, probabilistic, interface, seed=0):
         torch.manual_seed(seed)
         env = SerialEnv(
@@ -340,7 +338,7 @@ class TestOrnsteinUhlenbeckProcess:
                 policy, OrnsteinUhlenbeckProcessModule(spec=action_spec, device=device)
             )
         else:
-            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy, device=device)
+            raise NotImplementedError
         exploratory_policy(env.reset())
         collector = SyncDataCollector(
             create_env_fn=env,
@@ -357,7 +355,7 @@ class TestOrnsteinUhlenbeckProcess:
     @pytest.mark.parametrize("nested_obs_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
     @pytest.mark.parametrize("is_init_key", ["some"])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_nested(
         self,
         device,
@@ -401,12 +399,7 @@ class TestOrnsteinUhlenbeckProcess:
                 ).to(device),
             )
         else:
-            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(
-                policy,
-                spec=action_spec,
-                action_key=env.action_key,
-                is_init_key=is_init_key,
-            )
+            raise NotImplementedError
         collector = SyncDataCollector(
             create_env_fn=env,
             policy=exploratory_policy,
