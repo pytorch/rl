@@ -115,7 +115,7 @@ Key learnings:
 import torch
 
 # Tensordict modules
-from tensordict.nn import TensorDictModule
+from tensordict.nn import set_composite_lp_aggregate, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import multiprocessing
 
@@ -178,6 +178,9 @@ clip_epsilon = 0.2  # clip value for PPO loss
 gamma = 0.99  # discount factor
 lmbda = 0.9  # lambda for generalised advantage estimation
 entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
+
+# disable log-prob aggregation
+set_composite_lp_aggregate(False).set()
 
 ######################################################################
 # Environment
@@ -454,7 +457,6 @@ policy = ProbabilisticActor(
         "high": env.full_action_spec_unbatched[env.action_key].space.high,
     },
     return_log_prob=True,
-    log_prob_key=("agents", "sample_log_prob"),
 )  # we'll need the log-prob for the PPO loss
 
 ######################################################################
@@ -602,7 +604,6 @@ loss_module = ClipPPOLoss(
 loss_module.set_keys(  # We have to tell the loss where to find the keys
     reward=env.reward_key,
     action=env.action_key,
-    sample_log_prob=("agents", "sample_log_prob"),
     value=("agents", "state_value"),
     # These last 2 keys will be expanded to match the reward shape
     done=("agents", "done"),

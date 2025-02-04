@@ -12,6 +12,7 @@ import sys
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -43,6 +44,7 @@ from torch import autograd, nn
 from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
+from torchrl.envs import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
@@ -197,6 +199,70 @@ def get_devices():
     for i in range(torch.cuda.device_count()):
         devices += [torch.device(f"cuda:{i}")]
     return devices
+
+
+class MARLEnv(EnvBase):
+    def __init__(self):
+        batch = self.batch = (3,)
+        super().__init__(batch_size=batch)
+        self.n_agents = n_agents = (4,)
+        self.obs_feat = obs_feat = (5,)
+
+        self.full_observation_spec = Composite(
+            observation=Unbounded(batch + n_agents + obs_feat),
+            batch_size=batch,
+        )
+        self.full_done_spec = Composite(
+            done=Unbounded(batch + (1,), dtype=torch.bool),
+            terminated=Unbounded(batch + (1,), dtype=torch.bool),
+            truncated=Unbounded(batch + (1,), dtype=torch.bool),
+            batch_size=batch,
+        )
+
+        self.act_feat_dirich = act_feat_dirich = (
+            10,
+            2,
+        )
+        self.act_feat_categ = act_feat_categ = (7,)
+        self.full_action_spec = Composite(
+            dirich=Unbounded(batch + n_agents + act_feat_dirich),
+            categ=Unbounded(batch + n_agents + act_feat_categ),
+            batch_size=batch,
+        )
+
+        self.full_reward_spec = Composite(
+            reward=Unbounded(batch + n_agents + (1,)), batch_size=batch
+        )
+
+    @classmethod
+    def make_composite_dist(cls):
+        dist_cstr = functools.partial(
+            CompositeDistribution,
+            distribution_map={
+                "dirich": lambda concentration: torch.distributions.Independent(
+                    torch.distributions.Dirichlet(concentration), 1
+                ),
+                "categ": torch.distributions.Categorical,
+            },
+        )
+        return ProbabilisticTensorDictModule(
+            in_keys=["params"],
+            out_keys=["dirich", "categ"],
+            distribution_class=dist_cstr,
+            return_log_prob=True,
+        )
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        ...
+
+    def _reset(self, tensordic):
+        ...
+
+    def _set_seed(self, seed: Optional[int]):
+        ...
 
 
 class LossModuleTestBase:
@@ -9237,6 +9303,40 @@ class TestPPO(LossModuleTestBase):
             )
             loss = ppo(data)
             loss.sum(reduce=True)
+
+    def test_ppo_marl_aggregate(self):
+        env = MARLEnv()
+
+        def primer(td):
+            params = TensorDict(
+                dirich=TensorDict(concentration=env.action_spec["dirich"].one()),
+                categ=TensorDict(logits=env.action_spec["categ"].one()),
+                batch_size=td.batch_size,
+            )
+            td.set("params", params)
+            return td
+
+        policy = ProbabilisticTensorDictSequential(
+            primer,
+            env.make_composite_dist(),
+            # return_composite=True,
+        )
+        output = policy(env.fake_tensordict())
+        assert output.shape == env.batch_size
+        assert output["dirich_log_prob"].shape == env.batch_size + env.n_agents
+        assert output["categ_log_prob"].shape == env.batch_size + env.n_agents
+
+        output["advantage"] = output["next", "reward"].clone()
+        output["value_target"] = output["next", "reward"].clone()
+        critic = TensorDictModule(
+            lambda obs: obs.new_zeros((*obs.shape[:-1], 1)),
+            in_keys=list(env.full_observation_spec.keys(True, True)),
+            out_keys=["state_value"],
+        )
+        ppo = ClipPPOLoss(actor_network=policy, critic_network=critic)
+        ppo.set_keys(action=list(env.full_action_spec.keys(True, True)))
+        assert isinstance(ppo.tensor_keys.action, list)
+        ppo(output)
 
 
 class TestA2C(LossModuleTestBase):
