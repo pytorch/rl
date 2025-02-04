@@ -6118,7 +6118,7 @@ def _remove_neg_shapes(*shape):
 class _LegacySpecMeta(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         warnings.warn(
-            f"The {cls.__name__} has been deprecated and will be removed in v0.7. Please use "
+            f"The {cls.__name__} has been deprecated and will be removed in v0.8. Please use "
             f"{cls.__bases__[-1].__name__} instead.",
             category=DeprecationWarning,
         )

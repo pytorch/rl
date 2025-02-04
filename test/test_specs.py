@@ -3955,7 +3955,7 @@ class TestLegacy:
     def test_one_hot(self):
         with pytest.warns(
             DeprecationWarning,
-            match="The OneHotDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use OneHot instead.",
+            match="The OneHotDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use OneHot instead.",
         ):
             one_hot = OneHotDiscreteTensorSpec(n=4)
         assert isinstance(one_hot, OneHotDiscreteTensorSpec)
@@ -3969,7 +3969,7 @@ class TestLegacy:
     def test_discrete(self):
         with pytest.warns(
             DeprecationWarning,
-            match="The DiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use Categorical instead.",
+            match="The DiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use Categorical instead.",
         ):
             discrete = DiscreteTensorSpec(n=4)
         assert isinstance(discrete, DiscreteTensorSpec)
@@ -3996,7 +3996,7 @@ class TestLegacy:
 
         with pytest.warns(
             DeprecationWarning,
-            match="The UnboundedContinuousTensorSpec has been deprecated and will be removed in v0.7. Please use Unbounded instead.",
+            match="The UnboundedContinuousTensorSpec has been deprecated and will be removed in v0.8. Please use Unbounded instead.",
         ):
             unbounded_continuous = UnboundedContinuousTensorSpec()
         assert isinstance(unbounded_continuous, Unbounded)
@@ -4009,7 +4009,7 @@ class TestLegacy:
 
         with pytest.warns(
             DeprecationWarning,
-            match="The UnboundedDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use Unbounded instead.",
+            match="The UnboundedDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use Unbounded instead.",
         ):
             unbounded_discrete = UnboundedDiscreteTensorSpec()
         assert isinstance(unbounded_discrete, Unbounded)
@@ -4040,7 +4040,7 @@ class TestLegacy:
     def test_multi_one_hot(self):
         with pytest.warns(
             DeprecationWarning,
-            match="The MultiOneHotDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use MultiOneHot instead.",
+            match="The MultiOneHotDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use MultiOneHot instead.",
         ):
             one_hot = MultiOneHotDiscreteTensorSpec(nvec=[4, 3])
         assert isinstance(one_hot, MultiOneHotDiscreteTensorSpec)
@@ -4054,7 +4054,7 @@ class TestLegacy:
     def test_multi_categorical(self):
         with pytest.warns(
             DeprecationWarning,
-            match="The MultiDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use MultiCategorical instead.",
+            match="The MultiDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use MultiCategorical instead.",
         ):
             categorical = MultiDiscreteTensorSpec(nvec=[4, 3])
         assert isinstance(categorical, MultiDiscreteTensorSpec)
@@ -4068,7 +4068,7 @@ class TestLegacy:
     def test_binary(self):
         with pytest.warns(
             DeprecationWarning,
-            match="The BinaryDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use Binary instead.",
+            match="The BinaryDiscreteTensorSpec has been deprecated and will be removed in v0.8. Please use Binary instead.",
         ):
             binary = BinaryDiscreteTensorSpec(5)
         assert isinstance(binary, BinaryDiscreteTensorSpec)
@@ -4082,7 +4082,7 @@ class TestLegacy:
     def test_bounded(self):
         with pytest.warns(
             DeprecationWarning,
-            match="The BoundedTensorSpec has been deprecated and will be removed in v0.7. Please use Bounded instead.",
+            match="The BoundedTensorSpec has been deprecated and will be removed in v0.8. Please use Bounded instead.",
         ):
             bounded = BoundedTensorSpec(-2, 2, shape=())
         assert isinstance(bounded, BoundedTensorSpec)
@@ -4097,7 +4097,7 @@ class TestLegacy:
         with (
             pytest.warns(
                 DeprecationWarning,
-                match="The CompositeSpec has been deprecated and will be removed in v0.7. Please use Composite instead.",
+                match="The CompositeSpec has been deprecated and will be removed in v0.8. Please use Composite instead.",
             )
         ):
             composite = CompositeSpec()
@@ -4113,7 +4113,7 @@ class TestLegacy:
         with (
             pytest.warns(
                 DeprecationWarning,
-                match="The NonTensorSpec has been deprecated and will be removed in v0.7. Please use NonTensor instead.",
+                match="The NonTensorSpec has been deprecated and will be removed in v0.8. Please use NonTensor instead.",
             )
         ):
             non_tensor = NonTensorSpec()
