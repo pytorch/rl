@@ -35,7 +35,6 @@ from torchrl.modules.tensordict_module.actors import (
 from torchrl.modules.tensordict_module.exploration import (
     _OrnsteinUhlenbeckProcess,
     AdditiveGaussianModule,
-    AdditiveGaussianWrapper,
     EGreedyModule,
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessModule,
@@ -433,7 +432,7 @@ class TestOrnsteinUhlenbeckProcess:
 @pytest.mark.parametrize("device", get_default_devices())
 class TestAdditiveGaussian:
     @pytest.mark.parametrize("spec_origin", ["spec", "policy", None])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_additivegaussian_sd(
         self,
         device,
@@ -475,8 +474,8 @@ class TestAdditiveGaussian:
                 default_interaction_type=InteractionType.RANDOM,
             )
             given_spec = action_spec if spec_origin == "spec" else None
-            exploratory_policy = AdditiveGaussianWrapper(
-                policy, spec=given_spec, device=device
+            exploratory_policy = TensorDictModule(
+                policy, AdditiveGaussianModule(spec=given_spec, device=device)
             )
         if spec_origin is not None:
             sigma_init = (
@@ -524,7 +523,7 @@ class TestAdditiveGaussian:
         assert abs(noisy_action.std() - sigma_end) < 1e-1
 
     @pytest.mark.parametrize("spec_origin", ["spec", "policy", None])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_additivegaussian(
         self,
         device,
@@ -563,9 +562,7 @@ class TestAdditiveGaussian:
                 policy, AdditiveGaussianModule(spec=given_spec).to(device)
             )
         else:
-            exploratory_policy = AdditiveGaussianWrapper(
-                policy, spec=given_spec, safe=False
-            ).to(device)
+            raise NotImplementedError
 
         tensordict = TensorDict(
             batch_size=[batch],
@@ -590,7 +587,7 @@ class TestAdditiveGaussian:
                 assert action_spec.is_in(out.get("action"))
 
     @pytest.mark.parametrize("parallel_spec", [True, False])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_collector(self, device, parallel_spec, interface, seed=0):
         torch.manual_seed(seed)
         env = SerialEnv(
@@ -622,7 +619,7 @@ class TestAdditiveGaussian:
                 policy, AdditiveGaussianModule(spec=action_spec).to(device)
             )
         else:
-            exploratory_policy = AdditiveGaussianWrapper(policy, safe=False)
+            raise NotImplementedError
         exploratory_policy(env.reset())
         collector = SyncDataCollector(
             create_env_fn=env,

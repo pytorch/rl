@@ -81,7 +81,7 @@ _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 # MAX_IDLE_COUNT is the maximum number of times a Dataloader worker can timeout with his queue.
-_MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", float("inf")))
+_MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", torch.iinfo(torch.int64).max))
 
 DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
 
