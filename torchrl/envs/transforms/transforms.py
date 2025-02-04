@@ -9035,7 +9035,7 @@ class _CallableTransform(Transform):
 
 
 class BatchSizeTransform(Transform):
-    """A transform to modify the batch-size of an environmt.
+    """A transform to modify the batch-size of an environment.
 
     This transform has two distinct usages: it can be used to set the
     batch-size for non-batch-locked (e.g. stateless) environments to
