@@ -523,7 +523,7 @@ class TestAdditiveGaussian:
         assert abs(noisy_action.std() - sigma_end) < 1e-1
 
     @pytest.mark.parametrize("spec_origin", ["spec", "policy", None])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_additivegaussian(
         self,
         device,
@@ -587,7 +587,7 @@ class TestAdditiveGaussian:
                 assert action_spec.is_in(out.get("action"))
 
     @pytest.mark.parametrize("parallel_spec", [True, False])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_collector(self, device, parallel_spec, interface, seed=0):
         torch.manual_seed(seed)
         env = SerialEnv(

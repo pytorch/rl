@@ -77,6 +77,7 @@ cat "${this_dir}/environment.yml"
 
 export MUJOCO_GL=egl
 conda env config vars set \
+  MAX_IDLE_COUNT=1000 \
   MUJOCO_GL=egl \
   SDL_VIDEODRIVER=dummy \
   DISPLAY=unix:0.0 \
