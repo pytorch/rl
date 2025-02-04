@@ -494,7 +494,9 @@ class PPOLoss(LossModule):
     def reset(self) -> None:
         pass
 
-    def _get_entropy(self, dist: d.Distribution) -> torch.Tensor | TensorDict:
+    def _get_entropy(
+        self, dist: d.Distribution, adv_shape: torch.Size
+    ) -> torch.Tensor | TensorDict:
         try:
             entropy = dist.entropy()
         except NotImplementedError:
@@ -513,10 +515,12 @@ class PPOLoss(LossModule):
                         log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
 
             entropy = -log_prob.mean(0)
+            if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:
+                entropy.batch_size = adv_shape
         return entropy.unsqueeze(-1)
 
     def _log_weight(
-        self, tensordict: TensorDictBase
+        self, tensordict: TensorDictBase, adv_shape: torch.Size
     ) -> Tuple[torch.Tensor, d.Distribution, torch.Tensor]:
 
         with self.actor_network_params.to_module(
@@ -541,7 +545,9 @@ class PPOLoss(LossModule):
             action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
 
         prev_log_prob = _maybe_get_or_select(
-            tensordict, self.tensor_keys.sample_log_prob
+            tensordict,
+            self.tensor_keys.sample_log_prob,
+            adv_shape,
         )
 
         if prev_log_prob.requires_grad:
@@ -564,6 +570,8 @@ class PPOLoss(LossModule):
                         "the beginning of your script to get a proper composite log-prob.",
                         category=UserWarning,
                     )
+                if log_prob.batch_size != adv_shape:
+                    log_prob.batch_size = adv_shape
                 if (
                     is_composite
                     and not is_tensor_collection(prev_log_prob)
@@ -680,7 +688,9 @@ class PPOLoss(LossModule):
                 )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
-        log_weight, dist, kl_approx = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(
+            tensordict, adv_shape=advantage.shape[:-1]
+        )
         if is_tensor_collection(log_weight):
             log_weight = _sum_td_features(log_weight)
             log_weight = log_weight.view(advantage.shape)
@@ -688,7 +698,7 @@ class PPOLoss(LossModule):
         td_out = TensorDict({"loss_objective": -neg_loss})
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
         if self.entropy_bonus:
-            entropy = self._get_entropy(dist)
+            entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
@@ -968,7 +978,9 @@ class ClipPPOLoss(PPOLoss):
                 )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
-        log_weight, dist, kl_approx = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(
+            tensordict, adv_shape=advantage.shape[:-1]
+        )
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
@@ -995,7 +1007,7 @@ class ClipPPOLoss(PPOLoss):
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
 
         if self.entropy_bonus:
-            entropy = self._get_entropy(dist)
+            entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
@@ -1275,7 +1287,9 @@ class KLPENPPOLoss(PPOLoss):
                 )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
-        log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
+        log_weight, dist, kl_approx = self._log_weight(
+            tensordict_copy, adv_shape=advantage.shape[:-1]
+        )
         neg_loss = log_weight.exp() * advantage
         if is_tensor_collection(neg_loss):
             neg_loss = _sum_td_features(neg_loss)
@@ -1295,6 +1309,13 @@ class KLPENPPOLoss(PPOLoss):
                 previous_log_prob = previous_dist.log_prob(x)
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
+                if previous_log_prob.batch_size != advantage.shape[:-1]:
+                    previous_log_prob.batch_size = (
+                        self.samples_mc_kl,
+                    ) + advantage.shape[:-1]
+                    current_log_prob.batch_size = (
+                        self.samples_mc_kl,
+                    ) + advantage.shape[:-1]
                 previous_log_prob = _sum_td_features(previous_log_prob)
                 # Both dists have presumably the same params
                 current_log_prob = _sum_td_features(current_log_prob)
@@ -1314,7 +1335,7 @@ class KLPENPPOLoss(PPOLoss):
         )
 
         if self.entropy_bonus:
-            entropy = self._get_entropy(dist)
+            entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())

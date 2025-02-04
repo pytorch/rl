@@ -151,7 +151,7 @@ REDQ
     REDQLoss
 
 CrossQ
-----
+------
 
 .. autosummary::
     :toctree: generated/
@@ -160,7 +160,7 @@ CrossQ
     CrossQLoss
 
 IQL
-----
+---
 
 .. autosummary::
     :toctree: generated/
@@ -170,7 +170,7 @@ IQL
     DiscreteIQLLoss
 
 CQL
-----
+---
 
 .. autosummary::
     :toctree: generated/
@@ -189,7 +189,7 @@ GAIL
     GAILLoss
 
 DT
-----
+--
 
 .. autosummary::
     :toctree: generated/
@@ -199,7 +199,7 @@ DT
     OnlineDTLoss
 
 TD3
-----
+---
 
 .. autosummary::
     :toctree: generated/
@@ -208,7 +208,7 @@ TD3
     TD3Loss
 
 TD3+BC
-----
+------
 
 .. autosummary::
     :toctree: generated/
@@ -226,6 +226,85 @@ PPO
     PPOLoss
     ClipPPOLoss
     KLPENPPOLoss
+
+Using PPO with multi-head action policies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In some cases, we have a single advantage value but more than one action undertaken. Each action has its own
+log-probability, and shape. For instance, it can be that the action space is structured as follows:
+
+    >>> action_td = TensorDict(
+    ...     action0=Tensor(batch, n_agents, f0),
+    ...     action1=Tensor(batch, n_agents, f1, f2),
+    ...     batch_size=torch.Size((batch,))
+    ... )
+
+where `f0`, `f1` and `f2` are some arbitrary integers.
+
+Note that, in TorchRL, the tensordict has the shape of the environment (if the environment is batch-locked, otherwise it
+has the shape of the number of batched environments being run). If the tensordict is sampled from the buffer, it will
+also have the shape of the replay buffer `batch_size`. The `n_agent` dimension, although common to each action, does not
+in general appear in the tensordict's batch-size.
+
+There is a legitimate reason why this is the case: the number of agent may condition some but not all the specs of the
+environment. For example, some environments have a shared done state among all agents. A more complete tensordict
+would in this case look like
+
+    >>> action_td = TensorDict(
+    ...     action0=Tensor(batch, n_agents, f0),
+    ...     action1=Tensor(batch, n_agents, f1, f2),
+    ...     done=Tensor(batch, 1),
+    ...     observation=Tensor(batch, n_agents, f3),
+    ...     [...] # etc
+    ...     batch_size=torch.Size((batch,))
+    ... )
+
+Notice that `done` states and `reward` are usually flanked by a rightmost singleton dimension. See this :ref:`part of the doc <reward_done_singleton>`
+to learn more about this restriction.
+
+The main tools to consider when building multi-head policies are: :class:`~tensordict.nn.CompositeDistribution`,
+:class:`~tensordict.nn.ProbabilisticTensorDictModule` and :class:`~tensordict.nn.ProbabilisticTensorDictSequential`.
+When dealing with these, it is recommended to call `tensordict.nn.set_composite_lp_aggregate(False).set()` at the
+beginning of the script to instruct :class:`~tensordict.nn.CompositeDistribution` that log-probabilities should not
+be aggregated but rather written as leaves in the tensordict.
+
+The log-probability of our actions given their respective distributions may look like anything like
+
+    >>> action_td = TensorDict(
+    ...     action0_log_prob=Tensor(batch, n_agents),
+    ...     action1_log_prob=Tensor(batch, n_agents, f1),
+    ...     batch_size=torch.Size((batch,))
+    ... )
+
+or
+
+    >>> action_td = TensorDict(
+    ...     action0_log_prob=Tensor(batch, n_agents),
+    ...     action1_log_prob=Tensor(batch, n_agents),
+    ...     batch_size=torch.Size((batch,))
+    ... )
+
+ie, the number of dimensions of distributions log-probabilities generally varies from the sample's dimensionality to
+anything inferior to that, e.g. if the distribution is multivariate -- :class:`~torch.distributions.Dirichlet` for
+instance -- or an :class:`~torch.distributions.Independent` instance.
+The dimension of the tensordict, on the contrary, still matches the env's / replay-buffer's batch-size.
+
+During a call to the PPO loss, the loss module will schematically execute the following set of operations:
+
+    >>> def ppo(tensordict):
+    ...     prev_log_prob = tensordict.select(*log_prob_keys)
+    ...     action = tensordict.select(*action_keys)
+    ...     new_log_prob = dist.log_prob(action)
+    ...     log_weight = new_log_prob - prev_log_prob
+    ...     advantage = tensordict.get("advantage") # computed by GAE earlier
+    ...     # attempt to map shape
+    ...     log_weight.batch_size = advantage.batch_size[:-1]
+    ...     log_weight = sum(log_weight.sum(dim="feature").values(True, True)) # get a single tensor of log_weights
+    ...     return minimum(log_weight.exp() * advantage, log_weight.exp().clamp(1-eps, 1+eps) * advantage)
+
+To appreciate what a PPO pipeline looks like with multihead policies, an example can be found in the library's
+`example directory <https://github.com/pytorch/rl/blob/main/examples/agents/composite_ppo.py>`__.
+
 
 A2C
 ---
@@ -258,6 +337,7 @@ Dreamer
 
 Multi-agent objectives
 -----------------------
+
 .. currentmodule:: torchrl.objectives.multiagent
 
 These objectives are specific to multi-agent algorithms.
@@ -305,6 +385,7 @@ Returns
 
 Utils
 -----
+
 .. currentmodule:: torchrl.objectives
 
 .. autosummary::
