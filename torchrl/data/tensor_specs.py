@@ -1848,9 +1848,7 @@ class OneHot(TensorSpec):
         gathered = mask_expand & val
         oob = ~gathered.any(-1)
         new_val = torch.multinomial(mask_expand[oob].float(), 1)
-        val = val.clone()
-        val[oob] = 0
-        val[oob] = torch.scatter(val[oob], -1, new_val, 1)
+        val = torch.where(~oob, torch.scatter(val[oob], -1, new_val, 1), 0)
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
@@ -2301,17 +2299,15 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             low = low.to(val.device)
             high = high.to(val.device)
         try:
-            val = torch.maximum(torch.minimum(val, high), low)
+            val = torch.clamp(val, low, high)
         except ValueError:
             low = low.expand_as(val)
             high = high.expand_as(val)
-            val[val < low] = low[val < low]
-            val[val > high] = high[val > high]
+            val = torch.clamp(val, low, high)
         except RuntimeError:
             low = low.expand_as(val)
             high = high.expand_as(val)
-            val[val < low] = low[val < low]
-            val[val > high] = high[val > high]
+            val = torch.clamp(val, low, high)
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
