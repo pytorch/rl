@@ -84,7 +84,7 @@ class LLMInputTransform(Transform):
         else:
             llm_input = "The game has ended as there are no legal moves left. "
         next_tensordict["observation"] = llm_input
-        print("step", llm_input)
+        # print("step", llm_input)
         return next_tensordict
 
     def _reset(self, tensordict, tensordict_reset):
@@ -104,7 +104,7 @@ class LLMInputTransform(Transform):
         else:
             llm_input = ""
         tensordict_reset["observation"] = llm_input
-        print("reset", llm_input)
+        # print("reset", llm_input)
         return tensordict_reset
 
     def transform_observation_spec(self, observation_spec: Composite):
@@ -117,9 +117,8 @@ class LLMInputTransform(Transform):
 
 
 def run_player(input_queue, output_queue):
-    # Start the subprocess (./packed.sh)
     process = subprocess.Popen(
-        ["python", "../sunfish/sunfish.py"],
+        ["python", "/data/users/mg1998/sunfish/sunfish.py"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -430,11 +429,6 @@ def play(env, data_llm_policy, actor_llm_policy, tokenizer):
         return tensor1_padded, tensor2_padded
 
     for data in tqdm(collector):
-        breakpoint()
-        print(
-            "win rate",
-            data["next", "reward"].sum() / data["next", "done"].sum().clamp_min(1e-6),
-        )
         rb.empty()
         # FIXME: what is the right way to do this?
         data = data.densify(layout=torch.jagged)
