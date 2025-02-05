@@ -429,6 +429,7 @@ def play(env, data_llm_policy, actor_llm_policy, tokenizer):
         return tensor1_padded, tensor2_padded
 
     for data in tqdm(collector):
+        # FIXME: reward seems to be getting wrongly propagated (e.g. sunfish's win gets reflected as llm's win)
         rb.empty()
         # FIXME: what is the right way to do this?
         data = data.densify(layout=torch.jagged)
