@@ -32,7 +32,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: ${{ matrix.runner }}
-      timeout: 40
+      timeout: 60
       test-infra-ref: main
       script: |
         set -euxo pipefail
