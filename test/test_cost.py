@@ -209,29 +209,35 @@ class MARLEnv(EnvBase):
         self.obs_feat = obs_feat = (5,)
 
         self.full_observation_spec = Composite(
-            observation=Unbounded(batch + n_agents + obs_feat),
-            batch_size=batch,
+            agents=Composite(
+                observation=Unbounded(batch + n_agents + obs_feat),
+                shape=batch + n_agents,
+            ),
+            shape=batch,
         )
         self.full_done_spec = Composite(
             done=Unbounded(batch + (1,), dtype=torch.bool),
             terminated=Unbounded(batch + (1,), dtype=torch.bool),
             truncated=Unbounded(batch + (1,), dtype=torch.bool),
-            batch_size=batch,
+            shape=batch,
         )
 
-        self.act_feat_dirich = act_feat_dirich = (
-            10,
-            2,
-        )
+        self.act_feat_dirich = act_feat_dirich = (10, 2)
         self.act_feat_categ = act_feat_categ = (7,)
         self.full_action_spec = Composite(
-            dirich=Unbounded(batch + n_agents + act_feat_dirich),
-            categ=Unbounded(batch + n_agents + act_feat_categ),
-            batch_size=batch,
+            agents=Composite(
+                dirich=Unbounded(batch + n_agents + act_feat_dirich),
+                categ=Unbounded(batch + n_agents + act_feat_categ),
+                shape=batch + n_agents,
+            ),
+            shape=batch,
         )
 
         self.full_reward_spec = Composite(
-            reward=Unbounded(batch + n_agents + (1,)), batch_size=batch
+            agents=Composite(
+                reward=Unbounded(batch + n_agents + (1,)), shape=batch + n_agents
+            ),
+            shape=batch,
         )
 
     @classmethod
@@ -239,15 +245,18 @@ class MARLEnv(EnvBase):
         dist_cstr = functools.partial(
             CompositeDistribution,
             distribution_map={
-                "dirich": lambda concentration: torch.distributions.Independent(
+                (
+                    "agents",
+                    "dirich",
+                ): lambda concentration: torch.distributions.Independent(
                     torch.distributions.Dirichlet(concentration), 1
                 ),
-                "categ": torch.distributions.Categorical,
+                ("agents", "categ"): torch.distributions.Categorical,
             },
         )
         return ProbabilisticTensorDictModule(
             in_keys=["params"],
-            out_keys=["dirich", "categ"],
+            out_keys=[("agents", "dirich"), ("agents", "categ")],
             distribution_class=dist_cstr,
             return_log_prob=True,
         )
@@ -9309,8 +9318,13 @@ class TestPPO(LossModuleTestBase):
 
         def primer(td):
             params = TensorDict(
-                dirich=TensorDict(concentration=env.action_spec["dirich"].one()),
-                categ=TensorDict(logits=env.action_spec["categ"].one()),
+                agents=TensorDict(
+                    dirich=TensorDict(
+                        concentration=env.action_spec["agents", "dirich"].one()
+                    ),
+                    categ=TensorDict(logits=env.action_spec["agents", "categ"].one()),
+                    batch_size=env.action_spec["agents"].shape,
+                ),
                 batch_size=td.batch_size,
             )
             td.set("params", params)
@@ -9323,11 +9337,13 @@ class TestPPO(LossModuleTestBase):
         )
         output = policy(env.fake_tensordict())
         assert output.shape == env.batch_size
-        assert output["dirich_log_prob"].shape == env.batch_size + env.n_agents
-        assert output["categ_log_prob"].shape == env.batch_size + env.n_agents
+        assert (
+            output["agents", "dirich_log_prob"].shape == env.batch_size + env.n_agents
+        )
+        assert output["agents", "categ_log_prob"].shape == env.batch_size + env.n_agents
 
-        output["advantage"] = output["next", "reward"].clone()
-        output["value_target"] = output["next", "reward"].clone()
+        output["advantage"] = output["next", "agents", "reward"].clone()
+        output["value_target"] = output["next", "agents", "reward"].clone()
         critic = TensorDictModule(
             lambda obs: obs.new_zeros((*obs.shape[:-1], 1)),
             in_keys=list(env.full_observation_spec.keys(True, True)),
