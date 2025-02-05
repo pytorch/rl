@@ -440,6 +440,11 @@ class SyncDataCollector(DataCollectorBase):
         cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped
             in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
             If a dictionary of kwargs is passed, it will be used to wrap the policy.
+        no_cuda_sync (bool): if ``True``, explicit CUDA synchronizations calls will be bypassed.
+            For environments running directly on CUDA (`IsaacLab <https://github.com/isaac-sim/IsaacLab/>`_
+            or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
+            crashes.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -532,6 +537,7 @@ class SyncDataCollector(DataCollectorBase):
         trust_policy: bool = None,
         compile_policy: bool | Dict[str, Any] | None = None,
         cudagraph_policy: bool | Dict[str, Any] | None = None,
+        no_cuda_sync: bool = False,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -625,6 +631,7 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self._sync_policy = _do_nothing
         self.device = device
+        self.no_cuda_sync = no_cuda_sync
         # Check if we need to cast things from device to device
         # If the policy has a None device and the env too, no need to cast (we don't know
         # and assume the user knows what she's doing).
@@ -1010,12 +1017,16 @@ class SyncDataCollector(DataCollectorBase):
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
-        if self.storing_device and self.storing_device.type == "cuda":
+        if (
+            not self.no_cuda_sync
+            and self.storing_device
+            and self.storing_device.type == "cuda"
+        ):
             stream = torch.cuda.Stream(self.storing_device, priority=-1)
             event = stream.record_event()
             streams = [stream]
             events = [event]
-        elif self.storing_device is None:
+        elif not self.no_cuda_sync and self.storing_device is None:
             streams = []
             events = []
             # this way of checking cuda is robust to lazy stacks with mismatching shapes
@@ -1166,10 +1177,17 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
-                            policy_input = self._shuttle.to(
-                                self.policy_device, non_blocking=True
+                            # This is unsafe if the shuttle is in pin_memory -- otherwise cuda will be happy with non_blocking
+                            non_blocking = (
+                                not self.no_cuda_sync
+                                or self.policy_device.type == "cuda"
                             )
-                            self._sync_policy()
+                            policy_input = self._shuttle.to(
+                                self.policy_device,
+                                non_blocking=non_blocking,
+                            )
+                            if not self.no_cuda_sync:
+                                self._sync_policy()
                         elif self.policy_device is None:
                             # we know the tensordict has a device otherwise we would not be here
                             # we can pass this, clear_device_ must have been called earlier
@@ -1191,8 +1209,14 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self._cast_to_env_device:
                     if self.env_device is not None:
-                        env_input = self._shuttle.to(self.env_device, non_blocking=True)
-                        self._sync_env()
+                        non_blocking = (
+                            not self.no_cuda_sync or self.env_device.type == "cuda"
+                        )
+                        env_input = self._shuttle.to(
+                            self.env_device, non_blocking=non_blocking
+                        )
+                        if not self.no_cuda_sync:
+                            self._sync_env()
                     elif self.env_device is None:
                         # we know the tensordict has a device otherwise we would not be here
                         # we can pass this, clear_device_ must have been called earlier
@@ -1216,10 +1240,16 @@ class SyncDataCollector(DataCollectorBase):
                         return
                 else:
                     if self.storing_device is not None:
-                        tensordicts.append(
-                            self._shuttle.to(self.storing_device, non_blocking=True)
+                        non_blocking = (
+                            not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
-                        self._sync_storage()
+                        tensordicts.append(
+                            self._shuttle.to(
+                                self.storing_device, non_blocking=non_blocking
+                            )
+                        )
+                        if not self.no_cuda_sync:
+                            self._sync_storage()
                     else:
                         tensordicts.append(self._shuttle)
 
@@ -1558,6 +1588,11 @@ class _MultiDataCollector(DataCollectorBase):
         cudagraph_policy (bool or Dict[str, Any], optional): if ``True``, the policy will be wrapped
             in :class:`~tensordict.nn.CudaGraphModule` with default kwargs.
             If a dictionary of kwargs is passed, it will be used to wrap the policy.
+        no_cuda_sync (bool): if ``True``, explicit CUDA synchronizations calls will be bypassed.
+            For environments running directly on CUDA (`IsaacLab <https://github.com/isaac-sim/IsaacLab/>`_
+            or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
+            crashes.
+            Defaults to ``False``.
 
     """
 
@@ -1597,6 +1632,7 @@ class _MultiDataCollector(DataCollectorBase):
         trust_policy: bool = None,
         compile_policy: bool | Dict[str, Any] | None = None,
         cudagraph_policy: bool | Dict[str, Any] | None = None,
+        no_cuda_sync: bool = False,
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
@@ -1636,6 +1672,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.env_device = env_devices
 
         del storing_device, env_device, policy_device, device
+        self.no_cuda_sync = no_cuda_sync
 
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
@@ -1909,6 +1946,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "cudagraph_policy": self.cudagraphed_policy_kwargs
                     if self.cudagraphed_policy
                     else False,
+                    "no_cuda_sync": self.no_cuda_sync,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2914,6 +2952,7 @@ def _main_async_collector(
     trust_policy: bool = False,
     compile_policy: bool = False,
     cudagraph_policy: bool = False,
+    no_cuda_sync: bool = False,
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
@@ -2943,6 +2982,7 @@ def _main_async_collector(
         trust_policy=trust_policy,
         compile_policy=compile_policy,
         cudagraph_policy=cudagraph_policy,
+        no_cuda_sync=no_cuda_sync,
     )
     use_buffers = inner_collector._use_buffers
     if verbose:
