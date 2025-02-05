@@ -67,7 +67,7 @@ VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DE
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
 if RL_WARNINGS:
-    warnings.simplefilter("once", DeprecationWarning)
+    warnings.filterwarnings("once", category=DeprecationWarning, module="torchrl")
 
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
 
