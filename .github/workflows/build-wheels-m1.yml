@@ -34,7 +34,7 @@ jobs:
           - repository: pytorch/rl
             smoke-test-script: test/smoke_test.py
             package-name: torchrl
-    name: pytorch/rl
+    name: ${{ matrix.repository }}
     uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@main
     with:
       repository: ${{ matrix.repository }}
