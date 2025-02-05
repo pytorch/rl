@@ -1117,7 +1117,7 @@ in the relevant functions:
     >>> print(env2._env.env.env)
     <gym.envs.classic_control.pendulum.PendulumEnv at 0x1629916a0>
 
-We can see that the two libraries modify the value returned by :func:`~.gym.gym_backend()`
+We can see that the two libraries modify the value returned by :func:`~torchrl.envs.gym.gym_backend()`
 which can be further used to indicate which library needs to be used for
 the current computation. :class:`~.gym.set_gym_backend` is also a decorator:
 we can use it to tell to a specific function what gym backend needs to be used
@@ -1188,3 +1188,4 @@ the following function will return ``1`` when queried:
     VmasWrapper
     gym_backend
     set_gym_backend
+    register_gym_spec_conversion
