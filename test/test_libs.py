@@ -79,6 +79,7 @@ from torchrl.data import (
     Composite,
     MultiCategorical,
     MultiOneHot,
+    NonTensor,
     OneHot,
     ReplayBuffer,
     ReplayBufferEnsemble,
@@ -119,6 +120,7 @@ from torchrl.envs.libs.gym import (
     GymWrapper,
     MOGymEnv,
     MOGymWrapper,
+    register_gym_spec_conversion,
     set_gym_backend,
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
@@ -336,6 +338,39 @@ class TestGym:
             assert spec0 == spec1, (key0, key1, spec0, spec1)
         assert spec == recon
         assert recon.shape == spec.shape
+
+    def test_gym_new_spec_reg(self):
+        Space = gym_backend("spaces").Space
+
+        class MySpaceParent(Space):
+            ...
+
+        s_parent = MySpaceParent()
+
+        class MySpaceChild(MySpaceParent):
+            ...
+
+        # We intentionally register first the child then the parent
+        @register_gym_spec_conversion(MySpaceChild)
+        def convert_myspace_child(spec, **kwargs):
+            return NonTensor((), example_data="child")
+
+        @register_gym_spec_conversion(MySpaceParent)
+        def convert_myspace_parent(spec, **kwargs):
+            return NonTensor((), example_data="parent")
+
+        s_child = MySpaceChild()
+        assert _gym_to_torchrl_spec_transform(s_parent).example_data == "parent"
+        assert _gym_to_torchrl_spec_transform(s_child).example_data == "child"
+
+        class NoConversionSpace(Space):
+            ...
+
+        s_no_conv = NoConversionSpace()
+        with pytest.raises(
+            KeyError, match="No conversion tool could be found with the gym space"
+        ):
+            _gym_to_torchrl_spec_transform(s_no_conv)
 
     @pytest.mark.parametrize("order", ["tuple_seq"])
     @implement_for("gym")

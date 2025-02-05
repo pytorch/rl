@@ -25,7 +25,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -59,7 +59,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.11"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -96,7 +96,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -131,7 +131,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -166,7 +166,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -200,7 +200,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -235,7 +235,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -256,7 +256,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.1"
+        export CU_VERSION="12.4"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -277,7 +277,7 @@ jobs:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.1"
+      gpu-arch-version: "12.4"
       docker-image: "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
       timeout: 120
       script: |
@@ -291,7 +291,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.11"
-        export CU_VERSION="12.1"
+        export CU_VERSION="12.4"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -309,7 +309,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -330,7 +330,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.1"
+        export CU_VERSION="12.4"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -347,7 +347,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -368,7 +368,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.1"
+        export CU_VERSION="12.4"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -385,7 +385,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10.12"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -406,7 +406,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10.12"
-        export CU_VERSION="12.1"
+        export CU_VERSION="12.4"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -423,7 +423,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -458,7 +458,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -510,7 +510,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.1"
+        export CU_VERSION="12.4"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -528,7 +528,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -562,7 +562,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -597,7 +597,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -633,7 +633,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -654,7 +654,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.1"
+        export CU_VERSION="12.4"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -672,7 +672,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -707,7 +707,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -728,7 +728,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.1"
+        export CU_VERSION="12.4"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
