@@ -46,6 +46,12 @@ conda deactivate && conda activate ./env
 
 
 # this workflow only tests the libs
+mkdir data
+git lfs update
+
+python -m habitat_sim.utils.datasets_download --uids rearrange_pick_dataset_v0 rearrange_task_assets --data-path ./data --no-prune
+#python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets --data-path ./data --no-prune
+
 python -c "import habitat;import habitat.gym"
 python -c """from torchrl.envs.libs.habitat import HabitatEnv
 env = HabitatEnv('HabitatRenderPick-v0')

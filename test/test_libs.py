@@ -1678,6 +1678,14 @@ class TestHabitat:
         _ = env.rollout(3)
         check_env_specs(env)
 
+    def test_from_config(self):
+        import habitat
+
+        cfg = habitat.get_config("benchmark/nav/objectnav/objectnav_hssd-hab.yaml")
+        env = HabitatEnv.from_config(cfg)
+        check_env_specs(env)
+        assert isinstance(env, HabitatEnv)
+
     @pytest.mark.parametrize("from_pixels", [True, False])
     def test_habitat_render(self, envname, from_pixels):
         env = HabitatEnv(envname, from_pixels=from_pixels)

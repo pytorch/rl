@@ -72,6 +72,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 conda install habitat-sim withbullet headless -c conda-forge -c aihabitat -y
 git clone https://github.com/facebookresearch/habitat-lab.git
 cd habitat-lab
-pip3 install -e habitat-lab
-pip3 install -e habitat-baselines  # install habitat_baselines
+echo "numpy<2.0" > constraints.txt
+pip3 install -e habitat-lab --constraint constraints.txt
+pip3 install -e habitat-baselines --constraint constraints.txt # install habitat_baselines
 conda run python -m pip install "gym[atari,accept-rom-license]" pygame

@@ -5,14 +5,8 @@ set -v
 
 
 apt-get update && apt-get upgrade -y
-apt-get install -y vim git wget
+apt-get install -y g++ gcc vim git wget libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libglvnd0 libgl1 libglx0 libegl1 libgles2
 
-apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
-apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
-
-apt-get install -y g++ gcc
-#apt-get upgrade -y libstdc++6
-#apt-get install -y libgcc
 apt-get dist-upgrade -y
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
