@@ -22,7 +22,7 @@ from torch.distributions import Categorical
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import NonTensor
 from torchrl.data.replay_buffers.samplers import SliceSamplerWithoutReplacement
-from torchrl.data.tensor_specs import Composite
+from torchrl.data.tensor_specs import Box, Composite, TensorSpec
 from torchrl.envs import ChessEnv
 from torchrl.envs.transforms import (
     ConditionalPolicySwitch,
@@ -73,6 +73,41 @@ class SanHistory(Transform):
 
     def _reset(self, tensordict, tensordict_reset):
         return tensordict_reset
+
+
+class Score(Transform):
+    def __init__(self, input_queue, output_queue):
+        super().__init__()
+        self.input_queue = input_queue
+        self.output_queue = output_queue
+
+    def _step(self, tensordict, next_tensordict):
+        fen = next_tensordict["fen"]
+        self.input_queue.put(fen)
+        _, score = self.output_queue.get()
+        next_tensordict["score"] = torch.tensor(
+            score, device="cuda:7", dtype=torch.bfloat16
+        )
+        return next_tensordict
+
+    def _reset(self, tensordict, tensordict_reset):
+        fen = tensordict_reset["fen"]
+        self.input_queue.put(fen)
+        _, score = self.output_queue.get()
+        tensordict_reset["score"] = torch.tensor(
+            score, device="cuda:7", dtype=torch.bfloat16
+        )
+        return tensordict_reset
+
+    def transform_observation_spec(self, observation_spec: Composite):
+        if not isinstance(observation_spec, Composite):
+            raise ValueError(
+                f"observation_spec was expected to be of type Composite. Got {type(observation_spec)} instead."
+            )
+        observation_spec["observation"] = TensorSpec(
+            (), Box(), dtype=torch.bfloat16, device="cuda:7"
+        )
+        return observation_spec
 
 
 class LLMInputTransform(Transform):
@@ -159,9 +194,14 @@ def run_player(input_queue, output_queue):
 
                 output = process.stdout.readline()
                 if output:
-                    # print(f"Output: {output.strip()}")
+                    print(f"Output: {output.strip()}")
                     move = re.search(r"bestmove (.*)", output.strip()).group(1)
-                    output_queue.put(move)
+
+                    output = process.stdout.readline()
+                    print(f"Output scores: {output.strip()}")
+                    score = re.search(r"score (.*)", output.strip()).group(1)
+
+                    output_queue.put((move, int(score)))
 
             except queue.Empty:
                 continue
@@ -179,7 +219,7 @@ def run_player(input_queue, output_queue):
 def setup_env(input_queue, output_queue, tokenizer):
     def policy_sunfish(td):
         input_queue.put(td["fen"])
-        move = output_queue.get()
+        move, _ = output_queue.get()
         san = env.board.san(chess.Move.from_uci(move))
         san_idx = env.san_moves.index(san)
         td["action"] = torch.tensor(san_idx)
@@ -205,6 +245,7 @@ def setup_env(input_queue, output_queue, tokenizer):
             tokenizer=tokenizer,
         )
     )
+    env.append_transform(Score(input_queue, output_queue))
     env.reset()
     return env
 
@@ -405,16 +446,28 @@ def setup_llm_policy():
         return_composite=True,
     )
 
-    class CriticHead(torch.nn.Module):
+    # class CriticHead(torch.nn.Module):
+    #     def __init__(self):
+    #         super().__init__()
+    #         self.m = torch.nn.Linear(3584, 1, dtype=torch.bfloat16)
+
+    #     def forward(self, hidden):
+    #         return self.m(hidden).squeeze(-1).sum(-1, keepdim=True)
+
+    # critic_llm_policy = Seq(
+    #     Mod(CriticHead(), in_keys=["hidden"], out_keys=["state_value"]),
+    # )
+
+    class CriticLLMPolicy(torch.nn.Module):
         def __init__(self):
             super().__init__()
-            self.m = torch.nn.Linear(3584, 1, dtype=torch.bfloat16)
 
-        def forward(self, hidden):
-            return self.m(hidden).squeeze(-1).sum(-1, keepdim=True)
+        def forward(self, score):
+            # breakpoint()
+            return score.unsqueeze(-1)
 
     critic_llm_policy = Seq(
-        Mod(CriticHead(), in_keys=["hidden"], out_keys=["state_value"]),
+        Mod(CriticLLMPolicy(), in_keys=["score"], out_keys=["state_value"]),
     )
 
     return actor_llm_policy, data_llm_policy, critic_llm_policy, tokenizer
@@ -425,11 +478,20 @@ def play(env, data_llm_policy, actor_llm_policy, tokenizer):
 
     rb = ReplayBuffer(
         storage=LazyStackStorage(100),
-        batch_size=8,
+        batch_size=48,
         sampler=SliceSamplerWithoutReplacement(slice_len=8, end_key=("next", "done")),
     )
 
+    # def breakpointy(td):
+    #     breakpoint()
+    #     return td
+
+    # rb.append_transform(breakpointy)
+
+    # Temporarily patched fbcode/pytorch/tensordict/tensordict/_lazy.py?lines=1502
     rb.append_transform(lambda td: td.densify(layout=torch.jagged))
+
+    # rb.append_transform(breakpointy)
 
     # obs_tokens in layout=torch.jagged errors with Qwen
     # File "/home/mg1998/.conda/envs/rl/lib/python3.10/site-packages/transformers/models/qwen2/modeling_qwen2.py", line 859, in forward
@@ -486,6 +548,7 @@ def play(env, data_llm_policy, actor_llm_policy, tokenizer):
 
             data = gae(data)
             loss = loss_module(data)
+            breakpoint()
             loss.sum(reduce=True).backward()
             torch.nn.utils.clip_grad_norm_(loss_module.parameters(), 0.5)
             optim.step()
