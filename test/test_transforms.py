@@ -16,6 +16,8 @@ from copy import copy
 from functools import partial
 from sys import platform
 
+import numpy as np
+
 import pytest
 
 import tensordict.tensordict
@@ -2288,7 +2290,7 @@ class TestHash(TransformBase):
     def test_transform_no_env(self, datatype):
         if datatype == "tensor":
             obs = torch.tensor(10)
-            hash_fn = hash
+            hash_fn = lambda x: torch.tensor(hash(x))
         elif datatype == "str":
             obs = "abcdefg"
             hash_fn = Hash.reproducible_hash
@@ -2302,6 +2304,7 @@ class TestHash(TransformBase):
             )
 
             def fn0(x):
+                # return tuple([tuple(Hash.reproducible_hash(x_).tolist()) for x_ in x])
                 return torch.stack([Hash.reproducible_hash(x_) for x_ in x])
 
             hash_fn = fn0
@@ -2334,7 +2337,7 @@ class TestHash(TransformBase):
             t = Hash(
                 in_keys=["observation"],
                 out_keys=["hashing"],
-                hash_fn=hash,
+                hash_fn=lambda x: torch.tensor(hash(x)),
             )
             base_env = CountingEnv()
         elif datatype == "str":
@@ -2353,7 +2356,7 @@ class TestHash(TransformBase):
                 t = Hash(
                     in_keys=["observation"],
                     out_keys=["hashing"],
-                    hash_fn=hash,
+                    hash_fn=lambda x: torch.tensor(hash(x)),
                 )
                 base_env = CountingEnv()
 
@@ -2376,7 +2379,7 @@ class TestHash(TransformBase):
                 t = Hash(
                     in_keys=["observation"],
                     out_keys=["hashing"],
-                    hash_fn=hash,
+                    hash_fn=lambda x: torch.tensor(hash(x)),
                 )
                 base_env = CountingEnv()
             elif datatype == "str":
@@ -2402,7 +2405,7 @@ class TestHash(TransformBase):
             t = Hash(
                 in_keys=["observation"],
                 out_keys=["hashing"],
-                hash_fn=lambda x: [hash(x[0]), hash(x[1])],
+                hash_fn=lambda x: torch.tensor([hash(x[0]), hash(x[1])]),
             )
             base_env = CountingEnv
         elif datatype == "str":
@@ -2422,7 +2425,7 @@ class TestHash(TransformBase):
             t = Hash(
                 in_keys=["observation"],
                 out_keys=["hashing"],
-                hash_fn=lambda x: [hash(x[0]), hash(x[1])],
+                hash_fn=lambda x: torch.tensor([hash(x[0]), hash(x[1])]),
             )
             base_env = CountingEnv
         elif datatype == "str":
@@ -2457,7 +2460,7 @@ class TestHash(TransformBase):
         t = Hash(
             in_keys=["observation"],
             out_keys=["hashing"],
-            hash_fn=hash,
+            hash_fn=lambda x: torch.tensor(hash(x)),
         )
         t = Compose(t)
         td_hashed = t(td)
@@ -2469,7 +2472,7 @@ class TestHash(TransformBase):
         t = Hash(
             in_keys=[("next", "observation"), ("observation",)],
             out_keys=[("next", "hashing"), ("hashing",)],
-            hash_fn=hash,
+            hash_fn=lambda x: torch.tensor(hash(x)),
         )
         model = nn.Sequential(t, nn.Identity())
         td = TensorDict(
@@ -2486,7 +2489,7 @@ class TestHash(TransformBase):
         t = Hash(
             in_keys=["observation"],
             out_keys=["hashing"],
-            hash_fn=hash,
+            hash_fn=lambda x: torch.tensor(hash(x)),
         )
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED()), t)
         assert env.observation_spec["hashing"]
@@ -2499,7 +2502,7 @@ class TestHash(TransformBase):
         t = Hash(
             in_keys=[("next", "observation"), ("observation",)],
             out_keys=[("next", "hashing"), ("hashing",)],
-            hash_fn=lambda x: [hash(x[0]), hash(x[1])],
+            hash_fn=lambda x: torch.tensor([hash(x[0]), hash(x[1])]),
         )
         rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
@@ -2519,18 +2522,73 @@ class TestHash(TransformBase):
         assert "observation" in td.keys()
         assert ("next", "observation") in td.keys(True)
 
-    def test_transform_inverse(self):
-        return
-        env = CountingEnv()
-        with pytest.raises(TypeError):
-            env = env.append_transform(
-                Hash(
-                    in_keys=[],
-                    out_keys=[],
-                    in_keys_inv=["action"],
-                    out_keys_inv=["action_hash"],
-                )
-            )
+    @pytest.mark.parametrize("repertoire_gen", [lambda: None, lambda: {}])
+    def test_transform_inverse(self, repertoire_gen):
+        repertoire = repertoire_gen()
+        t = Hash(
+            in_keys=["observation"],
+            out_keys=["hashing"],
+            in_keys_inv=["observation"],
+            out_keys_inv=["hashing"],
+            repertoire=repertoire,
+        )
+        inputs = [
+            TensorDict({"observation": "test string"}),
+            TensorDict({"observation": torch.randn(10)}),
+            TensorDict({"observation": "another string"}),
+            TensorDict({"observation": torch.randn(3, 2, 1, 8)}),
+        ]
+        outputs = [t(input.clone()).exclude("observation") for input in inputs]
+
+        # Run the inputs through again, just to make sure that using the same
+        # inputs doesn't overwrite the repertoire.
+        for input in inputs:
+            t(input.clone())
+
+        assert len(t._repertoire) == 4
+
+        inv_inputs = [t.inv(output.clone()) for output in outputs]
+
+        for input, inv_input in zip(inputs, inv_inputs):
+            if torch.is_tensor(input["observation"]):
+                assert (input["observation"] == inv_input["observation"]).all()
+            else:
+                assert input["observation"] == inv_input["observation"]
+
+    @pytest.mark.parametrize("repertoire_gen", [lambda: None, lambda: {}])
+    def test_repertoire(self, repertoire_gen):
+        repertoire = repertoire_gen()
+        t = Hash(in_keys=["observation"], out_keys=["hashing"], repertoire=repertoire)
+        inputs = [
+            "string",
+            ["a", "b"],
+            torch.randn(3, 4, 1),
+            torch.randn(()),
+            torch.randn(0),
+            1234,
+            [1, 2, 3, 4],
+        ]
+        outputs = []
+
+        for input in inputs:
+            td = TensorDict({"observation": input})
+            outputs.append(t(td.clone()).clone()["hashing"])
+
+        for output, input in zip(outputs, inputs):
+            if repertoire is not None:
+                stored_input = repertoire[t.hash_to_repertoire_key(output)]
+                assert stored_input is t.get_input_from_hash(output)
+
+                if torch.is_tensor(stored_input):
+                    assert (stored_input == torch.as_tensor(input)).all()
+                elif isinstance(stored_input, np.ndarray):
+                    assert (stored_input == np.asarray(input)).all()
+
+                else:
+                    assert stored_input == input
+            else:
+                with pytest.raises(RuntimeError):
+                    stored_input = t.get_input_from_hash(output)
 
 
 @pytest.mark.skipif(
