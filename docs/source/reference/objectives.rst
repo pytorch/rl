@@ -230,31 +230,44 @@ PPO
 Using PPO with multi-head action policies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. note:: The main tools to consider when building multi-head policies are: :class:`~tensordict.nn.CompositeDistribution`,
+  :class:`~tensordict.nn.ProbabilisticTensorDictModule` and :class:`~tensordict.nn.ProbabilisticTensorDictSequential`.
+  When dealing with these, it is recommended to call `tensordict.nn.set_composite_lp_aggregate(False).set()` at the
+  beginning of the script to instruct :class:`~tensordict.nn.CompositeDistribution` that log-probabilities should not
+  be aggregated but rather written as leaves in the tensordict.
+
 In some cases, we have a single advantage value but more than one action undertaken. Each action has its own
 log-probability, and shape. For instance, it can be that the action space is structured as follows:
 
     >>> action_td = TensorDict(
-    ...     action0=Tensor(batch, n_agents, f0),
-    ...     action1=Tensor(batch, n_agents, f1, f2),
+    ...     agents=TensorDict(
+    ...         action0=Tensor(batch, n_agents, f0),
+    ...         action1=Tensor(batch, n_agents, f1, f2),
+    ...         batch_size=torch.Size((batch, n_agents))
+    ...     ),
     ...     batch_size=torch.Size((batch,))
     ... )
 
 where `f0`, `f1` and `f2` are some arbitrary integers.
 
-Note that, in TorchRL, the tensordict has the shape of the environment (if the environment is batch-locked, otherwise it
+Note that, in TorchRL, the root tensordict has the shape of the environment (if the environment is batch-locked, otherwise it
 has the shape of the number of batched environments being run). If the tensordict is sampled from the buffer, it will
 also have the shape of the replay buffer `batch_size`. The `n_agent` dimension, although common to each action, does not
-in general appear in the tensordict's batch-size.
+in general appear in the root tensordict's batch-size (although it appears in the sub-tensordict containing the
+agent-specific data according to the :ref:`MARL API <MARL-environment-API>`).
 
 There is a legitimate reason why this is the case: the number of agent may condition some but not all the specs of the
 environment. For example, some environments have a shared done state among all agents. A more complete tensordict
 would in this case look like
 
     >>> action_td = TensorDict(
-    ...     action0=Tensor(batch, n_agents, f0),
-    ...     action1=Tensor(batch, n_agents, f1, f2),
+    ...     agents=TensorDict(
+    ...         action0=Tensor(batch, n_agents, f0),
+    ...         action1=Tensor(batch, n_agents, f1, f2),
+    ...         observation=Tensor(batch, n_agents, f3),
+    ...         batch_size=torch.Size((batch, n_agents))
+    ...     ),
     ...     done=Tensor(batch, 1),
-    ...     observation=Tensor(batch, n_agents, f3),
     ...     [...] # etc
     ...     batch_size=torch.Size((batch,))
     ... )
@@ -262,25 +275,25 @@ would in this case look like
 Notice that `done` states and `reward` are usually flanked by a rightmost singleton dimension. See this :ref:`part of the doc <reward_done_singleton>`
 to learn more about this restriction.
 
-The main tools to consider when building multi-head policies are: :class:`~tensordict.nn.CompositeDistribution`,
-:class:`~tensordict.nn.ProbabilisticTensorDictModule` and :class:`~tensordict.nn.ProbabilisticTensorDictSequential`.
-When dealing with these, it is recommended to call `tensordict.nn.set_composite_lp_aggregate(False).set()` at the
-beginning of the script to instruct :class:`~tensordict.nn.CompositeDistribution` that log-probabilities should not
-be aggregated but rather written as leaves in the tensordict.
-
 The log-probability of our actions given their respective distributions may look like anything like
 
     >>> action_td = TensorDict(
-    ...     action0_log_prob=Tensor(batch, n_agents),
-    ...     action1_log_prob=Tensor(batch, n_agents, f1),
+    ...     agents=TensorDict(
+    ...         action0_log_prob=Tensor(batch, n_agents),
+    ...         action1_log_prob=Tensor(batch, n_agents, f1),
+    ...         batch_size=torch.Size((batch, n_agents))
+    ...     ),
     ...     batch_size=torch.Size((batch,))
     ... )
 
 or
 
     >>> action_td = TensorDict(
-    ...     action0_log_prob=Tensor(batch, n_agents),
-    ...     action1_log_prob=Tensor(batch, n_agents),
+    ...     agents=TensorDict(
+    ...         action0_log_prob=Tensor(batch, n_agents),
+    ...         action1_log_prob=Tensor(batch, n_agents),
+    ...         batch_size=torch.Size((batch, n_agents))
+    ...     ),
     ...     batch_size=torch.Size((batch,))
     ... )
 
@@ -336,7 +349,7 @@ Dreamer
     DreamerValueLoss
 
 Multi-agent objectives
------------------------
+----------------------
 
 .. currentmodule:: torchrl.objectives.multiagent
 

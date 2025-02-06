@@ -26,11 +26,11 @@ fi
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with cu121"
+printf "Installing PyTorch with cu124"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
 else
-    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu121 -U
+    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu124 -U
 fi
 
 # smoke test

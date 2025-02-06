@@ -3574,7 +3574,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         observation_spec = self.observation_spec
         action_spec = self.input_spec["full_action_spec"]
         # instantiates reward_spec if needed
-        _ = self.reward_spec
+        _ = self.full_reward_spec
         reward_spec = self.output_spec["full_reward_spec"]
         full_done_spec = self.output_spec["full_done_spec"]
 
