@@ -8,6 +8,8 @@ import time
 import chess
 
 import torch
+
+import torch.nn.functional as F
 from tensordict.nn import (
     ProbabilisticTensorDictModule as Prob,
     ProbabilisticTensorDictSequential as ProbSeq,
@@ -36,12 +38,23 @@ from tqdm import tqdm
 from transformers import pipeline
 
 
-def random_policy(td):
-    legal_moves = env.get_legal_moves()
-    move = random.choice(legal_moves)
-    san_idx = env.san_moves.index(move)
-    td["action"] = torch.tensor(san_idx)
-    return td
+def pad_tensors_to_same_last_dim(tensor1, tensor2, pad_token):
+    size1 = tensor1.shape
+    size2 = tensor2.shape
+
+    if size1[-1] < size2[-1]:
+        pad1 = size2[-1] - size1[-1]
+        tensor1_padded = F.pad(tensor1, (0, pad1), "constant", pad_token)
+        tensor2_padded = tensor2
+    elif size1[-1] > size2[-1]:
+        pad2 = size1[-1] - size2[-1]
+        tensor2_padded = F.pad(tensor2, (0, pad2), "constant", pad_token)
+        tensor1_padded = tensor1
+    else:
+        tensor1_padded = tensor1
+        tensor2_padded = tensor2
+
+    return tensor1_padded, tensor2_padded
 
 
 class SanHistory(Transform):
@@ -200,7 +213,7 @@ def setup_llm_policy():
 
     from transformers import pipeline
 
-    device = "cuda:1"
+    device = "cuda:7"
     torch.set_default_device(device)
 
     # model_id = "meta-llama/Llama-3.1-8B-Instruct"
@@ -214,7 +227,8 @@ def setup_llm_policy():
     )
 
     tokenizer = pipeline.tokenizer
-    llm = pipeline.model.eval().requires_grad_(False)
+    llm = pipeline.model
+    llm.config.pad_token_id = tokenizer.pad_token_id
 
     class LLMWrapper(torch.nn.Module):
         def __init__(self, llm, tokenizer, mode: str = "data"):
@@ -224,17 +238,34 @@ def setup_llm_policy():
             assert mode in ["data", "policy"]
             self.mode = mode
 
-        def forward(self, tokenized_observation):
+        def forward(self, tokenized_observation, tokenized_observation_lengths=None):
             if len(tokenized_observation.shape) == 1:
                 tokenized_observation = tokenized_observation.unsqueeze(0)
             max_new_tokens = 7
             exclamation_mark = self.tokenizer.encode("!", return_tensors="pt")
 
             if self.mode == "policy":
+                assert tokenized_observation_lengths is not None
                 input_length = tokenized_observation.shape[1]
-                for i in range(max_new_tokens):
+                attention_mask = torch.ones_like(tokenized_observation)
+                indices = (
+                    torch.arange(input_length)
+                    .unsqueeze(0)
+                    .expand(tokenized_observation.shape[0], -1)
+                )  # Shape [B, max_seq_len]
+
+                attention_mask[
+                    indices >= tokenized_observation_lengths.unsqueeze(1)
+                ] = 0
+                input_ids = tokenized_observation
+                past_key_values, hidden_states, all_logits = None, None, None
+                for _ in range(max_new_tokens):
                     output = self.llm(
-                        input_ids=tokenized_observation, output_hidden_states=True
+                        input_ids=input_ids,
+                        output_hidden_states=True,
+                        attention_mask=attention_mask,
+                        use_cache=True,
+                        past_key_values=past_key_values,
                     )
                     logits = output.logits[
                         :, -1, :
@@ -248,10 +279,34 @@ def setup_llm_policy():
                     tokenized_observation = torch.cat(
                         (tokenized_observation, next_token), dim=1
                     )
-                log_prob = output.logits[:, input_length - 1 :, :]
-                hidden = output.hidden_states[-1][:, input_length - 1, :]
-                return log_prob, hidden
+                    input_ids = next_token
+                    past_key_values = output.past_key_values
+                    attention_mask = torch.ones_like(input_ids)
+                    if hidden_states is None:
+                        hidden_states = output.hidden_states[-1][:, -1, :].unsqueeze(1)
+                        all_logits = output.logits[:, -1, :].unsqueeze(1)
+                    else:
+                        hidden_states = torch.cat(
+                            (
+                                hidden_states,
+                                output.hidden_states[-1][:, -1, :].unsqueeze(1),
+                            ),
+                            dim=1,
+                        )
+                        all_logits = torch.cat(
+                            (all_logits, output.logits[:, -1, :].unsqueeze(1)), dim=1
+                        )  # [B, len(tokenized_observation) + 1, vocab_size] -> [B, vocab_size]
+
+                print(
+                    [
+                        tokenizer.decode(tokenized_observation[i][-7:])
+                        for i in range(len(tokenized_observation))
+                    ]
+                )
+                # log_prob = all_logits.softmax(dim=-1)
+                return all_logits, hidden_states
             else:
+                # TODO: A next step could be to batch the data generation somehow
                 while True:
                     generated_tokens = tokenized_observation
                     input_length = generated_tokens.shape[1]
@@ -275,6 +330,8 @@ def setup_llm_policy():
                         output_tokens.squeeze(), skip_special_tokens=True
                     ).strip()
 
+                    print(tokenizer.decode(output_tokens))
+
                     try:
                         # print(decoded_output)
                         chosen_move = re.search(
@@ -289,12 +346,14 @@ def setup_llm_policy():
 
                 # FIXME: Perhaps san_idx can be a transform
                 san_idx = env.san_moves.index(chosen_move)
-                # FIXME: might need to do softmax on logits
+                output_token_logits = output.logits[:, input_length - 1 :, :]
+                # output_token_log_probs = output_token_logits.softmax(dim=-1)
+                # want to get [0, 0, index[0, 0, 0]], [0, 1, index[0, 1, 0]], ...
                 log_prob = torch.gather(
-                    output.logits[:, input_length:, :],
+                    output_token_logits,
                     -1,
-                    output_tokens.unsqueeze(0).unsqueeze(0),
-                )
+                    output_tokens.unsqueeze(0).unsqueeze(-1),
+                ).squeeze()
 
                 # pad output tokens if it was less than max_new_tokens
                 if output_tokens.shape[0] < max_new_tokens:
@@ -318,7 +377,13 @@ def setup_llm_policy():
             in_keys=["obs_tokens"],
             out_keys=["action", "tokenized_action", "logits", "hidden"],
         ),
-        lambda td: td.set("sample_log_prob", td.get("logits").sum(td.ndim - 1)),
+        lambda td: td.set(
+            "sample_log_prob",
+            # https://github.com/pytorch/pytorch/blob/v2.6.0/torch/distributions/categorical.py#L66C43-L66C74
+            (td.get("logits") - td.get("logits").logsumexp(dim=-1, keepdim=True)).sum(
+                -1
+            ),
+        ),
         remove_logits,
     )
 
@@ -332,11 +397,11 @@ def setup_llm_policy():
     actor_llm_policy = ProbSeq(
         Mod(
             LLMWrapper(llm, tokenizer, mode="policy"),
-            in_keys=["obs_tokens"],
+            in_keys=["obs_tokens", "obs_token_lengths"],
             out_keys=["logits", "hidden"],
         ),
         prob_module,
-        # using return_compsite=True so aggregate_probabilities is set
+        # using return_composite=True so aggregate_probabilities is set
         return_composite=True,
     )
 
@@ -346,7 +411,7 @@ def setup_llm_policy():
             self.m = torch.nn.Linear(3584, 1, dtype=torch.bfloat16)
 
         def forward(self, hidden):
-            return self.m(hidden).squeeze(-1)
+            return self.m(hidden).squeeze(-1).sum(-1, keepdim=True)
 
     critic_llm_policy = Seq(
         Mod(CriticHead(), in_keys=["hidden"], out_keys=["state_value"]),
@@ -360,9 +425,12 @@ def play(env, data_llm_policy, actor_llm_policy, tokenizer):
 
     rb = ReplayBuffer(
         storage=LazyStackStorage(100),
-        batch_size=32,
+        batch_size=8,
         sampler=SliceSamplerWithoutReplacement(slice_len=8, end_key=("next", "done")),
     )
+
+    rb.append_transform(lambda td: td.densify(layout=torch.jagged))
+
     # obs_tokens in layout=torch.jagged errors with Qwen
     # File "/home/mg1998/.conda/envs/rl/lib/python3.10/site-packages/transformers/models/qwen2/modeling_qwen2.py", line 859, in forward
     # cache_position = torch.arange(
@@ -370,28 +438,24 @@ def play(env, data_llm_policy, actor_llm_policy, tokenizer):
     #         )
     # AttributeError: 'ConstantIntNode' object has no attribute 'add'
     # After attempting to fix this there were other issues like NJT can't unsqueeze dim=0
-    rb.append_transform(lambda td: td.densify(layout=torch.jagged))
-    rb.append_transform(
-        lambda td: td.set(
-            "obs_tokens", td.get("obs_tokens").to_padded_tensor(tokenizer.pad_token_id)
+    def obs_token_transform(td):
+        obs_token_lengths = td["obs_tokens"].offsets().diff()
+        next_obs_token_lengths = td["next", "obs_tokens"].offsets().diff()
+        obs_token = td["obs_tokens"].to_padded_tensor(tokenizer.pad_token_id)
+        next_obs_token = td["next", "obs_tokens"].to_padded_tensor(
+            tokenizer.pad_token_id
         )
-    )
-
-    def foo(td):
-        td["next"].set(
-            "obs_tokens",
-            td["next", "obs_tokens"].to_padded_tensor(tokenizer.pad_token_id),
+        # necessary because of https://github.com/pytorch/rl/blob/4c06ce2b81aa8871ac9e41478668843c5d48a39c/torchrl/objectives/value/advantages.py#L472-L477
+        obs_token, next_obs_token = pad_tensors_to_same_last_dim(
+            obs_token, next_obs_token, tokenizer.pad_token_id
         )
+        td["obs_tokens"] = obs_token
+        td["next", "obs_tokens"] = next_obs_token
+        td["obs_token_lengths"] = obs_token_lengths
+        td["next", "obs_token_lengths"] = next_obs_token_lengths
         return td
 
-    rb.append_transform(foo)
-
-    # rb.append_transform(
-    #     lambda td: td.set(
-    #         "tokenized_action",
-    #         td.get("tokenized_action").to_padded_tensor(tokenizer.pad_token_id),
-    #     )
-    # )
+    rb.append_transform(obs_token_transform)
 
     collector = SyncDataCollector(
         env, data_llm_policy, frames_per_batch=20, total_frames=10000
@@ -404,7 +468,7 @@ def play(env, data_llm_policy, actor_llm_policy, tokenizer):
     # FIXME: is this the right way to do this?
     loss_module.tensor_keys.action = "tokenized_action"
 
-    optim = torch.optim.Adam(loss_module.parameters())
+    optim = torch.optim.Adam(loss_module.parameters(), lr=2.5e-4)
 
     gae = GAE(
         value_network=Seq(actor_llm_policy[0], *critic_llm_policy),
@@ -413,43 +477,17 @@ def play(env, data_llm_policy, actor_llm_policy, tokenizer):
         shifted=True,
     )
 
-    import torch.nn.functional as F
-
-    def pad_tensors_to_same_shape(tensor1, tensor2):
-        size1 = tensor1.shape
-        size2 = tensor2.shape
-
-        if size1[-1] < size2[-1]:
-            pad1 = size2[-1] - size1[-1]
-            tensor1_padded = F.pad(tensor1, (0, pad1))
-            tensor2_padded = tensor2
-        elif size1[-1] > size2[-1]:
-            pad2 = size1[-1] - size2[-1]
-            tensor2_padded = F.pad(tensor2, (0, pad2))
-            tensor1_padded = tensor1
-        else:
-            tensor1_padded = tensor1
-            tensor2_padded = tensor2
-
-        return tensor1_padded, tensor2_padded
-
     for data in tqdm(collector):
         # FIXME: reward seems to be getting wrongly propagated (e.g. sunfish's win gets reflected as llm's win)
         rb.empty()
         rb.extend(data)
 
         for data in tqdm(rb):
-            obs_tokens = data["obs_tokens"]
-            next_obs_tokens = data["next", "obs_tokens"]
-            obs_tokens, next_obs_tokens = pad_tensors_to_same_shape(
-                obs_tokens, next_obs_tokens
-            )
-            data["obs_tokens"] = obs_tokens
-            data["next", "obs_tokens"] = next_obs_tokens
+
             data = gae(data)
             loss = loss_module(data)
             loss.sum(reduce=True).backward()
-            torch.nn.utils.clip_grad_norm_(loss_module.parameters(), 100.0)
+            torch.nn.utils.clip_grad_norm_(loss_module.parameters(), 0.5)
             optim.step()
             optim.zero_grad()
 
