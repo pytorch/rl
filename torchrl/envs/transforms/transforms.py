@@ -4826,25 +4826,25 @@ class Hash(UnaryTransform):
         in_keys (sequence of NestedKey): the keys of the values to hash.
         out_keys (sequence of NestedKey): the keys of the resulting hashes.
         in_keys_inv (sequence of NestedKey, optional): the keys of the values to hash during inv call.
-
-            .. note:: If an inverse map is required, a repertoire ``Dict[Tuple[int], Any]`` of hash to value should be
-                passed alongside the list of keys to let the ``Hash`` transform know how to recover a value from a
-                given hash. This repertoire isn't copied, so it can be modified in the same workspace after the
-                transform instantiation and these modifications will be reflected in the map. Missing hashes will be
-                mapped to ``None``.
-
         out_keys_inv (sequence of NestedKey, optional): the keys of the resulting hashes during inv call.
 
     Keyword Args:
-        hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,
-            the hash function must accept it as its second argument. Default is
-            ``Hash.reproducible_hash``.
+        hash_fn (Callable, optional): the hash function to use. The function
+            signature must be
+            ``(input: Any, seed: Any | None) -> torch.Tensor``.
+            ``seed`` is only used if this transform is initialized with the
+            ``seed`` argument.  Default is ``Hash.reproducible_hash``.
         seed (optional): seed to use for the hash function, if it requires one.
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
             :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
             on them. If ``True``, the raw :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack`
             inputs are given directly to ``fn``, which must support those
             inputs. Default is ``False``.
+        repertoire (Dict[Tuple[int], Any], optional): If given, this dict stores
+            the inverse mappings from hashes to inputs. This repertoire isn't
+            copied, so it can be modified in the same workspace after the
+            transform instantiation and these modifications will be reflected in
+            the map. Missing hashes will be mapped to ``None``. Default: ``None``
 
         >>> from torchrl.envs import GymEnv, UnaryTransform, Hash
         >>> env = GymEnv("Pendulum-v1")
@@ -4925,57 +4925,79 @@ class Hash(UnaryTransform):
         self,
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
+        in_keys_inv: Sequence[NestedKey] = None,
+        out_keys_inv: Sequence[NestedKey] = None,
         *,
         hash_fn: Callable = None,
         seed: Any | None = None,
         use_raw_nontensor: bool = False,
+        repertoire: Tuple[Tuple[int], Any] = None,
     ):
         if hash_fn is None:
             hash_fn = Hash.reproducible_hash
+
+        if repertoire is None and in_keys_inv is not None and len(in_keys_inv) > 0:
+            self._repertoire = {}
+        else:
+            self._repertoire = repertoire
 
         self._seed = seed
         self._hash_fn = hash_fn
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
             fn=self.call_hash_fn,
+            inv_fn=self.get_input_from_hash,
             use_raw_nontensor=use_raw_nontensor,
         )
 
-    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        inputs = tensordict.select(*self.in_keys_inv).detach().cpu()
-        tensordict = super()._inv_call(tensordict)
-
-        def register_outcome(td):
-            # We need to treat each hash independently
-            if td.ndim:
-                if td.ndim > 1:
-                    td_r = td.reshape(-1)
-                elif td.ndim == 1:
-                    td_r = td
-                result = torch.stack([register_outcome(_td) for _td in td_r.unbind(0)])
-                if td_r is not td:
-                    return result.reshape(td.shape)
-                return result
-            for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-                inp = inputs.get(in_key)
-                inp = tuple(inp.tolist())
-                outp = self._repertoire.get(inp)
-                td[out_key] = outp
-            return td
-
-        return register_outcome(tensordict)
-
     def state_dict(self, *args, destination=None, prefix="", keep_vars=False):
-        if self.in_keys_inv is not None:
-            return {"_repertoire": self._repertoire}
-        return {}
+        return {"_repertoire": self._repertoire}
+
+    @classmethod
+    def hash_to_repertoire_key(cls, hash_tensor):
+        if isinstance(hash_tensor, torch.Tensor):
+            if hash_tensor.dim() == 0:
+                return hash_tensor.tolist()
+            return tuple(cls.hash_to_repertoire_key(t) for t in hash_tensor.tolist())
+        elif isinstance(hash_tensor, list):
+            return tuple(cls.hash_to_repertoire_key(t) for t in hash_tensor)
+        else:
+            return hash_tensor
+
+    def get_input_from_hash(self, hash_tensor):
+        """Look up the input that was given for a particular hash output.
+
+        This feature is only available if, during initialization, either the
+        :arg:`repertoire` argument was given or both the :arg:`in_keys_inv` and
+        :arg:`out_keys_inv` arguments were given.
+
+        Args:
+            hash_tensor (Tensor): The hash output.
+
+        Returns:
+            Any: The input that the hash was generated from.
+        """
+        if self._repertoire is None:
+            raise RuntimeError(
+                "An inverse transform was queried but the repertoire is None."
+            )
+        return self._repertoire[self.hash_to_repertoire_key(hash_tensor)]
 
     def call_hash_fn(self, value):
         if self._seed is None:
-            return self._hash_fn(value)
+            hash_tensor = self._hash_fn(value)
         else:
-            return self._hash_fn(value, self._seed)
+            hash_tensor = self._hash_fn(value, self._seed)
+        if not torch.is_tensor(hash_tensor):
+            raise ValueError(
+                f"Hash function must return a tensor, but got {type(hash_tensor)}"
+            )
+        if self._repertoire is not None:
+            self._repertoire[self.hash_to_repertoire_key(hash_tensor)] = copy(value)
+        return hash_tensor
 
     @classmethod
     def reproducible_hash(cls, string, seed=None):
