@@ -2587,7 +2587,7 @@ class TestHash(TransformBase):
                 else:
                     assert stored_input == input
             else:
-                with pytest.raises(AssertionError):
+                with pytest.raises(RuntimeError):
                     stored_input = t.get_input_from_hash(output)
 
 

@@ -4829,9 +4829,11 @@ class Hash(UnaryTransform):
         out_keys_inv (sequence of NestedKey, optional): the keys of the resulting hashes during inv call.
 
     Keyword Args:
-        hash_fn (Callable, optional): the hash function to use. If ``seed`` is given,
-            the hash function must accept it as its second argument. The output of
-            the hash function must be a tensor. Default is ``Hash.reproducible_hash``.
+        hash_fn (Callable, optional): the hash function to use. The function
+            signature must be
+            ``(input: Any, seed: Any | None) -> torch.Tensor``.
+            ``seed`` is only used if this transform is initialized with the
+            ``seed`` argument.  Default is ``Hash.reproducible_hash``.
         seed (optional): seed to use for the hash function, if it requires one.
         use_raw_nontensor (bool, optional): if ``False``, data is extracted from
             :class:`~tensordict.NonTensorData`/:class:`~tensordict.NonTensorStack` inputs before ``fn`` is called
@@ -4978,7 +4980,10 @@ class Hash(UnaryTransform):
         Returns:
             Any: The input that the hash was generated from.
         """
-        assert self._repertoire is not None
+        if self._repertoire is None:
+            raise RuntimeError(
+                "An inverse transform was queried but the repertoire is None."
+            )
         return self._repertoire[self.hash_to_repertoire_key(hash_tensor)]
 
     def call_hash_fn(self, value):
