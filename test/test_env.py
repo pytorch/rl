@@ -3709,6 +3709,74 @@ class TestChessEnv:
                 if include_san:
                     assert "san_hash" in env.observation_spec.keys()
 
+    # Test that `include_hash_inv=True` allows us to specify the board state
+    # with just the "fen_hash" or "pgn_hash", not "fen" or "pgn", when taking a
+    # step in the env.
+    @pytest.mark.parametrize(
+        "include_fen,include_pgn",
+        [[True, False], [False, True]],
+    )
+    @pytest.mark.parametrize("stateful", [True, False])
+    def test_env_hash_inv(self, include_fen, include_pgn, stateful):
+        env = ChessEnv(
+            include_fen=include_fen,
+            include_pgn=include_pgn,
+            include_hash=True,
+            include_hash_inv=True,
+            stateful=stateful,
+        )
+        env.check_env_specs()
+
+        def exclude_fen_and_pgn(td):
+            td = td.exclude("fen")
+            td = td.exclude("pgn")
+            return td
+
+        td0 = env.reset()
+
+        if include_fen:
+            env_check_fen = ChessEnv(
+                include_fen=True,
+                stateful=stateful,
+            )
+
+        if include_pgn:
+            env_check_pgn = ChessEnv(
+                include_pgn=True,
+                stateful=stateful,
+            )
+
+        for _ in range(8):
+            td1 = env.rand_step(exclude_fen_and_pgn(td0.clone()))
+
+            # Confirm that fen/pgn was not used to determine the board state
+            assert "fen" not in td1.keys()
+            assert "pgn" not in td1.keys()
+
+            if include_fen:
+                assert (td1["fen_hash"] == td0["fen_hash"]).all()
+                assert "fen" in td1["next"]
+
+                # Check that if we start in the same board state and perform the
+                # same action in an env that does not use hashes, we obtain the
+                # same next board state. This confirms that we really can
+                # successfully specify the board state with a hash.
+                td0_check = td1.clone().exclude("next").update({"fen": td0["fen"]})
+                assert (
+                    env_check_fen.step(td0_check)["next", "fen"] == td1["next", "fen"]
+                )
+
+            if include_pgn:
+                assert (td1["pgn_hash"] == td0["pgn_hash"]).all()
+                assert "pgn" in td1["next"]
+
+                td0_check = td1.clone().exclude("next").update({"pgn": td0["pgn"]})
+                assert (
+                    env_check_pgn.step(td0_check)["next", "pgn"] == td1["next", "pgn"]
+                )
+
+            td0 = td1["next"]
+
     @pytest.mark.skipif(not _has_tv, reason="torchvision not found.")
     @pytest.mark.skipif(not _has_cairosvg, reason="cairosvg not found.")
     @pytest.mark.parametrize("stateful", [False, True])
