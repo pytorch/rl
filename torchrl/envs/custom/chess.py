@@ -22,21 +22,38 @@ from torchrl.envs.utils import _classproperty
 class _ChessMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
-        if kwargs.get("include_hash"):
+        include_hash = kwargs.get("include_hash")
+        include_hash_inv = kwargs.get("include_hash_inv")
+        if include_hash:
             from torchrl.envs import Hash
 
             in_keys = []
             out_keys = []
-            if instance.include_san:
-                in_keys.append("san")
-                out_keys.append("san_hash")
-            if instance.include_fen:
-                in_keys.append("fen")
-                out_keys.append("fen_hash")
-            if instance.include_pgn:
-                in_keys.append("pgn")
-                out_keys.append("pgn_hash")
-            instance = instance.append_transform(Hash(in_keys, out_keys))
+            in_keys_inv = [] if include_hash_inv else None
+            out_keys_inv = [] if include_hash_inv else None
+
+            def maybe_add_keys(condition, in_key, out_key):
+                if condition:
+                    in_keys.append(in_key)
+                    out_keys.append(out_key)
+                    if include_hash_inv:
+                        in_keys_inv.append(in_key)
+                        out_keys_inv.append(out_key)
+
+            maybe_add_keys(instance.include_san, "san", "san_hash")
+            maybe_add_keys(instance.include_fen, "fen", "fen_hash")
+            maybe_add_keys(instance.include_pgn, "pgn", "pgn_hash")
+
+            instance = instance.append_transform(
+                Hash(in_keys, out_keys, in_keys_inv, out_keys_inv)
+            )
+        elif include_hash_inv:
+            raise ValueError(
+                (
+                    "'include_hash_inv=True' can only be set if"
+                    f"'include_hash=True', but got 'include_hash={include_hash}'."
+                )
+            )
         if kwargs.get("mask_actions", True):
             from torchrl.envs import ActionMask
 
@@ -265,6 +282,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         include_pgn: bool = False,
         include_legal_moves: bool = False,
         include_hash: bool = False,
+        include_hash_inv: bool = False,
         mask_actions: bool = True,
         pixels: bool = False,
     ):
