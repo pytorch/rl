@@ -1434,7 +1434,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         )
 
     def _init_env(self):
-        self.reset()
+        pass
 
     def __repr__(self) -> str:
         return (
