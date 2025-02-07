@@ -380,11 +380,12 @@ def make_model(dummy_env):
 # time must always have the same shape.
 
 
-def get_replay_buffer(buffer_size, n_optim, batch_size):
+def get_replay_buffer(buffer_size, n_optim, batch_size, device):
     replay_buffer = TensorDictReplayBuffer(
         batch_size=batch_size,
         storage=LazyMemmapStorage(buffer_size),
         prefetch=n_optim,
+        transform=lambda td: td.to(device),
     )
     return replay_buffer
 
@@ -660,7 +661,7 @@ trainer = Trainer(
 #   requires 3 hooks (``extend``, ``sample`` and ``update_priority``) which
 #   can be cumbersome to implement.
 buffer_hook = ReplayBufferTrainer(
-    get_replay_buffer(buffer_size, n_optim, batch_size=batch_size),
+    get_replay_buffer(buffer_size, n_optim, batch_size=batch_size, device=device),
     flatten_tensordicts=True,
 )
 buffer_hook.register(trainer)
