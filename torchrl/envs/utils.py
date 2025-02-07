@@ -819,6 +819,8 @@ def check_env_specs(
             spec = Composite(shape=env.batch_size, device=env.device)
         td = last_td.select(*spec.keys(True, True), strict=True)
         if not spec.contains(td):
+            for k, v in spec.items(True):
+                assert v.contains(td[k]), f"{k} is not in {v} (val: {td[k]})"
             raise AssertionError(
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )

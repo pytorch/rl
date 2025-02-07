@@ -37,7 +37,7 @@ except RuntimeError:
 import torch.cuda
 from tensordict.nn import TensorDictSequential
 from torch import nn
-from torchrl.envs import R3MTransform, TransformedEnv
+from torchrl.envs import Compose, R3MTransform, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import Actor
 
@@ -115,7 +115,7 @@ print("rollout, fine tuning:", rollout)
 from torchrl.data import LazyMemmapStorage, ReplayBuffer
 
 storage = LazyMemmapStorage(1000)
-rb = ReplayBuffer(storage=storage, transform=r3m)
+rb = ReplayBuffer(storage=storage, transform=Compose(lambda td: td.to(device), r3m))
 
 ##############################################################################
 # We can now collect the data (random rollouts for our purpose) and fill the replay
