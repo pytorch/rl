@@ -2619,6 +2619,10 @@ class NonTensor(TensorSpec):
             for i in range(self.shape[dim])
         )
 
+    def to_numpy(
+        self, val: torch.Tensor | TensorDictBase, safe: bool = None
+    ) -> np.ndarray | dict:
+        return val
 
 class _UnboundedMeta(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
