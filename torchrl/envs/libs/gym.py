@@ -1434,7 +1434,16 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         )
 
     def _init_env(self):
-        pass
+        init_reset = self.init_reset
+        if init_reset is None:
+            warnings.warn(f"init_env is None in the {type(self).__name__} constructor. The current "
+                          f"default behavior is to reset the gym env as soon as it's wrapped in the "
+                          f"class (init_reset=True), but from v0.9 this will be changed to False. "
+                          f"To adapt for these changes, pass init_reset to your constructor.", category=FutureWarning)
+            init_reset = True
+        if init_reset:
+            self._env.reset()
+
 
     def __repr__(self) -> str:
         return (
