@@ -73,6 +73,10 @@ from torchrl.envs.utils import (
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+]
+
 gym_version = None
 if _has_gym:
     try:
@@ -232,7 +236,7 @@ class TestEnvBase:
         check_env_specs(env)
         env._run_type_checks = True
         check_env_specs(env)
-        env.output_spec.unlock_()
+        env.output_spec.unlock_(recurse=True)
         # check type check on done
         env.output_spec["full_done_spec", "done"].dtype = torch.int
         with pytest.raises(TypeError, match="expected done.dtype to"):
@@ -292,8 +296,8 @@ class TestEnvBase:
         assert not env.output_spec_unbatched.shape
         assert not env.full_reward_spec_unbatched.shape
 
-        assert env.action_spec_unbatched.shape
-        assert env.reward_spec_unbatched.shape
+        assert env.full_action_spec_unbatched[env.action_key].shape
+        assert env.full_reward_spec_unbatched[env.reward_key].shape
 
         assert env.output_spec.is_in(env.output_spec_unbatched.zeros(env.shape))
         assert env.input_spec.is_in(env.input_spec_unbatched.zeros(env.shape))
