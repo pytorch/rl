@@ -345,7 +345,6 @@ def vec_generalized_advantage_estimate(
         first_below_thr = torch.where(first_below_thr)[0][0].item()
         gammalmbdas = gammalmbdas[..., :first_below_thr, :]
 
-    not_terminated = (~terminated).to(dtype)
     td0 = reward + not_terminated * gamma * next_state_value - state_value
 
     if len(batch_size) > 1:
