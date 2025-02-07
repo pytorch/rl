@@ -97,6 +97,7 @@ sphinx_gallery_conf = {
     "abort_on_example_error": True,
     "show_memory": True,
     "capture_repr": ("_repr_html_", "__repr__"),  # capture representations
+    "write_computation_times": True,
 }
 
 napoleon_use_ivar = True

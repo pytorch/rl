@@ -751,6 +751,9 @@ def print_csv_files_in_folder(folder_path):
 
 print_csv_files_in_folder(logger.experiment.log_dir)
 
+trainer.shutdown()
+del trainer
+
 ###############################################################################
 # Conclusion and possible improvements
 # ------------------------------------
