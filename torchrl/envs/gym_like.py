@@ -342,7 +342,7 @@ class GymLikeEnv(_EnvWrapper):
                     for key, val in TensorDict(obs_dict, []).items(True, True)
                 )
         else:
-            tensordict_out = TensorDict._new_unsafe(
+            tensordict_out = TensorDict(
                 obs_dict,
                 batch_size=tensordict.batch_size,
             )
@@ -376,7 +376,8 @@ class GymLikeEnv(_EnvWrapper):
 
         source = self.read_obs(obs)
 
-        tensordict_out = TensorDict._new_unsafe(
+        # _new_unsafe cannot be used because it won't wrap non-tensor correctly
+        tensordict_out = TensorDict(
             source=source,
             batch_size=self.batch_size,
         )

@@ -2632,6 +2632,7 @@ class NonTensor(TensorSpec):
     ) -> torch.Tensor | TensorDictBase:
         return val
 
+
 class _UnboundedMeta(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
@@ -4930,7 +4931,7 @@ class Composite(TensorSpec):
                 _dict[key] = item.rand(shape)
         # No need to run checks since we know Composite is compliant with
         # TensorDict requirements
-        return TensorDict._new_unsafe(
+        return TensorDict(
             _dict,
             batch_size=_size([*shape, *self.shape]),
             device=self._device,
