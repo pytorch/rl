@@ -37,7 +37,7 @@ except RuntimeError:
 import torch.cuda
 from tensordict.nn import TensorDictSequential
 from torch import nn
-from torchrl.envs import Compose, R3MTransform, TransformedEnv, Compose
+from torchrl.envs import Compose, R3MTransform, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import Actor
 
