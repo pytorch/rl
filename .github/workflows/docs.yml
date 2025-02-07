@@ -60,7 +60,7 @@ jobs:
         bash ./miniconda.sh -b -f -p "${conda_dir}"
         eval "$(${conda_dir}/bin/conda shell.bash hook)"
         printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python=3.10
+        conda create --prefix "${env_dir}" -y python=3.9
         printf "* Activating\n"
         conda activate "${env_dir}"
 
