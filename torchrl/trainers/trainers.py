@@ -640,7 +640,7 @@ class ReplayBufferTrainer(TrainerHookBase):
         memmap (bool, optional): if ``True``, a memmap tensordict is created.
             Default is ``False``.
         device (device, optional): device where the samples must be placed.
-            Default is ``cpu``.
+            Default to ``None``.
         flatten_tensordicts (bool, optional): if ``True``, the tensordicts will be
             flattened (or equivalently masked with the valid mask obtained from
             the collector) before being passed to the replay buffer. Otherwise,
@@ -666,7 +666,7 @@ class ReplayBufferTrainer(TrainerHookBase):
         replay_buffer: TensorDictReplayBuffer,
         batch_size: Optional[int] = None,
         memmap: bool = False,
-        device: DEVICE_TYPING = "cpu",
+        device: DEVICE_TYPING | None = None,
         flatten_tensordicts: bool = False,
         max_dims: Optional[Sequence[int]] = None,
     ) -> None:
@@ -695,15 +695,11 @@ class ReplayBufferTrainer(TrainerHookBase):
                     pads += [0, pad_value]
                 batch = pad(batch, pads)
         batch = batch.cpu()
-        if self.memmap:
-            # We can already place the tensords on the device if they're memmap,
-            # as this is a lazy op
-            batch = batch.memmap_().to(self.device)
         self.replay_buffer.extend(batch)
 
     def sample(self, batch: TensorDictBase) -> TensorDictBase:
         sample = self.replay_buffer.sample(batch_size=self.batch_size)
-        return sample.to(self.device, non_blocking=True)
+        return sample.to(self.device) if self.device is not None else sample
 
     def update_priority(self, batch: TensorDictBase) -> None:
         self.replay_buffer.update_tensordict_priority(batch)
