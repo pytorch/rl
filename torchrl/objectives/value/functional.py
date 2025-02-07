@@ -311,16 +311,16 @@ def vec_generalized_advantage_estimate(
         == terminated.shape
     ):
         raise RuntimeError(SHAPE_ERR)
+
     dtype = state_value.dtype
     *batch_size, time_steps, lastdim = terminated.shape
 
-    value = gamma * lmbda
+    gammalmbdas = gamma * lmbda
+    gammalmbdas_is_tensor = (
+        isinstance(gammalmbdas, torch.Tensor) and gammalmbdas.numel() > 1
+    )
 
-    if isinstance(value, torch.Tensor) and value.numel() > 1:
-        # create tensor while ensuring that gradients are passed
-        not_done = (~done).to(dtype)
-        gammalmbdas = not_done * value
-    else:
+    if not gammalmbdas_is_tensor:
         # when gamma and lmbda are scalars, use fast_vec_gae implementation
         return _fast_vec_gae(
             reward=reward,
@@ -332,6 +332,8 @@ def vec_generalized_advantage_estimate(
             lmbda=lmbda,
         )
 
+    not_terminated = (~terminated).to(dtype)
+    gammalmbdas = not_terminated * gammalmbdas
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
 

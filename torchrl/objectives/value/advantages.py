@@ -132,7 +132,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
             sample_log_prob (NestedKey): The key in the input tensordict that
                 indicates the log probability of the sampled action.
                 Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
-                `"action_log_prob"`  otherwise.
+                `"action_log_prob"` otherwise.
         """
 
         advantage: NestedKey = "advantage"
@@ -990,7 +990,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
-            markes with the ``"time"`` name if any, and to the last dimension
+            marked with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
@@ -1528,7 +1528,7 @@ class GAE(ValueEstimatorBase):
 class VTrace(ValueEstimatorBase):
     """A class wrapper around V-Trace estimate functional.
 
-    Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted  Actor-Learner Architectures"
+    Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted Actor-Learner Architectures"
     :ref:`here <https://arxiv.org/abs/1802.01561>`_ for more context.
 
     Keyword Args:
@@ -1570,7 +1570,7 @@ class VTrace(ValueEstimatorBase):
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
-            markes with the ``"time"`` name if any, and to the last dimension
+            marked with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
