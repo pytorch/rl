@@ -2624,6 +2624,14 @@ class NonTensor(TensorSpec):
     ) -> np.ndarray | dict:
         return val
 
+    def encode(
+        self,
+        val: np.ndarray | torch.Tensor | TensorDictBase,
+        *,
+        ignore_device: bool = False,
+    ) -> torch.Tensor | TensorDictBase:
+        return val
+
 class _UnboundedMeta(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
