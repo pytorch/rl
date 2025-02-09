@@ -14,6 +14,7 @@ from .checkpointers import (
 )
 from .replay_buffers import (
     PrioritizedReplayBuffer,
+    RemoteReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
