@@ -1185,6 +1185,12 @@ for i, tensordict in enumerate(collector):
 collector.shutdown()
 del collector
 
+try:
+    parallel_env.close()
+    del parallel_env
+except Exception:
+    pass
+
 ###############################################################################
 # Experiment results
 # ------------------
