@@ -293,7 +293,8 @@ class GymLikeEnv(_EnvWrapper):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if len(self.action_keys) == 1:
-            action = tensordict.get(self.action_key)
+            # Use brackets to get non-tensor data
+            action = tensordict[self.action_key]
         else:
             action = tensordict.select(*self.action_keys).to_dict()
         if self._convert_actions_to_numpy:
@@ -341,7 +342,7 @@ class GymLikeEnv(_EnvWrapper):
                     for key, val in TensorDict(obs_dict, []).items(True, True)
                 )
         else:
-            tensordict_out = TensorDict._new_unsafe(
+            tensordict_out = TensorDict(
                 obs_dict,
                 batch_size=tensordict.batch_size,
             )
@@ -375,7 +376,8 @@ class GymLikeEnv(_EnvWrapper):
 
         source = self.read_obs(obs)
 
-        tensordict_out = TensorDict._new_unsafe(
+        # _new_unsafe cannot be used because it won't wrap non-tensor correctly
+        tensordict_out = TensorDict(
             source=source,
             batch_size=self.batch_size,
         )
