@@ -4119,9 +4119,9 @@ class TestPartialSteps:
 
             td.set("action", penv.full_action_spec[penv.action_key].one())
             td = penv.step(td)
-            assert (td[0].get("next") == 0).all()
+            assert_allclose_td(td[0].get("next"), td[0], intersection=True)
             assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
+            assert_allclose_td(td[2].get("next"), td[2], intersection=True)
             assert (td[3].get("next") != 0).any()
 
     @pytest.mark.parametrize("use_buffers", [False, True])
@@ -4142,9 +4142,9 @@ class TestPartialSteps:
 
             td.set("action", penv.full_action_spec[penv.action_key].one())
             td, tdreset = penv.step_and_maybe_reset(td)
-            assert (td[0].get("next") == 0).all()
+            assert_allclose_td(td[0].get("next"), td[0], intersection=True)
             assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
+            assert_allclose_td(td[2].get("next"), td[2], intersection=True)
             assert (td[3].get("next") != 0).any()
 
     @pytest.mark.parametrize("use_buffers", [False, True])
@@ -4163,9 +4163,9 @@ class TestPartialSteps:
 
             td.set("action", penv.full_action_spec[penv.action_key].one())
             td = penv.step(td)
-            assert (td[0].get("next") == 0).all()
+            assert_allclose_td(td[0].get("next"), td[0], intersection=True)
             assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
+            assert_allclose_td(td[2].get("next"), td[2], intersection=True)
             assert (td[3].get("next") != 0).any()
 
     @pytest.mark.parametrize("use_buffers", [False, True])
@@ -4184,9 +4184,9 @@ class TestPartialSteps:
 
             td.set("action", penv.full_action_spec[penv.action_key].one())
             td = penv.step(td)
-            assert (td[0].get("next") == 0).all()
+            assert_allclose_td(td[0].get("next"), td[0], intersection=True)
             assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
+            assert_allclose_td(td[2].get("next"), td[2], intersection=True)
             assert (td[3].get("next") != 0).any()
 
 
