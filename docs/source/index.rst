@@ -100,6 +100,13 @@ Intermediate
 Advanced
 --------
 
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/multiagent_competitive_ddpg
+   tutorials/multi_task
+   tutorials/coding_ddpg
+   tutorials/coding_dqn
 
 References
 ==========
