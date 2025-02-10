@@ -2242,3 +2242,29 @@ class Str2StrEnv(EnvBase):
         random.seed(seed)
         torch.manual_seed(0)
         return seed
+
+
+class EnvThatErrorsAfter10Iters(EnvBase):
+    def __init__(self):
+        self.action_spec = Composite(action=Unbounded((1,)))
+        self.reward_spec = Composite(reward=Unbounded((1,)))
+        self.done_spec = Composite(done=Unbounded((1,)))
+        self.observation_spec = Composite(observation=Unbounded((1,)))
+        self.counter = 0
+        super().__init__()
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDict:
+        return self.full_observation_spec.zero().update(self.full_done_spec.zero())
+
+    def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDict:
+        if self.counter >= 10:
+            raise RuntimeError("max steps!")
+        self.counter += 1
+        return (
+            self.full_observation_spec.zero()
+            .update(self.full_done_spec.zero())
+            .update(self.full_reward_spec.zero())
+        )
+
+    def _set_seed(self, seed: Optional[int]):
+        ...
