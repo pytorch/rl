@@ -1678,18 +1678,30 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     )
 
             old_r_copy = tensordict_save._fast_apply(
-                select_and_transfer, result, filter_empty=True, device=device
+                select_and_transfer,
+                result,
+                filter_empty=True,
+                device=device,
+                default=None,
             )
             old_r_copy.set(
                 "next",
                 tensordict_save._fast_apply(
-                    select_and_transfer, next_td, filter_empty=True, device=device
+                    select_and_transfer,
+                    next_td,
+                    filter_empty=True,
+                    device=device,
+                    default=None,
                 ),
             )
             result.update(old_r_copy)
             result_.update(
                 tensordict_save._fast_apply(
-                    select_and_transfer, result_, filter_empty=True, device=device
+                    select_and_transfer,
+                    result_,
+                    filter_empty=True,
+                    device=device,
+                    default=None,
                 )
             )
             self._sync_w2m()
