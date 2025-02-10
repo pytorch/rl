@@ -943,7 +943,7 @@ $("table").removeAttr("border");
 var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 if (downloadNote.length >= 1) {
     var tutorialUrlArray = $("#tutorial-type").text().split('/');
-        tutorialUrlArray[0] = tutorialUrlArray[0] + "/sphinx-tutorials-save"
+        tutorialUrlArray[0] = tutorialUrlArray[0] + "/sphinx-tutorials"
 
     var githubLink = "https://github.com/pytorch/rl/blob/main/" + tutorialUrlArray.join("/") + ".py",
         notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
