@@ -4710,7 +4710,7 @@ class TestDiscreteSAC(LossModuleTestBase):
     ):
         # Actor
         action_spec = OneHot(action_dim)
-        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        net = nn.Linear(obs_dim, action_dim)
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
             spec=action_spec,
@@ -11388,7 +11388,7 @@ class TestDT(LossModuleTestBase):
         action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        net = nn.Linear(obs_dim, action_dim)
         module = TensorDictModule(net, in_keys=["observation"], out_keys=["param"])
         actor = ProbabilisticActor(
             module=module,
@@ -12632,7 +12632,7 @@ class TestDiscreteIQL(LossModuleTestBase):
     ):
         # Actor
         action_spec = OneHot(action_dim)
-        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        net = nn.Linear(obs_dim, action_dim)
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
             spec=action_spec,
@@ -12729,8 +12729,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         common = Mod(common_net, in_keys=["obs"], out_keys=["hidden"])
         actor = ProbSeq(
             common,
-            Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
-            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["logits"]),
+            Mod(actor_net, in_keys=["hidden"], out_keys=["logits"]),
             ProbMod(
                 in_keys=["logits"],
                 out_keys=["action"],
