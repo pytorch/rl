@@ -1548,7 +1548,7 @@ class _MultiDataCollector(DataCollectorBase):
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
-        update_at_each_batch (boolm optional): if ``True``, :meth:`~.update_policy_weight_()`
+        update_at_each_batch (boolm optional): if ``True``, :meth:`update_policy_weight_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
@@ -2863,7 +2863,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
-        update_at_each_batch (boolm optional): if ``True``, :meth:`~.update_policy_weight_()`
+        update_at_each_batch (boolm optional): if ``True``, :meth:`update_policy_weight_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers

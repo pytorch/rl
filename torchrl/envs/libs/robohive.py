@@ -110,7 +110,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             ``RoboHiveEnv`` since vectorized environments are not supported within the
             class. To execute more than one environment at a time, see :class:`~torchrl.envs.ParallelEnv`.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:

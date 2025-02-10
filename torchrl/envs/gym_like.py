@@ -157,7 +157,7 @@ class GymLikeEnv(_EnvWrapper):
 
     where the outputs are the observation, reward and done state respectively.
     In this implementation, the info output is discarded (but specific keys can be read
-    by updating info_dict_reader, see :meth:`~.set_info_dict_reader` method).
+    by updating info_dict_reader, see :meth:`set_info_dict_reader` method).
 
     By default, the first output is written at the "observation" key-value pair in the output tensordict, unless
     the first output is a dictionary. In that case, each observation output will be put at the corresponding
@@ -461,7 +461,7 @@ class GymLikeEnv(_EnvWrapper):
 
         .. note::
           Automatically registering an info_dict reader should be done via
-          :meth:`~.auto_register_info_dict`, which will ensure that the env
+          :meth:`auto_register_info_dict`, which will ensure that the env
           specs are properly constructed.
 
         Examples:
@@ -524,7 +524,7 @@ class GymLikeEnv(_EnvWrapper):
 
         Keyword Args:
             info_dict_reader (BaseInfoDictReader, optional): the info_dict_reader, if it is known in advance.
-                Unlike :meth:`~.set_info_dict_reader`, this method will create the primers necessary to get
+                Unlike :meth:`set_info_dict_reader`, this method will create the primers necessary to get
                 :func:`~torchrl.envs.utils.check_env_specs` to run.
 
         Examples:

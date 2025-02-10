@@ -57,7 +57,7 @@ class TokenizedDatasetLoader:
         num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`
             which is called during tokenization.
             Defaults to ``max(os.cpu_count() // 2, 1)``.
-        tokenizer_class (type, optional): A tokenizer class, such as
+        tokenizer_class (Type, optional): A tokenizer class, such as
             :class:`~transformers.AutoTokenizer` (default).
         tokenizer_model_name (str, optional): The model from which the vocabulary
             should be gathered. Defaults to ``"gpt2"``.
@@ -182,7 +182,7 @@ class TokenizedDatasetLoader:
         """Preprocesses a text dataset from ``datasets``.
 
         Args:
-            dataset (datasets.Dataset): a dataset loaded using :meth:`~.load_dataset`.
+            dataset (datasets.Dataset): a dataset loaded using :meth:`load_dataset`.
             excluded_features (sequence of str, optional): the features to exclude
                 once tokenization is complete. Defaults to ``{"text", "prompt", "label", "valid_sample"}``.
 

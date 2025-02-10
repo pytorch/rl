@@ -222,7 +222,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
-        collector_class (type or str, optional): a collector class for the remote node. Can be
+        collector_class (Type or str, optional): a collector class for the remote node. Can be
             :class:`~torchrl.collectors.SyncDataCollector`,
             :class:`~torchrl.collectors.MultiSyncDataCollector`,
             :class:`~torchrl.collectors.MultiaSyncDataCollector`
