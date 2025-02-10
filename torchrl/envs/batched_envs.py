@@ -10,6 +10,7 @@ import functools
 import gc
 
 import os
+import time
 import weakref
 from collections import OrderedDict
 from copy import deepcopy
@@ -1616,11 +1617,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         for i, _data in zip(workers_range, data):
             self.parent_channels[i].send(("step_and_maybe_reset", _data))
 
-        for i in workers_range:
-            event = self._events[i]
-            event.wait(self.BATCHED_PIPE_TIMEOUT)
-            event.clear()
-
+        self._wait_for_workers(workers_range)
         if self._non_tensor_keys:
             non_tensor_tds = []
             for i in workers_range:
@@ -1669,6 +1666,36 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             return result, result_
 
         return tensordict, tensordict_
+
+    def _wait_for_workers(self, workers_range):
+        workers_range_consume = set(workers_range)
+        t0 = time.time()
+        while (
+            len(workers_range_consume)
+            and (time.time() - t0) < self.BATCHED_PIPE_TIMEOUT
+        ):
+            for i in workers_range:
+                if i not in workers_range_consume:
+                    continue
+                worker = self._workers[i]
+                if worker.is_alive():
+                    event: mp.Event = self._events[i]
+                    if event.is_set():
+                        workers_range_consume.discard(i)
+                        event.clear()
+                    else:
+                        continue
+                else:
+                    try:
+                        self._shutdown_workers()
+                    finally:
+                        raise RuntimeError(f"Cannot proceed, worker {i} dead.")
+                # event.wait(self.BATCHED_PIPE_TIMEOUT)
+        if len(workers_range_consume):
+            raise RuntimeError(
+                f"Failed to run all workers within the {self.BATCHED_PIPE_TIMEOUT} sec time limit. This "
+                f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
+            )
 
     def _step_no_buffers(
         self, tensordict: TensorDictBase
@@ -1806,10 +1833,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         for i in workers_range:
             self.parent_channels[i].send(("step", data[i]))
 
-        for i in workers_range:
-            event = self._events[i]
-            event.wait(self.BATCHED_PIPE_TIMEOUT)
-            event.clear()
+        self._wait_for_workers(workers_range)
 
         if self._non_tensor_keys:
             non_tensor_tds = []
@@ -1975,10 +1999,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         for i, out in outs:
             self.parent_channels[i].send(out)
 
-        for i, _ in outs:
-            event = self._events[i]
-            event.wait(self.BATCHED_PIPE_TIMEOUT)
-            event.clear()
+        self._wait_for_workers(list(zip(*outs))[0])
 
         workers_nontensor = []
         if self._non_tensor_keys:
