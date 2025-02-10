@@ -1089,7 +1089,7 @@ class SerialEnv(BatchedEnvBase):
         self,
         tensordict: TensorDict,
     ) -> TensorDict:
-        partial_steps = tensordict.get("_step", None)
+        partial_steps = tensordict.get("_step")
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
@@ -1164,6 +1164,10 @@ class SerialEnv(BatchedEnvBase):
 
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
+            # Copy the observation data from the previous step as placeholder
+            result.update(
+                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+            )
             result[partial_steps] = out
             return result
 
@@ -1529,6 +1533,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         )
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
+            result.update(
+                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+            )
             result[partial_steps] = out
             return result
         return out
@@ -1543,7 +1550,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # return self._step_and_maybe_reset_no_buffers(tensordict)
             return super().step_and_maybe_reset(tensordict)
 
-        partial_steps = tensordict.get("_step", None)
+        partial_steps = tensordict.get("_step")
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
@@ -1661,6 +1668,14 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None:
             result = tensordict.new_zeros(tensordict_save.shape)
             result_ = tensordict_.new_zeros(tensordict_save.shape)
+
+            result.update(
+                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+            )
+            result_.update(
+                tensordict_save.select(*result_.keys(True, True), strict=False).clone()
+            )
+
             result[partial_steps] = tensordict
             result_[partial_steps] = tensordict_
             return result, result_
@@ -1700,7 +1715,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     def _step_no_buffers(
         self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
-        partial_steps = tensordict.get("_step", None)
+        partial_steps = tensordict.get("_step")
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
@@ -1727,6 +1742,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             out = out.to(self.device, non_blocking=self.non_blocking)
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
+            result.update(
+                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+            )
             result[partial_steps] = out
             return result
         return out
@@ -1744,7 +1762,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
-        partial_steps = tensordict.get("_step", None)
+        partial_steps = tensordict.get("_step")
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
@@ -1875,6 +1893,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self._sync_w2m()
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
+            result.update(
+                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+            )
             result[partial_steps] = out
             return result
         return out

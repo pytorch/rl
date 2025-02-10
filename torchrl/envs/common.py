@@ -1933,6 +1933,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         spec = spec.expand(self.batch_size + spec.shape)
         self.state_spec = spec
 
+    def _skip_tensordict(self, tensordict):
+        # Creates a "skip" tensordict, ie a placeholder for when a step is skipped
+        next_tensordict = self.full_done_spec.zero()
+        next_tensordict.update(self.full_observation_spec.zero())
+        next_tensordict.update(self.full_reward_spec.zero())
+        # Copy the data from tensordict in `next`
+        next_tensordict.update(
+            tensordict.select(*next_tensordict.keys(True, True), strict=False)
+        )
+        return next_tensordict
+
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -1953,25 +1964,33 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         # sanity check
         self._assert_tensordict_shape(tensordict)
-        partial_steps = None
+        partial_steps = tensordict.pop("_step", None)
 
-        if not self.batch_locked:
-            # Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here
-            partial_steps = tensordict.get("_step", None)
-            if partial_steps is not None:
+        next_tensordict = None
+
+        if partial_steps is not None:
+            if not self.batch_locked:
+                # Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here
                 if partial_steps.all():
                     partial_steps = None
                 else:
                     tensordict_batch_size = tensordict.batch_size
                     partial_steps = partial_steps.view(tensordict_batch_size)
                     tensordict = tensordict[partial_steps]
-        else:
+            else:
+                if not partial_steps.any():
+                    next_tensordict = self._skip_tensordic(tensordict)
+                else:
+                    # trust that the _step can handle this!
+                    tensordict.set("_step", partial_steps)
+
             tensordict_batch_size = self.batch_size
 
         next_preset = tensordict.get("next", None)
 
-        next_tensordict = self._step(tensordict)
-        next_tensordict = self._step_proc_data(next_tensordict)
+        if next_tensordict is None:
+            next_tensordict = self._step(tensordict)
+            next_tensordict = self._step_proc_data(next_tensordict)
         if next_preset is not None:
             # tensordict could already have a "next" key
             # this could be done more efficiently by not excluding but just passing
@@ -1980,7 +1999,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 next_preset.exclude(*next_tensordict.keys(True, True))
             )
         tensordict.set("next", next_tensordict)
-        if partial_steps is not None:
+        if partial_steps is not None and tensordict_batch_size != self.batch_size:
             result = tensordict.new_zeros(tensordict_batch_size)
             result[partial_steps] = tensordict
             return result
