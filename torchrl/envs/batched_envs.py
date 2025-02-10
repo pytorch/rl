@@ -1669,14 +1669,30 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             result = tensordict.new_zeros(tensordict_save.shape)
             result_ = tensordict_.new_zeros(tensordict_save.shape)
 
-            old_r_copy = tensordict_save.clone().set(
+            def select_and_transfer(x, y):
+                if y is not None:
+                    return (
+                        x.to(y.device, non_blocking=self.non_blocking)
+                        if x.device != y.device
+                        else x.clone()
+                    )
+
+            old_r_copy = tensordict_save._fast_apply(
+                select_and_transfer, result, filter_empty=True, device=device
+            )
+            old_r_copy.set(
                 "next",
-                tensordict_save.select(*next_td.keys(True, True), strict=False).clone(),
+                tensordict_save._fast_apply(
+                    select_and_transfer, next_td, filter_empty=True, device=device
+                ),
             )
             result.update(old_r_copy)
             result_.update(
-                tensordict_save.select(*result_.keys(True, True), strict=False).clone()
+                tensordict_save._fast_apply(
+                    select_and_transfer, result_, filter_empty=True, device=device
+                )
             )
+            self._sync_w2m()
 
             result[partial_steps] = tensordict
             result_[partial_steps] = tensordict_
