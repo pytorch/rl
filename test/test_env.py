@@ -73,6 +73,13 @@ from torchrl.envs.utils import (
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings(
+        "ignore:Got multiple backends for torchrl.data.replay_buffers.storages"
+    ),
+]
+
 gym_version = None
 if _has_gym:
     try:
@@ -232,7 +239,7 @@ class TestEnvBase:
         check_env_specs(env)
         env._run_type_checks = True
         check_env_specs(env)
-        env.output_spec.unlock_()
+        env.output_spec.unlock_(recurse=True)
         # check type check on done
         env.output_spec["full_done_spec", "done"].dtype = torch.int
         with pytest.raises(TypeError, match="expected done.dtype to"):
@@ -292,8 +299,8 @@ class TestEnvBase:
         assert not env.output_spec_unbatched.shape
         assert not env.full_reward_spec_unbatched.shape
 
-        assert env.action_spec_unbatched.shape
-        assert env.reward_spec_unbatched.shape
+        assert env.full_action_spec_unbatched[env.action_key].shape
+        assert env.full_reward_spec_unbatched[env.reward_key].shape
 
         assert env.output_spec.is_in(env.output_spec_unbatched.zeros(env.shape))
         assert env.input_spec.is_in(env.input_spec_unbatched.zeros(env.shape))
@@ -307,7 +314,10 @@ class TestEnvBase:
                 return values.argmax(-1)
 
         policy = nn.Sequential(
-            nn.Linear(env.observation_spec["observation"].shape[-1], env.action_spec.n),
+            nn.Linear(
+                env.observation_spec["observation"].shape[-1],
+                env.full_action_spec[env.action_key].n,
+            ),
             ArgMaxModule(),
         )
         env.rollout(10, policy)
@@ -507,7 +517,7 @@ class TestEnvBase:
         policy = Actor(
             nn.Linear(
                 env.observation_spec["observation"].shape[-1],
-                env.action_spec.shape[-1],
+                env.full_action_spec[env.action_key].shape[-1],
                 device="cuda:0",
             ),
             in_keys=["observation"],
@@ -538,7 +548,7 @@ class TestEnvBase:
     def test_env_seed(self, env_name, frame_skip, seed=0):
         env_name = env_name()
         env = GymEnv(env_name, frame_skip=frame_skip)
-        action = env.action_spec.rand()
+        action = env.full_action_spec[env.action_key].rand()
 
         env.set_seed(seed)
         td0a = env.reset()
@@ -624,7 +634,7 @@ class TestEnvBase:
         env = CountingEnv(max_steps=max_steps, batch_size=batch_size)
         env.set_seed(1)
 
-        action = env.action_spec.rand()
+        action = env.full_action_spec[env.action_key].rand()
         action[:] = 1
 
         for i in range(max_steps):
@@ -695,7 +705,7 @@ class TestEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             env.batch_locked = False
         td = env.reset()
-        td["action"] = env.action_spec.rand()
+        td["action"] = env.full_action_spec[env.action_key].rand()
         td_expanded = td.expand(2).clone()
         _ = env.step(td)
 
@@ -712,7 +722,7 @@ class TestEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             env.batch_locked = False
         td = env.reset()
-        td["action"] = env.action_spec.rand()
+        td["action"] = env.full_action_spec[env.action_key].rand()
         td_expanded = td.expand(2).clone()
         td = env.step(td)
 
@@ -727,7 +737,7 @@ class TestEnvBase:
             env.batch_locked = False
 
         td = env.reset()
-        td["action"] = env.action_spec.rand()
+        td["action"] = env.full_action_spec[env.action_key].rand()
         td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
         td = env.step(td)
 
@@ -803,7 +813,7 @@ class TestRollout:
         # CountingEnv is done at max_steps + 1, so to emulate it being done at max_steps, we feed max_steps=max_steps - 1
         env = CountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
         policy = CountingEnvCountPolicy(
-            action_spec=env.action_spec, action_key=env.action_key
+            action_spec=env.full_action_spec[env.action_key], action_key=env.action_key
         )
 
         input_td = env.reset()
@@ -1010,7 +1020,7 @@ class TestModelBasedEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             mb_env.batch_locked = False
         td = mb_env.reset()
-        td["action"] = mb_env.action_spec.rand()
+        td["action"] = mb_env.full_action_spec[mb_env.action_key].rand()
         td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
         mb_env.step(td)
 
@@ -1028,7 +1038,7 @@ class TestModelBasedEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             mb_env.batch_locked = False
         td = mb_env.reset()
-        td["action"] = mb_env.action_spec.rand()
+        td["action"] = mb_env.full_action_spec[mb_env.action_key].rand()
         td_expanded = td.expand(2)
         mb_env.step(td)
         # we should be able to do a step with a tensordict that has been expended
@@ -1242,6 +1252,7 @@ class TestParallel:
             N=N,
         )
         td = TensorDict(source={"action": env0.action_spec.rand((N,))}, batch_size=[N])
+        env_parallel.reset()
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
         assert ("next", "done") in td1.keys(True)
@@ -1308,6 +1319,7 @@ class TestParallel:
         )
 
         td = TensorDict(source={"action": env0.action_spec.rand((N,))}, batch_size=[N])
+        env_parallel.reset()
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
         assert ("next", "done") in td1.keys(True)
@@ -1715,7 +1727,7 @@ class TestParallel:
             n_workers, lambda: CountingEnv(max_steps=max_steps, batch_size=batch_size)
         )
         env.set_seed(1)
-        action = env.action_spec.rand()
+        action = env.full_action_spec[env.action_key].rand()
         action[:] = 1
         for i in range(max_steps):
             td = env.step(
@@ -1787,7 +1799,9 @@ class TestParallel:
             if not nested_done and not nested_reward and not nested_obs_action:
                 assert "data" not in td.keys()
 
-            policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+            policy = CountingEnvCountPolicy(
+                env.full_action_spec[env.action_key], env.action_key
+            )
             td = env.rollout(rollout_length, policy)
             assert td.batch_size == (*batch_size, rollout_length)
             if nested_done or nested_obs_action:
@@ -2558,6 +2572,7 @@ class TestConcurrentEnvs:
             total_frames=N * n_workers * 100,
             storing_device=device,
             device=device,
+            trust_policy=True,
             cat_results=-1,
         )
         single_collectors = [
@@ -2567,6 +2582,7 @@ class TestConcurrentEnvs:
                 frames_per_batch=n_workers * 100,
                 total_frames=N * n_workers * 100,
                 storing_device=device,
+                trust_policy=True,
                 device=device,
             )
             for i in range(n_workers)
@@ -2662,18 +2678,24 @@ class TestNestedSpecs:
         else:
             raise NotImplementedError
         reset = env.reset()
-        assert not isinstance(env.reward_spec, Composite)
+        with pytest.warns(
+            DeprecationWarning, match="non-trivial"
+        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+            assert not isinstance(env.reward_spec, Composite)
         for done_key in env.done_keys:
             assert (
                 env.full_done_spec[done_key]
                 == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(done_key))]
             )
-        assert (
-            env.reward_spec
-            == env.output_spec[
-                ("full_reward_spec", *_unravel_key_to_tuple(env.reward_key))
-            ]
-        )
+        with pytest.warns(
+            DeprecationWarning, match="non-trivial"
+        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+            assert (
+                env.reward_spec
+                == env.output_spec[
+                    ("full_reward_spec", *_unravel_key_to_tuple(env.reward_key))
+                ]
+            )
         if envclass == "NestedCountingEnv":
             for done_key in env.done_keys:
                 assert done_key in (("data", "done"), ("data", "terminated"))
@@ -2734,7 +2756,9 @@ class TestNestedSpecs:
             nested_dim,
         )
 
-        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], env.action_key
+        )
         td = env.rollout(rollout_length, policy)
         assert td.batch_size == (*batch_size, rollout_length)
         assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
@@ -2858,7 +2882,7 @@ class TestMultiKeyEnvs:
     @pytest.mark.parametrize("max_steps", [2, 5])
     def test_rollout(self, batch_size, rollout_steps, max_steps, seed):
         env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
-        policy = MultiKeyCountingEnvPolicy(full_action_spec=env.action_spec)
+        policy = MultiKeyCountingEnvPolicy(full_action_spec=env.full_action_spec)
         td = env.rollout(rollout_steps, policy=policy)
         torch.manual_seed(seed)
         check_rollout_consistency_multikey_env(td, max_steps=max_steps)
@@ -2924,11 +2948,17 @@ class TestMultiKeyEnvs:
 )
 def test_mocking_envs(envclass):
     env = envclass()
-    env.set_seed(100)
+    with pytest.warns(UserWarning, match="model based") if isinstance(
+        env, DummyModelBasedEnvBase
+    ) else contextlib.nullcontext():
+        env.set_seed(100)
     reset = env.reset()
     _ = env.rand_step(reset)
     r = env.rollout(3)
-    check_env_specs(env, seed=100, return_contiguous=False)
+    with pytest.warns(UserWarning, match="model based") if isinstance(
+        env, DummyModelBasedEnvBase
+    ) else contextlib.nullcontext():
+        check_env_specs(env, seed=100, return_contiguous=False)
 
 
 class TestTerminatedOrTruncated:
@@ -4087,7 +4117,7 @@ class TestPartialSteps:
             psteps[[1, 3]] = True
             td.set("_step", psteps)
 
-            td.set("action", penv.action_spec.one())
+            td.set("action", penv.full_action_spec[penv.action_key].one())
             td = penv.step(td)
             assert (td[0].get("next") == 0).all()
             assert (td[1].get("next") != 0).any()
@@ -4110,7 +4140,7 @@ class TestPartialSteps:
             psteps[[1, 3]] = True
             td.set("_step", psteps)
 
-            td.set("action", penv.action_spec.one())
+            td.set("action", penv.full_action_spec[penv.action_key].one())
             td, tdreset = penv.step_and_maybe_reset(td)
             assert (td[0].get("next") == 0).all()
             assert (td[1].get("next") != 0).any()
@@ -4131,7 +4161,7 @@ class TestPartialSteps:
             psteps[[1, 3]] = True
             td.set("_step", psteps)
 
-            td.set("action", penv.action_spec.one())
+            td.set("action", penv.full_action_spec[penv.action_key].one())
             td = penv.step(td)
             assert (td[0].get("next") == 0).all()
             assert (td[1].get("next") != 0).any()
@@ -4152,7 +4182,7 @@ class TestPartialSteps:
             psteps[[1, 3]] = True
             td.set("_step", psteps)
 
-            td.set("action", penv.action_spec.one())
+            td.set("action", penv.full_action_spec[penv.action_key].one())
             td = penv.step(td)
             assert (td[0].get("next") == 0).all()
             assert (td[1].get("next") != 0).any()
