@@ -86,6 +86,12 @@ Tutorials
 Basics
 ------
 
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/coding_ppo
+   tutorials/pendulum
+   tutorials/torchrl_demo
 
 Intermediate
 ------------
