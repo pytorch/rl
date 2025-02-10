@@ -7102,6 +7102,7 @@ class StepCounter(Transform):
             self.step_count_keys, self.truncated_keys, self.done_keys
         ):
             step_count = tensordict.get(step_count_key)
+            print('step_count', step_count)
             next_step_count = step_count + 1
             next_tensordict.set(step_count_key, next_step_count)
 
@@ -10337,3 +10338,44 @@ class ConditionalSkip(Transform):
         raise NotImplementedError(
             FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
         )
+
+
+class MultiAction(Transform):
+    """A transform to execute multiple actions in the parent environment.
+
+    This transform unbinds the actions along a specific dimension and passes each action independently.
+    The returned transform can be either a stack of the observations gathered during the steps or only the
+    last observation.
+
+    If a `"done"` entry is encountered, the next steps are skipped.
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Get the actions
+        parent = self.parent
+        print(parent)
+        action_keys = parent.action_keys
+        actions = tensordict.select(*action_keys)
+        actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + 1)
+        actions = actions.unbind(-1)
+        td = tensordict
+        for a in actions[:-1]:
+            td = td.replace(a)
+            td = parent.step(td)
+            td = parent.step_mdp(td)
+            print(td["step_count"])
+        return td.replace(actions[-1])
