@@ -8038,9 +8038,11 @@ class RenameTransform(Transform):
                 input_spec["full_action_spec"][out_key] = input_spec[
                     "full_action_spec"
                 ][action_key].clone()
-                if not self.create_copy:
+        if not self.create_copy:
+            for action_key in self.parent.action_keys:
+                if action_key in self.in_keys_inv:
                     del input_spec["full_action_spec"][action_key]
-        for state_key in self.parent.full_state_spec.keys(True):
+        for state_key in self.parent.full_state_spec.keys(True, True):
             if state_key in self.in_keys_inv:
                 for i, out_key in enumerate(self.out_keys_inv):  # noqa: B007
                     if self.in_keys_inv[i] == state_key:
@@ -8051,7 +8053,9 @@ class RenameTransform(Transform):
                 input_spec["full_state_spec"][out_key] = input_spec["full_state_spec"][
                     state_key
                 ].clone()
-                if not self.create_copy:
+        if not self.create_copy:
+            for state_key in self.parent.full_state_spec.keys(True, True):
+                if state_key in self.in_keys_inv:
                     del input_spec["full_state_spec"][state_key]
         return input_spec
 
