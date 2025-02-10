@@ -819,7 +819,7 @@ assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector"))
 # compatible with tensordict-structured data): the number of slices or their
 # length and some information about where the separation between the
 # episodes can be found (e.g. :ref:`recall that <gs_storage_collector>` with a
-# :ref:`DataCollector <collectors>`, the trajectory id is stored in
+# :ref:`DataCollector <ref_collectors>`, the trajectory id is stored in
 # ``("collector", "traj_ids")``). In this simple example, we construct a data
 # with 4 consecutive short trajectories and sample 4 slices out of it, each of
 # length 2 (since the batch size is 8, and 8 items // 4 slices = 2 time steps).
