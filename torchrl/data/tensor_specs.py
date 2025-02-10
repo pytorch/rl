@@ -4818,7 +4818,7 @@ class Composite(TensorSpec):
     def __setitem__(self, key, value):
         dest = self
         if isinstance(key, tuple) and len(key) > 1:
-            while key[0] not in self.keys():
+            while key[0] not in dest.keys():
                 dest[key[0]] = dest = Composite(shape=self.shape, device=self.device)
                 if len(key) > 2:
                     key = key[1:]
