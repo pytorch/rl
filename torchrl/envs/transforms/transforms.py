@@ -973,7 +973,7 @@ but got an object of type {type(transform)}."""
             )
         self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
         # we want the input entries to remain unchanged
-        next_tensordict = self.transform._step(tensordict, next_tensordict)
+        next_tensordict = self.transform._step(tensordict_in, next_tensordict)
         return next_tensordict
 
     def set_seed(
