@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import _pickle
 import abc
+import collections
 
 import contextlib
 
@@ -20,6 +21,7 @@ from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
+from queue import Empty
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -258,7 +260,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             self.policy_weights.data.update_(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
-        yield from self.iterator()
+        try:
+            yield from self.iterator()
+        except Exception:
+            self.shutdown()
+            raise
 
     def next(self):
         try:
@@ -2325,8 +2331,28 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 while self.queue_out.qsize() < int(self.num_workers):
                     continue
 
+            recv = collections.deque()
+            t0 = time.time()
+            while len(recv) < self.num_workers and (
+                (time.time() - t0) < (_TIMEOUT * _MAX_IDLE_COUNT)
+            ):
+                for _ in range(self.num_workers):
+                    try:
+                        new_data, j = self.queue_out.get(timeout=_TIMEOUT)
+                        recv.append((new_data, j))
+                    except (TimeoutError, Empty):
+                        _check_for_faulty_process(self.procs)
+            if (time.time() - t0) > (_TIMEOUT * _MAX_IDLE_COUNT):
+                try:
+                    self.shutdown()
+                finally:
+                    raise RuntimeError(
+                        f"Failed to gather all collector output within {_TIMEOUT * _MAX_IDLE_COUNT} seconds. "
+                        f"Increase the MAX_IDLE_COUNT environment variable to bypass this error."
+                    )
+
             for _ in range(self.num_workers):
-                new_data, j = self.queue_out.get()
+                new_data, j = recv.popleft()
                 use_buffers = self._use_buffers
                 if self.replay_buffer is not None:
                     idx = new_data
@@ -2659,12 +2685,19 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         workers_frames = [0 for _ in range(self.num_workers)]
         while self._frames < self.total_frames:
             self._iter += 1
+            counter = 0
             while True:
                 try:
-                    idx, j, out = self._get_from_queue(timeout=10.0)
+                    idx, j, out = self._get_from_queue(timeout=_TIMEOUT)
                     break
-                except TimeoutError:
+                except (TimeoutError, Empty):
+                    counter += _TIMEOUT
                     _check_for_faulty_process(self.procs)
+                if counter > (_TIMEOUT * _MAX_IDLE_COUNT):
+                    raise RuntimeError(
+                        f"Failed to gather all collector output within {_TIMEOUT * _MAX_IDLE_COUNT} seconds. "
+                        f"Increase the MAX_IDLE_COUNT environment variable to bypass this error."
+                    )
             if self.replay_buffer is None:
                 worker_frames = out.numel()
                 if self.split_trajs:
