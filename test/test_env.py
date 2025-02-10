@@ -2572,6 +2572,7 @@ class TestConcurrentEnvs:
             total_frames=N * n_workers * 100,
             storing_device=device,
             device=device,
+            trust_policy=True,
             cat_results=-1,
         )
         single_collectors = [
@@ -2581,6 +2582,7 @@ class TestConcurrentEnvs:
                 frames_per_batch=n_workers * 100,
                 total_frames=N * n_workers * 100,
                 storing_device=device,
+                trust_policy=True,
                 device=device,
             )
             for i in range(n_workers)
