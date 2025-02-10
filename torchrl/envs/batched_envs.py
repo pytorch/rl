@@ -1669,9 +1669,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             result = tensordict.new_zeros(tensordict_save.shape)
             result_ = tensordict_.new_zeros(tensordict_save.shape)
 
-            result.update(
-                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+            old_r_copy = tensordict_save.clone().set(
+                "next",
+                tensordict_save.select(*next_td.keys(True, True), strict=False).clone(),
             )
+            result.update(old_r_copy)
             result_.update(
                 tensordict_save.select(*result_.keys(True, True), strict=False).clone()
             )

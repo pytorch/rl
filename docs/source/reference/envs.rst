@@ -885,6 +885,7 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    ConditionalSkip
     Crop
     DTypeCastTransform
     DeviceCastTransform
