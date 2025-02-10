@@ -58,6 +58,7 @@ from torchrl.envs import (
     CenterCrop,
     ClipTransform,
     Compose,
+    ConditionalSkip,
     Crop,
     DeviceCastTransform,
     DiscreteActionProjection,
@@ -13449,6 +13450,159 @@ class TestLineariseRewards(TransformBase):
             in_keys=[("agent_0", "reward"), ("agent_1", "reward")], weights=weights
         )
         assert transform.transform_reward_spec(reward_spec) == expected_reward_spec
+
+
+class TestConditionalSkip(TransformBase):
+    @pytest.mark.parametrize("bwad", [False, True])
+    def test_single_trans_env_check(self, bwad):
+        env = CountingEnv()
+        base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
+        env = TransformedEnv(base_env, StepCounter(), auto_unwrap=False)
+        env = env.append_transform(
+            ConditionalSkip(cond=lambda td: td["step_count"] % 2 == 1)
+        )
+        env.set_seed(0)
+        env.check_env_specs()
+        policy = lambda td: td.set("action", torch.ones((1,)))
+        r = env.rollout(10, policy, break_when_any_done=bwad)
+        assert (r["step_count"] == torch.arange(10).view(10, 1)).all()
+        assert (r["other_count"] == torch.arange(1, 11).view(10, 1) // 2).all()
+
+    @pytest.mark.parametrize("bwad", [False, True])
+    def test_serial_trans_env_check(self, bwad):
+        def make_env(i):
+            env = CountingEnv()
+            base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
+            return TransformedEnv(
+                base_env,
+                Compose(
+                    StepCounter(),
+                    ConditionalSkip(cond=lambda td, i=i: (td["step_count"] % 2 == i)),
+                ),
+                auto_unwrap=False,
+            )
+
+        env = SerialEnv(2, [partial(make_env, i=0), partial(make_env, i=1)])
+        env.check_env_specs()
+        policy = lambda td: td.set("action", torch.ones((2, 1)))
+        r = env.rollout(10, policy, break_when_any_done=bwad)
+        assert (r["step_count"] == torch.arange(10).view(10, 1).expand(2, 10, 1)).all()
+        assert (r["other_count"][0] == torch.arange(0, 10).view(10, 1) // 2).all()
+        assert (r["other_count"][1] == torch.arange(1, 11).view(10, 1) // 2).all()
+
+    @pytest.mark.parametrize("bwad", [False, True])
+    def test_parallel_trans_env_check(self, bwad):
+        def make_env(i):
+            env = CountingEnv()
+            base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
+            return TransformedEnv(
+                base_env,
+                Compose(
+                    StepCounter(),
+                    ConditionalSkip(cond=lambda td, i=i: (td["step_count"] % 2 == i)),
+                ),
+                auto_unwrap=False,
+            )
+
+        env = ParallelEnv(
+            2, [partial(make_env, i=0), partial(make_env, i=1)], mp_start_method=mp_ctx
+        )
+        try:
+            env.check_env_specs()
+            policy = lambda td: td.set("action", torch.ones((2, 1)))
+            r = env.rollout(10, policy, break_when_any_done=bwad)
+            assert (
+                r["step_count"] == torch.arange(10).view(10, 1).expand(2, 10, 1)
+            ).all()
+            assert (r["other_count"][0] == torch.arange(0, 10).view(10, 1) // 2).all()
+            assert (r["other_count"][1] == torch.arange(1, 11).view(10, 1) // 2).all()
+        finally:
+            env.close()
+            del env
+
+    @pytest.mark.parametrize("bwad", [False, True])
+    def test_trans_serial_env_check(self, bwad):
+        def make_env():
+            env = CountingEnv(max_steps=100)
+            base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
+            return base_env
+
+        base_env = SerialEnv(2, [make_env, make_env])
+
+        def cond(td):
+            sc = td["step_count"] + torch.tensor([[0], [1]])
+            return sc.squeeze() % 2 == 0
+
+        env = TransformedEnv(base_env, Compose(StepCounter(), ConditionalSkip(cond)))
+        env.check_env_specs()
+        policy = lambda td: td.set("action", torch.ones((2, 1)))
+        r = env.rollout(10, policy, break_when_any_done=bwad)
+        assert (r["step_count"] == torch.arange(10).view(10, 1).expand(2, 10, 1)).all()
+        assert (r["other_count"][0] == torch.arange(0, 10).view(10, 1) // 2).all()
+        assert (r["other_count"][1] == torch.arange(1, 11).view(10, 1) // 2).all()
+
+    @pytest.mark.parametrize("bwad", [True, False])
+    @pytest.mark.parametrize("buffers", [True, False])
+    def test_trans_parallel_env_check(self, bwad, buffers):
+        def make_env():
+            env = CountingEnv(max_steps=100)
+            base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
+            return base_env
+
+        base_env = ParallelEnv(
+            2, [make_env, make_env], mp_start_method=mp_ctx, use_buffers=buffers
+        )
+        try:
+
+            def cond(td):
+                sc = td["step_count"] + torch.tensor([[0], [1]])
+                return sc.squeeze() % 2 == 0
+
+            env = TransformedEnv(
+                base_env, Compose(StepCounter(), ConditionalSkip(cond))
+            )
+            env.check_env_specs()
+            policy = lambda td: td.set("action", torch.ones((2, 1)))
+            r = env.rollout(10, policy, break_when_any_done=bwad)
+            assert (
+                r["step_count"] == torch.arange(10).view(10, 1).expand(2, 10, 1)
+            ).all()
+            assert (r["other_count"][0] == torch.arange(0, 10).view(10, 1) // 2).all()
+            assert (r["other_count"][1] == torch.arange(1, 11).view(10, 1) // 2).all()
+        finally:
+            base_env.close()
+            del base_env
+
+    def test_transform_no_env(self):
+        t = ConditionalSkip(lambda td: torch.arange(td.numel()).view(td.shape) % 2 == 0)
+        assert not t._inv_call(TensorDict())["_step"]
+        assert t._inv_call(TensorDict())["_step"].shape == ()
+        assert t._inv_call(TensorDict(batch_size=(2, 3)))["_step"].shape == (2, 3)
+
+    def test_transform_compose(self):
+        t = Compose(
+            ConditionalSkip(lambda td: torch.arange(td.numel()).view(td.shape) % 2 == 0)
+        )
+        assert not t._inv_call(TensorDict())["_step"]
+        assert t._inv_call(TensorDict())["_step"].shape == ()
+        assert t._inv_call(TensorDict(batch_size=(2, 3)))["_step"].shape == (2, 3)
+
+    def test_transform_env(self):
+        # tested above
+        return
+
+    def test_transform_model(self):
+        t = Compose(
+            ConditionalSkip(lambda td: torch.arange(td.numel()).view(td.shape) % 2 == 0)
+        )
+        with pytest.raises(NotImplementedError):
+            t(TensorDict())["_step"]
+
+    def test_transform_rb(self):
+        return
+
+    def test_transform_inverse(self):
+        return
 
 
 if __name__ == "__main__":
