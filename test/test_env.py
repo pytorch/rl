@@ -75,6 +75,9 @@ from torchrl.modules.tensordict_module import WorldModelWrapper
 
 pytestmark = [
     pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings(
+        "ignore:Got multiple backends for torchrl.data.replay_buffers.storages"
+    ),
 ]
 
 gym_version = None
