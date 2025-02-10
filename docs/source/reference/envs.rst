@@ -212,6 +212,7 @@ component (sub-environments or agents) should be reset.
 This allows to reset some but not all of the components.
 
 The ``"_reset"`` key has two distinct functionalities:
+
 1. During a call to :meth:`~.EnvBase._reset`, the ``"_reset"`` key may or may
    not be present in the input tensordict. TorchRL's convention is that the
    absence of the ``"_reset"`` key at a given ``"done"`` level indicates
@@ -899,7 +900,7 @@ to be able to create this other composition:
     Hash
     InitTracker
     KLRewardTransform
-    LineariseReward
+    LineariseRewards
     NoopResetEnv
     ObservationNorm
     ObservationTransform

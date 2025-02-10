@@ -3163,6 +3163,7 @@ class CatFrames(ObservationTransform):
 
         Returns:
             A tuple containing:
+
                 - transform (Transform): A transform that stacks frames on-the-fly during sampling.
                 - sampler (SliceSampler): A sampler that ensures the correct sequence length is maintained.
 

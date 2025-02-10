@@ -215,10 +215,11 @@ class GymLikeEnv(_EnvWrapper):
                 Defaults to ``None``.
 
         Returns: a tuple with 4 boolean / tensor values,
-            - a terminated state,
-            - a truncated state,
-            - a done state,
-            - a boolean value indicating whether the frame_skip loop should be broken.
+
+        - a terminated state,
+        - a truncated state,
+        - a done state,
+        - a boolean value indicating whether the frame_skip loop should be broken.
 
         """
         if truncated is not None and done is None:
@@ -418,16 +419,16 @@ class GymLikeEnv(_EnvWrapper):
 
         These three concepts have different usage:
 
-          - ``"terminated"`` indicated the final stage of a Markov Decision
-            Process. It means that one should not pay attention to the
-            upcoming observations (eg., in value functions) as they should be
-            regarded as not valid.
-          - ``"truncated"`` means that the environment has reached a stage where
-            we decided to stop the collection for some reason but the next
-            observation should not be discarded. If it were not for this
-            arbitrary decision, the collection could have proceeded further.
-          - ``"done"`` is either one or the other. It is to be interpreted as
-            "a reset should be called before the next step is undertaken".
+        - ``"terminated"`` indicated the final stage of a Markov Decision
+          Process. It means that one should not pay attention to the
+          upcoming observations (eg., in value functions) as they should be
+          regarded as not valid.
+        - ``"truncated"`` means that the environment has reached a stage where
+          we decided to stop the collection for some reason but the next
+          observation should not be discarded. If it were not for this
+          arbitrary decision, the collection could have proceeded further.
+        - ``"done"`` is either one or the other. It is to be interpreted as
+          "a reset should be called before the next step is undertaken".
 
         """
         ...

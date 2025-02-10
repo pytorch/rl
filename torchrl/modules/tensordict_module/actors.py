@@ -2149,11 +2149,12 @@ class LMHeadActorValueOperator(ActorValueOperator):
     """Builds an Actor-Value operator from an huggingface-like *LMHeadModel.
 
     This method:
-        - takes as input an huggingface-like *LMHeadModel
-        - extracts the final linear layer uses it as a base layer of the actor_head and
-            adds the sampling layer
-        - uses the common transformer as common model
-        - adds a linear critic
+
+    - takes as input an huggingface-like *LMHeadModel
+    - extracts the final linear layer uses it as a base layer of the actor_head and
+      adds the sampling layer
+    - uses the common transformer as common model
+    - adds a linear critic
 
     Args:
         base_model (nn.Module): a torch model composed by a `.transformer` model and `.lm_head` linear layer

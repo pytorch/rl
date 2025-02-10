@@ -442,8 +442,11 @@ class Tree(TensorClass["nocast"]):
         """Returns the number of unique vertices in the Tree.
 
         Keyword Args:
-            count_repeat (bool, optional): Determines whether to count repeated vertices.
+            count_repeat (bool, optional): Determines whether to count repeated
+                vertices.
+
                 - If ``False``, counts each unique vertex only once.
+
                 - If ``True``, counts vertices multiple times if they appear in different paths.
                 Defaults to ``False``.
 

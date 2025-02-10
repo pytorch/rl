@@ -917,13 +917,13 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
         and/or within a tensordict:
 
-          - spaces.Box
-          - spaces.Sequence
-          - spaces.Tuple
-          - spaces.Discrete
-          - spaces.MultiBinary
-          - spaces.MultiDiscrete
-          - spaces.Dict
+        - spaces.Box
+        - spaces.Sequence
+        - spaces.Tuple
+        - spaces.Discrete
+        - spaces.MultiBinary
+        - spaces.MultiDiscrete
+        - spaces.Dict
 
         Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
         can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
@@ -1588,13 +1588,13 @@ class GymEnv(GymWrapper):
         The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
         and/or within a tensordict:
 
-          - spaces.Box
-          - spaces.Sequence
-          - spaces.Tuple
-          - spaces.Discrete
-          - spaces.MultiBinary
-          - spaces.MultiDiscrete
-          - spaces.Dict
+        - spaces.Box
+        - spaces.Sequence
+        - spaces.Tuple
+        - spaces.Discrete
+        - spaces.MultiBinary
+        - spaces.MultiDiscrete
+        - spaces.Dict
 
         Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
         can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).

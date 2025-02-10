@@ -339,10 +339,12 @@ class SyncDataCollector(DataCollectorBase):
             instances) it will be wrapped in a `nn.Module` first.
             Then, the collector will try to assess if these
             modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+
             - If the policy forward signature matches any of ``forward(self, tensordict)``,
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:
@@ -1462,6 +1464,7 @@ class _MultiDataCollector(DataCollectorBase):
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+
             - In all other cases an attempt to wrap it will be undergone as such:
               ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
@@ -2774,10 +2777,12 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             instances) it will be wrapped in a `nn.Module` first.
             Then, the collector will try to assess if these
             modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+
             - If the policy forward signature matches any of ``forward(self, tensordict)``,
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:

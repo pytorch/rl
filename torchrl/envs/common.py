@@ -2130,9 +2130,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         This method is designed with the following scopes in mind:
 
-          - Incorporate a TorchRL-first environment in a framework that uses Gym;
-          - Incorporate another environment (eg, DeepMind Control, Brax, Jumanji, ...)
-            in a framework that uses Gym.
+        - Incorporate a TorchRL-first environment in a framework that uses Gym;
+        - Incorporate another environment (eg, DeepMind Control, Brax, Jumanji, ...)
+          in a framework that uses Gym.
 
         Args:
             id (str): the name of the environment. Should follow the
