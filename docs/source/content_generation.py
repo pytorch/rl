@@ -83,6 +83,10 @@ def generate_tutorial_references(tutorial_path: str, file_type: str) -> None:
         for f in os.listdir(tutorial_path)
         if f.endswith((".py", ".rst", ".png"))
     ]
+    # Make rb_tutorial.py the first one
+    file_paths = [p for p in file_paths if p.endswith("rb_tutorial.py")] + [
+        p for p in file_paths if not p.endswith("rb_tutorial.py")
+    ]
 
     for file_path in file_paths:
         shutil.copyfile(file_path, os.path.join(target_path, Path(file_path).name))
