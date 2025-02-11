@@ -7,6 +7,8 @@ Using Replay Buffers
 .. _rb_tuto:
 
 """
+import gc
+
 ######################################################################
 # Replay buffers are a central piece of any RL or control algorithm.
 # Supervised learning methods are usually characterized by a training loop
@@ -59,7 +61,6 @@ Using Replay Buffers
 import warnings
 
 warnings.filterwarnings("ignore")
-from torch import multiprocessing
 
 # TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
 # `__main__` method call, but for the easy of reading the code switch to fork
@@ -68,11 +69,6 @@ try:
     is_sphinx = __sphinx_build__
 except NameError:
     is_sphinx = False
-
-try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
-except RuntimeError:
-    pass
 
 # sphinx_gallery_end_ignore
 
@@ -205,17 +201,21 @@ print("samples", sample["a"], sample["b", "c"])
 #
 
 with tempfile.TemporaryDirectory() as tempdir:
-    buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size, scratch_dir=tempdir))
+    buffer_lazymemmap = ReplayBuffer(
+        storage=LazyMemmapStorage(size, scratch_dir=tempdir)
+    )
     buffer_lazymemmap.extend(data)
     print(f"The buffer has {len(buffer_lazymemmap)} elements")
-    print("the 'a' tensor is stored in", buffer_lazymemmap._storage._storage["a"].filename)
+    print(
+        "the 'a' tensor is stored in", buffer_lazymemmap._storage._storage["a"].filename
+    )
     print(
         "the ('b', 'c') tensor is stored in",
         buffer_lazymemmap._storage._storage["b", "c"].filename,
     )
     sample = buffer_lazytensor.sample(5)
     print("samples: a=", sample["a"], "\n('b', 'c'):", sample["b", "c"])
-
+    del buffer_lazymemmap
 
 
 ######################################################################
@@ -250,6 +250,7 @@ with tempfile.TemporaryDirectory() as tempdir:
     print(f"The buffer has {len(buffer_lazymemmap)} elements")
     sample = buffer_lazymemmap.sample()
     print("sample:", sample)
+    del buffer_lazymemmap
 
 ######################################################################
 # Our sample now has an extra ``"index"`` key that indicates what indices
@@ -284,9 +285,7 @@ data = MyData(
     batch_size=[10],
 )
 
-buffer_lazymemmap = ReplayBuffer(
-    storage=LazyTensorStorage(size), batch_size=12
-)
+buffer_lazymemmap = ReplayBuffer(storage=LazyTensorStorage(size), batch_size=12)
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
 sample = buffer_lazymemmap.sample()
@@ -872,5 +871,6 @@ print("steps are successive", sample["steps"])
 # - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.
 
 # sphinx_gallery_start_ignore
-exit(0)
+gc.collect()
+# exit(0)
 # sphinx_gallery_end_ignore
