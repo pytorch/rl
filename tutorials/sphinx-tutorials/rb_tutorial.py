@@ -200,27 +200,22 @@ sample = buffer_lazytensor.sample(5)
 print("samples", sample["a"], sample["b", "c"])
 
 ######################################################################
-# A :class:`~torchrl.data.LazyMemmapStorage` is created in the same manner:
-#
-
-buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size))
-buffer_lazymemmap.extend(data)
-print(f"The buffer has {len(buffer_lazymemmap)} elements")
-sample = buffer_lazytensor.sample(5)
-print("samples: a=", sample["a"], "\n('b', 'c'):", sample["b", "c"])
-
-######################################################################
+# A :class:`~torchrl.data.LazyMemmapStorage` is created in the same manner.
 # We can also customize the storage location on disk:
 #
-tempdir = tempfile.TemporaryDirectory()
-buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size, scratch_dir=tempdir))
-buffer_lazymemmap.extend(data)
-print(f"The buffer has {len(buffer_lazymemmap)} elements")
-print("the 'a' tensor is stored in", buffer_lazymemmap._storage._storage["a"].filename)
-print(
-    "the ('b', 'c') tensor is stored in",
-    buffer_lazymemmap._storage._storage["b", "c"].filename,
-)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size, scratch_dir=tempdir))
+    buffer_lazymemmap.extend(data)
+    print(f"The buffer has {len(buffer_lazymemmap)} elements")
+    print("the 'a' tensor is stored in", buffer_lazymemmap._storage._storage["a"].filename)
+    print(
+        "the ('b', 'c') tensor is stored in",
+        buffer_lazymemmap._storage._storage["b", "c"].filename,
+    )
+    sample = buffer_lazytensor.sample(5)
+    print("samples: a=", sample["a"], "\n('b', 'c'):", sample["b", "c"])
+
 
 
 ######################################################################
@@ -247,14 +242,14 @@ print(
 
 from torchrl.data import TensorDictReplayBuffer
 
-tempdir = tempfile.TemporaryDirectory()
-buffer_lazymemmap = TensorDictReplayBuffer(
-    storage=LazyMemmapStorage(size, scratch_dir=tempdir), batch_size=12
-)
-buffer_lazymemmap.extend(data)
-print(f"The buffer has {len(buffer_lazymemmap)} elements")
-sample = buffer_lazymemmap.sample()
-print("sample:", sample)
+with tempfile.TemporaryDirectory() as tempdir:
+    buffer_lazymemmap = TensorDictReplayBuffer(
+        storage=LazyMemmapStorage(size, scratch_dir=tempdir), batch_size=12
+    )
+    buffer_lazymemmap.extend(data)
+    print(f"The buffer has {len(buffer_lazymemmap)} elements")
+    sample = buffer_lazymemmap.sample()
+    print("sample:", sample)
 
 ######################################################################
 # Our sample now has an extra ``"index"`` key that indicates what indices
@@ -289,9 +284,8 @@ data = MyData(
     batch_size=[10],
 )
 
-tempdir = tempfile.TemporaryDirectory()
 buffer_lazymemmap = ReplayBuffer(
-    storage=LazyMemmapStorage(size, scratch_dir=tempdir), batch_size=12
+    storage=LazyTensorStorage(size), batch_size=12
 )
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
@@ -322,8 +316,8 @@ from torch.utils._pytree import tree_map
 
 
 ######################################################################
-# Let's build our replay buffer on disk:
-rb = ReplayBuffer(storage=LazyMemmapStorage(size))
+# Let's build our replay buffer on RAM:
+rb = ReplayBuffer(storage=LazyTensorStorage(size))
 data = {
     "a": torch.randn(3),
     "b": {"c": (torch.zeros(2), [torch.ones(1)])},
@@ -394,7 +388,7 @@ data = MyData(
     batch_size=[200],
 )
 
-buffer_lazymemmap = ReplayBuffer(storage=LazyMemmapStorage(size), batch_size=128)
+buffer_lazymemmap = ReplayBuffer(storage=LazyTensorStorage(size), batch_size=128)
 buffer_lazymemmap.extend(data)
 buffer_lazymemmap.sample()
 
@@ -409,7 +403,7 @@ buffer_lazymemmap.sample()
 
 
 buffer_lazymemmap = ReplayBuffer(
-    storage=LazyMemmapStorage(size), batch_size=128, prefetch=10
+    storage=LazyTensorStorage(size), batch_size=128, prefetch=10
 )  # creates a queue of 10 elements to be prefetched in the background
 buffer_lazymemmap.extend(data)
 print(buffer_lazymemmap.sample())
@@ -440,7 +434,7 @@ for i, data in enumerate(buffer_lazymemmap):
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 
 buffer_lazymemmap = ReplayBuffer(
-    storage=LazyMemmapStorage(size), batch_size=32, sampler=SamplerWithoutReplacement()
+    storage=LazyTensorStorage(size), batch_size=32, sampler=SamplerWithoutReplacement()
 )
 ######################################################################
 # we create a data that is big enough to get a couple of samples
@@ -465,9 +459,8 @@ print(f"A total of {_i+1} batches have been collected")
 # In contrast to what we have seen earlier, the ``batch_size`` keyword
 # argument can be omitted and passed directly to the ``sample`` method:
 
-
 buffer_lazymemmap = ReplayBuffer(
-    storage=LazyMemmapStorage(size), sampler=SamplerWithoutReplacement()
+    storage=LazyTensorStorage(size), sampler=SamplerWithoutReplacement()
 )
 buffer_lazymemmap.extend(data)
 print("sampling 3 elements:", buffer_lazymemmap.sample(3))
@@ -721,7 +714,7 @@ t = Compose(
     Resize(in_keys=["pixels_trsf", ("next", "pixels_trsf")], w=64, h=64),
     GrayScale(in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
 )
-rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1000), transform=t, batch_size=16)
+rb = TensorDictReplayBuffer(storage=LazyTensorStorage(1000), transform=t, batch_size=16)
 rb.extend(data)
 
 
@@ -783,7 +776,7 @@ t = Compose(
     UnsqueezeTransform(-4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
     CatFrames(dim=-4, N=4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
 )
-rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(size), transform=t, batch_size=16)
+rb = TensorDictReplayBuffer(storage=LazyTensorStorage(size), transform=t, batch_size=16)
 data_exclude = data.exclude("pixels_trsf", ("next", "pixels_trsf"))
 rb.add(data_exclude)
 
@@ -828,7 +821,7 @@ assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector"))
 from torchrl.data import SliceSampler
 
 rb = TensorDictReplayBuffer(
-    storage=LazyMemmapStorage(size),
+    storage=LazyTensorStorage(size),
     sampler=SliceSampler(traj_key="episode", num_slices=4),
     batch_size=8,
 )
@@ -877,3 +870,7 @@ print("steps are successive", sample["steps"])
 #   :class:`~torchrl.data.SliceSamplerWithoutReplacement`, or other writers
 #   such as :class:`~torchrl.data.TensorDictMaxValueWriter`.
 # - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.
+
+# sphinx_gallery_start_ignore
+exit(0)
+# sphinx_gallery_end_ignore
