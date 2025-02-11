@@ -26,8 +26,8 @@ jobs:
   build-docs:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: [ "3.9" ]
+        cuda_arch_version: [ "12.4" ]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -112,7 +112,7 @@ jobs:
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build -vvv
         cd ..
 
         cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
@@ -123,8 +123,8 @@ jobs:
 
   upload:
     needs: build-docs
-    if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
-        ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
+    if: github.repository == 'pytorch/rl' && github.event_name == 'push' &&
+      ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main

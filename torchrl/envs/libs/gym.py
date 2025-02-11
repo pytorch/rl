@@ -858,7 +858,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             rewards, actions and infos.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
         convert_actions_to_numpy (bool, optional): if ``True``, actions will be
             converted from tensors to numpy arrays and moved to CPU before being passed to the
@@ -908,7 +908,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        :meth:`set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
         For parallel (Vectorized) environments, the info dictionary reader is automatically set and should
         not be set manually.
@@ -917,13 +917,13 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
         and/or within a tensordict:
 
-          - spaces.Box
-          - spaces.Sequence
-          - spaces.Tuple
-          - spaces.Discrete
-          - spaces.MultiBinary
-          - spaces.MultiDiscrete
-          - spaces.Dict
+        - spaces.Box
+        - spaces.Sequence
+        - spaces.Tuple
+        - spaces.Discrete
+        - spaces.MultiBinary
+        - spaces.MultiDiscrete
+        - spaces.Dict
 
         Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
         can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
@@ -1522,7 +1522,7 @@ class GymEnv(GymWrapper):
             rewards, actions and infos.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
@@ -1581,20 +1581,20 @@ class GymEnv(GymWrapper):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        :meth:`set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
     .. note:: Gym spaces are not completely covered.
         The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
         and/or within a tensordict:
 
-          - spaces.Box
-          - spaces.Sequence
-          - spaces.Tuple
-          - spaces.Discrete
-          - spaces.MultiBinary
-          - spaces.MultiDiscrete
-          - spaces.Dict
+        - spaces.Box
+        - spaces.Sequence
+        - spaces.Tuple
+        - spaces.Discrete
+        - spaces.MultiBinary
+        - spaces.MultiDiscrete
+        - spaces.Dict
 
         Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
         can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).

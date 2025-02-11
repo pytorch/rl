@@ -19,6 +19,7 @@ Recurrent DQN: Training recurrent policies
       * gym[mujoco]
       * tqdm
 """
+import tempfile
 
 #########################################################################
 # Overview
@@ -393,9 +394,13 @@ optim = torch.optim.Adam(policy.parameters(), lr=3e-4)
 #   For the sake of efficiency, we're only running a few thousands iterations
 #   here. In a real setting, the total number of frames should be set to 1M.
 #
+buffer_scratch_dir = tempfile.TemporaryDirectory().name
+
 collector = SyncDataCollector(env, stoch_policy, frames_per_batch=50, total_frames=200)
 rb = TensorDictReplayBuffer(
-    storage=LazyMemmapStorage(20_000), batch_size=4, prefetch=10
+    storage=LazyMemmapStorage(20_000, scratch_dir=buffer_scratch_dir),
+    batch_size=4,
+    prefetch=10,
 )
 
 ######################################################################
@@ -470,3 +475,19 @@ if traj_lens:
 # ---------------
 #
 # - The TorchRL documentation can be found `here <https://pytorch.org/rl/>`_.
+
+
+# sphinx_gallery_start_ignore
+
+# Remove scratch dir
+try:
+    import shutil
+
+    # Use shutil.rmtree() to delete the directory and all its contents
+    shutil.rmtree(buffer_scratch_dir)
+    print(f"Directory '{buffer_scratch_dir}' deleted successfully.")
+except FileNotFoundError:
+    print(f"Directory '{buffer_scratch_dir}' not found.")
+except Exception as e:
+    print(f"Error deleting directory: {e}")
+# sphinx_gallery_end_ignore
