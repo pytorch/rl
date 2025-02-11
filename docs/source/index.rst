@@ -96,6 +96,12 @@ Basics
 Intermediate
 ------------
 
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/multiagent_ppo
+   tutorials/torchrl_envs
+   tutorials/pretrained_models
 
 Advanced
 --------
