@@ -156,6 +156,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
         NestedCountingEnv,
+        StateLessCountingEnv,
     )
 else:
     from _utils_internal import (  # noqa
@@ -184,6 +185,7 @@ else:
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
         NestedCountingEnv,
+        StateLessCountingEnv,
     )
 
 IS_WIN = platform == "win32"
@@ -13752,7 +13754,9 @@ class TestMultiAction(TransformBase):
     @pytest.mark.parametrize("buffers", [True, False])
     def test_trans_parallel_env_check(self, bwad, buffers):
         self._batched_trans_env_check(
-            partial(ParallelEnv, mp_start_method=mp_ctx), bwad, within=False
+            partial(ParallelEnv, use_buffers=buffers, mp_start_method=mp_ctx),
+            bwad,
+            within=False,
         )
 
     def test_transform_no_env(self):
@@ -13761,9 +13765,39 @@ class TestMultiAction(TransformBase):
     def test_transform_compose(self):
         ...
 
-    def test_transform_env(self):
-        # tested above
-        return
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_transform_env(self, bwad):
+        # tests stateless (batch-unlocked) envs
+        torch.manual_seed(0)
+        env = StateLessCountingEnv()
+
+        def policy(td):
+            td["action"] = torch.ones(td.shape + (1,))
+            return td
+
+        r = env.rollout(
+            10,
+            tensordict=env.reset().expand(4),
+            auto_reset=False,
+            break_when_any_done=False,
+            policy=policy,
+        )
+        assert (r["count"] == torch.arange(10).expand(4, 10).view(4, 10, 1)).all()
+        td_reset = env.reset().expand(4).clone()
+        td_reset["max_count"] = torch.arange(4, 8).view(4, 1)
+        env = TransformedEnv(env, MultiAction())
+
+        def policy(td):
+            td["action"] = torch.ones(td.shape + (3,) + (1,))
+            return td
+
+        r = env.rollout(
+            20,
+            policy=policy,
+            auto_reset=False,
+            tensordict=td_reset,
+            break_when_any_done=bwad,
+        )
 
     def test_transform_model(self):
         ...
