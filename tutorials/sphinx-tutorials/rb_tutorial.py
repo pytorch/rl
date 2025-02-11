@@ -692,6 +692,7 @@ for data in collector:
     print(data)
     break
 
+collector.shutdown()
 
 ######################################################################
 # We create a replay buffer with the same transform as the environment.
@@ -760,6 +761,8 @@ collector = SyncDataCollector(
 for data in collector:
     print(data)
     break
+
+collector.shutdown()
 
 ######################################################################
 # The buffer transform looks pretty much like the environment one, but with
@@ -871,6 +874,8 @@ print("steps are successive", sample["steps"])
 # - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.
 
 # sphinx_gallery_start_ignore
+
 gc.collect()
 # exit(0)
+
 # sphinx_gallery_end_ignore
