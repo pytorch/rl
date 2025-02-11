@@ -92,7 +92,7 @@ class ReplayBuffer:
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading. Defaults to None (no prefetching).
         transform (Transform, optional): Transform to be executed when
-            :meth:`~.sample` is called.
+            :meth:`sample` is called.
             To chain transforms use the :class:`~torchrl.envs.Compose` class.
             Transforms should be used with :class:`tensordict.TensorDict`
             content. A generic callable can also be passed if the replay buffer
@@ -104,21 +104,21 @@ class ReplayBuffer:
               ``batch_size`` argument, or at sampling time. The former should
               be preferred whenever the batch-size is consistent across the
               experiment. If the batch-size is likely to change, it can be
-              passed to the :meth:`~.sample` method. This option is
+              passed to the :meth:`sample` method. This option is
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
         dim_extend (int, optional): indicates the dim to consider for
-            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            extension when calling :meth:`extend`. Defaults to ``storage.ndim-1``.
             When using ``dim_extend > 0``, we recommend using the ``ndim``
             argument in the storage instantiation if that argument is
             available, to let storages know that the data is
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
 
-            .. note:: This argument has no effect on :meth:`~.add` and
-                therefore should be used with caution when both :meth:`~.add`
-                and :meth:`~.extend` are used in a codebase. For example:
+            .. note:: This argument has no effect on :meth:`add` and
+                therefore should be used with caution when both :meth:`add`
+                and :meth:`extend` are used in a codebase. For example:
 
                     >>> data = torch.zeros(3, 4)
                     >>> rb = ReplayBuffer(
@@ -541,12 +541,12 @@ class ReplayBuffer:
     def loads(self, path):
         """Loads a replay buffer state at the given path.
 
-        The buffer should have matching components and be saved using :meth:`~.dumps`.
+        The buffer should have matching components and be saved using :meth:`dumps`.
 
         Args:
             path (Path or str): path where the replay buffer was saved.
 
-        See :meth:`~.dumps` for more info.
+        See :meth:`dumps` for more info.
 
         """
         path = Path(path).absolute()
@@ -566,15 +566,15 @@ class ReplayBuffer:
         self._batch_size = metadata["batch_size"]
 
     def save(self, *args, **kwargs):
-        """Alias for :meth:`~.dumps`."""
+        """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def dump(self, *args, **kwargs):
-        """Alias for :meth:`~.dumps`."""
+        """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def load(self, *args, **kwargs):
-        """Alias for :meth:`~.loads`."""
+        """Alias for :meth:`loads`."""
         return self.loads(*args, **kwargs)
 
     def register_save_hook(self, hook: Callable[[Any], Any]):
@@ -931,21 +931,21 @@ class PrioritizedReplayBuffer(ReplayBuffer):
               ``batch_size`` argument, or at sampling time. The former should
               be preferred whenever the batch-size is consistent across the
               experiment. If the batch-size is likely to change, it can be
-              passed to the :meth:`~.sample` method. This option is
+              passed to the :meth:`sample` method. This option is
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
         dim_extend (int, optional): indicates the dim to consider for
-            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            extension when calling :meth:`extend`. Defaults to ``storage.ndim-1``.
             When using ``dim_extend > 0``, we recommend using the ``ndim``
             argument in the storage instantiation if that argument is
             available, to let storages know that the data is
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
 
-            .. note:: This argument has no effect on :meth:`~.add` and
-                therefore should be used with caution when both :meth:`~.add`
-                and :meth:`~.extend` are used in a codebase. For example:
+            .. note:: This argument has no effect on :meth:`add` and
+                therefore should be used with caution when both :meth:`add`
+                and :meth:`extend` are used in a codebase. For example:
 
                     >>> data = torch.zeros(3, 4)
                     >>> rb = ReplayBuffer(

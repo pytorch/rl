@@ -57,7 +57,7 @@ class EGreedyModule(TensorDictModuleBase):
         device (torch.device, optional): the device of the exploration module.
 
     .. note::
-        It is crucial to incorporate a call to :meth:`~.step` in the training loop
+        It is crucial to incorporate a call to :meth:`step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
         will be raised if this is ommitted!
@@ -270,7 +270,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
     .. note::
         It is
-        crucial to incorporate a call to :meth:`~.step` in the training loop
+        crucial to incorporate a call to :meth:`step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
         will be raised if this is ommitted!
@@ -424,7 +424,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
 
     .. note::
         It is
-        crucial to incorporate a call to :meth:`~.step` in the training loop
+        crucial to incorporate a call to :meth:`step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
         will be raised if this is ommitted!

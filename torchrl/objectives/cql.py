@@ -72,7 +72,7 @@ class CQLLoss(LossModule):
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
             Default is ``False``.
-        target_entropy (float or str, optional): Target entropy for the
+        target_entropy (:obj:`float` or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
             computed as :obj:`-prod(n_actions)`.
         delay_actor (bool, optional): Whether to separate the target actor

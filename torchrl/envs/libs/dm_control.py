@@ -150,7 +150,7 @@ class DMControlWrapper(GymLikeEnv):
             rewards, actions and infos.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
@@ -378,7 +378,7 @@ class DMControlEnv(DMControlWrapper):
             rewards, actions and infos.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:

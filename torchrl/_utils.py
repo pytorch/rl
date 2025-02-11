@@ -513,7 +513,7 @@ class implement_for:
         """Resets the setters in setter_dict.
 
         ``setter_dict`` is a copy of implementations. We just need to iterate through its
-        values and call :meth:`~.module_set` for each.
+        values and call :meth:`module_set` for each.
 
         """
         if VERBOSE:
@@ -888,7 +888,7 @@ def _standardize(
         exclude_dims (Tuple[int]): dimensions to exclude from the statistics, can be negative. Default: ().
         mean (Tensor): a mean to be used for standardization. Must be of shape broadcastable to input. Default: None.
         std (Tensor): a standard deviation to be used for standardization. Must be of shape broadcastable to input. Default: None.
-        eps (float): epsilon to be used for numerical stability. Default: float32 resolution.
+        eps (:obj:`float`): epsilon to be used for numerical stability. Default: float32 resolution.
 
     """
     if eps is None:

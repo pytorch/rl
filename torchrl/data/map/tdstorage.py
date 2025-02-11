@@ -193,7 +193,7 @@ class TensorDictMap(
                 in the storage. Defaults to ``None`` (all keys are registered).
             max_size (int, optional): the maximum number of elements in the storage. Ignored if the
                 ``storage_constructor`` is passed. Defaults to ``1000``.
-            storage_constructor (type, optional): a type of tensor storage.
+            storage_constructor (Type, optional): a type of tensor storage.
                 Defaults to :class:`~tensordict.nn.storage.LazyDynamicStorage`.
                 Other options include :class:`~tensordict.nn.storage.FixedStorage`.
             hash_module (Callable, optional): a hash function to use in the :class:`~torchrl.data.map.QueryModule`.

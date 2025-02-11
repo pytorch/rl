@@ -44,7 +44,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         device (torch.device, optional): if provided, the device on which the data
             is to be cast. Defaults to ``torch.device("cpu")``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
@@ -342,7 +342,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         device (torch.device, optional): if provided, the device on which the data
             is to be cast. Defaults to ``torch.device("cpu")``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Examples:

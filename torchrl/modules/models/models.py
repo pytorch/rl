@@ -1519,7 +1519,7 @@ class OnlineDTActor(nn.Module):
         action_dim (int): action dimension.
         transformer_config (Dict or :class:`DecisionTransformer.DTConfig`):
             config for the GPT2 transformer.
-            Defaults to :meth:`~.default_config`.
+            Defaults to :meth:`default_config`.
         device (torch.device, optional): device to use. Defaults to None.
 
     Examples:

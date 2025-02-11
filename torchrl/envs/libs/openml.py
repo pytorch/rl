@@ -47,7 +47,7 @@ class OpenMLEnv(EnvBase):
         device (torch.device or compatible, optional): the device where the input
             and output data is to be expected. Defaults to ``"cpu"``.
         batch_size (torch.Size or compatible, optional): the batch size of the environment,
-            ie. the number of elements samples and returned when a :meth:`~.reset` is
+            ie. the number of elements samples and returned when a :meth:`reset` is
             called. Defaults to an empty batch size, ie. one element is sampled
             at a time.
 

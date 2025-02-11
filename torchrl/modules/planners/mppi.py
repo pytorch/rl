@@ -15,6 +15,7 @@ class MPPIPlanner(MPCPlannerBase):
     """MPPI Planner Module.
 
     Reference:
+
      - Model predictive path integral control using covariance variable importance
      sampling. (Williams, G., Aldrich, A., and Theodorou, E. A.) https://arxiv.org/abs/1509.01149
      - Temporal Difference Learning for Model Predictive Control

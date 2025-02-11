@@ -380,10 +380,13 @@ def make_model(dummy_env):
 # time must always have the same shape.
 
 
+buffer_scratch_dir = tempfile.TemporaryDirectory().name
+
+
 def get_replay_buffer(buffer_size, n_optim, batch_size, device):
     replay_buffer = TensorDictReplayBuffer(
         batch_size=batch_size,
-        storage=LazyMemmapStorage(buffer_size),
+        storage=LazyMemmapStorage(buffer_size, scratch_dir=buffer_scratch_dir),
         prefetch=n_optim,
         transform=lambda td: td.to(device),
     )
@@ -777,3 +780,19 @@ del trainer
 # - A distributional loss (see :class:`~torchrl.objectives.DistributionalDQNLoss`
 #   for more information).
 # - More fancy exploration techniques, such as :class:`~torchrl.modules.NoisyLinear` layers and such.
+
+
+# sphinx_gallery_start_ignore
+
+# Remove scratch dir
+try:
+    import shutil
+
+    # Use shutil.rmtree() to delete the directory and all its contents
+    shutil.rmtree(buffer_scratch_dir)
+    print(f"Directory '{buffer_scratch_dir}' deleted successfully.")
+except FileNotFoundError:
+    print(f"Directory '{buffer_scratch_dir}' not found.")
+except Exception as e:
+    print(f"Error deleting directory: {e}")
+# sphinx_gallery_end_ignore

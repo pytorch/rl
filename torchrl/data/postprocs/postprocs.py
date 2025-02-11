@@ -182,6 +182,7 @@ class MultiStep(nn.Module):
                   environment (i.e. before multi-step);
                 - The "reward" values will be replaced by the newly computed
                   rewards.
+
                 The ``"done"`` key can have either the shape of the tensordict
                 OR the shape of the tensordict followed by a singleton
                 dimension OR the shape of the tensordict followed by other

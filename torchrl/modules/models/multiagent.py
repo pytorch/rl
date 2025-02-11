@@ -25,7 +25,7 @@ class MultiAgentNetBase(nn.Module):
     """A base class for multi-agent networks.
 
     .. note:: to initialize the MARL module parameters with the `torch.nn.init`
-        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        module, please refer to :meth:`get_stateful_net` and :meth:`from_stateful_net`
         methods.
 
     """
@@ -187,7 +187,7 @@ class MultiAgentNetBase(nn.Module):
 
         If the parameters are modified in-place (recommended) there is no need to copy the
         parameters back into the MARL module.
-        See :meth:`~.from_stateful_net` for details on how to re-populate the MARL model with
+        See :meth:`from_stateful_net` for details on how to re-populate the MARL model with
         parameters that have been re-initialized out-of-place.
 
         Examples:
@@ -230,7 +230,7 @@ class MultiAgentNetBase(nn.Module):
     def from_stateful_net(self, stateful_net: nn.Module):
         """Populates the parameters given a stateful version of the network.
 
-        See :meth:`~.get_stateful_net` for details on how to gather a stateful version of the network.
+        See :meth:`get_stateful_net` for details on how to gather a stateful version of the network.
 
         Args:
             stateful_net (nn.Module): the stateful network from which the params should be
@@ -326,7 +326,7 @@ class MultiAgentMLP(MultiAgentNetBase):
         **kwargs: for :class:`torchrl.modules.models.MLP` can be passed to customize the MLPs.
 
     .. note:: to initialize the MARL module parameters with the `torch.nn.init`
-        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        module, please refer to :meth:`get_stateful_net` and :meth:`from_stateful_net`
         methods.
 
     Examples:

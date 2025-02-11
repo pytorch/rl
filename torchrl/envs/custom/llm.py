@@ -32,8 +32,6 @@ class LLMHashingEnv(EnvBase):
     .. figure:: /_static/img/rollout-llm.png
         :alt: Data collection loop with our LLM environment.
 
-    .. seealso:: the :ref:`Beam Search <beam_search>` tutorial gives a practical example of how this env can be used.
-
     Args:
         vocab_size (int): The size of the vocabulary. Can be omitted if the tokenizer is passed.
 

@@ -3,6 +3,8 @@ Using pretrained models
 =======================
 This tutorial explains how to use pretrained models in TorchRL.
 """
+import tempfile
+
 ##############################################################################
 # At the end of this tutorial, you will be capable of using pretrained models
 # for efficient image representation, and fine-tune them.
@@ -66,7 +68,7 @@ base_env = GymEnv("Ant-v4", from_pixels=True, device=device)
 r3m = R3MTransform(
     "resnet50",
     in_keys=["pixels"],
-    download=True,
+    download=False,  # Turn to true for real-life testing
 )
 env_transformed = TransformedEnv(base_env, r3m)
 net = nn.Sequential(
@@ -114,7 +116,8 @@ print("rollout, fine tuning:", rollout)
 #
 from torchrl.data import LazyMemmapStorage, ReplayBuffer
 
-storage = LazyMemmapStorage(1000)
+buffer_scratch_dir = tempfile.TemporaryDirectory().name
+storage = LazyMemmapStorage(1000, scratch_dir=buffer_scratch_dir)
 rb = ReplayBuffer(storage=storage, transform=Compose(lambda td: td.to(device), r3m))
 
 ##############################################################################
@@ -140,7 +143,15 @@ batch = rb.sample(32)
 print("data after sampling:", batch)
 
 # sphinx_gallery_start_ignore
-import time
+# Remove scratch dir
+try:
+    import shutil
 
-time.sleep(10)
+    # Use shutil.rmtree() to delete the directory and all its contents
+    shutil.rmtree(buffer_scratch_dir)
+    print(f"Directory '{buffer_scratch_dir}' deleted successfully.")
+except FileNotFoundError:
+    print(f"Directory '{buffer_scratch_dir}' not found.")
+except Exception as e:
+    print(f"Error deleting directory: {e}")
 # sphinx_gallery_end_ignore

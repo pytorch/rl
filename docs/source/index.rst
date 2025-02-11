@@ -104,7 +104,6 @@ Intermediate
    tutorials/pretrained_models
    tutorials/dqn_with_rnn
    tutorials/rb_tutorial
-   tutorials/export
 
 Advanced
 --------
