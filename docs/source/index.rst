@@ -102,7 +102,7 @@ Intermediate
    tutorials/multiagent_ppo
    tutorials/torchrl_envs
    tutorials/pretrained_models
-   tutorials/rb_tutorial
+   tutorials/dqn_with_rnn
 
 Advanced
 --------
