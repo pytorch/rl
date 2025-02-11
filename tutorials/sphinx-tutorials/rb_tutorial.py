@@ -56,8 +56,14 @@ Using Replay Buffers
 # example:
 #
 
+######################################################################
+# .. warning:: This tutorial build is temporarily disabled.
+
+exit(0)
+
 # sphinx_gallery_start_ignore
 import gc
+
 # sphinx_gallery_end_ignore
 
 import tempfile
@@ -839,6 +845,8 @@ sample = rb.sample()
 print("episode are grouped", sample["episode"])
 print("steps are successive", sample["steps"])
 
+gc.collect()
+
 ######################################################################
 # Conclusion
 # ----------
@@ -863,10 +871,3 @@ print("steps are successive", sample["steps"])
 #   :class:`~torchrl.data.SliceSamplerWithoutReplacement`, or other writers
 #   such as :class:`~torchrl.data.TensorDictMaxValueWriter`.
 # - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.
-
-# sphinx_gallery_start_ignore
-
-gc.collect()
-# exit(0)
-
-# sphinx_gallery_end_ignore
