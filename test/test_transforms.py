@@ -13456,11 +13456,14 @@ class TestConditionalSkip(TransformBase):
     @pytest.mark.parametrize("bwad", [False, True])
     def test_single_trans_env_check(self, bwad):
         env = CountingEnv()
-        base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
-        env = TransformedEnv(base_env, StepCounter(), auto_unwrap=False)
-        env = env.append_transform(
-            ConditionalSkip(cond=lambda td: td["step_count"] % 2 == 1)
+        base_env = TransformedEnv(
+            env,
+            Compose(
+                StepCounter(step_count_key="other_count"),
+                ConditionalSkip(cond=lambda td: td["step_count"] % 2 == 1),
+            ),
         )
+        env = TransformedEnv(base_env, StepCounter(), auto_unwrap=False)
         env.set_seed(0)
         env.check_env_specs()
         policy = lambda td: td.set("action", torch.ones((1,)))
@@ -13472,13 +13475,16 @@ class TestConditionalSkip(TransformBase):
     def test_serial_trans_env_check(self, bwad):
         def make_env(i):
             env = CountingEnv()
-            base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
-            return TransformedEnv(
-                base_env,
+            base_env = TransformedEnv(
+                env,
                 Compose(
-                    StepCounter(),
+                    StepCounter(step_count_key="other_count"),
                     ConditionalSkip(cond=lambda td, i=i: (td["step_count"] % 2 == i)),
                 ),
+            )
+            return TransformedEnv(
+                base_env,
+                StepCounter(),
                 auto_unwrap=False,
             )
 
@@ -13494,13 +13500,16 @@ class TestConditionalSkip(TransformBase):
     def test_parallel_trans_env_check(self, bwad):
         def make_env(i):
             env = CountingEnv()
-            base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
-            return TransformedEnv(
-                base_env,
+            base_env = TransformedEnv(
+                env,
                 Compose(
-                    StepCounter(),
+                    StepCounter(step_count_key="other_count"),
                     ConditionalSkip(cond=lambda td, i=i: (td["step_count"] % 2 == i)),
                 ),
+            )
+            return TransformedEnv(
+                base_env,
+                StepCounter(),
                 auto_unwrap=False,
             )
 
@@ -13533,7 +13542,8 @@ class TestConditionalSkip(TransformBase):
             sc = td["step_count"] + torch.tensor([[0], [1]])
             return sc.squeeze() % 2 == 0
 
-        env = TransformedEnv(base_env, Compose(StepCounter(), ConditionalSkip(cond)))
+        env = TransformedEnv(base_env, ConditionalSkip(cond))
+        env = TransformedEnv(env, StepCounter(), auto_unwrap=False)
         env.check_env_specs()
         policy = lambda td: td.set("action", torch.ones((2, 1)))
         r = env.rollout(10, policy, break_when_any_done=bwad)
@@ -13558,9 +13568,8 @@ class TestConditionalSkip(TransformBase):
                 sc = td["step_count"] + torch.tensor([[0], [1]])
                 return sc.squeeze() % 2 == 0
 
-            env = TransformedEnv(
-                base_env, Compose(StepCounter(), ConditionalSkip(cond))
-            )
+            env = TransformedEnv(base_env, ConditionalSkip(cond))
+            env = TransformedEnv(env, StepCounter(), auto_unwrap=False)
             env.check_env_specs()
             policy = lambda td: td.set("action", torch.ones((2, 1)))
             r = env.rollout(10, policy, break_when_any_done=bwad)
