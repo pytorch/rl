@@ -635,7 +635,7 @@ class Transform(nn.Module):
                     )
                 parent, _ = container._rebuild_up_to(self)
             elif isinstance(container, TransformedEnv):
-                parent = TransformedEnv(container.base_env)
+                parent = TransformedEnv(container.base_env, auto_unwrap=False)
             else:
                 raise ValueError(f"container is of type {type(container)}")
             self.__dict__["_parent"] = parent
@@ -958,22 +958,21 @@ but got an object of type {type(transform)}."""
 
         if next_tensordict is None:
             next_tensordict = self.base_env._step(tensordict_in)
+            if next_preset is not None:
+                # tensordict could already have a "next" key
+                # this could be done more efficiently by not excluding but just passing
+                # the necessary keys
+                next_tensordict.update(
+                    next_preset.exclude(*next_tensordict.keys(True, True))
+                )
+            self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
+            # we want the input entries to remain unchanged
+            next_tensordict = self.transform._step(tensordict_in, next_tensordict)
 
         if partial_steps is not None and tensordict_batch_size != self.batch_size:
             result = next_tensordict.new_zeros(tensordict_batch_size)
             result[partial_steps] = next_tensordict
             next_tensordict = result
-
-        if next_preset is not None:
-            # tensordict could already have a "next" key
-            # this could be done more efficiently by not excluding but just passing
-            # the necessary keys
-            next_tensordict.update(
-                next_preset.exclude(*next_tensordict.keys(True, True))
-            )
-        self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
-        # we want the input entries to remain unchanged
-        next_tensordict = self.transform._step(tensordict_in, next_tensordict)
         return next_tensordict
 
     def set_seed(
@@ -7102,7 +7101,6 @@ class StepCounter(Transform):
             self.step_count_keys, self.truncated_keys, self.done_keys
         ):
             step_count = tensordict.get(step_count_key)
-            print('step_count', step_count)
             next_step_count = step_count + 1
             next_tensordict.set(step_count_key, next_step_count)
 
@@ -9080,6 +9078,7 @@ class _CallableTransform(Transform):
     # A wrapper around a custom callable to make it possible to transform any data type
     def __init__(self, func):
         super().__init__()
+        raise RuntimeError(isinstance(func, Transform), func)
         self.func = func
 
     def forward(self, *args, **kwargs):
@@ -10267,21 +10266,40 @@ class ConditionalSkip(Transform):
     value in `"_step"` is ``True``. Otherwise, it is trusted that the environment will account for the
     `"_step"` signal accordingly.
 
+    .. note:: The skip will affect transforms that modify the environment output too, i.e., any transform
+        that is to be exectued on the tensordict returned by :meth:`~torchrl.envs.EnvBase.step` will be
+        skipped if the condition is met. To palliate this effect if it is not desirable, one can wrap
+        the transformed env in another transformed env, since the skip only affects the first-degree parent
+        of the ``ConditionalSkip`` transform. See example below.
+
     Args:
         cond (Callable[[TensorDictBase], bool | torch.Tensor]): a callable for the tensordict input
             that checks whether the next env step must be skipped (`True` = skipped, `False` = execute
             env.step).
 
     Examples:
-        >>> from torchrl.envs.transforms.transforms import ConditionalSkip, StepCounter, TransformedEnv
-        >>> from torchrl.envs import GymEnv
         >>> import torch
+        >>>
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.transforms.transforms import ConditionalSkip, StepCounter, TransformedEnv, Compose
         >>>
         >>> torch.manual_seed(0)
         >>>
-        >>> base_env = TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(step_count_key="other_count"))
-        >>> env = TransformedEnv(base_env, StepCounter(), auto_unwrap=False)
-        >>> env = env.append_transform(ConditionalSkip(cond=lambda td: td["step_count"] % 2 == 1))
+        >>> base_env = TransformedEnv(
+        ...     GymEnv("Pendulum-v1"),
+        ...     StepCounter(step_count_key="inner_count"),
+        ... )
+        >>> middle_env = TransformedEnv(
+        ...     base_env,
+        ...     Compose(
+        ...         StepCounter(step_count_key="middle_count"),
+        ...         ConditionalSkip(cond=lambda td: td["step_count"] % 2 == 1),
+        ...     ),
+        ...     auto_unwrap=False)  # makes sure that transformed envs are properly wrapped
+        >>> env = TransformedEnv(
+        ...     middle_env,
+        ...     StepCounter(step_count_key="step_count"),
+        ...     auto_unwrap=False)
         >>> env.set_seed(0)
         >>>
         >>> r = env.rollout(10)
@@ -10296,6 +10314,28 @@ class ConditionalSkip(Transform):
                 [-0.9984,  0.0561, -1.7933],
                 [-0.9984,  0.0561, -1.7933],
                 [-0.9895,  0.1445, -1.7779]])
+        >>> print(r["inner_count"])
+        tensor([[0],
+                [1],
+                [1],
+                [2],
+                [2],
+                [3],
+                [3],
+                [4],
+                [4],
+                [5]])
+        >>> print(r["middle_count"])
+        tensor([[0],
+                [1],
+                [1],
+                [2],
+                [2],
+                [3],
+                [3],
+                [4],
+                [4],
+                [5]])
         >>> print(r["step_count"])
         tensor([[0],
                 [1],
@@ -10307,17 +10347,7 @@ class ConditionalSkip(Transform):
                 [7],
                 [8],
                 [9]])
-        >>> print(r["other_count"])
-        tensor([[0],
-                [1],
-                [1],
-                [2],
-                [2],
-                [3],
-                [3],
-                [4],
-                [4],
-                [5]])
+
 
     """
 
@@ -10349,6 +10379,9 @@ class MultiAction(Transform):
 
     If a `"done"` entry is encountered, the next steps are skipped.
 
+    .. note:: If a transform is appended before the MultiAction, it will be called multiple times. If it is appended
+        after, it will be called once per macro-step.
+
     """
 
     def __init__(self):
@@ -10367,15 +10400,64 @@ class MultiAction(Transform):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # Get the actions
         parent = self.parent
-        print(parent)
         action_keys = parent.action_keys
         actions = tensordict.select(*action_keys)
         actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + 1)
         actions = actions.unbind(-1)
         td = tensordict
+        idx = None
+        global_idx = None
+        reset = True
         for a in actions[:-1]:
+            if global_idx is not None:
+                a = a[global_idx]
             td = td.replace(a)
             td = parent.step(td)
             td = parent.step_mdp(td)
-            print(td["step_count"])
-        return td.replace(actions[-1])
+            any_done = parent.any_done(td)
+            if any_done:
+                if global_idx is None:
+                    reset = reset & td.pop("_reset").view(td.shape)
+                else:
+                    reset = td.pop("_reset").view(td.shape)
+                if reset.all():
+                    # Skip step for all
+                    td["_step"] = ~reset
+                    return td
+                elif parent.batch_locked:
+                    td["_step"] = ~reset
+                else:
+                    # we can simply index the tensordict
+                    idx = ~reset.view(td.shape)
+                    if global_idx is None:
+                        global_idx = idx.clone()
+                        td_out = td
+                    else:
+                        td_out[global_idx] = td
+                        global_idx[global_idx] = idx
+                    td = td[idx]
+
+        if global_idx is None:
+            return td.replace(actions[-1])
+        else:
+            td_out[global_idx] = td.replace(actions[-1][global_idx])
+            td_out["_step"] = global_idx
+            return td_out
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        try:
+            action_spec = input_spec["full_action_spec"]
+        except KeyError:
+            raise KeyError(
+                f"{type(self).__name__} requires an action spec to be present."
+            )
+        action_spec = action_spec.unsqueeze(input_spec.ndim)
+        # Make the dim dynamic
+        action_spec = action_spec.expand(
+            tuple(
+                d if i != input_spec.ndim else -1
+                for i, d in enumerate(action_spec.shape)
+            )
+        )
+        input_spec["full_action_spec"] = action_spec
+        return input_spec
