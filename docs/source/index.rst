@@ -103,7 +103,6 @@ Intermediate
    tutorials/torchrl_envs
    tutorials/pretrained_models
    tutorials/rb_tutorial
-   tutorials/export
 
 Advanced
 --------
