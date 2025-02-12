@@ -35,6 +35,7 @@ from .transforms import (
     Hash,
     InitTracker,
     LineariseRewards,
+    MultiAction,
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
