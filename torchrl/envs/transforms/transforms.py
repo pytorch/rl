@@ -9104,7 +9104,6 @@ class _CallableTransform(Transform):
     # A wrapper around a custom callable to make it possible to transform any data type
     def __init__(self, func):
         super().__init__()
-        raise RuntimeError(isinstance(func, Transform), func)
         self.func = func
 
     def forward(self, *args, **kwargs):
