@@ -1188,7 +1188,6 @@ class SerialEnv(BatchedEnvBase):
             result.update(prev)
             if partial_steps.any():
                 result[partial_steps] = out
-                assert result[partial_steps]["obs_str"] == out["obs_str"]
             return result
 
         return out
