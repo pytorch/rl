@@ -1875,6 +1875,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 tensordict = tensordict[partial_steps].to(
                     self.shared_tensordict_parent.device
                 )
+                shared_tensordict_parent = shared_tensordict_parent[partial_steps]
         else:
             workers_range = range(self.num_workers)
             shared_tensordict_parent = self.shared_tensordict_parent
@@ -1883,7 +1884,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             tensordict,
             # We also update the output keys because they can be implicitly used, eg
             # during partial steps to fill in values
-            keys_to_update=list(self._env_input_keys) + list(self._env_output_keys),
+            keys_to_update=list(self._env_input_keys),
             non_blocking=self.non_blocking,
         )
         next_td_passthrough = tensordict.get("next", None)
@@ -2415,12 +2416,17 @@ def _run_worker_pipe_shared_mem(
                 if non_tensor_data is not None:
                     input.update(non_tensor_data)
 
-            next_td = env._step(input)
+            input = env.step(input.copy())
+            next_td = input.get("next")
             next_shared_tensordict.update_(next_td, non_blocking=non_blocking)
+
             if event is not None:
                 event.record()
                 event.synchronize()
             mp_event.set()
+
+            # Make sure the root is updated
+            root_shared_tensordict.update_(env._step_mdp(input))
 
             if _non_tensor_keys:
                 child_pipe.send(
