@@ -7,7 +7,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import pathlib
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -525,6 +525,35 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             return [board.uci(move) for move in moves]
         else:
             return [board.san(move) for move in moves]
+
+    def all_actions(self, tensordict: Optional[TensorDictBase] = None):
+        board = self.board
+
+        if not self.stateful:
+            if self.include_fen:
+                fen = tensordict.get("fen").data
+                board.set_fen(fen)
+            elif self.include_pgn:
+                pgn = tensordict.get("pgn").data
+                board = self._pgn_to_board(pgn, board)
+            else:
+                raise RuntimeError(
+                    "Not enough information to deduce the board. If stateful=False, include_pgn or include_fen must be True."
+                )
+
+        if tensordict is None:
+            dest = TensorDict()
+        else:
+            dest = tensordict.empty()
+
+        moves_idx = self._legal_moves_to_index(
+            board=board,
+            pad=False,
+            return_mask=False,
+        )
+        dest.batch_size = torch.Size([moves_idx.shape[0]])
+        dest.set("action", moves_idx)
+        return dest
 
     def _step(self, tensordict):
         # action
