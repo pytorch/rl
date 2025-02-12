@@ -1938,9 +1938,24 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         next_tensordict = self.full_done_spec.zero()
         next_tensordict.update(self.full_observation_spec.zero())
         next_tensordict.update(self.full_reward_spec.zero())
+
         # Copy the data from tensordict in `next`
+        def select_and_clone(x, y):
+            if y is not None:
+                if y.device == x.device:
+                    return x.clone()
+                return x.to(y.device)
+
         next_tensordict.update(
-            tensordict.select(*next_tensordict.keys(True, True), strict=False)
+            tensordict._fast_apply(
+                select_and_clone,
+                next_tensordict,
+                device=next_tensordict.device,
+                batch_size=next_tensordict.batch_size,
+                default=None,
+                filter_empty=True,
+                is_leaf=_is_leaf_nontensor,
+            )
         )
         return next_tensordict
 
@@ -2001,7 +2016,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict.set("next", next_tensordict)
         if partial_steps is not None and tensordict_batch_size != self.batch_size:
             result = tensordict.new_zeros(tensordict_batch_size)
-            result[partial_steps] = tensordict
+
+            def select_and_clone(x, y):
+                if y is not None:
+                    if x.device == y.device:
+                        return x.clone()
+                    return x.to(y.device)
+
+            result.update(
+                tensordict._fast_apply(
+                    select_and_clone,
+                    result,
+                    device=result.device,
+                    filter_empty=True,
+                    default=None,
+                    batch_size=result.batch_size,
+                    is_leaf=_is_leaf_nontensor,
+                )
+            )
+            if partial_steps.any():
+                result[partial_steps] = tensordict
             return result
         return tensordict
 
@@ -2892,9 +2926,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 policy device before the policy is used. Default is ``False``.
             break_when_any_done (bool): if ``True``, break when any of the contained environments reaches any of the
                 done states. If ``False``, then the done environments are reset automatically. Default is ``True``.
+
+                .. seealso:: The :ref:`Partial resets <ref_partial_resets>` of the documentation gives more
+                    information about partial resets.
+
             break_when_all_done (bool, optional): if ``True``, break if all of the contained environments reach any
                 of the done states. If ``False``, break if at least one environment reaches any of the done states.
                 Default is ``False``.
+
+                .. seealso:: The :ref:`Partial steps <ref_partial_steps>` of the documentation gives more
+                    information about partial resets.
+
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is `True` if
                 the env does not have dynamic specs, otherwise `False`.
             tensordict (TensorDict, optional): if ``auto_reset`` is False, an initial
