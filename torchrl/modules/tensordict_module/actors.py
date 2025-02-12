@@ -2279,6 +2279,10 @@ class MultiStepActorWrapper(TensorDictModuleBase):
             batch_size=torch.Size([5, 100]),
             device=cpu,
             is_shared=False)
+
+    .. seealso:: :class:`torchrl.envs.MultiStepEnvWrapper` is the EnvBase alter-ego of this wrapper:
+        It wraps an environment and unbinds the action, executing it one element at a time.
+
     """
 
     def __init__(
