@@ -26,10 +26,11 @@ jobs:
   build-docs:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: [ "3.9" ]
+        cuda_arch_version: [ "12.4" ]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
+      runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
       upload-artifact: docs
       timeout: 120
@@ -38,7 +39,6 @@ jobs:
         set -v
         # apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
         yum makecache
-        # yum install -y glfw glew mesa-libGL mesa-libGL-devel mesa-libOSMesa-devel egl-utils freeglut
         # Install Mesa and OpenGL Libraries:
         yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL
         # Install DRI Drivers:
@@ -112,7 +112,7 @@ jobs:
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build -v
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build -v -j 4
         cd ..
 
         cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
@@ -123,8 +123,8 @@ jobs:
 
   upload:
     needs: build-docs
-    if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
-        ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
+    if: github.repository == 'pytorch/rl' && github.event_name == 'push' &&
+      ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
