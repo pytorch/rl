@@ -198,6 +198,7 @@ class RolloutFromModel:
             batch_size=torch.Size([4, 50]),
             device=cpu,
             is_shared=False)
+
     """
 
     EOS_TOKEN_ID = 50256

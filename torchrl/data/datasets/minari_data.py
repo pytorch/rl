@@ -66,7 +66,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The Minari dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/minari`.
+            `~/.cache/torchrl/atari`.minari`.
         download (bool or str, optional): Whether the dataset should be downloaded if
             not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
