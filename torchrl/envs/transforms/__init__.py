@@ -20,6 +20,7 @@ from .transforms import (
     CenterCrop,
     ClipTransform,
     Compose,
+    ConditionalSkip,
     Crop,
     DeviceCastTransform,
     DiscreteActionProjection,
