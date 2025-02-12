@@ -661,11 +661,16 @@ collector = SyncDataCollector(
 # This will result in faster sampling but is subject to the memory constraints of the selected device.
 #
 
+
 replay_buffers = {}
+scratch_dirs = []
 for group, _agents in env.group_map.items():
+    scratch_dir = tempfile.TemporaryDirectory().name
+    scratch_dirs.append(scratch_dir)
     replay_buffer = ReplayBuffer(
         storage=LazyMemmapStorage(
-            memory_size
+            memory_size,
+            scratch_dir=scratch_dir,
         ),  # We will store up to memory_size multi-agent transitions
         sampler=RandomSampler(),
         batch_size=train_batch_size,  # We will sample batches of this size
@@ -948,3 +953,19 @@ if use_vmas and not is_sphinx:
 #
 #    Scenarios available in `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__
 #
+
+# sphinx_gallery_start_ignore
+
+# Remove scratch dir
+try:
+    import shutil
+
+    for scratch_dir in scratch_dirs:
+        # Use shutil.rmtree() to delete the directory and all its contents
+        shutil.rmtree(scratch_dir)
+        print(f"Directory '{scratch_dir}' deleted successfully.")
+except FileNotFoundError:
+    print(f"Directory '{scratch_dir}' not found.")
+except Exception as e:
+    print(f"Error deleting directory: {e}")
+# sphinx_gallery_end_ignore

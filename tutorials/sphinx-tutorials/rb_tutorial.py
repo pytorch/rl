@@ -56,11 +56,6 @@ Using Replay Buffers
 # example:
 #
 
-######################################################################
-# .. warning:: This tutorial build is temporarily disabled.
-
-exit(0)
-
 # sphinx_gallery_start_ignore
 import gc
 
