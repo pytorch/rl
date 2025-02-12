@@ -4032,6 +4032,58 @@ class TestChessEnv:
         assert "fen" in ftd["next"]
         env.check_env_specs()
 
+    @pytest.mark.parametrize("include_fen", [False, True])
+    @pytest.mark.parametrize("include_pgn", [False, True])
+    @pytest.mark.parametrize("stateful", [False, True])
+    @pytest.mark.parametrize("mask_actions", [False, True])
+    def test_all_actions(self, include_fen, include_pgn, stateful, mask_actions):
+        if not stateful and not include_fen and not include_pgn:
+            pytest.skip("fen or pgn must be included if not stateful")
+
+        env = ChessEnv(
+            include_fen=include_fen,
+            include_pgn=include_pgn,
+            stateful=stateful,
+            mask_actions=mask_actions,
+        )
+        td = env.reset()
+
+        # Choose random actions from the output of `all_actions`
+        for _ in range(100):
+            if stateful:
+                all_actions = env.all_actions()
+            else:
+                # Reset the the initial state first, just to make sure
+                # `all_actions` knows how to get the board state from the input.
+                env.reset()
+                all_actions = env.all_actions(td.clone())
+
+            # Choose some random actions and make sure they match exactly one of
+            # the actions from `all_actions`. This part is not tested when
+            # `mask_actions == False`, because `rand_action` can pick illegal
+            # actions in that case.
+            if mask_actions:
+                # TODO: Something is wrong in `ChessEnv.rand_action` which makes
+                # it fail to work properly for stateless mode. It doesn't know
+                # how to correctly reset the board state to what is given in the
+                # tensordict before picking an action. When this is fixed, we
+                # can get rid of the two `reset`s below
+                if not stateful:
+                    env.reset(td.clone())
+                td_act = td.clone()
+                for _ in range(10):
+                    rand_action = env.rand_action(td_act)
+                    assert (rand_action["action"] == all_actions["action"]).sum() == 1
+                if not stateful:
+                    env.reset()
+
+            action_idx = torch.randint(0, all_actions.shape[0], ()).item()
+            chosen_action = all_actions[action_idx]
+            td = env.step(td.update(chosen_action))["next"]
+
+            if td["done"]:
+                td = env.reset()
+
 
 class TestCustomEnvs:
     def test_tictactoe_env(self):

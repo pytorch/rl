@@ -918,6 +918,11 @@ but got an object of type {type(transform)}."""
             return self.base_env.rand_action(tensordict)
         return super().rand_action(tensordict)
 
+    def all_actions(
+        self, tensordict: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
+        return self.base_env.all_actions(tensordict)
+
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # No need to clone here because inv does it already
         # tensordict = tensordict.clone(False)

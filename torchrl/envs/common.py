@@ -2764,6 +2764,27 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 f"got {tensordict.batch_size} and {self.batch_size}"
             )
 
+    def all_actions(
+        self, tensordict: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
+        """Generates all possible actions.
+
+        Not all environments implement this function. Furthermore, it can only
+        be implemented for environments that have fully discrete actions specs.
+
+        Args:
+            tensordict (TensorDictBase, optional): tensordict where the
+                resulting actions should be written. This input can also be used
+                to pass arguments to the reset function, in which case the
+                actions will be generated for the state after reset.
+
+        Returns:
+            a tensordict object with the "action" entry updated with a batch of
+            all possible actions. The actions are stacked together in the
+            leading dimension.
+        """
+        raise NotImplementedError
+
     def rand_action(self, tensordict: Optional[TensorDictBase] = None):
         """Performs a random action given the action_spec attribute.
 
