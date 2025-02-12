@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import abc
 import argparse
+import collections
 import contextlib
 import importlib.util
 
@@ -13456,9 +13457,53 @@ class TestLineariseRewards(TransformBase):
 
 
 class TestConditionalSkip(TransformBase):
+    def check_non_tensor_match(self, td):
+        q = collections.deque()
+        obs_str = td["obs_str"]
+        obs = td["observation"]
+        q.extend(list(zip(obs_str, obs.unbind(0))))
+        next_obs_str = td["next", "obs_str"]
+        next_obs = td["next", "observation"]
+        q.extend(zip(next_obs_str, next_obs.unbind(0)))
+        while len(q):
+            o_str, o = q.popleft()
+            if isinstance(o_str, list):
+                q.extend(zip(o_str, o.unbind(0)))
+            else:
+                assert o_str == str(o), (obs, obs_str, next_obs, next_obs_str)
+
+    class ToString(Transform):
+        def _apply_transform(self, obs: torch.Tensor) -> None:
+            return NonTensorData(str(obs), device=obs.device)
+
+        def _reset(
+            self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+        ) -> TensorDictBase:
+            return self._call(tensordict_reset)
+
+        def transform_observation_spec(
+            self, observation_spec: TensorSpec
+        ) -> TensorSpec:
+            observation_spec["obs_str"] = NonTensor(
+                example_data="a string!",
+                shape=observation_spec.shape,
+                device=observation_spec.device,
+            )
+            return observation_spec
+
+    class CountinEnvWithString(TransformedEnv):
+        def __init__(self, *args, **kwargs):
+            base_env = CountingEnv()
+            super().__init__(
+                base_env,
+                TestConditionalSkip.ToString(
+                    in_keys=["observation"], out_keys=["obs_str"]
+                ),
+            )
+
     @pytest.mark.parametrize("bwad", [False, True])
     def test_single_trans_env_check(self, bwad):
-        env = CountingEnv()
+        env = TestConditionalSkip.CountinEnvWithString()
         base_env = TransformedEnv(
             env,
             Compose(
@@ -13473,11 +13518,12 @@ class TestConditionalSkip(TransformBase):
         r = env.rollout(10, policy, break_when_any_done=bwad)
         assert (r["step_count"] == torch.arange(10).view(10, 1)).all()
         assert (r["other_count"] == torch.arange(1, 11).view(10, 1) // 2).all()
+        self.check_non_tensor_match(r)
 
     @pytest.mark.parametrize("bwad", [False, True])
     def test_serial_trans_env_check(self, bwad):
         def make_env(i):
-            env = CountingEnv()
+            env = TestConditionalSkip.CountinEnvWithString()
             base_env = TransformedEnv(
                 env,
                 Compose(
@@ -13498,11 +13544,12 @@ class TestConditionalSkip(TransformBase):
         assert (r["step_count"] == torch.arange(10).view(10, 1).expand(2, 10, 1)).all()
         assert (r["other_count"][0] == torch.arange(0, 10).view(10, 1) // 2).all()
         assert (r["other_count"][1] == torch.arange(1, 11).view(10, 1) // 2).all()
+        self.check_non_tensor_match(r)
 
     @pytest.mark.parametrize("bwad", [False, True])
     def test_parallel_trans_env_check(self, bwad):
         def make_env(i):
-            env = CountingEnv()
+            env = TestConditionalSkip.CountinEnvWithString()
             base_env = TransformedEnv(
                 env,
                 Compose(
@@ -13528,6 +13575,7 @@ class TestConditionalSkip(TransformBase):
             ).all()
             assert (r["other_count"][0] == torch.arange(0, 10).view(10, 1) // 2).all()
             assert (r["other_count"][1] == torch.arange(1, 11).view(10, 1) // 2).all()
+            self.check_non_tensor_match(r)
         finally:
             env.close()
             del env
@@ -13535,7 +13583,7 @@ class TestConditionalSkip(TransformBase):
     @pytest.mark.parametrize("bwad", [False, True])
     def test_trans_serial_env_check(self, bwad):
         def make_env():
-            env = CountingEnv(max_steps=100)
+            env = TestConditionalSkip.CountinEnvWithString(max_steps=100)
             base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
             return base_env
 
@@ -13553,12 +13601,13 @@ class TestConditionalSkip(TransformBase):
         assert (r["step_count"] == torch.arange(10).view(10, 1).expand(2, 10, 1)).all()
         assert (r["other_count"][0] == torch.arange(0, 10).view(10, 1) // 2).all()
         assert (r["other_count"][1] == torch.arange(1, 11).view(10, 1) // 2).all()
+        self.check_non_tensor_match(r)
 
     @pytest.mark.parametrize("bwad", [True, False])
     @pytest.mark.parametrize("buffers", [True, False])
     def test_trans_parallel_env_check(self, bwad, buffers):
         def make_env():
-            env = CountingEnv(max_steps=100)
+            env = TestConditionalSkip.CountinEnvWithString(max_steps=100)
             base_env = TransformedEnv(env, StepCounter(step_count_key="other_count"))
             return base_env
 
@@ -13581,6 +13630,7 @@ class TestConditionalSkip(TransformBase):
             ).all()
             assert (r["other_count"][0] == torch.arange(0, 10).view(10, 1) // 2).all()
             assert (r["other_count"][1] == torch.arange(1, 11).view(10, 1) // 2).all()
+            self.check_non_tensor_match(r)
         finally:
             base_env.close()
             del base_env

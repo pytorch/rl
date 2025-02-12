@@ -44,6 +44,7 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
+from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.utils import (
     _unravel_key_to_tuple,
@@ -947,15 +948,21 @@ but got an object of type {type(transform)}."""
                 else:
                     tensordict_batch_size = tensordict_in.batch_size
                     partial_steps = partial_steps.view(tensordict_batch_size)
-                    tensordict_in_save = tensordict_in[~partial_steps]
+                    tensordict_save = tensordict_in[~partial_steps]
                     tensordict_in = tensordict_in[partial_steps]
             else:
                 if not partial_steps.any():
                     next_tensordict = self._skip_tensordict(tensordict_in)
+                    # No need to copy anything
+                    partial_steps = None
                 elif not partial_steps.all():
                     # trust that the _step can handle this!
                     tensordict_in.set("_step", partial_steps)
-                tensordict_batch_size = self.batch_size
+                    # The filling should be handled by the sub-env
+                    partial_steps = None
+                else:
+                    partial_steps = None
+            tensordict_batch_size = self.batch_size
 
         if next_tensordict is None:
             next_tensordict = self.base_env._step(tensordict_in)
@@ -970,24 +977,26 @@ but got an object of type {type(transform)}."""
             # we want the input entries to remain unchanged
             next_tensordict = self.transform._step(tensordict_in, next_tensordict)
 
-        if (
-            partial_steps is not None
-            and tensordict_batch_size != next_tensordict.batch_size
-        ):
+        if partial_steps is not None:
             result = next_tensordict.new_zeros(tensordict_batch_size)
 
-            def _select_and_clone(x, y):
+            def select_and_clone(x, y):
                 if y is not None:
                     if x.device == y.device:
                         return y.clone()
-                    return y.to(x.device)
-                return x.clone()
+                    return y.to(y.device)
 
-            other = result[~partial_steps]._fast_apply(
-                _select_and_clone, tensordict_in_save, default=None, filter_empty=True
-            )
-            result[~partial_steps] = other
-            result[partial_steps] = next_tensordict
+            if not partial_steps.all():
+                result[~partial_steps] = tensordict_save._fast_apply(
+                    select_and_clone,
+                    tensordict_in_save,
+                    device=result.device,
+                    filter_empty=True,
+                    default=None,
+                    is_leaf=_is_leaf_nontensor,
+                )
+            if partial_steps.any():
+                result[partial_steps] = next_tensordict
             next_tensordict = result
         return next_tensordict
 

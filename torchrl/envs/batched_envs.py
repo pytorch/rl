@@ -29,6 +29,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
+from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torchrl._utils import (
@@ -1162,13 +1163,32 @@ class SerialEnv(BatchedEnvBase):
                 out_tds.append(out_td)
             out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
 
-        if partial_steps is not None:
+        if partial_steps is not None and not partial_steps.all():
             result = out.new_zeros(tensordict_save.shape)
             # Copy the observation data from the previous step as placeholder
-            result.update(
-                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+
+            def select_and_clone(x, y):
+                if y is not None:
+                    if x.device != y.device:
+                        x = x.to(y.device)
+                    else:
+                        x = x.clone()
+                    return x
+
+            prev = tensordict_save._fast_apply(
+                select_and_clone,
+                result,
+                filter_empty=True,
+                device=result.device,
+                batch_size=result.batch_size,
+                is_leaf=_is_leaf_nontensor,
+                default=None,
             )
-            result[partial_steps] = out
+
+            result.update(prev)
+            if partial_steps.any():
+                result[partial_steps] = out
+                assert result[partial_steps]["obs_str"] == out["obs_str"]
             return result
 
         return out
@@ -1533,10 +1553,29 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         )
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
-            result.update(
-                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+
+            def select_and_clone(x, y):
+                if y is not None:
+                    if x.device != y.device:
+                        x = x.to(y.device)
+                    else:
+                        x = x.clone()
+                    return x
+
+            prev = tensordict_save._fast_apply(
+                select_and_clone,
+                result,
+                filter_empty=True,
+                device=result.device,
+                batch_size=result.batch_size,
+                is_leaf=_is_leaf_nontensor,
+                default=None,
             )
-            result[partial_steps] = out
+
+            result.update(prev)
+
+            if partial_steps.any():
+                result[partial_steps] = out
             return result
         return out
 
@@ -1615,10 +1654,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             data = [{} for _ in workers_range]
 
         if self._non_tensor_keys:
-            for i in workers_range:
-                data[i]["non_tensor_data"] = tensordict[i].select(
-                    *self._non_tensor_keys, strict=False
-                )
+            for i, td in zip(
+                workers_range,
+                tensordict.select(*self._non_tensor_keys, strict=False).unbind(0),
+            ):
+                data[i]["non_tensor_data"] = td
 
         self._sync_m2w()
         for i, _data in zip(workers_range, data):
@@ -1706,8 +1746,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             )
             self._sync_w2m()
 
-            result[partial_steps] = tensordict
-            result_[partial_steps] = tensordict_
+            if partial_steps.any():
+                result[partial_steps] = tensordict
+                result_[partial_steps] = tensordict_
             return result, result_
 
         return tensordict, tensordict_
@@ -1772,10 +1813,29 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             out = out.to(self.device, non_blocking=self.non_blocking)
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
-            result.update(
-                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+
+            def select_and_clone(x, y):
+                if y is not None:
+                    if x.device != y.device:
+                        x = x.to(y.device)
+                    else:
+                        x = x.clone()
+                    return x
+
+            prev = tensordict_save._fast_apply(
+                select_and_clone,
+                result,
+                filter_empty=True,
+                device=result.device,
+                batch_size=result.batch_size,
+                is_leaf=_is_leaf_nontensor,
+                default=None,
             )
-            result[partial_steps] = out
+
+            result.update(prev)
+
+            if partial_steps.any():
+                result[partial_steps] = out
             return result
         return out
 
@@ -1822,7 +1882,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         shared_tensordict_parent.update_(
             tensordict,
-            keys_to_update=list(self._env_input_keys),
+            # We also update the output keys because they can be implicitly used, eg
+            # during partial steps to fill in values
+            keys_to_update=list(self._env_input_keys) + list(self._env_output_keys),
             non_blocking=self.non_blocking,
         )
         next_td_passthrough = tensordict.get("next", None)
@@ -1868,10 +1930,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             data = [{} for _ in range(self.num_workers)]
 
         if self._non_tensor_keys:
-            for i in workers_range:
-                data[i]["non_tensor_data"] = tensordict[i].select(
-                    *self._non_tensor_keys, strict=False
-                )
+            for i, td in zip(
+                workers_range,
+                tensordict.select(*self._non_tensor_keys, strict=False).unbind(0),
+            ):
+                data[i]["non_tensor_data"] = td
 
         self._sync_m2w()
 
@@ -1923,10 +1986,28 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self._sync_w2m()
         if partial_steps is not None:
             result = out.new_zeros(tensordict_save.shape)
-            result.update(
-                tensordict_save.select(*result.keys(True, True), strict=False).clone()
+
+            def select_and_clone(x, y):
+                if y is not None:
+                    if x.device != y.device:
+                        x = x.to(y.device)
+                    else:
+                        x = x.clone()
+                    return x
+
+            prev = tensordict_save._fast_apply(
+                select_and_clone,
+                result,
+                filter_empty=True,
+                device=result.device,
+                batch_size=result.batch_size,
+                is_leaf=_is_leaf_nontensor,
+                default=None,
             )
-            result[partial_steps] = out
+
+            result.update(prev)
+            if partial_steps.any():
+                result[partial_steps] = out
             return result
         return out
 
