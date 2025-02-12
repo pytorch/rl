@@ -1875,7 +1875,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 tensordict = tensordict[partial_steps].to(
                     self.shared_tensordict_parent.device
                 )
-                shared_tensordict_parent = shared_tensordict_parent[partial_steps]
         else:
             workers_range = range(self.num_workers)
             shared_tensordict_parent = self.shared_tensordict_parent
