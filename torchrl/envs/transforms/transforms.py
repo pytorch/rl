@@ -948,7 +948,7 @@ but got an object of type {type(transform)}."""
                 else:
                     tensordict_batch_size = tensordict_in.batch_size
                     partial_steps = partial_steps.view(tensordict_batch_size)
-                    tensordict_save = tensordict_in[~partial_steps]
+                    tensordict_in_save = tensordict_in[~partial_steps]
                     tensordict_in = tensordict_in[partial_steps]
             else:
                 if not partial_steps.any():
@@ -987,7 +987,7 @@ but got an object of type {type(transform)}."""
                     return x.to(y.device)
 
             if not partial_steps.all():
-                result[~partial_steps] = tensordict_save._fast_apply(
+                result[~partial_steps] = tensordict_in_save._fast_apply(
                     select_and_clone,
                     result,
                     device=result.device,
