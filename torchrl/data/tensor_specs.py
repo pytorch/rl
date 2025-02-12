@@ -3495,7 +3495,7 @@ class Categorical(TensorSpec):
             return torch.randint(
                 0,
                 n,
-                _size([*shape, *self.shape]),
+                _size([*shape, *_remove_neg_shapes(self.shape)]),
                 device=self.device,
                 dtype=self.dtype,
             )
@@ -3919,10 +3919,6 @@ class Binary(Categorical):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
@@ -3938,13 +3934,17 @@ class Binary(Categorical):
         )
 
     def _unflatten(self, dim, sizes):
-        shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
+        shape = (
+            torch.zeros(_remove_neg_shapes(self.shape), device="meta")
+            .unflatten(dim, sizes)
+            .shape
+        )
         return self.__class__(
             n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
         )
 
     def squeeze(self, dim=None):
-        shape = _squeezed_shape(self.shape, dim)
+        shape = _squeezed_shape(_remove_neg_shapes(self.shape), dim)
         if shape is None:
             return self
         return self.__class__(
@@ -4933,7 +4933,7 @@ class Composite(TensorSpec):
         # TensorDict requirements
         return TensorDict(
             _dict,
-            batch_size=_size([*shape, *self.shape]),
+            batch_size=_size([*shape, *_remove_neg_shapes(self.shape)]),
             device=self._device,
         )
 

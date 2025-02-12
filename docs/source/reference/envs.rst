@@ -977,6 +977,7 @@ to be able to create this other composition:
     InitTracker
     KLRewardTransform
     LineariseReward
+    MultiAction
     NoopResetEnv
     ObservationNorm
     ObservationTransform

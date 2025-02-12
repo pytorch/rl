@@ -77,6 +77,7 @@ from torchrl.envs import (
     Hash,
     InitTracker,
     LineariseRewards,
+    MultiAction,
     MultiStepTransform,
     NoopResetEnv,
     ObservationNorm,
@@ -156,6 +157,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
         NestedCountingEnv,
+        StateLessCountingEnv,
     )
 else:
     from _utils_internal import (  # noqa
@@ -184,6 +186,7 @@ else:
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
         NestedCountingEnv,
+        StateLessCountingEnv,
     )
 
 IS_WIN = platform == "win32"
@@ -13656,6 +13659,198 @@ class TestConditionalSkip(TransformBase):
         )
         with pytest.raises(NotImplementedError):
             t(TensorDict())["_step"]
+
+    def test_transform_rb(self):
+        return
+
+    def test_transform_inverse(self):
+        return
+
+
+class TestMultiAction(TransformBase):
+    @pytest.mark.parametrize("bwad", [False, True])
+    def test_single_trans_env_check(self, bwad):
+        base_env = CountingEnv(max_steps=10)
+        env = TransformedEnv(
+            base_env,
+            Compose(
+                StepCounter(step_count_key="before_count"),
+                MultiAction(),
+                StepCounter(step_count_key="after_count"),
+            ),
+        )
+        env.check_env_specs()
+
+        def policy(td):
+            # 3 action per step
+            td["action"] = torch.ones(3, 1)
+            return td
+
+        r = env.rollout(10, policy)
+        assert r["action"].shape == (4, 3, 1)
+        assert r["next", "done"].any()
+        assert r["next", "done"][-1].all()
+        assert (r["observation"][0] == 0).all()
+        assert (r["next", "observation"][0] == 3).all()
+        assert (r["next", "observation"][-1] == 11).all()
+        # Check that before_count is incremented but not after_count
+        assert r["before_count"].max() == 9
+        assert r["after_count"].max() == 3
+
+    def _batched_trans_env_check(self, cls, bwad, within):
+        if within:
+
+            def make_env(i):
+                base_env = CountingEnv(max_steps=i)
+                env = TransformedEnv(
+                    base_env,
+                    Compose(
+                        StepCounter(step_count_key="before_count"),
+                        MultiAction(),
+                        StepCounter(step_count_key="after_count"),
+                    ),
+                )
+                return env
+
+            env = cls(2, [partial(make_env, i=10), partial(make_env, i=20)])
+        else:
+            base_env = cls(
+                2,
+                [
+                    partial(CountingEnv, max_steps=10),
+                    partial(CountingEnv, max_steps=20),
+                ],
+            )
+            env = TransformedEnv(
+                base_env,
+                Compose(
+                    StepCounter(step_count_key="before_count"),
+                    MultiAction(),
+                    StepCounter(step_count_key="after_count"),
+                ),
+            )
+
+        try:
+            env.check_env_specs()
+
+            def policy(td):
+                # 3 action per step
+                td["action"] = torch.ones(2, 3, 1)
+                return td
+
+            r = env.rollout(10, policy, break_when_any_done=bwad)
+            # r0
+            r0 = r[0]
+            if bwad:
+                assert r["action"].shape == (2, 4, 3, 1)
+            else:
+                assert r["action"].shape == (2, 10, 3, 1)
+            assert r0["next", "done"].any()
+            if bwad:
+                assert r0["next", "done"][-1].all()
+            else:
+                assert r0["next", "done"].sum() == 2
+
+            assert (r0["observation"][0] == 0).all()
+            assert (r0["next", "observation"][0] == 3).all()
+            if bwad:
+                assert (r0["next", "observation"][-1] == 11).all()
+            else:
+                assert (r0["next", "observation"][-1] == 6).all(), r0[
+                    "next", "observation"
+                ]
+            # Check that before_count is incremented but not after_count
+            assert r0["before_count"].max() == 9
+            assert r0["after_count"].max() == 3
+            # r1
+            r1 = r[1]
+            if bwad:
+                assert not r1["next", "done"].any()
+            else:
+                assert r1["next", "done"].any()
+                assert r1["next", "done"].sum() == 1
+            assert (r1["observation"][0] == 0).all()
+            assert (r1["next", "observation"][0] == 3).all()
+            if bwad:
+                # r0 cannot go above 11 but r1 can - so we see a 12 because one more step was done
+                assert (r1["next", "observation"][-1] == 12).all()
+            else:
+                assert (r1["next", "observation"][-1] == 9).all()
+            # Check that before_count is incremented but not after_count
+            if bwad:
+                assert r1["before_count"].max() == 9
+                assert r1["after_count"].max() == 3
+            else:
+                assert r1["before_count"].max() == 18
+                assert r1["after_count"].max() == 6
+        finally:
+            env.close()
+
+    @pytest.mark.parametrize("bwad", [False, True])
+    def test_serial_trans_env_check(self, bwad):
+        self._batched_trans_env_check(SerialEnv, bwad, within=True)
+
+    @pytest.mark.parametrize("bwad", [False, True])
+    def test_parallel_trans_env_check(self, bwad):
+        self._batched_trans_env_check(
+            partial(ParallelEnv, mp_start_method=mp_ctx), bwad, within=True
+        )
+
+    @pytest.mark.parametrize("bwad", [False, True])
+    def test_trans_serial_env_check(self, bwad):
+        self._batched_trans_env_check(SerialEnv, bwad, within=False)
+
+    @pytest.mark.parametrize("bwad", [True, False])
+    @pytest.mark.parametrize("buffers", [True, False])
+    def test_trans_parallel_env_check(self, bwad, buffers):
+        self._batched_trans_env_check(
+            partial(ParallelEnv, use_buffers=buffers, mp_start_method=mp_ctx),
+            bwad,
+            within=False,
+        )
+
+    def test_transform_no_env(self):
+        ...
+
+    def test_transform_compose(self):
+        ...
+
+    @pytest.mark.parametrize("bwad", [True, False])
+    def test_transform_env(self, bwad):
+        # tests stateless (batch-unlocked) envs
+        torch.manual_seed(0)
+        env = StateLessCountingEnv()
+
+        def policy(td):
+            td["action"] = torch.ones(td.shape + (1,))
+            return td
+
+        r = env.rollout(
+            10,
+            tensordict=env.reset().expand(4),
+            auto_reset=False,
+            break_when_any_done=False,
+            policy=policy,
+        )
+        assert (r["count"] == torch.arange(10).expand(4, 10).view(4, 10, 1)).all()
+        td_reset = env.reset().expand(4).clone()
+        td_reset["max_count"] = torch.arange(4, 8).view(4, 1)
+        env = TransformedEnv(env, MultiAction())
+
+        def policy(td):
+            td["action"] = torch.ones(td.shape + (3,) + (1,))
+            return td
+
+        r = env.rollout(
+            20,
+            policy=policy,
+            auto_reset=False,
+            tensordict=td_reset,
+            break_when_any_done=bwad,
+        )
+
+    def test_transform_model(self):
+        ...
 
     def test_transform_rb(self):
         return

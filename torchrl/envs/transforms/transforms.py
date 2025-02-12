@@ -975,7 +975,7 @@ but got an object of type {type(transform)}."""
                 )
             self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
             # we want the input entries to remain unchanged
-            next_tensordict = self.transform._step(tensordict, next_tensordict)
+            next_tensordict = self.transform._step(tensordict_in, next_tensordict)
 
         if partial_steps is not None:
             result = next_tensordict.new_zeros(tensordict_batch_size)
@@ -983,13 +983,13 @@ but got an object of type {type(transform)}."""
             def select_and_clone(x, y):
                 if y is not None:
                     if x.device == y.device:
-                        return x.clone()
-                    return x.to(y.device)
+                        return y.clone()
+                    return y.to(y.device)
 
             if not partial_steps.all():
                 result[~partial_steps] = tensordict_save._fast_apply(
                     select_and_clone,
-                    result,
+                    tensordict_in_save,
                     device=result.device,
                     filter_empty=True,
                     default=None,
@@ -998,7 +998,6 @@ but got an object of type {type(transform)}."""
             if partial_steps.any():
                 result[partial_steps] = next_tensordict
             next_tensordict = result
-
         return next_tensordict
 
     def set_seed(
@@ -10394,3 +10393,96 @@ class ConditionalSkip(Transform):
         raise NotImplementedError(
             FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
         )
+
+
+class MultiAction(Transform):
+    """A transform to execute multiple actions in the parent environment.
+
+    This transform unbinds the actions along a specific dimension and passes each action independently.
+    The returned transform can be either a stack of the observations gathered during the steps or only the
+    last observation.
+
+    If a `"done"` entry is encountered, the next steps are skipped.
+
+    .. note:: If a transform is appended before the MultiAction, it will be called multiple times. If it is appended
+        after, it will be called once per macro-step.
+
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Get the actions
+        parent = self.parent
+        action_keys = parent.action_keys
+        actions = tensordict.select(*action_keys)
+        actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + 1)
+        actions = actions.unbind(-1)
+        td = tensordict
+        idx = None
+        global_idx = None
+        reset = True
+        for a in actions[:-1]:
+            if global_idx is not None:
+                a = a[global_idx]
+            td = td.replace(a)
+            td = parent.step(td)
+            td = parent.step_mdp(td)
+            any_done = parent.any_done(td)
+            if any_done:
+                if global_idx is None:
+                    reset = reset & td.pop("_reset").view(td.shape)
+                else:
+                    reset = td.pop("_reset").view(td.shape)
+                if reset.all():
+                    # Skip step for all
+                    td["_step"] = ~reset
+                    return td
+                elif parent.batch_locked:
+                    td["_step"] = ~reset
+                else:
+                    # we can simply index the tensordict
+                    idx = ~reset.view(td.shape)
+                    if global_idx is None:
+                        global_idx = idx.clone()
+                        td_out = td
+                    else:
+                        td_out[global_idx] = td
+                        global_idx = torch.masked_scatter(global_idx, global_idx, idx)
+                    td = td[idx]
+
+        if global_idx is None:
+            return td.replace(actions[-1])
+        else:
+            td_out[global_idx] = td.replace(actions[-1][global_idx])
+            td_out["_step"] = global_idx
+            return td_out
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        try:
+            action_spec = input_spec["full_action_spec"]
+        except KeyError:
+            raise KeyError(
+                f"{type(self).__name__} requires an action spec to be present."
+            )
+        action_spec = action_spec.unsqueeze(input_spec.ndim)
+        # Make the dim dynamic
+        action_spec = action_spec.expand(
+            tuple(
+                d if i != input_spec.ndim else -1
+                for i, d in enumerate(action_spec.shape)
+            )
+        )
+        input_spec["full_action_spec"] = action_spec
+        return input_spec
