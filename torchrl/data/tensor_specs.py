@@ -4665,7 +4665,11 @@ class Composite(TensorSpec):
                 out[key] = result
         return out
 
-    def set(self, name, spec):
+    def set(self, name: str, spec: TensorSpec) -> Composite:
+        """Sets a spec in the Composite spec."""
+        if not isinstance(name, str):
+            self[name] = spec
+            return self
         if self.locked:
             raise RuntimeError("Cannot modify a locked Composite.")
         if spec is not None and self.device is not None and spec.device != self.device:
@@ -4698,6 +4702,7 @@ class Composite(TensorSpec):
                         f"Composite.shape={self.shape}."
                     )
         self._specs[name] = spec
+        return self
 
     def __init__(
         self, *args, shape: torch.Size = None, device: torch.device = None, **kwargs
@@ -5733,9 +5738,10 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
     def ndimension(self):
         return len(self.shape)
 
-    def set(self, name, spec):
+    def set(self, name: str, spec: TensorSpec) -> StackedComposite:
         for sub_spec, sub_item in zip(self._specs, spec.unbind(self.dim)):
             sub_spec[name] = sub_item
+        return self
 
     @property
     def shape(self):
