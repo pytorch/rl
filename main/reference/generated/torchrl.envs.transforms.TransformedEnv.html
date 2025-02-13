@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
     </div>
     
 
@@ -464,11 +464,20 @@ in which case this value should be set  to <cite>False</cite>. Default is
 <cite>True</cite>.</p></li>
 </ul>
 </dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>auto_unwrap</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, wrapping a transformed env in  transformed env
+unwraps the transforms of the inner TransformedEnv in the outer one (the new instance).
+Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code></p>
+</dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v0&quot;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">transform</span> <span class="o">=</span> <span class="n">RewardScaling</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">transformed_env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">transform</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># check auto-unwrap</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">transformed_env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">transformed_env</span><span class="p">,</span> <span class="n">StepCounter</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># The inner env has been unwrapped</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transformed_env</span><span class="o">.</span><span class="n">base_env</span><span class="p">,</span> <span class="n">GymEnv</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
     </div>
     
 
@@ -648,12 +648,30 @@
         <li><a href="reference/generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv.add_truncated_keys">(torchrl.envs.transforms.TransformedEnv method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.modules.AdditiveGaussianModule.html#torchrl.modules.AdditiveGaussianModule">AdditiveGaussianModule (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss.alpha_loss">alpha_loss() (torchrl.objectives.CrossQLoss method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.any_done">any_done() (torchrl.envs.ChessEnv method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.any_done">(torchrl.envs.EnvBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.any_done">(torchrl.envs.GymLikeEnv method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv.any_done">(torchrl.envs.LLMHashingEnv method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv.any_done">(torchrl.envs.ParallelEnv method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.PendulumEnv.html#torchrl.envs.PendulumEnv.any_done">(torchrl.envs.PendulumEnv method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv.any_done">(torchrl.envs.SerialEnv method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.any_done">(torchrl.envs.TicTacToeEnv method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.append">append() (torchrl.envs.transforms.Compose method)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay.append_transform">append_transform() (torchrl.data.datasets.AtariDQNExperienceReplay method)</a>
@@ -1301,6 +1319,8 @@
       <li><a href="reference/generated/torchrl.data.Composite.html#torchrl.data.Composite">Composite (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.CompositeSpec.html#torchrl.data.CompositeSpec">CompositeSpec (class in torchrl.data)</a>
+</li>
+      <li><a href="reference/generated/torchrl.envs.transforms.ConditionalSkip.html#torchrl.envs.transforms.ConditionalSkip">ConditionalSkip (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.ConsistentDropout.html#torchrl.modules.ConsistentDropout">ConsistentDropout (class in torchrl.modules)</a>
 </li>
@@ -2580,6 +2600,8 @@
         <li><a href="reference/generated/torchrl.envs.transforms.CatTensors.html#torchrl.envs.transforms.CatTensors.forward">(torchrl.envs.transforms.CatTensors method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.forward">(torchrl.envs.transforms.Compose method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.ConditionalSkip.html#torchrl.envs.transforms.ConditionalSkip.forward">(torchrl.envs.transforms.ConditionalSkip method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.DeviceCastTransform.html#torchrl.envs.transforms.DeviceCastTransform.forward">(torchrl.envs.transforms.DeviceCastTransform method)</a>
 </li>
@@ -4286,6 +4308,8 @@
         <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.mtia">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction">MultiAction (class in torchrl.envs.transforms)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.MultiAgentConvNet.html#torchrl.modules.MultiAgentConvNet">MultiAgentConvNet (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.MultiAgentMLP.html#torchrl.modules.MultiAgentMLP">MultiAgentMLP (class in torchrl.modules)</a>
@@ -4605,7 +4629,25 @@
       <li><a href="reference/generated/torchrl.modules.ObsEncoder.html#torchrl.modules.ObsEncoder">ObsEncoder (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.MCTSForest.html#torchrl.data.MCTSForest.observation_keys">observation_keys (torchrl.data.MCTSForest property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.observation_keys">(torchrl.envs.ChessEnv property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.observation_keys">(torchrl.envs.EnvBase property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.observation_keys">(torchrl.envs.GymLikeEnv property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv.observation_keys">(torchrl.envs.LLMHashingEnv property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv.observation_keys">(torchrl.envs.ParallelEnv property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.PendulumEnv.html#torchrl.envs.PendulumEnv.observation_keys">(torchrl.envs.PendulumEnv property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv.observation_keys">(torchrl.envs.SerialEnv property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.observation_keys">(torchrl.envs.TicTacToeEnv property)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.observation_spec">observation_spec (torchrl.envs.ChessEnv property)</a>
 
       <ul>
@@ -4702,6 +4744,8 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.data.OneHot.html#torchrl.data.OneHot">OneHot (class in torchrl.data)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical">OneHotCategorical (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.OneHotDiscreteTensorSpec.html#torchrl.data.OneHotDiscreteTensorSpec">OneHotDiscreteTensorSpec (class in torchrl.data)</a>
@@ -4762,8 +4806,6 @@
         <li><a href="reference/generated/torchrl.data.UnboundedDiscreteTensorSpec.html#torchrl.data.UnboundedDiscreteTensorSpec.ones">(torchrl.data.UnboundedDiscreteTensorSpec method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor">OnlineDTActor (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.OnlineDTLoss.html#torchrl.objectives.OnlineDTLoss">OnlineDTLoss (class in torchrl.objectives)</a>
@@ -6206,12 +6248,20 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv">SerialEnv (class in torchrl.envs)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.set">set() (torchrl.data.PairwiseDataset method)</a>
+      <li><a href="reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.set">set() (torchrl.data.Composite method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.CompositeSpec.html#torchrl.data.CompositeSpec.set">(torchrl.data.CompositeSpec method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.LazyStackedCompositeSpec.html#torchrl.data.LazyStackedCompositeSpec.set">(torchrl.data.LazyStackedCompositeSpec method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.set">(torchrl.data.PairwiseDataset method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.PromptData.html#torchrl.data.PromptData.set">(torchrl.data.PromptData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.RewardData.html#torchrl.data.RewardData.set">(torchrl.data.RewardData method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.set">(torchrl.data.StackedComposite method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.set">(torchrl.data.Tree method)</a>
 </li>
@@ -7234,10 +7284,10 @@
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer">Tokenizer (class in torchrl.envs.transforms)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.transforms.ToTensorImage.html#torchrl.envs.transforms.ToTensorImage">ToTensorImage (class in torchrl.envs.transforms)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.train">train() (torchrl.data.BinaryToDecimal method)</a>
 
       <ul>
@@ -7343,6 +7393,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.DTypeCastTransform.html#torchrl.envs.transforms.DTypeCastTransform.transform_input_spec">(torchrl.envs.transforms.DTypeCastTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction.transform_input_spec">(torchrl.envs.transforms.MultiAction method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.transforms.PermuteTransform.html#torchrl.envs.transforms.PermuteTransform.transform_input_spec">(torchrl.envs.transforms.PermuteTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.transform_input_spec">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
@@ -7446,6 +7498,8 @@
         <li><a href="reference/generated/torchrl.envs.transforms.ExcludeTransform.html#torchrl.envs.transforms.ExcludeTransform.transform_output_spec">(torchrl.envs.transforms.ExcludeTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.KLRewardTransform.html#torchrl.envs.transforms.KLRewardTransform.transform_output_spec">(torchrl.envs.transforms.KLRewardTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction.transform_output_spec">(torchrl.envs.transforms.MultiAction method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.transform_output_spec">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
 </li>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
     </div>
     
 
@@ -637,12 +637,12 @@
             <span class="n">val</span> <span class="o">=</span> <span class="n">data_in</span><span class="o">.</span><span class="n">_get_str</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">NO_DEFAULT</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">subdict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">val_out</span> <span class="o">=</span> <span class="n">data_out</span><span class="o">.</span><span class="n">_get_str</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">val_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">val_out</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">val_out</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">val_out</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">!=</span> <span class="n">val</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
+                    <span class="n">val_out</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">val</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
 
-                    <span class="n">val</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="p">(</span>
-                        <span class="o">*</span><span class="p">(</span>
+                    <span class="n">val</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">lazy_stack</span><span class="p">(</span>
+                        <span class="p">[</span>
                             <span class="bp">cls</span><span class="o">.</span><span class="n">_grab_and_place</span><span class="p">(</span>
                                 <span class="n">subdict</span><span class="p">,</span>
                                 <span class="n">_val</span><span class="p">,</span>
@@ -653,8 +653,8 @@
                                 <span class="n">val</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">val</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">),</span>
                                 <span class="n">val_out</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">val_out</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">),</span>
                             <span class="p">)</span>
-                        <span class="p">),</span>
-                        <span class="n">stack_dim</span><span class="o">=</span><span class="n">val</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">,</span>
+                        <span class="p">],</span>
+                        <span class="n">dim</span><span class="o">=</span><span class="n">val</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">,</span>
                     <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">val</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_grab_and_place</span><span class="p">(</span>
@@ -723,8 +723,8 @@
             <span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_td</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
-                <span class="n">out</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="p">(</span>
-                    <span class="o">*</span><span class="n">out</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">next_td</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">),</span> <span class="n">stack_dim</span><span class="o">=</span><span class="n">next_td</span><span class="o">.</span><span class="n">stack_dim</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">lazy_stack</span><span class="p">(</span>
+                    <span class="nb">list</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">next_td</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">)),</span> <span class="n">dim</span><span class="o">=</span><span class="n">next_td</span><span class="o">.</span><span class="n">stack_dim</span>
                 <span class="p">)</span>
             <span class="k">for</span> <span class="n">_next_td</span><span class="p">,</span> <span class="n">_out</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">next_td</span><span class="o">.</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">out</span><span class="o">.</span><span class="n">tensordicts</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_grab_and_place</span><span class="p">(</span>

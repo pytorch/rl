@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
     </div>
     
 
@@ -1618,6 +1618,20 @@
         <span class="k">return</span> <span class="n">reward_keys</span>
 
     <span class="nd">@property</span>
+    <span class="nd">@_cache_value</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The observation keys of an environment.</span>
+
+<span class="sd">        By default, there will only be one key named &quot;observation&quot;.</span>
+
+<span class="sd">        Keys are sorted by depth in the data tree.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">observation_keys</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="n">_repr_by_depth</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">observation_keys</span>
+
+    <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reward_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The reward key of an environment.</span>
 
@@ -2354,6 +2368,32 @@
         <span class="n">spec</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">state_spec</span> <span class="o">=</span> <span class="n">spec</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_skip_tensordict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+        <span class="c1"># Creates a &quot;skip&quot; tensordict, ie a placeholder for when a step is skipped</span>
+        <span class="n">next_tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span>
+        <span class="n">next_tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">())</span>
+        <span class="n">next_tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">full_reward_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">())</span>
+
+        <span class="c1"># Copy the data from tensordict in `next`</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">y</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">next_tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                <span class="n">select_and_clone</span><span class="p">,</span>
+                <span class="n">next_tensordict</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">is_leaf</span><span class="o">=</span><span class="n">_is_leaf_nontensor</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
 <div class="viewcode-block" id="EnvBase.step"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.step">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Makes a step in the environment.</span>
 
@@ -2374,25 +2414,33 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># sanity check</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_assert_tensordict_shape</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-        <span class="n">partial_steps</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_locked</span><span class="p">:</span>
-            <span class="c1"># Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here</span>
-            <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">next_tensordict</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_locked</span><span class="p">:</span>
+                <span class="c1"># Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here</span>
                 <span class="k">if</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
                     <span class="n">partial_steps</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">tensordict_batch_size</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span>
                     <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">tensordict_batch_size</span><span class="p">)</span>
                     <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                    <span class="n">next_tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_skip_tensordic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># trust that the _step can handle this!</span>
+                    <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="n">partial_steps</span><span class="p">)</span>
+
             <span class="n">tensordict_batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
 
         <span class="n">next_preset</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
-        <span class="n">next_tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-        <span class="n">next_tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_proc_data</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">next_tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">next_tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="n">next_tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_proc_data</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">next_preset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># tensordict could already have a &quot;next&quot; key</span>
             <span class="c1"># this could be done more efficiently by not excluding but just passing</span>
@@ -2401,9 +2449,28 @@
                 <span class="n">next_preset</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
             <span class="p">)</span>
         <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">tensordict_batch_size</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">tensordict_batch_size</span><span class="p">)</span>
-            <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensordict</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                        <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+            <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                    <span class="n">select_and_clone</span><span class="p">,</span>
+                    <span class="n">result</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">batch_size</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                    <span class="n">is_leaf</span><span class="o">=</span><span class="n">_is_leaf_nontensor</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensordict</span>
             <span class="k">return</span> <span class="n">result</span>
         <span class="k">return</span> <span class="n">tensordict</span></div>
 
@@ -3294,9 +3361,17 @@
 <span class="sd">                policy device before the policy is used. Default is ``False``.</span>
 <span class="sd">            break_when_any_done (bool): if ``True``, break when any of the contained environments reaches any of the</span>
 <span class="sd">                done states. If ``False``, then the done environments are reset automatically. Default is ``True``.</span>
+
+<span class="sd">                .. seealso:: The :ref:`Partial resets &lt;ref_partial_resets&gt;` of the documentation gives more</span>
+<span class="sd">                    information about partial resets.</span>
+
 <span class="sd">            break_when_all_done (bool, optional): if ``True``, break if all of the contained environments reach any</span>
 <span class="sd">                of the done states. If ``False``, break if at least one environment reaches any of the done states.</span>
 <span class="sd">                Default is ``False``.</span>
+
+<span class="sd">                .. seealso:: The :ref:`Partial steps &lt;ref_partial_steps&gt;` of the documentation gives more</span>
+<span class="sd">                    information about partial resets.</span>
+
 <span class="sd">            return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is `True` if</span>
 <span class="sd">                the env does not have dynamic specs, otherwise `False`.</span>
 <span class="sd">            tensordict (TensorDict, optional): if ``auto_reset`` is False, an initial</span>
@@ -3832,27 +3907,26 @@
         <span class="k">return</span> <span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_</span></div>
 
     <span class="nd">@property</span>
+    <span class="nd">@_cache_value</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_simple_done</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">_simple_done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_simple_done_value&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">_simple_done</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">key_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-            <span class="n">_simple_done</span> <span class="o">=</span> <span class="n">key_set</span> <span class="o">==</span> <span class="p">{</span>
-                <span class="s2">&quot;done&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;truncated&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;terminated&quot;</span><span class="p">,</span>
-            <span class="p">}</span> <span class="ow">or</span> <span class="n">key_set</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">}</span>
-            <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_simple_done_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_simple_done</span>
+        <span class="n">key_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">_simple_done</span> <span class="o">=</span> <span class="n">key_set</span> <span class="o">==</span> <span class="p">{</span>
+            <span class="s2">&quot;done&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;truncated&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;terminated&quot;</span><span class="p">,</span>
+        <span class="p">}</span> <span class="ow">or</span> <span class="n">key_set</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">}</span>
         <span class="k">return</span> <span class="n">_simple_done</span>
 
-<div class="viewcode-block" id="EnvBase.maybe_reset"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.maybe_reset">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">maybe_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.</span>
+<div class="viewcode-block" id="EnvBase.any_done"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.any_done">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">any_done</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Checks if the tensordict is in a &quot;done&quot; state (or if an element of the batch is).</span>
 
-<span class="sd">        Args:</span>
-<span class="sd">            tensordict (TensorDictBase): a tensordict coming from the output of :func:`~torchrl.envs.utils.step_mdp`.</span>
+<span class="sd">        Writes the result under the `&quot;_reset&quot;` entry.</span>
 
-<span class="sd">        Returns:</span>
-<span class="sd">            A tensordict that is identical to the input where the environment was</span>
-<span class="sd">            not reset and contains the new reset data where the environment was reset.</span>
+<span class="sd">        Returns: a bool indicating whether there is an element in the tensordict that is marked</span>
+<span class="sd">            as done.</span>
+
+<span class="sd">        .. note:: The tensordict passed should be a `&quot;next&quot;` tensordict or equivalent -- i.e., it should not</span>
+<span class="sd">            contain a `&quot;next&quot;` value.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_simple_done</span><span class="p">:</span>
@@ -3862,7 +3936,7 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">any_done</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="k">if</span> <span class="n">any_done</span><span class="p">:</span>
-                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">_set_str</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">_set_str</span><span class="p">(</span>
                     <span class="s2">&quot;_reset&quot;</span><span class="p">,</span>
                     <span class="n">done</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
                     <span class="n">validated</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -3875,6 +3949,20 @@
                 <span class="n">full_done_spec</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">],</span>
                 <span class="n">key</span><span class="o">=</span><span class="s2">&quot;_reset&quot;</span><span class="p">,</span>
             <span class="p">)</span>
+        <span class="k">return</span> <span class="n">any_done</span></div>
+
+<div class="viewcode-block" id="EnvBase.maybe_reset"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.maybe_reset">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">maybe_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): a tensordict coming from the output of :func:`~torchrl.envs.utils.step_mdp`.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A tensordict that is identical to the input where the environment was</span>
+<span class="sd">            not reset and contains the new reset data where the environment was reset.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">any_done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">any_done</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">any_done</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">select_reset_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tensordict</span></div>

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
     </div>
     
 
@@ -603,6 +603,22 @@ accessed from this module using the given name</p></li>
 <dt class="sig sig-object py" id="torchrl.envs.LLMHashingEnv.add_truncated_keys">
 <span class="sig-name descname"><span class="pre">add_truncated_keys</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.common.EnvBase"><span class="pre">EnvBase</span></a></span></span><a class="headerlink" href="#torchrl.envs.LLMHashingEnv.add_truncated_keys" title="Permalink to this definition">¶</a></dt>
 <dd><p>Adds truncated keys to the environment.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.LLMHashingEnv.any_done">
+<span class="sig-name descname"><span class="pre">any_done</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrl.envs.LLMHashingEnv.any_done" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks if the tensordict is in a “done” state (or if an element of the batch is).</p>
+<p>Writes the result under the <cite>“_reset”</cite> entry.</p>
+<dl class="simple">
+<dt>Returns: a bool indicating whether there is an element in the tensordict that is marked</dt><dd><p>as done.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The tensordict passed should be a <cite>“next”</cite> tensordict or equivalent – i.e., it should not
+contain a <cite>“next”</cite> value.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -1681,6 +1697,14 @@ parameters in the result. Defaults to True.</p></li>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.LLMHashingEnv.observation_keys">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">observation_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrl.envs.LLMHashingEnv.observation_keys" title="Permalink to this definition">¶</a></dt>
+<dd><p>The observation keys of an environment.</p>
+<p>By default, there will only be one key named “observation”.</p>
+<p>Keys are sorted by depth in the data tree.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="torchrl.envs.LLMHashingEnv.observation_spec">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">observation_spec</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></em><a class="headerlink" href="#torchrl.envs.LLMHashingEnv.observation_spec" title="Permalink to this definition">¶</a></dt>
 <dd><p>Observation spec.</p>
@@ -2504,11 +2528,23 @@ rollout. If <code class="docutils literal notranslate"><span class="pre">False</
 <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> argument to be passed with the previous rollout. Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 <li><p><strong>auto_cast_to_device</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the device of the tensordict is automatically cast to the
 policy device before the policy is used. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>break_when_any_done</strong> (<em>bool</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, break when any of the contained environments reaches any of the
-done states. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, then the done environments are reset automatically. Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
-<li><p><strong>break_when_all_done</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, break if all of the contained environments reach any
+<li><p><strong>break_when_any_done</strong> (<em>bool</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, break when any of the contained environments reaches any of the
+done states. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, then the done environments are reset automatically. Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p>The <a class="reference internal" href="../envs.html#ref-partial-resets"><span class="std std-ref">Partial resets</span></a> of the documentation gives more
+information about partial resets.</p>
+</div>
+</p></li>
+<li><p><strong>break_when_all_done</strong> (<em>bool</em><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, break if all of the contained environments reach any
 of the done states. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, break if at least one environment reaches any of the done states.
-Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p>The <a class="reference internal" href="../envs.html#ref-partial-steps"><span class="std std-ref">Partial steps</span></a> of the documentation gives more
+information about partial resets.</p>
+</div>
+</p></li>
 <li><p><strong>return_contiguous</strong> (<em>bool</em>) – if False, a LazyStackedTensorDict will be returned. Default is <cite>True</cite> if
 the env does not have dynamic specs, otherwise <cite>False</cite>.</p></li>
 <li><p><strong>tensordict</strong> (<em>TensorDict</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">auto_reset</span></code> is False, an initial

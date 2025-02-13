@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
     </div>
     
 
@@ -450,6 +450,7 @@
     <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">unravel_key</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_is_leaf_nontensor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">multiprocessing</span> <span class="k">as</span> <span class="n">mp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -1510,7 +1511,7 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
-        <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">)</span>
         <span class="n">tensordict_save</span> <span class="o">=</span> <span class="n">tensordict</span>
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
             <span class="n">partial_steps</span> <span class="o">=</span> <span class="kc">None</span>
@@ -1583,9 +1584,31 @@
                 <span class="n">out_tds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">out_td</span><span class="p">)</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span><span class="n">out_tds</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">tensordict_save</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-            <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">out</span>
+            <span class="c1"># Copy the observation data from the previous step as placeholder</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                        <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="k">return</span> <span class="n">x</span>
+
+            <span class="n">prev</span> <span class="o">=</span> <span class="n">tensordict_save</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                <span class="n">select_and_clone</span><span class="p">,</span>
+                <span class="n">result</span><span class="p">,</span>
+                <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                <span class="n">is_leaf</span><span class="o">=</span><span class="n">_is_leaf_nontensor</span><span class="p">,</span>
+                <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">prev</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">out</span>
             <span class="k">return</span> <span class="n">result</span>
 
         <span class="k">return</span> <span class="n">out</span>
@@ -1950,7 +1973,29 @@
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">tensordict_save</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-            <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">out</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                        <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="k">return</span> <span class="n">x</span>
+
+            <span class="n">prev</span> <span class="o">=</span> <span class="n">tensordict_save</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                <span class="n">select_and_clone</span><span class="p">,</span>
+                <span class="n">result</span><span class="p">,</span>
+                <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                <span class="n">is_leaf</span><span class="o">=</span><span class="n">_is_leaf_nontensor</span><span class="p">,</span>
+                <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">prev</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">out</span>
             <span class="k">return</span> <span class="n">result</span>
         <span class="k">return</span> <span class="n">out</span>
 
@@ -1964,7 +2009,7 @@
             <span class="c1"># return self._step_and_maybe_reset_no_buffers(tensordict)</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">step_and_maybe_reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
 
-        <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">)</span>
         <span class="n">tensordict_save</span> <span class="o">=</span> <span class="n">tensordict</span>
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
             <span class="n">partial_steps</span> <span class="o">=</span> <span class="kc">None</span>
@@ -2029,10 +2074,11 @@
             <span class="n">data</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">]</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_non_tensor_keys</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">:</span>
-                <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s2">&quot;non_tensor_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-                    <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
-                <span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">td</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                <span class="n">workers_range</span><span class="p">,</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="p">):</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s2">&quot;non_tensor_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">td</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_sync_m2w</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_data</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">workers_range</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
@@ -2066,6 +2112,14 @@
                 <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                 <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="p">)</span>
+            <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                    <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span>
+                    <span class="k">else</span> <span class="n">x</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_sync_w2m</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">next_td</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
@@ -2082,8 +2136,47 @@
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">tensordict_save</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
             <span class="n">result_</span> <span class="o">=</span> <span class="n">tensordict_</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">tensordict_save</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-            <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensordict</span>
-            <span class="n">result_</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensordict_</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_transfer</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="p">(</span>
+                        <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">y</span><span class="o">.</span><span class="n">device</span>
+                        <span class="k">else</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="p">)</span>
+
+            <span class="n">old_r_copy</span> <span class="o">=</span> <span class="n">tensordict_save</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                <span class="n">select_and_transfer</span><span class="p">,</span>
+                <span class="n">result</span><span class="p">,</span>
+                <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">old_r_copy</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;next&quot;</span><span class="p">,</span>
+                <span class="n">tensordict_save</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                    <span class="n">select_and_transfer</span><span class="p">,</span>
+                    <span class="n">next_td</span><span class="p">,</span>
+                    <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">old_r_copy</span><span class="p">)</span>
+            <span class="n">result_</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">tensordict_save</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                    <span class="n">select_and_transfer</span><span class="p">,</span>
+                    <span class="n">result_</span><span class="p">,</span>
+                    <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_w2m</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensordict</span>
+                <span class="n">result_</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensordict_</span>
             <span class="k">return</span> <span class="n">result</span><span class="p">,</span> <span class="n">result_</span>
 
         <span class="k">return</span> <span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_</span></div>
@@ -2121,7 +2214,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_step_no_buffers</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]:</span>
-        <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">)</span>
         <span class="n">tensordict_save</span> <span class="o">=</span> <span class="n">tensordict</span>
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
             <span class="n">partial_steps</span> <span class="o">=</span> <span class="kc">None</span>
@@ -2148,7 +2241,29 @@
             <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">tensordict_save</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-            <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">out</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                        <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="k">return</span> <span class="n">x</span>
+
+            <span class="n">prev</span> <span class="o">=</span> <span class="n">tensordict_save</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                <span class="n">select_and_clone</span><span class="p">,</span>
+                <span class="n">result</span><span class="p">,</span>
+                <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                <span class="n">is_leaf</span><span class="o">=</span><span class="n">_is_leaf_nontensor</span><span class="p">,</span>
+                <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">prev</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">out</span>
             <span class="k">return</span> <span class="n">result</span>
         <span class="k">return</span> <span class="n">out</span>
 
@@ -2165,7 +2280,7 @@
         <span class="c1">#   and this transform overrides an observation key (eg, CatFrames)</span>
         <span class="c1">#   the shape, dtype or device may not necessarily match and writing</span>
         <span class="c1">#   the value in-place will fail.</span>
-        <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">partial_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">)</span>
         <span class="n">tensordict_save</span> <span class="o">=</span> <span class="n">tensordict</span>
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
             <span class="n">partial_steps</span> <span class="o">=</span> <span class="kc">None</span>
@@ -2195,6 +2310,8 @@
 
         <span class="n">shared_tensordict_parent</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span>
             <span class="n">tensordict</span><span class="p">,</span>
+            <span class="c1"># We also update the output keys because they can be implicitly used, eg</span>
+            <span class="c1"># during partial steps to fill in values</span>
             <span class="n">keys_to_update</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env_input_keys</span><span class="p">),</span>
             <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">,</span>
         <span class="p">)</span>
@@ -2241,10 +2358,11 @@
             <span class="n">data</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_non_tensor_keys</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">:</span>
-                <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s2">&quot;non_tensor_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-                    <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
-                <span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">td</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                <span class="n">workers_range</span><span class="p">,</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="p">):</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s2">&quot;non_tensor_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">td</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_sync_m2w</span><span class="p">()</span>
 
@@ -2296,7 +2414,28 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_sync_w2m</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">tensordict_save</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-            <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">out</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                        <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="k">return</span> <span class="n">x</span>
+
+            <span class="n">prev</span> <span class="o">=</span> <span class="n">tensordict_save</span><span class="o">.</span><span class="n">_fast_apply</span><span class="p">(</span>
+                <span class="n">select_and_clone</span><span class="p">,</span>
+                <span class="n">result</span><span class="p">,</span>
+                <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                <span class="n">is_leaf</span><span class="o">=</span><span class="n">_is_leaf_nontensor</span><span class="p">,</span>
+                <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">prev</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">result</span><span class="p">[</span><span class="n">partial_steps</span><span class="p">]</span> <span class="o">=</span> <span class="n">out</span>
             <span class="k">return</span> <span class="n">result</span>
         <span class="k">return</span> <span class="n">out</span>
 
@@ -2694,7 +2833,7 @@
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;called &#39;init&#39; before step&quot;</span><span class="p">)</span>
             <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="c1"># No need to copy here since we don&#39;t write in-place</span>
-            <span class="nb">input</span> <span class="o">=</span> <span class="n">root_shared_tensordict</span>
+            <span class="nb">input</span> <span class="o">=</span> <span class="n">root_shared_tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">data</span><span class="p">:</span>
                 <span class="n">next_td_passthrough_keys</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next_td_passthrough_keys&quot;</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">next_td_passthrough_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -2705,12 +2844,17 @@
                 <span class="k">if</span> <span class="n">non_tensor_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="nb">input</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">non_tensor_data</span><span class="p">)</span>
 
-            <span class="n">next_td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+            <span class="nb">input</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+            <span class="n">next_td</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span>
             <span class="n">next_shared_tensordict</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">next_td</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">)</span>
+
             <span class="k">if</span> <span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
             <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+            <span class="c1"># Make sure the root is updated</span>
+            <span class="n">root_shared_tensordict</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">_step_mdp</span><span class="p">(</span><span class="nb">input</span><span class="p">))</span>
 
             <span class="k">if</span> <span class="n">_non_tensor_keys</span><span class="p">:</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>

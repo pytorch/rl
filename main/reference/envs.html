@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
     </div>
     
 
@@ -582,6 +582,64 @@ provides more information on how to design a custom environment from scratch.</p
 </tr>
 </tbody>
 </table>
+</section>
+<section id="partial-steps-and-partial-resets">
+<h2>Partial steps and partial resets<a class="headerlink" href="#partial-steps-and-partial-resets" title="Permalink to this heading">¶</a></h2>
+<p>TorchRL allows environments to reset some but not all the environments, or run a step in one but not all environments.
+If there is only one environment in the batch, then a partial reset / step is also allowed with the behavior detailed
+below.</p>
+<section id="batching-environments-and-locking-the-batch">
+<h3>Batching environments and locking the batch<a class="headerlink" href="#batching-environments-and-locking-the-batch" title="Permalink to this heading">¶</a></h3>
+<p id="ref-batch-locked">Before detailing what partial resets and partial steps do, we must distinguish cases where an environment has
+a batch size of its own (mostly stateful environments) or when the environment is just a mere module that, given an
+input of arbitrary size, batches the operations over all elements (mostly stateless environments).</p>
+<p>This is controlled via the <code class="xref py py-attr docutils literal notranslate"><span class="pre">batch_locked</span></code> attribute: a batch-locked environment requires all input
+tensordicts to have the same batch-size as the env’s. Typical examples of these environments are
+<a class="reference internal" href="generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">GymEnv</span></code></a> and related. Batch-unlocked envs are by contrast allowed to work with any input size.
+Notable examples are <a class="reference internal" href="generated/torchrl.envs.BraxEnv.html#torchrl.envs.BraxEnv" title="torchrl.envs.BraxEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">BraxEnv</span></code></a> or <a class="reference internal" href="generated/torchrl.envs.JumanjiEnv.html#torchrl.envs.JumanjiEnv" title="torchrl.envs.JumanjiEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">JumanjiEnv</span></code></a>.</p>
+<p>Executing partial steps in a batch-unlocked environment is straightforward: one just needs to mask the part of the
+tensordict that does not need to be executed, pass the other part to <cite>step</cite> and merge the results with the previous
+input.</p>
+<p>Batched environments (<a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> and <a class="reference internal" href="generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">SerialEnv</span></code></a>) can also deal with
+partial steps easily, they just pass the actions to the sub-environments that are required to be executed.</p>
+<p>In all other cases, TorchRL assumes that the environment handles the partial steps correctly.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This means that custom environments may silently run the non-required steps as there is no way for torchrl
+to control what happens within the <cite>_step</cite> method!</p>
+</div>
+</section>
+<section id="partial-steps">
+<h3>Partial Steps<a class="headerlink" href="#partial-steps" title="Permalink to this heading">¶</a></h3>
+<p id="ref-partial-steps">Partial steps are controlled via the temporary key <cite>“_step”</cite> which points to a boolean mask of the
+size of the tensordict that holds it. The classes armed to deal with this are:</p>
+<ul class="simple">
+<li><p>Batched environments: <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> and <a class="reference internal" href="generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">SerialEnv</span></code></a> will dispatch the
+action to and only to the environments where <cite>“_step”</cite> is <cite>True</cite>;</p></li>
+<li><p>Batch-unlocked environments;</p></li>
+<li><p>Unbatched environments (i.e., environments without batch size). In these environments, the <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a>
+method will first look for a <cite>“_step”</cite> entry and, if present, act accordingly.
+If a <code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code> instance passes a <cite>“_step”</cite> entry to the tensordict, it is also captured by
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code>’s own <cite>_step</cite> method which will skip the <cite>base_env.step</cite> as well as any further
+transformation.</p></li>
+</ul>
+<p>When dealing with partial steps, the strategy is always to use the step output and mask missing values with the previous
+content of the input tensordict, if present, or a <cite>0</cite>-valued tensor if the tensor cannot be found. This means that
+if the input tensordict does not contain all the previous observations, then the output tensordict will be 0-valued for
+all the non-stepped elements. Within batched environments, data collectors and rollouts utils, this is an issue that
+is not observed because these classes handle the passing of data properly.</p>
+<p>Partial steps are an essential feature of <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a> when <cite>break_when_all_done</cite> is <cite>True</cite>,
+as the environments with a <cite>True</cite> done state will need to be skipped during calls to <cite>_step</cite>.</p>
+<p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">ConditionalSkip</span></code> transform allows you to programmatically ask for (partial) step skips.</p>
+</section>
+<section id="partial-resets">
+<h3>Partial Resets<a class="headerlink" href="#partial-resets" title="Permalink to this heading">¶</a></h3>
+<p id="ref-partial-resets">Partial resets work pretty much like partial steps, but with the <cite>“_reset”</cite> entry.</p>
+<p>The same restrictions of partial steps apply to partial resets.</p>
+<p>Likewise, partial resets are an essential feature of <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a> when <cite>break_when_any_done</cite> is <cite>True</cite>,
+as the environments with a <cite>True</cite> done state will need to be reset, but not others.</p>
+<p>See te following paragraph for a deep dive in partial resets within batched and vectorized environments.</p>
+</section>
 </section>
 <section id="vectorized-envs">
 <h2>Vectorized envs<a class="headerlink" href="#vectorized-envs" title="Permalink to this heading">¶</a></h2>
@@ -1305,50 +1363,56 @@ to be able to create this other composition:</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose" title="torchrl.envs.transforms.Compose"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Compose</span></code></a>(*transforms)</p></td>
 <td><p>Composes a chain of transforms.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Crop.html#torchrl.envs.transforms.Crop" title="torchrl.envs.transforms.Crop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Crop</span></code></a>(w[, h, top, left, in_keys, out_keys])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.ConditionalSkip.html#torchrl.envs.transforms.ConditionalSkip" title="torchrl.envs.transforms.ConditionalSkip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConditionalSkip</span></code></a>(cond)</p></td>
+<td><p>A transform that skips steps in the env if certain conditions are met.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Crop.html#torchrl.envs.transforms.Crop" title="torchrl.envs.transforms.Crop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Crop</span></code></a>(w[, h, top, left, in_keys, out_keys])</p></td>
 <td><p>Crops the input image at the specified location and output size.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.DTypeCastTransform.html#torchrl.envs.transforms.DTypeCastTransform" title="torchrl.envs.transforms.DTypeCastTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DTypeCastTransform</span></code></a>(dtype_in, dtype_out[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.DTypeCastTransform.html#torchrl.envs.transforms.DTypeCastTransform" title="torchrl.envs.transforms.DTypeCastTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DTypeCastTransform</span></code></a>(dtype_in, dtype_out[, ...])</p></td>
 <td><p>Casts one dtype to another for selected keys.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.DeviceCastTransform.html#torchrl.envs.transforms.DeviceCastTransform" title="torchrl.envs.transforms.DeviceCastTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DeviceCastTransform</span></code></a>(device[, orig_device, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.DeviceCastTransform.html#torchrl.envs.transforms.DeviceCastTransform" title="torchrl.envs.transforms.DeviceCastTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DeviceCastTransform</span></code></a>(device[, orig_device, ...])</p></td>
 <td><p>Moves data from one device to another.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.DiscreteActionProjection.html#torchrl.envs.transforms.DiscreteActionProjection" title="torchrl.envs.transforms.DiscreteActionProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteActionProjection</span></code></a>(...[, action_key, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.DiscreteActionProjection.html#torchrl.envs.transforms.DiscreteActionProjection" title="torchrl.envs.transforms.DiscreteActionProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteActionProjection</span></code></a>(...[, action_key, ...])</p></td>
 <td><p>Projects discrete actions from a high dimensional space to a low dimensional space.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.DoubleToFloat.html#torchrl.envs.transforms.DoubleToFloat" title="torchrl.envs.transforms.DoubleToFloat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DoubleToFloat</span></code></a>([in_keys, out_keys, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.DoubleToFloat.html#torchrl.envs.transforms.DoubleToFloat" title="torchrl.envs.transforms.DoubleToFloat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DoubleToFloat</span></code></a>([in_keys, out_keys, ...])</p></td>
 <td><p>Casts one dtype to another for selected keys.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.EndOfLifeTransform.html#torchrl.envs.transforms.EndOfLifeTransform" title="torchrl.envs.transforms.EndOfLifeTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EndOfLifeTransform</span></code></a>([eol_key, lives_key, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.EndOfLifeTransform.html#torchrl.envs.transforms.EndOfLifeTransform" title="torchrl.envs.transforms.EndOfLifeTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EndOfLifeTransform</span></code></a>([eol_key, lives_key, ...])</p></td>
 <td><p>Registers the end-of-life signal from a Gym env with a <cite>lives</cite> method.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.ExcludeTransform.html#torchrl.envs.transforms.ExcludeTransform" title="torchrl.envs.transforms.ExcludeTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExcludeTransform</span></code></a>(*excluded_keys[, inverse])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.ExcludeTransform.html#torchrl.envs.transforms.ExcludeTransform" title="torchrl.envs.transforms.ExcludeTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExcludeTransform</span></code></a>(*excluded_keys[, inverse])</p></td>
 <td><p>Excludes keys from the data.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.FiniteTensorDictCheck.html#torchrl.envs.transforms.FiniteTensorDictCheck" title="torchrl.envs.transforms.FiniteTensorDictCheck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FiniteTensorDictCheck</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.FiniteTensorDictCheck.html#torchrl.envs.transforms.FiniteTensorDictCheck" title="torchrl.envs.transforms.FiniteTensorDictCheck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FiniteTensorDictCheck</span></code></a>()</p></td>
 <td><p>This transform will check that all the items of the tensordict are finite, and raise an exception if they are not.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.FlattenObservation.html#torchrl.envs.transforms.FlattenObservation" title="torchrl.envs.transforms.FlattenObservation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlattenObservation</span></code></a>(first_dim, last_dim[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.FlattenObservation.html#torchrl.envs.transforms.FlattenObservation" title="torchrl.envs.transforms.FlattenObservation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlattenObservation</span></code></a>(first_dim, last_dim[, ...])</p></td>
 <td><p>Flatten adjacent dimensions of a tensor.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.FrameSkipTransform.html#torchrl.envs.transforms.FrameSkipTransform" title="torchrl.envs.transforms.FrameSkipTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameSkipTransform</span></code></a>([frame_skip])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.FrameSkipTransform.html#torchrl.envs.transforms.FrameSkipTransform" title="torchrl.envs.transforms.FrameSkipTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameSkipTransform</span></code></a>([frame_skip])</p></td>
 <td><p>A frame-skip transform.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.GrayScale.html#torchrl.envs.transforms.GrayScale" title="torchrl.envs.transforms.GrayScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GrayScale</span></code></a>([in_keys, out_keys])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.GrayScale.html#torchrl.envs.transforms.GrayScale" title="torchrl.envs.transforms.GrayScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GrayScale</span></code></a>([in_keys, out_keys])</p></td>
 <td><p>Turns a pixel observation to grayscale.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash" title="torchrl.envs.transforms.Hash"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Hash</span></code></a>(in_keys, out_keys[, in_keys_inv, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash" title="torchrl.envs.transforms.Hash"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Hash</span></code></a>(in_keys, out_keys[, in_keys_inv, ...])</p></td>
 <td><p>Adds a hash value to a tensordict.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InitTracker</span></code></a>([init_key])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InitTracker</span></code></a>([init_key])</p></td>
 <td><p>Reset tracker.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.KLRewardTransform.html#torchrl.envs.transforms.KLRewardTransform" title="torchrl.envs.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(actor[, coef, in_keys, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.KLRewardTransform.html#torchrl.envs.transforms.KLRewardTransform" title="torchrl.envs.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(actor[, coef, in_keys, ...])</p></td>
 <td><p>A transform to add a KL[pi_current||pi_0] correction term to the reward.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.LineariseRewards.html#torchrl.envs.transforms.LineariseRewards" title="torchrl.envs.transforms.LineariseRewards"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LineariseRewards</span></code></a>(in_keys[, out_keys, weights])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.LineariseRewards.html#torchrl.envs.transforms.LineariseRewards" title="torchrl.envs.transforms.LineariseRewards"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LineariseRewards</span></code></a>(in_keys[, out_keys, weights])</p></td>
 <td><p>Transforms a multi-objective reward signal to a single-objective one via a weighted sum.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction" title="torchrl.envs.transforms.MultiAction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiAction</span></code></a>(*[, dim, stack_rewards, ...])</p></td>
+<td><p>A transform to execute multiple actions in the parent environment.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.NoopResetEnv.html#torchrl.envs.transforms.NoopResetEnv" title="torchrl.envs.transforms.NoopResetEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NoopResetEnv</span></code></a>([noops, random])</p></td>
 <td><p>Runs a series of random actions when an environment is reset.</p></td>
@@ -1846,6 +1910,12 @@ the following function will return <code class="docutils literal notranslate"><s
 <li><a class="reference internal" href="#">torchrl.envs package</a><ul>
 <li><a class="reference internal" href="#env-specs-locks-and-batch-size">Env specs: locks and batch size</a></li>
 <li><a class="reference internal" href="#env-methods">Env methods</a></li>
+<li><a class="reference internal" href="#partial-steps-and-partial-resets">Partial steps and partial resets</a><ul>
+<li><a class="reference internal" href="#batching-environments-and-locking-the-batch">Batching environments and locking the batch</a></li>
+<li><a class="reference internal" href="#partial-steps">Partial Steps</a></li>
+<li><a class="reference internal" href="#partial-resets">Partial Resets</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#vectorized-envs">Vectorized envs</a></li>
 <li><a class="reference internal" href="#custom-native-torchrl-environments">Custom native TorchRL environments</a></li>
 <li><a class="reference internal" href="#multi-agent-environments">Multi-agent environments</a></li>

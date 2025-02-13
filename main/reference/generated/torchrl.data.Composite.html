@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
     </div>
     
 
@@ -457,6 +457,8 @@ a <code class="docutils literal notranslate"><span class="pre">None</span></code
 to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>shape</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.6)"><em>torch.Size</em></a>) – the leading shape of all the leaves. Equivalent
 to the batch-size of the corresponding tensordicts.</p></li>
+<li><p><strong>data_cls</strong> (<em>type</em><em>, </em><em>optional</em>) – the tensordict subclass (TensorDict, TensorClass, tensorclass…) that should be
+enforced in the env. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -926,6 +928,12 @@ composite spec. If a key is not found, the specified default value is used. The 
 <p class="admonition-title">Note</p>
 <p>If none of the specified keys are found, the method returns <cite>None</cite>.</p>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.Composite.set">
+<span class="sig-name descname"><span class="pre">set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/data/tensor_specs.html#Composite.set"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.Composite.set" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets a spec in the Composite spec.</p>
 </dd></dl>
 
 <dl class="py method">
