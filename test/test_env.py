@@ -127,6 +127,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
+        EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
         MockBatchedLockedEnv,
@@ -166,6 +167,7 @@ else:
         EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
+        EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
         MockBatchedLockedEnv,
@@ -235,6 +237,7 @@ _has_transformers = importlib.util.find_spec("transformers") is not None
 class TestEnvBase:
     def test_run_type_checks(self):
         env = ContinuousActionVecMockEnv()
+        env.adapt_dtype = False
         env._run_type_checks = False
         check_env_specs(env)
         env._run_type_checks = True
@@ -3707,6 +3710,29 @@ class TestNonTensorEnv:
         else:
             raise RuntimeError("Failed to sample both trajs")
 
+    def test_env_with_tensorclass(self):
+        env = EnvWithTensorClass()
+        env.check_env_specs()
+        r = env.reset()
+        for _ in range(3):
+            assert isinstance(r["tc"], env.tc_cls)
+            a = env.rand_action(r)
+            s = env.step(a)
+            assert isinstance(s["tc"], env.tc_cls)
+            r = env.step_mdp(s)
+
+    @pytest.mark.parametrize("cls", [SerialEnv, ParallelEnv])
+    def test_env_with_tensorclass_batched(self, cls):
+        env = cls(2, EnvWithTensorClass)
+        env.check_env_specs()
+        r = env.reset()
+        for _ in range(3):
+            assert isinstance(r["tc"], EnvWithTensorClass.tc_cls)
+            a = env.rand_action(r)
+            s = env.step(a)
+            assert isinstance(s["tc"], EnvWithTensorClass.tc_cls)
+            r = env.step_mdp(s)
+
 
 # fen strings for board positions generated with:
 # https://lichess.org/editor
@@ -4112,17 +4138,21 @@ class TestPartialSteps:
                 use_buffers=use_buffers,
                 device=device,
             )
-            td = penv.reset()
-            psteps = torch.zeros(4, dtype=torch.bool)
-            psteps[[1, 3]] = True
-            td.set("_step", psteps)
+            try:
+                td = penv.reset()
+                psteps = torch.zeros(4, dtype=torch.bool)
+                psteps[[1, 3]] = True
+                td.set("_step", psteps)
 
-            td.set("action", penv.full_action_spec[penv.action_key].one())
-            td = penv.step(td)
-            assert (td[0].get("next") == 0).all()
-            assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
-            assert (td[3].get("next") != 0).any()
+                td.set("action", penv.full_action_spec[penv.action_key].one())
+                td = penv.step(td)
+                assert_allclose_td(td[0].get("next"), td[0], intersection=True)
+                assert (td[1].get("next") != 0).any()
+                assert_allclose_td(td[2].get("next"), td[2], intersection=True)
+                assert (td[3].get("next") != 0).any()
+            finally:
+                penv.close()
+                del penv
 
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_parallel_partial_step_and_maybe_reset(
@@ -4135,17 +4165,21 @@ class TestPartialSteps:
                 use_buffers=use_buffers,
                 device=device,
             )
-            td = penv.reset()
-            psteps = torch.zeros(4, dtype=torch.bool)
-            psteps[[1, 3]] = True
-            td.set("_step", psteps)
+            try:
+                td = penv.reset()
+                psteps = torch.zeros(4, dtype=torch.bool, device=td.get("done").device)
+                psteps[[1, 3]] = True
+                td.set("_step", psteps)
 
-            td.set("action", penv.full_action_spec[penv.action_key].one())
-            td, tdreset = penv.step_and_maybe_reset(td)
-            assert (td[0].get("next") == 0).all()
-            assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
-            assert (td[3].get("next") != 0).any()
+                td.set("action", penv.full_action_spec[penv.action_key].one())
+                td, tdreset = penv.step_and_maybe_reset(td)
+                assert_allclose_td(td[0].get("next"), td[0], intersection=True)
+                assert (td[1].get("next") != 0).any()
+                assert_allclose_td(td[2].get("next"), td[2], intersection=True)
+                assert (td[3].get("next") != 0).any()
+            finally:
+                penv.close()
+                del penv
 
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_serial_partial_steps(self, use_buffers, device, env_device):
@@ -4156,17 +4190,21 @@ class TestPartialSteps:
                 use_buffers=use_buffers,
                 device=device,
             )
-            td = penv.reset()
-            psteps = torch.zeros(4, dtype=torch.bool)
-            psteps[[1, 3]] = True
-            td.set("_step", psteps)
+            try:
+                td = penv.reset()
+                psteps = torch.zeros(4, dtype=torch.bool)
+                psteps[[1, 3]] = True
+                td.set("_step", psteps)
 
-            td.set("action", penv.full_action_spec[penv.action_key].one())
-            td = penv.step(td)
-            assert (td[0].get("next") == 0).all()
-            assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
-            assert (td[3].get("next") != 0).any()
+                td.set("action", penv.full_action_spec[penv.action_key].one())
+                td = penv.step(td)
+                assert_allclose_td(td[0].get("next"), td[0], intersection=True)
+                assert (td[1].get("next") != 0).any()
+                assert_allclose_td(td[2].get("next"), td[2], intersection=True)
+                assert (td[3].get("next") != 0).any()
+            finally:
+                penv.close()
+                del penv
 
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_serial_partial_step_and_maybe_reset(self, use_buffers, device, env_device):
@@ -4184,9 +4222,9 @@ class TestPartialSteps:
 
             td.set("action", penv.full_action_spec[penv.action_key].one())
             td = penv.step(td)
-            assert (td[0].get("next") == 0).all()
+            assert_allclose_td(td[0].get("next"), td[0], intersection=True)
             assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
+            assert_allclose_td(td[2].get("next"), td[2], intersection=True)
             assert (td[3].get("next") != 0).any()
 
 
