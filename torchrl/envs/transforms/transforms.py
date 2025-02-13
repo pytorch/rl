@@ -953,6 +953,10 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
+            # Inputs might be transformed, so need to apply inverse transform
+            # before passing to the env reset function.
+            with _set_missing_tolerance(self.transform, True):
+                tensordict = self.transform.inv(tensordict)
         tensordict_reset = self.base_env._reset(tensordict, **kwargs)
         if tensordict is None:
             # make sure all transforms see a source tensordict
