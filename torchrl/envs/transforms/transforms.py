@@ -313,10 +313,10 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform.
 
         For any operation that relates exclusively to the parent env (e.g. FrameSkip),
-        modify the _step method instead. :meth:`~._call` should only be overwritten
+        modify the _step method instead. :meth:`_call` should only be overwritten
         if a modification of the input tensordict is needed.
 
-        :meth:`~._call` will be called by :meth:`TransformedEnv.step` and
+        :meth:`_call` will be called by :meth:`TransformedEnv.step` and
         :meth:`TransformedEnv.reset`.
 
         """
@@ -351,13 +351,13 @@ class Transform(nn.Module):
     ) -> TensorDictBase:
         """The parent method of a transform during the ``env.step`` execution.
 
-        This method should be overwritten whenever the :meth:`~._step` needs to be
-        adapted. Unlike :meth:`~._call`, it is assumed that :meth:`~._step`
+        This method should be overwritten whenever the :meth:`_step` needs to be
+        adapted. Unlike :meth:`_call`, it is assumed that :meth:`_step`
         will execute some operation with the parent env or that it requires
         access to the content of the tensordict at time ``t`` and not only
         ``t+1`` (the ``"next"`` entry in the input tensordict).
 
-        :meth:`~._step` will only be called by :meth:`TransformedEnv.step` and
+        :meth:`_step` will only be called by :meth:`TransformedEnv.step` and
         not by :meth:`TransformedEnv.reset`.
 
         Args:
@@ -413,7 +413,7 @@ class Transform(nn.Module):
         """Transforms the output spec such that the resulting spec matches transform mapping.
 
         This method should generally be left untouched. Changes should be implemented using
-        :meth:`~.transform_observation_spec`, :meth:`~.transform_reward_spec` and :meth:`~.transformfull_done_spec`.
+        :meth:`transform_observation_spec`, :meth:`transform_reward_spec` and :meth:`transform_full_done_spec`.
         Args:
             output_spec (TensorSpec): spec before the transform
 
@@ -1555,8 +1555,8 @@ class ClipTransform(Transform):
     Args:
         in_keys (list of NestedKeys): input entries (read)
         out_keys (list of NestedKeys): input entries (write)
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`inv` calls.
 
     Keyword Args:
         low (scalar, optional): the lower bound of the clipped space.
@@ -2322,7 +2322,7 @@ class UnsqueezeTransform(Transform):
         in_keys (list of NestedKeys): input entries (read).
         out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
             not provided.
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
         out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
             Defaults to ``in_keys_in`` if not provided.
     """
@@ -3163,6 +3163,7 @@ class CatFrames(ObservationTransform):
 
         Returns:
             A tuple containing:
+
                 - transform (Transform): A transform that stacks frames on-the-fly during sampling.
                 - sampler (SliceSampler): A sampler that ensures the correct sequence length is maintained.
 
@@ -5694,7 +5695,7 @@ class TensorDictPrimer(Transform):
         random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
-        default_value (float, Callable, Dict[NestedKey, float], Dict[NestedKey, Callable], optional): If non-random
+        default_value (:obj:`float`, Callable, Dict[NestedKey, float], Dict[NestedKey, Callable], optional): If non-random
             filling is chosen, `default_value` will be used to populate the tensors. If `default_value` is a float,
             all elements of the tensors will be set to that value. If it is a callable, this callable is expected to
             return a tensor fitting the specs, and it will be used to generate the tensors. Finally, if `default_value`
@@ -8037,9 +8038,11 @@ class RenameTransform(Transform):
                 input_spec["full_action_spec"][out_key] = input_spec[
                     "full_action_spec"
                 ][action_key].clone()
-                if not self.create_copy:
+        if not self.create_copy:
+            for action_key in self.parent.action_keys:
+                if action_key in self.in_keys_inv:
                     del input_spec["full_action_spec"][action_key]
-        for state_key in self.parent.full_state_spec.keys(True):
+        for state_key in self.parent.full_state_spec.keys(True, True):
             if state_key in self.in_keys_inv:
                 for i, out_key in enumerate(self.out_keys_inv):  # noqa: B007
                     if self.in_keys_inv[i] == state_key:
@@ -8050,7 +8053,9 @@ class RenameTransform(Transform):
                 input_spec["full_state_spec"][out_key] = input_spec["full_state_spec"][
                     state_key
                 ].clone()
-                if not self.create_copy:
+        if not self.create_copy:
+            for state_key in self.parent.full_state_spec.keys(True, True):
+                if state_key in self.in_keys_inv:
                     del input_spec["full_state_spec"][state_key]
         return input_spec
 
@@ -8063,7 +8068,7 @@ class Reward2GoTransform(Transform):
     and not to the collector or within an environment.
 
     Args:
-        gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
+        gamma (:obj:`float` or torch.Tensor): the discount factor. Defaults to 1.0.
         in_keys (sequence of NestedKey): the entries to rename. Defaults to
             ``("next", "reward")`` if none is provided.
         out_keys (sequence of NestedKey): the entries to rename. Defaults to
@@ -9313,7 +9318,7 @@ class AutoResetTransform(Transform):
             ``False`` overrides any subsequent filling keyword argument.
             This argumet can also be passed with the constructor method by passing a
             ``auto_reset_replace`` argument: ``env = FooEnv(..., auto_reset=True, auto_reset_replace=False)``.
-        fill_float (float or str, optional): The filling value for floating point tensors
+        fill_float (:obj:`float` or str, optional): The filling value for floating point tensors
             that terminate an episode. A value of ``None`` means no replacement (values are just
             placed as they are in the ``"next"`` entry even if they are not valid).
         fill_int (int, optional): The filling value for signed integer tensors

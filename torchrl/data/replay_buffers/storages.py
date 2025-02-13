@@ -194,15 +194,15 @@ class Storage:
         )
 
     def save(self, *args, **kwargs):
-        """Alias for :meth:`~.dumps`."""
+        """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def dump(self, *args, **kwargs):
-        """Alias for :meth:`~.dumps`."""
+        """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def load(self, *args, **kwargs):
-        """Alias for :meth:`~.loads`."""
+        """Alias for :meth:`loads`."""
         return self.loads(*args, **kwargs)
 
     def __getstate__(self):
@@ -1342,7 +1342,7 @@ class StorageEnsemble(Storage):
             transforms of the same length as storages.
 
     .. warning::
-      This class signatures for :meth:`~.get` does not match other storages, as
+      This class signatures for :meth:`get` does not match other storages, as
       it will return a tuple ``(buffer_id, samples)`` rather than just the samples.
 
     .. warning::

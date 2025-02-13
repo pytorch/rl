@@ -36,7 +36,7 @@ class KLRewardTransform(Transform):
 
     .. note:: If the parameters are not differentiable (default), they will *not*
         follow the module when dtype or device casting operations will be called
-        (such as :meth:`~.cuda`, :meth:`~.to` etc.). When ``requires_grad=True``,
+        (such as :meth:`cuda`, :meth:`to` etc.). When ``requires_grad=True``,
         casting operations will work as expected.
 
     Examples:
