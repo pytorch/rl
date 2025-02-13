@@ -314,10 +314,10 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform.
 
         For any operation that relates exclusively to the parent env (e.g. FrameSkip),
-        modify the _step method instead. :meth:`~._call` should only be overwritten
+        modify the _step method instead. :meth:`_call` should only be overwritten
         if a modification of the input tensordict is needed.
 
-        :meth:`~._call` will be called by :meth:`TransformedEnv.step` and
+        :meth:`_call` will be called by :meth:`TransformedEnv.step` and
         :meth:`TransformedEnv.reset`.
 
         """
@@ -352,13 +352,13 @@ class Transform(nn.Module):
     ) -> TensorDictBase:
         """The parent method of a transform during the ``env.step`` execution.
 
-        This method should be overwritten whenever the :meth:`~._step` needs to be
-        adapted. Unlike :meth:`~._call`, it is assumed that :meth:`~._step`
+        This method should be overwritten whenever the :meth:`_step` needs to be
+        adapted. Unlike :meth:`_call`, it is assumed that :meth:`_step`
         will execute some operation with the parent env or that it requires
         access to the content of the tensordict at time ``t`` and not only
         ``t+1`` (the ``"next"`` entry in the input tensordict).
 
-        :meth:`~._step` will only be called by :meth:`TransformedEnv.step` and
+        :meth:`_step` will only be called by :meth:`TransformedEnv.step` and
         not by :meth:`TransformedEnv.reset`.
 
         Args:
@@ -414,7 +414,7 @@ class Transform(nn.Module):
         """Transforms the output spec such that the resulting spec matches transform mapping.
 
         This method should generally be left untouched. Changes should be implemented using
-        :meth:`~.transform_observation_spec`, :meth:`~.transform_reward_spec` and :meth:`~.transformfull_done_spec`.
+        :meth:`transform_observation_spec`, :meth:`transform_reward_spec` and :meth:`transform_full_done_spec`.
         Args:
             output_spec (TensorSpec): spec before the transform
 
@@ -962,7 +962,8 @@ but got an object of type {type(transform)}."""
                     partial_steps = None
                 else:
                     partial_steps = None
-            tensordict_batch_size = self.batch_size
+            if tensordict_batch_size is None:
+                tensordict_batch_size = self.batch_size
 
         if next_tensordict is None:
             next_tensordict = self.base_env._step(tensordict_in)
@@ -1619,8 +1620,8 @@ class ClipTransform(Transform):
     Args:
         in_keys (list of NestedKeys): input entries (read)
         out_keys (list of NestedKeys): input entries (write)
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`inv` calls.
 
     Keyword Args:
         low (scalar, optional): the lower bound of the clipped space.
@@ -2386,7 +2387,7 @@ class UnsqueezeTransform(Transform):
         in_keys (list of NestedKeys): input entries (read).
         out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
             not provided.
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
         out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
             Defaults to ``in_keys_in`` if not provided.
     """
@@ -3227,6 +3228,7 @@ class CatFrames(ObservationTransform):
 
         Returns:
             A tuple containing:
+
                 - transform (Transform): A transform that stacks frames on-the-fly during sampling.
                 - sampler (SliceSampler): A sampler that ensures the correct sequence length is maintained.
 
@@ -5758,7 +5760,7 @@ class TensorDictPrimer(Transform):
         random (bool, optional): if ``True``, the values will be drawn randomly from
             the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
-        default_value (float, Callable, Dict[NestedKey, float], Dict[NestedKey, Callable], optional): If non-random
+        default_value (:obj:`float`, Callable, Dict[NestedKey, float], Dict[NestedKey, Callable], optional): If non-random
             filling is chosen, `default_value` will be used to populate the tensors. If `default_value` is a float,
             all elements of the tensors will be set to that value. If it is a callable, this callable is expected to
             return a tensor fitting the specs, and it will be used to generate the tensors. Finally, if `default_value`
@@ -8101,9 +8103,11 @@ class RenameTransform(Transform):
                 input_spec["full_action_spec"][out_key] = input_spec[
                     "full_action_spec"
                 ][action_key].clone()
-                if not self.create_copy:
+        if not self.create_copy:
+            for action_key in self.parent.action_keys:
+                if action_key in self.in_keys_inv:
                     del input_spec["full_action_spec"][action_key]
-        for state_key in self.parent.full_state_spec.keys(True):
+        for state_key in self.parent.full_state_spec.keys(True, True):
             if state_key in self.in_keys_inv:
                 for i, out_key in enumerate(self.out_keys_inv):  # noqa: B007
                     if self.in_keys_inv[i] == state_key:
@@ -8114,7 +8118,9 @@ class RenameTransform(Transform):
                 input_spec["full_state_spec"][out_key] = input_spec["full_state_spec"][
                     state_key
                 ].clone()
-                if not self.create_copy:
+        if not self.create_copy:
+            for state_key in self.parent.full_state_spec.keys(True, True):
+                if state_key in self.in_keys_inv:
                     del input_spec["full_state_spec"][state_key]
         return input_spec
 
@@ -8127,7 +8133,7 @@ class Reward2GoTransform(Transform):
     and not to the collector or within an environment.
 
     Args:
-        gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
+        gamma (:obj:`float` or torch.Tensor): the discount factor. Defaults to 1.0.
         in_keys (sequence of NestedKey): the entries to rename. Defaults to
             ``("next", "reward")`` if none is provided.
         out_keys (sequence of NestedKey): the entries to rename. Defaults to
@@ -9377,7 +9383,7 @@ class AutoResetTransform(Transform):
             ``False`` overrides any subsequent filling keyword argument.
             This argumet can also be passed with the constructor method by passing a
             ``auto_reset_replace`` argument: ``env = FooEnv(..., auto_reset=True, auto_reset_replace=False)``.
-        fill_float (float or str, optional): The filling value for floating point tensors
+        fill_float (:obj:`float` or str, optional): The filling value for floating point tensors
             that terminate an episode. A value of ``None`` means no replacement (values are just
             placed as they are in the ``"next"`` entry even if they are not valid).
         fill_int (int, optional): The filling value for signed integer tensors
@@ -10399,21 +10405,70 @@ class MultiAction(Transform):
 
     This transform unbinds the actions along a specific dimension and passes each action independently.
     The returned transform can be either a stack of the observations gathered during the steps or only the
-    last observation.
+    last observation (and similarly for the rewards, see args below).
 
-    If a `"done"` entry is encountered, the next steps are skipped.
+    By default, the actions must be stacked along the first dimension after the root tensordict batch-dims, i.e.
+
+        >>> td = policy(td)
+        >>> actions = td.select(*env.action_keys)
+        >>> # Adapt the batch-size
+        >>> actions = actions.auto_batch_size_(td.ndim + 1)
+        >>> # Step-wise actions
+        >>> actions = actions.unbind(-1)
+
+    If a `"done"` entry is encountered, the next steps are skipped for the env that has reached that state.
 
     .. note:: If a transform is appended before the MultiAction, it will be called multiple times. If it is appended
         after, it will be called once per macro-step.
 
+    Keyword Args:
+        dim (int, optional): the stack dimension with respect to the tensordict ``ndim`` attribute.
+            Must be greater than 0. Defaults to ``1`` (the first dimension after the batch-dims).
+        stack_rewards (bool, optional): if ``True``, each step's reward will be stack in the output tensordict.
+            If ``False``, only the last reward will be returned. The reward spec is adapted accordingly. The
+            stack dimension is the same as the action stack dimension. Defaults to ``True``.
+        stack_observations (bool, optional): if ``True``, each step's observation will be stack in the output tensordict.
+            If ``False``, only the last observation will be returned. The observation spec is adapted accordingly. The
+            stack dimension is the same as the action stack dimension. Defaults to ``False``.
+
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        dim: int = 1,
+        stack_rewards: bool = True,
+        stack_observations: bool = False,
+    ):
         super().__init__()
+        self.stack_rewards = stack_rewards
+        self.stack_observations = stack_observations
+        self.dim = dim
+
+    def _stack_tds(self, td_list, next_tensordict, keys):
+        td = torch.stack(td_list + [next_tensordict.select(*keys)], -1)
+        if self.dim != 1:
+            d = td.ndim - 1
+            td.auto_batch_size_(d + self.dim)
+            td = td.transpose(d, d + self.dim)
+        return td
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        # Collect the stacks if needed
+        if self.stack_rewards:
+            reward_td = self.rewards
+            reward_td = self._stack_tds(
+                reward_td, next_tensordict, self.parent.reward_keys
+            )
+            next_tensordict.update(reward_td)
+        if self.stack_observations:
+            obs_td = self.obs
+            obs_td = self._stack_tds(
+                obs_td, next_tensordict, self.parent.observation_keys
+            )
+            next_tensordict.update(obs_td)
         return next_tensordict
 
     def _reset(
@@ -10426,28 +10481,53 @@ class MultiAction(Transform):
         parent = self.parent
         action_keys = parent.action_keys
         actions = tensordict.select(*action_keys)
-        actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + 1)
+        actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + self.dim)
         actions = actions.unbind(-1)
         td = tensordict
         idx = None
         global_idx = None
-        reset = True
+        reset = False
+        if self.stack_rewards:
+            self.rewards = rewards = []
+        if self.stack_observations:
+            self.obs = obs = []
         for a in actions[:-1]:
             if global_idx is not None:
                 a = a[global_idx]
             td = td.replace(a)
             td = parent.step(td)
+
+            # Save rewards and done states
+            if self.stack_rewards:
+                reward_td = td["next"].select(*self.parent.reward_keys)
+                if global_idx is not None:
+                    reward_td_expand = reward_td.new_zeros(
+                        global_idx.shape + reward_td.shape[global_idx.ndim :]
+                    )
+                    reward_td_expand[global_idx] = reward_td
+                else:
+                    reward_td_expand = reward_td
+
+                rewards.append(reward_td_expand)
+            if self.stack_observations:
+                obs_td = td["next"].select(*self.parent.observation_keys)
+                # obs_td = td.select("next", *self.parent.observation_keys).set("next", obs_td)
+                if global_idx is not None:
+                    obs_td = torch.where(global_idx, obs_td, 0)
+                obs.append(obs_td)
+
             td = parent.step_mdp(td)
+            if self.stack_rewards:
+                td.update(reward_td)
+
             any_done = parent.any_done(td)
             if any_done:
-                if global_idx is None:
-                    reset = reset & td.pop("_reset").view(td.shape)
-                else:
-                    reset = td.pop("_reset").view(td.shape)
+                # Intersect the resets to avoid making any step after reset has been called
+                reset = reset | td.pop("_reset").view(td.shape)
                 if reset.all():
                     # Skip step for all
                     td["_step"] = ~reset
-                    return td
+                    break
                 elif parent.batch_locked:
                     td["_step"] = ~reset
                 else:
@@ -10460,13 +10540,28 @@ class MultiAction(Transform):
                         td_out[global_idx] = td
                         global_idx = torch.masked_scatter(global_idx, global_idx, idx)
                     td = td[idx]
+                    reset = reset[idx]  # Should be all False
 
         if global_idx is None:
-            return td.replace(actions[-1])
+            td_out = td.replace(actions[-1])
+            if (self.stack_rewards or self.stack_observations) and not td_out.get(
+                "_step", torch.ones((), dtype=torch.bool)
+            ).any():
+                td_out = self._step(None, td_out)
         else:
             td_out[global_idx] = td.replace(actions[-1][global_idx])
+            if self.stack_rewards or self.stack_observations:
+                td_out = self._step(None, td_out)
+                if self.stack_rewards:
+                    self.rewards = list(
+                        torch.stack(self.rewards, -1)[global_idx].unbind(-1)
+                    )
+                if self.stack_observations:
+                    self.obs = list(torch.stack(self.obs, -1)[global_idx].unbind(-1))
+
             td_out["_step"] = global_idx
-            return td_out
+
+        return td_out
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         try:
@@ -10475,13 +10570,55 @@ class MultiAction(Transform):
             raise KeyError(
                 f"{type(self).__name__} requires an action spec to be present."
             )
-        action_spec = action_spec.unsqueeze(input_spec.ndim)
+        for _ in range(self.dim):
+            action_spec = action_spec.unsqueeze(input_spec.ndim)
         # Make the dim dynamic
         action_spec = action_spec.expand(
             tuple(
-                d if i != input_spec.ndim else -1
+                d if i != (input_spec.ndim + self.dim - 1) else -1
                 for i, d in enumerate(action_spec.shape)
             )
         )
         input_spec["full_action_spec"] = action_spec
         return input_spec
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        if "full_reward_spec" in output_spec.keys():
+            output_spec["full_reward_spec"] = self._transform_reward_spec(
+                output_spec["full_reward_spec"], output_spec.ndim
+            )
+        if "full_observation_spec" in output_spec.keys():
+            output_spec["full_observation_spec"] = self._transform_observation_spec(
+                output_spec["full_observation_spec"], output_spec.ndim
+            )
+        return output_spec
+
+    def _transform_reward_spec(self, reward_spec: TensorSpec, ndim) -> TensorSpec:
+        if not self.stack_rewards:
+            return reward_spec
+        for _ in range(self.dim):
+            reward_spec = reward_spec.unsqueeze(ndim)
+        # Make the dim dynamic
+        reward_spec = reward_spec.expand(
+            tuple(
+                d if i != (ndim + self.dim - 1) else -1
+                for i, d in enumerate(reward_spec.shape)
+            )
+        )
+        return reward_spec
+
+    def _transform_observation_spec(
+        self, observation_spec: TensorSpec, ndim
+    ) -> TensorSpec:
+        if not self.stack_observations:
+            return observation_spec
+        for _ in range(self.dim):
+            observation_spec = observation_spec.unsqueeze(ndim)
+        # Make the dim dynamic
+        observation_spec = observation_spec.expand(
+            tuple(
+                d if i != (ndim + self.dim - 1) else -1
+                for i, d in enumerate(observation_spec.shape)
+            )
+        )
+        return observation_spec

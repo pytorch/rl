@@ -28,8 +28,7 @@ import warnings
 import pytorch_sphinx_theme
 import torchrl
 
-# Suppress warnings - TODO
-# suppress_warnings = [ 'misc.highlighting_failure' ]
+# Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 project = "torchrl"
@@ -86,6 +85,21 @@ intersphinx_mapping = {
     "torchvision": ("https://pytorch.org/vision/stable/", None),
 }
 
+
+def kill_procs(gallery_conf, fname):
+    import os
+
+    import psutil
+
+    # Get the current process
+    current_proc = psutil.Process(os.getpid())
+    # Iterate over all child processes
+    for child in current_proc.children(recursive=True):
+        # Kill the child process
+        child.terminate()
+        print(f"Killed child process with PID {child.pid}")  # noqa: T201
+
+
 sphinx_gallery_conf = {
     "examples_dirs": "reference/generated/tutorials/",  # path to your example scripts
     "gallery_dirs": "tutorials",  # path to where to save gallery generated output
@@ -95,9 +109,12 @@ sphinx_gallery_conf = {
     "notebook_images": "reference/generated/tutorials/media/",  # images to parse
     "download_all_examples": True,
     "abort_on_example_error": True,
-    "show_memory": True,
+    # "show_memory": True,
+    "plot_gallery": "False",
     "capture_repr": ("_repr_html_", "__repr__"),  # capture representations
     "write_computation_times": True,
+    # "compress_images": ("images", "thumbnails"),
+    "reset_modules": (kill_procs, "matplotlib", "seaborn"),
 }
 
 napoleon_use_ivar = True

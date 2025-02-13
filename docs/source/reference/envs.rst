@@ -976,7 +976,7 @@ to be able to create this other composition:
     Hash
     InitTracker
     KLRewardTransform
-    LineariseReward
+    LineariseRewards
     MultiAction
     NoopResetEnv
     ObservationNorm
