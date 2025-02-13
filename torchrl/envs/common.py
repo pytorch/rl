@@ -1197,6 +1197,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return reward_keys
 
     @property
+    @_cache_value
+    def observation_keys(self) -> List[NestedKey]:
+        """The observation keys of an environment.
+
+        By default, there will only be one key named "observation".
+
+        Keys are sorted by depth in the data tree.
+        """
+        observation_keys = sorted(
+            self.full_observation_spec.keys(True, True), key=_repr_by_depth
+        )
+        return observation_keys
+
+    @property
     def reward_key(self):
         """The reward key of an environment.
 
@@ -3472,27 +3486,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return tensordict, tensordict_
 
     @property
+    @_cache_value
     def _simple_done(self):
-        _simple_done = self.__dict__.get("_simple_done_value")
-        if _simple_done is None:
-            key_set = set(self.full_done_spec.keys())
-            _simple_done = key_set == {
-                "done",
-                "truncated",
-                "terminated",
-            } or key_set == {"done", "terminated"}
-            self.__dict__["_simple_done_value"] = _simple_done
+        key_set = set(self.full_done_spec.keys())
+        _simple_done = key_set == {
+            "done",
+            "truncated",
+            "terminated",
+        } or key_set == {"done", "terminated"}
         return _simple_done
 
-    def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
+    def any_done(self, tensordict: TensorDictBase) -> bool:
+        """Checks if the tensordict is in a "done" state (or if an element of the batch is).
 
-        Args:
-            tensordict (TensorDictBase): a tensordict coming from the output of :func:`~torchrl.envs.utils.step_mdp`.
+        Writes the result under the `"_reset"` entry.
 
-        Returns:
-            A tensordict that is identical to the input where the environment was
-            not reset and contains the new reset data where the environment was reset.
+        Returns: a bool indicating whether there is an element in the tensordict that is marked
+            as done.
+
+        .. note:: The tensordict passed should be a `"next"` tensordict or equivalent -- i.e., it should not
+            contain a `"next"` value.
 
         """
         if self._simple_done:
@@ -3502,7 +3515,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             else:
                 any_done = False
             if any_done:
-                tensordict = tensordict._set_str(
+                tensordict._set_str(
                     "_reset",
                     done.clone(),
                     validated=True,
@@ -3515,6 +3528,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 full_done_spec=self.output_spec["full_done_spec"],
                 key="_reset",
             )
+        return any_done
+
+    def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
+
+        Args:
+            tensordict (TensorDictBase): a tensordict coming from the output of :func:`~torchrl.envs.utils.step_mdp`.
+
+        Returns:
+            A tensordict that is identical to the input where the environment was
+            not reset and contains the new reset data where the environment was reset.
+
+        """
+        any_done = self.any_done(tensordict)
         if any_done:
             return self.reset(tensordict, select_reset_only=True)
         return tensordict
