@@ -10,11 +10,11 @@ from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right, NestedKey
 
-from torchrl.data.tensor_specs import (
+from torchrl.data import (
     Binary,
     Bounded,
     Categorical,
@@ -2356,3 +2356,42 @@ class EnvThatErrorsAfter10Iters(EnvBase):
 
     def _set_seed(self, seed: Optional[int]):
         ...
+
+
+@tensorclass()
+class TC:
+    field0: str
+    field1: torch.Tensor
+
+
+class EnvWithTensorClass(CountingEnv):
+    tc_cls = TC
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.observation_spec["tc"] = Composite(
+            field0=NonTensor(example_data="an observation!", shape=self.batch_size),
+            field1=Unbounded(shape=self.batch_size),
+            shape=self.batch_size,
+            data_cls=TC,
+        )
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        td = super()._reset(tensordict, **kwargs)
+        td["tc"] = TC("0", torch.zeros(self.batch_size))
+        return td
+
+    def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        td = super()._step(tensordict, **kwargs)
+        default = TC("0", 0)
+        f0 = tensordict.get("tc", default).field0
+        if f0 is None:
+            f0 = "0"
+        f1 = tensordict.get("tc", default).field1
+        if f1 is None:
+            f1 = torch.zeros(self.batch_size)
+        td["tc"] = TC(
+            str(int(f0) + 1),
+            f1 + 1,
+        )
+        return td

@@ -2412,7 +2412,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             # No need to copy here since we don't write in-place
-            input = root_shared_tensordict
+            input = root_shared_tensordict.copy()
             if data:
                 next_td_passthrough_keys = data.get("next_td_passthrough_keys")
                 if next_td_passthrough_keys is not None:
@@ -2423,7 +2423,7 @@ def _run_worker_pipe_shared_mem(
                 if non_tensor_data is not None:
                     input.update(non_tensor_data)
 
-            input = env.step(input.copy())
+            input = env.step(input)
             next_td = input.get("next")
             next_shared_tensordict.update_(next_td, non_blocking=non_blocking)
 

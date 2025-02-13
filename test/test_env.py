@@ -127,6 +127,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
+        EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
         MockBatchedLockedEnv,
@@ -166,6 +167,7 @@ else:
         EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
+        EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
         MockBatchedLockedEnv,
@@ -3707,6 +3709,29 @@ class TestNonTensorEnv:
                 break
         else:
             raise RuntimeError("Failed to sample both trajs")
+
+    def test_env_with_tensorclass(self):
+        env = EnvWithTensorClass()
+        env.check_env_specs()
+        r = env.reset()
+        for _ in range(3):
+            assert isinstance(r["tc"], env.tc_cls)
+            a = env.rand_action(r)
+            s = env.step(a)
+            assert isinstance(s["tc"], env.tc_cls)
+            r = env.step_mdp(s)
+
+    @pytest.mark.parametrize("cls", [SerialEnv, ParallelEnv])
+    def test_env_with_tensorclass_batched(self, cls):
+        env = cls(2, EnvWithTensorClass)
+        env.check_env_specs()
+        r = env.reset()
+        for _ in range(3):
+            assert isinstance(r["tc"], EnvWithTensorClass.tc_cls)
+            a = env.rand_action(r)
+            s = env.step(a)
+            assert isinstance(s["tc"], EnvWithTensorClass.tc_cls)
+            r = env.step_mdp(s)
 
 
 # fen strings for board positions generated with:
