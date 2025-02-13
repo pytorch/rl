@@ -5213,7 +5213,7 @@ class Composite(TensorSpec):
             and self._device == other._device
             and set(self._specs.keys()) == set(other._specs.keys())
             and all((self._specs[key] == spec) for (key, spec) in other._specs.items())
-            and other.cls == self.data_cls
+            and other.data_cls == self.data_cls
         )
 
     def update(self, dict_or_spec: Union[Composite, Dict[str, TensorSpec]]) -> None:
