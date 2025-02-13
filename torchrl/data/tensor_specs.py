@@ -3495,7 +3495,7 @@ class Categorical(TensorSpec):
             return torch.randint(
                 0,
                 n,
-                _size([*shape, *self.shape]),
+                _size([*shape, *_remove_neg_shapes(self.shape)]),
                 device=self.device,
                 dtype=self.dtype,
             )
@@ -3919,10 +3919,6 @@ class Binary(Categorical):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
@@ -3938,13 +3934,17 @@ class Binary(Categorical):
         )
 
     def _unflatten(self, dim, sizes):
-        shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
+        shape = (
+            torch.zeros(_remove_neg_shapes(self.shape), device="meta")
+            .unflatten(dim, sizes)
+            .shape
+        )
         return self.__class__(
             n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
         )
 
     def squeeze(self, dim=None):
-        shape = _squeezed_shape(self.shape, dim)
+        shape = _squeezed_shape(_remove_neg_shapes(self.shape), dim)
         if shape is None:
             return self
         return self.__class__(
@@ -4665,7 +4665,11 @@ class Composite(TensorSpec):
                 out[key] = result
         return out
 
-    def set(self, name, spec):
+    def set(self, name: str, spec: TensorSpec) -> Composite:
+        """Sets a spec in the Composite spec."""
+        if not isinstance(name, str):
+            self[name] = spec
+            return self
         if self.locked:
             raise RuntimeError("Cannot modify a locked Composite.")
         if spec is not None and self.device is not None and spec.device != self.device:
@@ -4698,6 +4702,7 @@ class Composite(TensorSpec):
                         f"Composite.shape={self.shape}."
                     )
         self._specs[name] = spec
+        return self
 
     def __init__(
         self, *args, shape: torch.Size = None, device: torch.device = None, **kwargs
@@ -4933,7 +4938,7 @@ class Composite(TensorSpec):
         # TensorDict requirements
         return TensorDict(
             _dict,
-            batch_size=_size([*shape, *self.shape]),
+            batch_size=_size([*shape, *_remove_neg_shapes(self.shape)]),
             device=self._device,
         )
 
@@ -5733,9 +5738,10 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
     def ndimension(self):
         return len(self.shape)
 
-    def set(self, name, spec):
+    def set(self, name: str, spec: TensorSpec) -> StackedComposite:
         for sub_spec, sub_item in zip(self._specs, spec.unbind(self.dim)):
             sub_spec[name] = sub_item
+        return self
 
     @property
     def shape(self):
