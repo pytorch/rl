@@ -44,6 +44,7 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
+from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import dispatch, TensorDictModuleBase
 from tensordict.utils import (
     _unravel_key_to_tuple,
@@ -635,7 +636,7 @@ class Transform(nn.Module):
                     )
                 parent, _ = container._rebuild_up_to(self)
             elif isinstance(container, TransformedEnv):
-                parent = TransformedEnv(container.base_env)
+                parent = TransformedEnv(container.base_env, auto_unwrap=False)
             else:
                 raise ValueError(f"container is of type {type(container)}")
             self.__dict__["_parent"] = parent
@@ -693,10 +694,19 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             in which case this value should be set  to `False`. Default is
             `True`.
 
+    Keyword Args:
+        auto_unwrap (bool, optional): if ``True``, wrapping a transformed env in  transformed env
+            unwraps the transforms of the inner TransformedEnv in the outer one (the new instance).
+            Defaults to ``True``
+
     Examples:
         >>> env = GymEnv("Pendulum-v0")
         >>> transform = RewardScaling(0.0, 1.0)
         >>> transformed_env = TransformedEnv(env, transform)
+        >>> # check auto-unwrap
+        >>> transformed_env = TransformedEnv(transformed_env, StepCounter())
+        >>> # The inner env has been unwrapped
+        >>> assert isinstance(transformed_env.base_env, GymEnv)
 
     """
 
@@ -705,6 +715,8 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         env: EnvBase,
         transform: Optional[Transform] = None,
         cache_specs: bool = True,
+        *,
+        auto_unwrap: bool = True,
         **kwargs,
     ):
         self._transform = None
@@ -717,7 +729,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
         # Type matching must be exact here, because subtyping could introduce differences in behavior that must
         # be contained within the subclass.
-        if type(env) is TransformedEnv and type(self) is TransformedEnv:
+        if type(env) is TransformedEnv and type(self) is TransformedEnv and auto_unwrap:
             self._set_env(env.base_env, device)
             if type(transform) is not Compose:
                 # we don't use isinstance as some transforms may be subclassed from
@@ -923,17 +935,70 @@ but got an object of type {type(transform)}."""
         # tensordict = tensordict.clone(False)
         next_preset = tensordict.get("next", None)
         tensordict_in = self.transform.inv(tensordict)
-        next_tensordict = self.base_env._step(tensordict_in)
-        if next_preset is not None:
-            # tensordict could already have a "next" key
-            # this could be done more efficiently by not excluding but just passing
-            # the necessary keys
-            next_tensordict.update(
-                next_preset.exclude(*next_tensordict.keys(True, True))
-            )
-        self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
-        # we want the input entries to remain unchanged
-        next_tensordict = self.transform._step(tensordict, next_tensordict)
+
+        # It could be that the step must be skipped
+        partial_steps = tensordict_in.pop("_step", None)
+        next_tensordict = None
+        tensordict_batch_size = None
+        if partial_steps is not None:
+            if not self.batch_locked:
+                # Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here
+                if partial_steps.all():
+                    partial_steps = None
+                else:
+                    tensordict_batch_size = tensordict_in.batch_size
+                    partial_steps = partial_steps.view(tensordict_batch_size)
+                    tensordict_in_save = tensordict_in[~partial_steps]
+                    tensordict_in = tensordict_in[partial_steps]
+            else:
+                if not partial_steps.any():
+                    next_tensordict = self._skip_tensordict(tensordict_in)
+                    # No need to copy anything
+                    partial_steps = None
+                elif not partial_steps.all():
+                    # trust that the _step can handle this!
+                    tensordict_in.set("_step", partial_steps)
+                    # The filling should be handled by the sub-env
+                    partial_steps = None
+                else:
+                    partial_steps = None
+            if tensordict_batch_size is None:
+                tensordict_batch_size = self.batch_size
+
+        if next_tensordict is None:
+            next_tensordict = self.base_env._step(tensordict_in)
+            if next_preset is not None:
+                # tensordict could already have a "next" key
+                # this could be done more efficiently by not excluding but just passing
+                # the necessary keys
+                next_tensordict.update(
+                    next_preset.exclude(*next_tensordict.keys(True, True))
+                )
+            self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
+            # we want the input entries to remain unchanged
+            next_tensordict = self.transform._step(tensordict_in, next_tensordict)
+
+        if partial_steps is not None:
+            result = next_tensordict.new_zeros(tensordict_batch_size)
+
+            def select_and_clone(x, y):
+                if y is not None:
+                    if x.device == y.device:
+                        return y.clone()
+                    return y.to(y.device)
+
+            if not partial_steps.all():
+                result[~partial_steps] = tensordict_in_save._fast_apply(
+                    select_and_clone,
+                    tensordict_in_save,
+                    device=result.device,
+                    filter_empty=True,
+                    default=None,
+                    is_leaf=_is_leaf_nontensor,
+                )
+            if partial_steps.any():
+                result[partial_steps] = next_tensordict
+            next_tensordict = result
         return next_tensordict
 
     def set_seed(
@@ -953,6 +1018,10 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
+            # Inputs might be transformed, so need to apply inverse transform
+            # before passing to the env reset function.
+            with _set_missing_tolerance(self.transform, True):
+                tensordict = self.transform.inv(tensordict)
         tensordict_reset = self.base_env._reset(tensordict, **kwargs)
         if tensordict is None:
             # make sure all transforms see a source tensordict
@@ -1410,7 +1479,7 @@ class Compose(Transform):
                 # returns None if there is no parent env
                 return None, None
         elif isinstance(container, TransformedEnv):
-            out = TransformedEnv(container.base_env)
+            out = TransformedEnv(container.base_env, auto_unwrap=False)
         elif container is None:
             # returns None if there is no parent env
             return None, None
@@ -10218,3 +10287,342 @@ class LineariseRewards(Transform):
             )
 
         return (self.weights * reward).sum(dim=-1)
+
+
+class ConditionalSkip(Transform):
+    """A transform that skips steps in the env if certain conditions are met.
+
+    This transform writes the result of `cond(tensordict)` in the `"_step"` entry of the
+    tensordict passed as input to the `TransformedEnv.base_env._step` method.
+    If the `base_env` is not batch-locked (generally speaking, it is stateless), the tensordict is
+    reduced to its element that need to go through the step.
+    If it is batch-locked (generally speaking, it is stateful), the step is skipped altogether if no
+    value in `"_step"` is ``True``. Otherwise, it is trusted that the environment will account for the
+    `"_step"` signal accordingly.
+
+    .. note:: The skip will affect transforms that modify the environment output too, i.e., any transform
+        that is to be exectued on the tensordict returned by :meth:`~torchrl.envs.EnvBase.step` will be
+        skipped if the condition is met. To palliate this effect if it is not desirable, one can wrap
+        the transformed env in another transformed env, since the skip only affects the first-degree parent
+        of the ``ConditionalSkip`` transform. See example below.
+
+    Args:
+        cond (Callable[[TensorDictBase], bool | torch.Tensor]): a callable for the tensordict input
+            that checks whether the next env step must be skipped (`True` = skipped, `False` = execute
+            env.step).
+
+    Examples:
+        >>> import torch
+        >>>
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.transforms.transforms import ConditionalSkip, StepCounter, TransformedEnv, Compose
+        >>>
+        >>> torch.manual_seed(0)
+        >>>
+        >>> base_env = TransformedEnv(
+        ...     GymEnv("Pendulum-v1"),
+        ...     StepCounter(step_count_key="inner_count"),
+        ... )
+        >>> middle_env = TransformedEnv(
+        ...     base_env,
+        ...     Compose(
+        ...         StepCounter(step_count_key="middle_count"),
+        ...         ConditionalSkip(cond=lambda td: td["step_count"] % 2 == 1),
+        ...     ),
+        ...     auto_unwrap=False)  # makes sure that transformed envs are properly wrapped
+        >>> env = TransformedEnv(
+        ...     middle_env,
+        ...     StepCounter(step_count_key="step_count"),
+        ...     auto_unwrap=False)
+        >>> env.set_seed(0)
+        >>>
+        >>> r = env.rollout(10)
+        >>> print(r["observation"])
+        tensor([[-0.9670, -0.2546, -0.9669],
+                [-0.9802, -0.1981, -1.1601],
+                [-0.9802, -0.1981, -1.1601],
+                [-0.9926, -0.1214, -1.5556],
+                [-0.9926, -0.1214, -1.5556],
+                [-0.9994, -0.0335, -1.7622],
+                [-0.9994, -0.0335, -1.7622],
+                [-0.9984,  0.0561, -1.7933],
+                [-0.9984,  0.0561, -1.7933],
+                [-0.9895,  0.1445, -1.7779]])
+        >>> print(r["inner_count"])
+        tensor([[0],
+                [1],
+                [1],
+                [2],
+                [2],
+                [3],
+                [3],
+                [4],
+                [4],
+                [5]])
+        >>> print(r["middle_count"])
+        tensor([[0],
+                [1],
+                [1],
+                [2],
+                [2],
+                [3],
+                [3],
+                [4],
+                [4],
+                [5]])
+        >>> print(r["step_count"])
+        tensor([[0],
+                [1],
+                [2],
+                [3],
+                [4],
+                [5],
+                [6],
+                [7],
+                [8],
+                [9]])
+
+
+    """
+
+    def __init__(self, cond: Callable[[TensorDict], bool | torch.Tensor]):
+        super().__init__()
+        self.cond = cond
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Run cond
+        cond = self.cond(tensordict)
+        # Write result in step
+        tensordict["_step"] = tensordict.get("_step", True) & ~cond
+        if not tensordict["_step"].shape == tensordict.batch_size:
+            tensordict["_step"] = tensordict["_step"].view(tensordict.batch_size)
+        return tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(
+            FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
+        )
+
+
+class MultiAction(Transform):
+    """A transform to execute multiple actions in the parent environment.
+
+    This transform unbinds the actions along a specific dimension and passes each action independently.
+    The returned transform can be either a stack of the observations gathered during the steps or only the
+    last observation (and similarly for the rewards, see args below).
+
+    By default, the actions must be stacked along the first dimension after the root tensordict batch-dims, i.e.
+
+        >>> td = policy(td)
+        >>> actions = td.select(*env.action_keys)
+        >>> # Adapt the batch-size
+        >>> actions = actions.auto_batch_size_(td.ndim + 1)
+        >>> # Step-wise actions
+        >>> actions = actions.unbind(-1)
+
+    If a `"done"` entry is encountered, the next steps are skipped for the env that has reached that state.
+
+    .. note:: If a transform is appended before the MultiAction, it will be called multiple times. If it is appended
+        after, it will be called once per macro-step.
+
+    Keyword Args:
+        dim (int, optional): the stack dimension with respect to the tensordict ``ndim`` attribute.
+            Must be greater than 0. Defaults to ``1`` (the first dimension after the batch-dims).
+        stack_rewards (bool, optional): if ``True``, each step's reward will be stack in the output tensordict.
+            If ``False``, only the last reward will be returned. The reward spec is adapted accordingly. The
+            stack dimension is the same as the action stack dimension. Defaults to ``True``.
+        stack_observations (bool, optional): if ``True``, each step's observation will be stack in the output tensordict.
+            If ``False``, only the last observation will be returned. The observation spec is adapted accordingly. The
+            stack dimension is the same as the action stack dimension. Defaults to ``False``.
+
+    """
+
+    def __init__(
+        self,
+        *,
+        dim: int = 1,
+        stack_rewards: bool = True,
+        stack_observations: bool = False,
+    ):
+        super().__init__()
+        self.stack_rewards = stack_rewards
+        self.stack_observations = stack_observations
+        self.dim = dim
+
+    def _stack_tds(self, td_list, next_tensordict, keys):
+        td = torch.stack(td_list + [next_tensordict.select(*keys)], -1)
+        if self.dim != 1:
+            d = td.ndim - 1
+            td.auto_batch_size_(d + self.dim)
+            td = td.transpose(d, d + self.dim)
+        return td
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        # Collect the stacks if needed
+        if self.stack_rewards:
+            reward_td = self.rewards
+            reward_td = self._stack_tds(
+                reward_td, next_tensordict, self.parent.reward_keys
+            )
+            next_tensordict.update(reward_td)
+        if self.stack_observations:
+            obs_td = self.obs
+            obs_td = self._stack_tds(
+                obs_td, next_tensordict, self.parent.observation_keys
+            )
+            next_tensordict.update(obs_td)
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Get the actions
+        parent = self.parent
+        action_keys = parent.action_keys
+        actions = tensordict.select(*action_keys)
+        actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + self.dim)
+        actions = actions.unbind(-1)
+        td = tensordict
+        idx = None
+        global_idx = None
+        reset = False
+        if self.stack_rewards:
+            self.rewards = rewards = []
+        if self.stack_observations:
+            self.obs = obs = []
+        for a in actions[:-1]:
+            if global_idx is not None:
+                a = a[global_idx]
+            td = td.replace(a)
+            td = parent.step(td)
+
+            # Save rewards and done states
+            if self.stack_rewards:
+                reward_td = td["next"].select(*self.parent.reward_keys)
+                if global_idx is not None:
+                    reward_td_expand = reward_td.new_zeros(
+                        global_idx.shape + reward_td.shape[global_idx.ndim :]
+                    )
+                    reward_td_expand[global_idx] = reward_td
+                else:
+                    reward_td_expand = reward_td
+
+                rewards.append(reward_td_expand)
+            if self.stack_observations:
+                obs_td = td["next"].select(*self.parent.observation_keys)
+                # obs_td = td.select("next", *self.parent.observation_keys).set("next", obs_td)
+                if global_idx is not None:
+                    obs_td = torch.where(global_idx, obs_td, 0)
+                obs.append(obs_td)
+
+            td = parent.step_mdp(td)
+            if self.stack_rewards:
+                td.update(reward_td)
+
+            any_done = parent.any_done(td)
+            if any_done:
+                # Intersect the resets to avoid making any step after reset has been called
+                reset = reset | td.pop("_reset").view(td.shape)
+                if reset.all():
+                    # Skip step for all
+                    td["_step"] = ~reset
+                    break
+                elif parent.batch_locked:
+                    td["_step"] = ~reset
+                else:
+                    # we can simply index the tensordict
+                    idx = ~reset.view(td.shape)
+                    if global_idx is None:
+                        global_idx = idx.clone()
+                        td_out = td
+                    else:
+                        td_out[global_idx] = td
+                        global_idx = torch.masked_scatter(global_idx, global_idx, idx)
+                    td = td[idx]
+                    reset = reset[idx]  # Should be all False
+
+        if global_idx is None:
+            td_out = td.replace(actions[-1])
+            if (self.stack_rewards or self.stack_observations) and not td_out.get(
+                "_step", torch.ones((), dtype=torch.bool)
+            ).any():
+                td_out = self._step(None, td_out)
+        else:
+            td_out[global_idx] = td.replace(actions[-1][global_idx])
+            if self.stack_rewards or self.stack_observations:
+                td_out = self._step(None, td_out)
+                if self.stack_rewards:
+                    self.rewards = list(
+                        torch.stack(self.rewards, -1)[global_idx].unbind(-1)
+                    )
+                if self.stack_observations:
+                    self.obs = list(torch.stack(self.obs, -1)[global_idx].unbind(-1))
+
+            td_out["_step"] = global_idx
+
+        return td_out
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        try:
+            action_spec = input_spec["full_action_spec"]
+        except KeyError:
+            raise KeyError(
+                f"{type(self).__name__} requires an action spec to be present."
+            )
+        for _ in range(self.dim):
+            action_spec = action_spec.unsqueeze(input_spec.ndim)
+        # Make the dim dynamic
+        action_spec = action_spec.expand(
+            tuple(
+                d if i != (input_spec.ndim + self.dim - 1) else -1
+                for i, d in enumerate(action_spec.shape)
+            )
+        )
+        input_spec["full_action_spec"] = action_spec
+        return input_spec
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        if "full_reward_spec" in output_spec.keys():
+            output_spec["full_reward_spec"] = self._transform_reward_spec(
+                output_spec["full_reward_spec"], output_spec.ndim
+            )
+        if "full_observation_spec" in output_spec.keys():
+            output_spec["full_observation_spec"] = self._transform_observation_spec(
+                output_spec["full_observation_spec"], output_spec.ndim
+            )
+        return output_spec
+
+    def _transform_reward_spec(self, reward_spec: TensorSpec, ndim) -> TensorSpec:
+        if not self.stack_rewards:
+            return reward_spec
+        for _ in range(self.dim):
+            reward_spec = reward_spec.unsqueeze(ndim)
+        # Make the dim dynamic
+        reward_spec = reward_spec.expand(
+            tuple(
+                d if i != (ndim + self.dim - 1) else -1
+                for i, d in enumerate(reward_spec.shape)
+            )
+        )
+        return reward_spec
+
+    def _transform_observation_spec(
+        self, observation_spec: TensorSpec, ndim
+    ) -> TensorSpec:
+        if not self.stack_observations:
+            return observation_spec
+        for _ in range(self.dim):
+            observation_spec = observation_spec.unsqueeze(ndim)
+        # Make the dim dynamic
+        observation_spec = observation_spec.expand(
+            tuple(
+                d if i != (ndim + self.dim - 1) else -1
+                for i, d in enumerate(observation_spec.shape)
+            )
+        )
+        return observation_spec
