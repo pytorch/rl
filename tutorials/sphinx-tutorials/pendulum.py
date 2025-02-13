@@ -868,8 +868,9 @@ optim = torch.optim.Adam(policy.parameters(), lr=2e-3)
 # which demonstrates that the pendulum is upward and still as desired.
 #
 batch_size = 32
-pbar = tqdm.tqdm(range(20_000 // batch_size))
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, 20_000)
+n_iter = 1000  # set to 20_000 for a proper training
+pbar = tqdm.tqdm(range(n_iter // batch_size))
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, n_iter)
 logs = defaultdict(list)
 
 for _ in pbar:
