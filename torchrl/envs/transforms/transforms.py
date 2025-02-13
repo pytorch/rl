@@ -209,6 +209,7 @@ class Transform(nn.Module):
     """
 
     invertible = False
+    disable_inv_on_reset = False
 
     def __init__(
         self,
@@ -1020,8 +1021,9 @@ but got an object of type {type(transform)}."""
             )
             # Inputs might be transformed, so need to apply inverse transform
             # before passing to the env reset function.
-            with _set_missing_tolerance(self.transform, True):
-                tensordict = self.transform.inv(tensordict)
+            if not self.transform.disable_inv_on_reset:
+                with _set_missing_tolerance(self.transform, True):
+                    tensordict = self.transform.inv(tensordict)
         tensordict_reset = self.base_env._reset(tensordict, **kwargs)
         if tensordict is None:
             # make sure all transforms see a source tensordict
@@ -1264,6 +1266,9 @@ class Compose(Transform):
         self.transforms = nn.ModuleList(transforms)
         for t in transforms:
             t.set_container(self)
+        self.disable_inv_on_reset = any(
+            [trsf.disable_inv_on_reset for trsf in transforms]
+        )
 
     def to(self, *args, **kwargs):
         # because Module.to(...) does not call to(...) on sub-modules, we have
@@ -10436,6 +10441,8 @@ class MultiAction(Transform):
             stack dimension is the same as the action stack dimension. Defaults to ``False``.
 
     """
+
+    disable_inv_on_reset = True
 
     def __init__(
         self,
