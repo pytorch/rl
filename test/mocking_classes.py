@@ -617,6 +617,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
 
 class ContinuousActionVecMockEnv(_MockEnv):
+    adapt_dtype: bool = True
+
     @classmethod
     def __new__(
         cls,
@@ -715,7 +717,12 @@ class ContinuousActionVecMockEnv(_MockEnv):
             done = done.any(-1)
         done = reward = done.unsqueeze(-1)
         tensordict.set(
-            "reward", reward.to(self.reward_spec.dtype).expand(self.reward_spec.shape)
+            "reward",
+            reward.to(
+                self.reward_spec.dtype
+                if self.adapt_dtype
+                else torch.get_default_dtype()
+            ).expand(self.reward_spec.shape),
         )
         tensordict.set("done", done)
         tensordict.set("terminated", done)

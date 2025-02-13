@@ -237,6 +237,7 @@ _has_transformers = importlib.util.find_spec("transformers") is not None
 class TestEnvBase:
     def test_run_type_checks(self):
         env = ContinuousActionVecMockEnv()
+        env.adapt_dtype = False
         env._run_type_checks = False
         check_env_specs(env)
         env._run_type_checks = True
