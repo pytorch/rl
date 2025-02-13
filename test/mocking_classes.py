@@ -714,7 +714,9 @@ class ContinuousActionVecMockEnv(_MockEnv):
         while done.shape != tensordict.shape:
             done = done.any(-1)
         done = reward = done.unsqueeze(-1)
-        tensordict.set("reward", reward.to(torch.get_default_dtype()))
+        tensordict.set(
+            "reward", reward.to(self.reward_spec.dtype).expand(self.reward_spec.shape)
+        )
         tensordict.set("done", done)
         tensordict.set("terminated", done)
         return tensordict
