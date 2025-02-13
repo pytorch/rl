@@ -60,7 +60,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The AtariDQN dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/atari`.
+            `~/.cache/torchrl/atari`.atari`.
         num_procs (int, optional): number of processes to launch for preprocessing.
             Has no effect whenever the data is already downloaded. Defaults to 0
             (no multiprocessing used).
