@@ -54,7 +54,7 @@ class UnityMLAgentsWrapper(_EnvWrapper):
         batch_size (torch.Size, optional): the batch size of the environment.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to
             group agents in tensordicts for input/output. See
@@ -539,7 +539,7 @@ class UnityMLAgentsEnv(UnityMLAgentsWrapper):
         batch_size (torch.Size, optional): the batch size of the environment.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to
             group agents in tensordicts for input/output. See
