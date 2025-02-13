@@ -216,12 +216,12 @@ class _StepMDP:
             val = data_in._get_str(key, NO_DEFAULT)
             if subdict is not None:
                 val_out = data_out._get_str(key, None)
-                if val_out is None:
-                    val_out = val.empty()
+                if val_out is None or val_out.batch_size != val.batch_size:
+                    val_out = val.empty(batch_size=val.batch_size)
                 if isinstance(val, LazyStackedTensorDict):
 
-                    val = LazyStackedTensorDict(
-                        *(
+                    val = LazyStackedTensorDict.lazy_stack(
+                        [
                             cls._grab_and_place(
                                 subdict,
                                 _val,
@@ -232,8 +232,8 @@ class _StepMDP:
                                 val.unbind(val.stack_dim),
                                 val_out.unbind(val_out.stack_dim),
                             )
-                        ),
-                        stack_dim=val.stack_dim,
+                        ],
+                        dim=val.stack_dim,
                     )
                 else:
                     val = cls._grab_and_place(
@@ -302,8 +302,8 @@ class _StepMDP:
             )
         if isinstance(next_td, LazyStackedTensorDict):
             if not isinstance(out, LazyStackedTensorDict):
-                out = LazyStackedTensorDict(
-                    *out.unbind(next_td.stack_dim), stack_dim=next_td.stack_dim
+                out = LazyStackedTensorDict.lazy_stack(
+                    list(out.unbind(next_td.stack_dim)), dim=next_td.stack_dim
                 )
             for _next_td, _out in zip(next_td.tensordicts, out.tensordicts):
                 self._grab_and_place(
