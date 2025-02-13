@@ -52,7 +52,7 @@ class OpenSpielWrapper(_EnvWrapper):
         batch_size (torch.Size, optional): the batch size of the environment.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to
             group agents in tensordicts for input/output. See
@@ -64,8 +64,8 @@ class OpenSpielWrapper(_EnvWrapper):
             (:class:`torchrl.data.Categorical`), otherwise a one-hot encoding
             will be used (:class:`torchrl.data.OneHot`).  Defaults to ``False``.
         return_state (bool, optional): if ``True``, "state" is included in the
-            output of :meth:`~.reset` and :meth:`~step`. The state can be given
-            to :meth:`~.reset` to reset to that state, rather than resetting to
+            output of :meth:`reset` and :meth:`~step`. The state can be given
+            to :meth:`reset` to reset to that state, rather than resetting to
             the initial state.
             Defaults to ``False``.
 
@@ -113,7 +113,7 @@ class OpenSpielWrapper(_EnvWrapper):
         >>> print(env.available_envs)
         ['2048', 'add_noise', 'amazons', 'backgammon', ...]
 
-    :meth:`~.reset` can restore a specific state, rather than the initial
+    :meth:`reset` can restore a specific state, rather than the initial
     state, as long as ``return_state=True``.
 
         >>> import pyspiel
@@ -521,7 +521,7 @@ class OpenSpielEnv(OpenSpielWrapper):
         batch_size (torch.Size, optional): the batch size of the environment.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to
             group agents in tensordicts for input/output. See
@@ -533,8 +533,8 @@ class OpenSpielEnv(OpenSpielWrapper):
             (:class:`torchrl.data.Categorical`), otherwise a one-hot encoding
             will be used (:class:`torchrl.data.OneHot`).  Defaults to ``False``.
         return_state (bool, optional): if ``True``, "state" is included in the
-            output of :meth:`~.reset` and :meth:`~step`. The state can be given
-            to :meth:`~.reset` to reset to that state, rather than resetting to
+            output of :meth:`reset` and :meth:`~step`. The state can be given
+            to :meth:`reset` to reset to that state, rather than resetting to
             the initial state.
             Defaults to ``False``.
 
@@ -580,7 +580,7 @@ class OpenSpielEnv(OpenSpielWrapper):
         >>> print(env.available_envs)
         ['2048', 'add_noise', 'amazons', 'backgammon', ...]
 
-    :meth:`~.reset` can restore a specific state, rather than the initial state,
+    :meth:`reset` can restore a specific state, rather than the initial state,
     as long as ``return_state=True``.
 
         >>> from torchrl.envs import OpenSpielEnv

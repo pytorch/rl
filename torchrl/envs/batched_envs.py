@@ -196,7 +196,7 @@ class BatchedEnvBase(EnvBase):
 
     .. note::
         One can pass keyword arguments to each sub-environments using the following
-        technique: every keyword argument in :meth:`~.reset` will be passed to each
+        technique: every keyword argument in :meth:`reset` will be passed to each
         environment except for the ``list_of_kwargs`` argument which, if present,
         should contain a list of the same length as the number of workers with the
         worker-specific keyword arguments stored in a dictionary.
@@ -1377,8 +1377,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         >>> env = ParallelEnv(N, MyEnv(..., device="cpu"))
 
     .. warning::
-      ParallelEnv disable gradients in all operations (:meth:`~.step`,
-      :meth:`~.reset` and :meth:`~.step_and_maybe_reset`) because gradients
+      ParallelEnv disable gradients in all operations (:meth:`step`,
+      :meth:`reset` and :meth:`step_and_maybe_reset`) because gradients
       cannot be passed through :class:`multiprocessing.Pipe` objects.
       Only :class:`~torchrl.envs.SerialEnv` will support backpropagation.
 

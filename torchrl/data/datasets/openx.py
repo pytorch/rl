@@ -66,7 +66,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
             sampling strategy.
             If the ``batch_size`` is ``None`` (default), iterating over the
             dataset will deliver trajectories one at a time *whereas* calling
-            :meth:`~.sample` will *still* require a batch-size to be provided.
+            :meth:`sample` will *still* require a batch-size to be provided.
 
     Keyword Args:
         shuffle (bool, optional): if ``True``, trajectories are delivered in a
@@ -115,7 +115,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         replacement (bool, optional): if ``False``, sampling will be done
             without replacement. Defaults to ``True`` for downloaded datasets,
             ``False`` for streamed datasets.
-        pad (bool, float or None): if ``True``, trajectories of insufficient length
+        pad (bool, :obj:`float` or None): if ``True``, trajectories of insufficient length
             given the `slice_len` or `num_slices` arguments will be padded with
             0s. If another value is provided, it will be used for padding. If
             ``False`` or ``None`` (default) any encounter with a trajectory of

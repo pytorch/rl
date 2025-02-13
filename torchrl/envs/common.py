@@ -301,7 +301,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         run_type_checks (bool, optional): If ``True``, type-checks will occur
             at every reset and every step. Defaults to ``False``.
         allow_done_after_reset (bool, optional): if ``True``, an environment can
-            be done after a call to :meth:`~.reset` is made. Defaults to ``False``.
+            be done after a call to :meth:`reset` is made. Defaults to ``False``.
         spec_locked (bool, optional): if ``True``, the specs are locked and can only be
             modified if :meth:`~torchrl.envs.EnvBase.set_spec_lock_` is called.
 
@@ -702,7 +702,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         - The action cardinality may depend on the action mask;
         - The shape can be dynamic, as in ``Unbound(shape=(-1))``.
 
-        In these cases, the :meth:`~.cardinality` should be overwritten,
+        In these cases, the :meth:`cardinality` should be overwritten,
 
         Args:
             tensordict (TensorDictBase, optional): a tensordict containing the data required to compute the cardinality.
@@ -2183,9 +2183,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         This method is designed with the following scopes in mind:
 
-          - Incorporate a TorchRL-first environment in a framework that uses Gym;
-          - Incorporate another environment (eg, DeepMind Control, Brax, Jumanji, ...)
-            in a framework that uses Gym.
+        - Incorporate a TorchRL-first environment in a framework that uses Gym;
+        - Incorporate another environment (eg, DeepMind Control, Brax, Jumanji, ...)
+          in a framework that uses Gym.
 
         Args:
             id (str): the name of the environment. Should follow the
@@ -3426,7 +3426,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """Runs a step in the environment and (partially) resets it if needed.
 
         Args:
-            tensordict (TensorDictBase): an input data structure for the :meth:`~.step`
+            tensordict (TensorDictBase): an input data structure for the :meth:`step`
                 method.
 
         This method allows to easily code non-stopping rollout functions.
