@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+TruncatedNormal
+===============
+
+.. autoclass:: TruncatedNormal
+    :members:

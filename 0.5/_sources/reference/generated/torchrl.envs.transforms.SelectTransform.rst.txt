@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+SelectTransform
+===============
+
+.. autoclass:: SelectTransform
+    :members:

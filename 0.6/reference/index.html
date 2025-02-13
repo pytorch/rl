@@ -1,0 +1,1227 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>API Reference &mdash; torchrl 0.6 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="torchrl.collectors package" href="collectors.html" />
+    <link rel="prev" title="TorchRL trainer: A DQN example" href="../tutorials/coding_dqn.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2023">
+                  <span class="dropdown-title">Contributor Awards - 2023</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                  <p></p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.6 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+      <li>API Reference</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/index.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="api-reference">
+<h1>API Reference<a class="headerlink" href="#api-reference" title="Permalink to this heading">¶</a></h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="collectors.html">torchrl.collectors package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="collectors.html#collectors-and-batch-size">Collectors and batch size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="collectors.html#collectors-and-policy-copies">Collectors and policy copies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="collectors.html#collectors-and-replay-buffers-interoperability">Collectors and replay buffers interoperability</a></li>
+<li class="toctree-l2"><a class="reference internal" href="collectors.html#single-node-data-collectors">Single node data collectors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.DataCollectorBase.html">DataCollectorBase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.SyncDataCollector.html">SyncDataCollector</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html">MultiSyncDataCollector</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.MultiaSyncDataCollector.html">MultiaSyncDataCollector</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.aSyncDataCollector.html">aSyncDataCollector</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="collectors.html#distributed-data-collectors">Distributed data collectors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedDataCollector.html">DistributedDataCollector</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.distributed.RPCDataCollector.html">RPCDataCollector</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedSyncDataCollector.html">DistributedSyncDataCollector</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.distributed.submitit_delayed_launcher.html">submitit_delayed_launcher</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.distributed.RayCollector.html">RayCollector</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="collectors.html#helper-functions">Helper functions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.collectors.utils.split_trajectories.html">split_trajectories</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="data.html">torchrl.data package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="data.html#replay-buffers">Replay Buffers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html">ReplayBuffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.PrioritizedReplayBuffer.html">PrioritizedReplayBuffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.TensorDictReplayBuffer.html">TensorDictReplayBuffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html">TensorDictPrioritizedReplayBuffer</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#composable-replay-buffers">Composable Replay Buffers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="data.html#supported-data-types-and-choosing-a-storage">Supported data types and choosing a storage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#sampling-and-indexing">Sampling and indexing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#sharing-replay-buffers-across-processes">Sharing replay buffers across processes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#storing-trajectories">Storing trajectories</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#checkpointing-replay-buffers">Checkpointing Replay Buffers</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#torchrl-episode-data-format-ted">TorchRL Episode Data Format (TED)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="data.html#the-rationale-behind-ted">The Rationale Behind TED</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#the-structure-of-ted">The structure of TED</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#flattening-ted-to-reduce-memory-consumption">Flattening TED to reduce memory consumption</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#special-cases-and-footnotes">Special cases and footnotes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#datasets">Datasets</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="data.html#transforming-datasets">Transforming datasets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#composing-datasets">Composing datasets</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#tensorspec">TensorSpec</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.TensorSpec.html">TensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.Binary.html">Binary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.Bounded.html">Bounded</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.Categorical.html">Categorical</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.Composite.html">Composite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.MultiCategorical.html">MultiCategorical</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.MultiOneHot.html">MultiOneHot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.NonTensor.html">NonTensor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.Stacked.html">Stacked</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.StackedComposite.html">StackedComposite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.Unbounded.html">Unbounded</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.UnboundedContinuous.html">UnboundedContinuous</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.UnboundedDiscrete.html">UnboundedDiscrete</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.BinaryDiscreteTensorSpec.html">BinaryDiscreteTensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.BoundedTensorSpec.html">BoundedTensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.CompositeSpec.html">CompositeSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.DiscreteTensorSpec.html">DiscreteTensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.LazyStackedCompositeSpec.html">LazyStackedCompositeSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.LazyStackedTensorSpec.html">LazyStackedTensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.MultiDiscreteTensorSpec.html">MultiDiscreteTensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.MultiOneHotDiscreteTensorSpec.html">MultiOneHotDiscreteTensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.NonTensorSpec.html">NonTensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.OneHotDiscreteTensorSpec.html">OneHotDiscreteTensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.UnboundedContinuousTensorSpec.html">UnboundedContinuousTensorSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.UnboundedDiscreteTensorSpec.html">UnboundedDiscreteTensorSpec</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#trees-and-forests">Trees and Forests</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.BinaryToDecimal.html">BinaryToDecimal</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.HashToInt.html">HashToInt</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.QueryModule.html">QueryModule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.RandomProjectionHash.html">RandomProjectionHash</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.SipHash.html">SipHash</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.TensorDictMap.html">TensorDictMap</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.TensorMap.html">TensorMap</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#reinforcement-learning-from-human-feedback-rlhf">Reinforcement Learning From Human Feedback (RLHF)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.PairwiseDataset.html">PairwiseDataset</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.PromptData.html">PromptData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.PromptTensorDictTokenizer.html">PromptTensorDictTokenizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.RewardData.html">RewardData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.RolloutFromModel.html">RolloutFromModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.TensorDictTokenizer.html">TensorDictTokenizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.TokenizedDatasetLoader.html">TokenizedDatasetLoader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.create_infinite_iterator.html">create_infinite_iterator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.get_dataloader.html">get_dataloader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.ConstantKLController.html">ConstantKLController</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.AdaptiveKLController.html">AdaptiveKLController</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#utils">Utils</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.MultiStep.html">MultiStep</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.consolidate_spec.html">consolidate_spec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.check_no_exclusive_keys.html">check_no_exclusive_keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.contains_lazy_spec.html">contains_lazy_spec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.Nested2TED.html">Nested2TED</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.Flat2TED.html">Flat2TED</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.H5Combine.html">H5Combine</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.H5Split.html">H5Split</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.TED2Flat.html">TED2Flat</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.TED2Nested.html">TED2Nested</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html">MultiStepTransform</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="envs.html">torchrl.envs package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.envs.EnvBase.html">EnvBase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.envs.GymLikeEnv.html">GymLikeEnv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.envs.EnvMetaData.html">EnvMetaData</a></li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#vectorized-envs">Vectorized envs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.SerialEnv.html">SerialEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html">ParallelEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.EnvCreator.html">EnvCreator</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#custom-native-torchrl-environments">Custom native TorchRL environments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.PendulumEnv.html">PendulumEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.TicTacToeEnv.html">TicTacToeEnv</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#multi-agent-environments">Multi-agent environments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.MarlGroupMapType.html">MarlGroupMapType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.check_marl_grouping.html">check_marl_grouping</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#auto-resetting-envs">Auto-resetting Envs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#dynamic-specs">Dynamic Specs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#transforms">Transforms</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="envs.html#forward-and-inverse-transforms">Forward and inverse transforms</a></li>
+<li class="toctree-l3"><a class="reference internal" href="envs.html#cloning-transforms">Cloning transforms</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#environments-with-masked-actions">Environments with masked actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#recorders">Recorders</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="envs.html#recording-videos">Recording videos</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#helpers">Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.utils.RandomPolicy.html">RandomPolicy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.utils.check_env_specs.html">check_env_specs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.utils.exploration_type.html">exploration_type</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.utils.get_available_libraries.html">get_available_libraries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.utils.make_composite_from_td.html">make_composite_from_td</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.utils.set_exploration_type.html">set_exploration_type</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.utils.step_mdp.html">step_mdp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.utils.terminated_or_truncated.html">terminated_or_truncated</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#domain-specific">Domain-specific</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.ModelBasedEnvBase.html">ModelBasedEnvBase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.model_based.dreamer.DreamerEnv.html">DreamerEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.model_based.dreamer.DreamerDecoder.html">DreamerDecoder</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="envs.html#libraries">Libraries</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.BraxEnv.html">BraxEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.BraxWrapper.html">BraxWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.DMControlEnv.html">DMControlEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.DMControlWrapper.html">DMControlWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.GymEnv.html">GymEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.GymWrapper.html">GymWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.HabitatEnv.html">HabitatEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.IsaacGymEnv.html">IsaacGymEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.IsaacGymWrapper.html">IsaacGymWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.JumanjiEnv.html">JumanjiEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.JumanjiWrapper.html">JumanjiWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.MeltingpotEnv.html">MeltingpotEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.MeltingpotWrapper.html">MeltingpotWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.MOGymEnv.html">MOGymEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.MOGymWrapper.html">MOGymWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.MultiThreadedEnv.html">MultiThreadedEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.MultiThreadedEnvWrapper.html">MultiThreadedEnvWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.OpenMLEnv.html">OpenMLEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.OpenSpielWrapper.html">OpenSpielWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.OpenSpielEnv.html">OpenSpielEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.PettingZooEnv.html">PettingZooEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.PettingZooWrapper.html">PettingZooWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.RoboHiveEnv.html">RoboHiveEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.SMACv2Env.html">SMACv2Env</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.SMACv2Wrapper.html">SMACv2Wrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.UnityMLAgentsEnv.html">UnityMLAgentsEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.UnityMLAgentsWrapper.html">UnityMLAgentsWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.VmasEnv.html">VmasEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.VmasWrapper.html">VmasWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.gym_backend.html">gym_backend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.set_gym_backend.html">set_gym_backend</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html">torchrl.modules package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#tensordict-modules-actors-exploration-value-models-and-generative-models">TensorDict modules: Actors, exploration, value models and generative models</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="modules.html#tensordictmodules-and-safemodules">TensorDictModules and SafeModules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="modules.html#exploration-wrappers-and-modules">Exploration wrappers and modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="modules.html#probabilistic-actors">Probabilistic actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="modules.html#q-value-actors">Q-Value actors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="modules.html#value-operators-and-joined-models">Value operators and joined models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="modules.html#domain-specific-tensordict-modules">Domain-specific TensorDict modules</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#hooks">Hooks</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.QValueHook.html">QValueHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.DistributionalQValueHook.html">DistributionalQValueHook</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#models">Models</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="modules.html#regular-modules">Regular modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="modules.html#algorithm-specific-modules">Algorithm-specific modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="modules.html#multi-agent-specific-modules">Multi-agent-specific modules</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#exploration">Exploration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.NoisyLinear.html">NoisyLinear</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.NoisyLazyLinear.html">NoisyLazyLinear</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.reset_noise.html">reset_noise</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#planners">Planners</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.CEMPlanner.html">CEMPlanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.MPCPlannerBase.html">MPCPlannerBase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.MPPIPlanner.html">MPPIPlanner</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#distributions">Distributions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.Delta.html">Delta</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.IndependentNormal.html">IndependentNormal</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.NormalParamWrapper.html">NormalParamWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.TanhNormal.html">TanhNormal</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.TruncatedNormal.html">TruncatedNormal</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.TanhDelta.html">TanhDelta</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.OneHotCategorical.html">OneHotCategorical</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.MaskedCategorical.html">MaskedCategorical</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.MaskedOneHotCategorical.html">MaskedOneHotCategorical</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#utils">Utils</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.utils.mappings.html">mappings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.utils.inv_softplus.html">inv_softplus</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.utils.biased_softplus.html">biased_softplus</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.utils.get_primers_from_module.html">get_primers_from_module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.VmapModule.html">VmapModule</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="objectives.html">torchrl.objectives package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#torch-vmap-and-randomness">torch.vmap and randomness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#training-value-functions">Training value functions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.LossModule.html">LossModule</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#dqn">DQN</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DQNLoss.html">DQNLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DistributionalDQNLoss.html">DistributionalDQNLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#ddpg">DDPG</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DDPGLoss.html">DDPGLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#sac">SAC</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.SACLoss.html">SACLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DiscreteSACLoss.html">DiscreteSACLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#redq">REDQ</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.REDQLoss.html">REDQLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#crossq">CrossQ</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.CrossQLoss.html">CrossQLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#iql">IQL</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.IQLLoss.html">IQLLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DiscreteIQLLoss.html">DiscreteIQLLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#cql">CQL</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.CQLLoss.html">CQLLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DiscreteCQLLoss.html">DiscreteCQLLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#gail">GAIL</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.GAILLoss.html">GAILLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#dt">DT</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DTLoss.html">DTLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.OnlineDTLoss.html">OnlineDTLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#td3">TD3</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.TD3Loss.html">TD3Loss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#td3-bc">TD3+BC</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.TD3BCLoss.html">TD3BCLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#ppo">PPO</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.PPOLoss.html">PPOLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.ClipPPOLoss.html">ClipPPOLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.KLPENPPOLoss.html">KLPENPPOLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#a2c">A2C</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.A2CLoss.html">A2CLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#reinforce">Reinforce</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.ReinforceLoss.html">ReinforceLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#dreamer">Dreamer</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DreamerActorLoss.html">DreamerActorLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DreamerModelLoss.html">DreamerModelLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DreamerValueLoss.html">DreamerValueLoss</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#multi-agent-objectives">Multi-agent objectives</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="objectives.html#qmixer">QMixer</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#returns">Returns</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.ValueEstimatorBase.html">ValueEstimatorBase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.TD0Estimator.html">TD0Estimator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.TD1Estimator.html">TD1Estimator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.TDLambdaEstimator.html">TDLambdaEstimator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.GAE.html">GAE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.td0_return_estimate.html">td0_return_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.td0_advantage_estimate.html">td0_advantage_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.td1_return_estimate.html">td1_return_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_td1_return_estimate.html">vec_td1_return_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.td1_advantage_estimate.html">td1_advantage_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_td1_advantage_estimate.html">vec_td1_advantage_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.td_lambda_return_estimate.html">td_lambda_return_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_td_lambda_return_estimate.html">vec_td_lambda_return_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.td_lambda_advantage_estimate.html">td_lambda_advantage_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate.html">vec_td_lambda_advantage_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.generalized_advantage_estimate.html">generalized_advantage_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_generalized_advantage_estimate.html">vec_generalized_advantage_estimate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.functional.reward2go.html">reward2go</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="objectives.html#utils">Utils</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.distance_loss.html">distance_loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.hold_out_net.html">hold_out_net</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.hold_out_params.html">hold_out_params</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.next_state_value.html">next_state_value</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.SoftUpdate.html">SoftUpdate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.HardUpdate.html">HardUpdate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.ValueEstimators.html">ValueEstimators</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.default_value_kwargs.html">default_value_kwargs</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="trainers.html">torchrl.trainers package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="trainers.html#checkpointing">Checkpointing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="trainers.html#trainer-and-hooks">Trainer and hooks</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.BatchSubSampler.html">BatchSubSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.ClearCudaCache.html">ClearCudaCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.CountFramesLog.html">CountFramesLog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.LogReward.html">LogReward</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.OptimizerHook.html">OptimizerHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.Recorder.html">Recorder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.ReplayBufferTrainer.html">ReplayBufferTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.RewardNormalizer.html">RewardNormalizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.SelectKeys.html">SelectKeys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.Trainer.html">Trainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.TrainerHookBase.html">TrainerHookBase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.UpdateWeights.html">UpdateWeights</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="trainers.html#builders">Builders</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_collector_offpolicy.html">make_collector_offpolicy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_collector_onpolicy.html">make_collector_onpolicy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_dqn_loss.html">make_dqn_loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_replay_buffer.html">make_replay_buffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_target_updater.html">make_target_updater</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_trainer.html">make_trainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.parallel_env_constructor.html">parallel_env_constructor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.sync_async_collector.html">sync_async_collector</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.sync_sync_collector.html">sync_sync_collector</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.transformed_env_constructor.html">transformed_env_constructor</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="trainers.html#utils">Utils</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.correct_for_frame_skip.html">correct_for_frame_skip</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.get_stats_random_rollout.html">get_stats_random_rollout</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="trainers.html#loggers">Loggers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.wandb.WandbLogger.html">WandbLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.get_logger.html">get_logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.generate_exp_name.html">generate_exp_name</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="trainers.html#recording-utils">Recording utils</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.VideoRecorder.html">VideoRecorder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.TensorDictRecorder.html">TensorDictRecorder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.PixelRenderTransform.html">PixelRenderTransform</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="utils.html">torchrl._utils package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl._utils.implement_for.html">implement_for</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="collectors.html" class="btn btn-neutral float-right" title="torchrl.collectors package" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="../tutorials/coding_dqn.html" class="btn btn-neutral" title="TorchRL trainer: A DQN example" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">API Reference</a></li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../_static/doctools.js"></script>
+         <script src="../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2023</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

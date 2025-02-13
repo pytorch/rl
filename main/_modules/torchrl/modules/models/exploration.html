@@ -1,0 +1,1539 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.modules.models.exploration &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.modules.models.exploration</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.modules.models.exploration</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">d</span><span class="p">,</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn.modules.dropout</span><span class="w"> </span><span class="kn">import</span> <span class="n">_DropoutNd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn.modules.lazy</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyModuleMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn.parameter</span><span class="w"> </span><span class="kn">import</span> <span class="n">UninitializedBuffer</span><span class="p">,</span> <span class="n">UninitializedParameter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">prod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEVICE_TYPING</span><span class="p">,</span> <span class="n">DEVICE_TYPING_ARGS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">exploration_type</span><span class="p">,</span> <span class="n">ExplorationType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.distributions.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_cast_transform_device</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">inv_softplus</span>
+
+
+<div class="viewcode-block" id="NoisyLinear"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">NoisyLinear</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Noisy Linear Layer.</span>
+
+<span class="sd">    Presented in &quot;Noisy Networks for Exploration&quot;, https://arxiv.org/abs/1706.10295v3</span>
+
+<span class="sd">    A Noisy Linear Layer is a linear layer with parametric noise added to the weights. This induced stochasticity can</span>
+<span class="sd">    be used in RL networks for the agent&#39;s policy to aid efficient exploration. The parameters of the noise are learned</span>
+<span class="sd">    with gradient descent along with any other remaining network weights. Factorized Gaussian</span>
+<span class="sd">    noise is the type of noise usually employed.</span>
+
+
+<span class="sd">    Args:</span>
+<span class="sd">        in_features (int): input features dimension</span>
+<span class="sd">        out_features (int): out features dimension</span>
+<span class="sd">        bias (bool, optional): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.</span>
+<span class="sd">            Defaults to ``True``</span>
+<span class="sd">        device (DEVICE_TYPING, optional): device of the layer.</span>
+<span class="sd">            Defaults to ``&quot;cpu&quot;``</span>
+<span class="sd">        dtype (torch.dtype, optional): dtype of the parameters.</span>
+<span class="sd">            Defaults to ``None`` (default pytorch dtype)</span>
+<span class="sd">        std_init (scalar, optional): initial value of the Gaussian standard deviation before optimization.</span>
+<span class="sd">            Defaults to ``0.1``</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">in_features</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">out_features</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">bias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DEVICE_TYPING</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">std_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">in_features</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_features</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">out_features</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">std_init</span> <span class="o">=</span> <span class="n">std_init</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+                <span class="n">out_features</span><span class="p">,</span>
+                <span class="n">in_features</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_sigma</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+                <span class="n">out_features</span><span class="p">,</span>
+                <span class="n">in_features</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;weight_epsilon&quot;</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">out_features</span><span class="p">,</span> <span class="n">in_features</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">bias</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+                    <span class="n">out_features</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+                    <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_sigma</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+                    <span class="n">out_features</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+                    <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+                <span class="s2">&quot;bias_epsilon&quot;</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">out_features</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset_parameters</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset_noise</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">mu_range</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_features</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">uniform_</span><span class="p">(</span><span class="o">-</span><span class="n">mu_range</span><span class="p">,</span> <span class="n">mu_range</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_sigma</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">std_init</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_features</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">uniform_</span><span class="p">(</span><span class="o">-</span><span class="n">mu_range</span><span class="p">,</span> <span class="n">mu_range</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_sigma</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">std_init</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_features</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset_noise</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">epsilon_in</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scale_noise</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_features</span><span class="p">)</span>
+        <span class="n">epsilon_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scale_noise</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_features</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_epsilon</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">epsilon_out</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">epsilon_in</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_epsilon</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">epsilon_out</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_scale_noise</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">size</span><span class="p">,)</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">sign</span><span class="p">()</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">sqrt_</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">weight</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_sigma</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_epsilon</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bias</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_sigma</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_epsilon</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="NoisyLazyLinear"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.NoisyLazyLinear.html#torchrl.modules.NoisyLazyLinear">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">NoisyLazyLinear</span><span class="p">(</span><span class="n">LazyModuleMixin</span><span class="p">,</span> <span class="n">NoisyLinear</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Noisy Lazy Linear Layer.</span>
+
+<span class="sd">    This class makes the Noisy Linear layer lazy, in that the in_feature argument does not need to be passed at</span>
+<span class="sd">    initialization (but is inferred after the first call to the layer).</span>
+
+<span class="sd">    For more context on noisy layers, see the NoisyLinear class.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        out_features (int): out features dimension</span>
+<span class="sd">        bias (bool, optional): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.</span>
+<span class="sd">            Defaults to ``True``.</span>
+<span class="sd">        device (DEVICE_TYPING, optional): device of the layer.</span>
+<span class="sd">            Defaults to ``&quot;cpu&quot;``.</span>
+<span class="sd">        dtype (torch.dtype, optional): dtype of the parameters.</span>
+<span class="sd">            Defaults to the default PyTorch dtype.</span>
+<span class="sd">        std_init (scalar): initial value of the Gaussian standard deviation before optimization.</span>
+<span class="sd">            Defaults to 0.1</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">out_features</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">bias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DEVICE_TYPING</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">std_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_features</span> <span class="o">=</span> <span class="n">out_features</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">std_init</span> <span class="o">=</span> <span class="n">std_init</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_sigma</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;weight_epsilon&quot;</span><span class="p">,</span> <span class="n">UninitializedBuffer</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">bias</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_sigma</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+                <span class="s2">&quot;bias_epsilon&quot;</span><span class="p">,</span> <span class="n">UninitializedBuffer</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset_parameters</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_uninitialized_params</span><span class="p">()</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset_parameters</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset_noise</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_uninitialized_params</span><span class="p">()</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset_noise</span><span class="p">()</span>
+
+<div class="viewcode-block" id="NoisyLazyLinear.initialize_parameters"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.NoisyLazyLinear.html#torchrl.modules.NoisyLazyLinear.initialize_parameters">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">initialize_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_uninitialized_params</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">weight_mu</span><span class="o">.</span><span class="n">materialize</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">weight_sigma</span><span class="o">.</span><span class="n">materialize</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">weight_epsilon</span><span class="o">.</span><span class="n">materialize</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">out_features</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span><span class="p">))</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">bias_mu</span><span class="o">.</span><span class="n">materialize</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">out_features</span><span class="p">,))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">bias_sigma</span><span class="o">.</span><span class="n">materialize</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">out_features</span><span class="p">,))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">bias_epsilon</span><span class="o">.</span><span class="n">materialize</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">out_features</span><span class="p">,))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">reset_parameters</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">reset_noise</span><span class="p">()</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">weight</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_uninitialized_params</span><span class="p">()</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">weight</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bias</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_uninitialized_params</span><span class="p">()</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_features</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">bias</span></div>
+
+
+<div class="viewcode-block" id="reset_noise"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.reset_noise.html#torchrl.modules.reset_noise">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">reset_noise</span><span class="p">(</span><span class="n">layer</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resets the noise of noisy layers.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">layer</span><span class="p">,</span> <span class="s2">&quot;reset_noise&quot;</span><span class="p">):</span>
+        <span class="n">layer</span><span class="o">.</span><span class="n">reset_noise</span><span class="p">()</span></div>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">gSDEModule</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A gSDE exploration module.</span>
+
+<span class="sd">     Presented in &quot;Smooth Exploration for Robotic Reinforcement Learning&quot; by Antonin Raffin, Jens Kober, Freek Stulp (https://arxiv.org/abs/2005.05719)</span>
+
+<span class="sd">    gSDEModule adds a state-dependent exploration noise to an input action.</span>
+<span class="sd">    It also outputs the mean, scale (standard deviation) of the normal</span>
+<span class="sd">    distribution, as well as the Gaussian noise used.</span>
+
+<span class="sd">    The noise input should be reset through a :obj:`torchrl.envs.transforms.gSDENoise`</span>
+<span class="sd">    instance: each time the environment is reset, the input noise will be set to</span>
+<span class="sd">    zero by the environment transform, indicating to gSDEModule that it has to be resampled.</span>
+<span class="sd">    This scheme allows us to have the environemt tell the module to resample a</span>
+<span class="sd">    noise only the latter knows the shape of.</span>
+
+<span class="sd">    A variable transform function can also be provided to map the noicy action</span>
+<span class="sd">    to the desired space (e.g. a SafeTanhTransform or similar).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        policy_model (nn.Module): a model that reads observations and</span>
+<span class="sd">            outputs a distribution average.</span>
+<span class="sd">        action_dim (int): the dimension of the action.</span>
+<span class="sd">        state_dim (int): the state dimension.</span>
+<span class="sd">        sigma_init (:obj:`float`, optional): the initial value of the standard deviation. The</span>
+<span class="sd">            softplus non-linearity is used to map the log_sigma parameter to a</span>
+<span class="sd">            positive value. Defaults to ``1.0``.</span>
+<span class="sd">        scale_min (:obj:`float`, optional): min value of the scale. Defaults to ``0.01``.</span>
+<span class="sd">        scale_max (:obj:`float`, optional): max value of the scale. Defaults to ``10.0``.</span>
+<span class="sd">        learn_sigma (bool, optional): if ``True``, the value of the ``sigma``</span>
+<span class="sd">            variable will be included in the module parameters, making it learnable.</span>
+<span class="sd">            Defaults to ``True``.</span>
+<span class="sd">        transform (torch.distribution.Transform, optional): a transform to apply</span>
+<span class="sd">            to the sampled action. Defaults to ``None`` (no transform).</span>
+<span class="sd">        device (torch.device, optional): device to create the model on.</span>
+<span class="sd">            Defaults to ``&quot;cpu&quot;``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules import ProbabilisticActor, TanhNormal</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict.nn import TensorDictModule, ProbabilisticTensorDictSequential</span>
+<span class="sd">        &gt;&gt;&gt; batch, state_dim, action_dim = 3, 7, 5</span>
+<span class="sd">        &gt;&gt;&gt; model = nn.Linear(state_dim, action_dim)</span>
+<span class="sd">        &gt;&gt;&gt; deterministic_policy = TensorDictModule(model, in_keys=[&quot;obs&quot;], out_keys=[&quot;action&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; stochastic_part = TensorDictModule(</span>
+<span class="sd">        ...     gSDEModule(action_dim, state_dim),</span>
+<span class="sd">        ...     in_keys=[&quot;action&quot;, &quot;obs&quot;, &quot;_eps_gSDE&quot;],</span>
+<span class="sd">        ...     out_keys=[&quot;loc&quot;, &quot;scale&quot;, &quot;action&quot;, &quot;_eps_gSDE&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; stochastic_part = ProbabilisticActor(stochastic_part,</span>
+<span class="sd">        ...      in_keys=[&quot;loc&quot;, &quot;scale&quot;],</span>
+<span class="sd">        ...      distribution_class=TanhNormal)</span>
+<span class="sd">        &gt;&gt;&gt; stochastic_policy = ProbabilisticTensorDictSequential(deterministic_policy, *stochastic_part)</span>
+<span class="sd">        &gt;&gt;&gt; tensordict = TensorDict({&#39;obs&#39;: torch.randn(state_dim), &#39;_epx_gSDE&#39;: torch.zeros(1)}, [])</span>
+<span class="sd">        &gt;&gt;&gt; _ = stochastic_policy(tensordict)</span>
+<span class="sd">        &gt;&gt;&gt; print(tensordict)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                _eps_gSDE: Tensor(shape=torch.Size([5, 7]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                _epx_gSDE: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                action: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                loc: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                obs: Tensor(shape=torch.Size([7]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                scale: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; action_first_call = tensordict.get(&quot;action&quot;).clone()</span>
+<span class="sd">        &gt;&gt;&gt; dist = stochastic_policy.get_dist(tensordict)</span>
+<span class="sd">        &gt;&gt;&gt; print(dist)</span>
+<span class="sd">        TanhNormal(loc: torch.Size([5]), scale: torch.Size([5]))</span>
+<span class="sd">        &gt;&gt;&gt; _ = stochastic_policy(tensordict)</span>
+<span class="sd">        &gt;&gt;&gt; action_second_call = tensordict.get(&quot;action&quot;).clone()</span>
+<span class="sd">        &gt;&gt;&gt; assert (action_second_call == action_first_call).all()  # actions are the same</span>
+<span class="sd">        &gt;&gt;&gt; assert (action_first_call != dist.base_dist.base_dist.loc).all()  # actions are truly stochastic</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">action_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">state_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">sigma_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">scale_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">scale_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">learn_sigma</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">transform</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">d</span><span class="o">.</span><span class="n">Transform</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DEVICE_TYPING</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_dim</span> <span class="o">=</span> <span class="n">action_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_dim</span> <span class="o">=</span> <span class="n">state_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale_min</span> <span class="o">=</span> <span class="n">scale_min</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale_max</span> <span class="o">=</span> <span class="n">scale_max</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transform</span> <span class="o">=</span> <span class="n">transform</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">learn_sigma</span> <span class="o">=</span> <span class="n">learn_sigma</span>
+        <span class="k">if</span> <span class="n">learn_sigma</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">sigma_init</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">sigma_init</span> <span class="o">=</span> <span class="n">inv_softplus</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">scale_min</span><span class="p">)</span> <span class="o">/</span> <span class="n">state_dim</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span>
+                <span class="s2">&quot;log_sigma&quot;</span><span class="p">,</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                        <span class="p">(</span><span class="n">action_dim</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                    <span class="p">)</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">sigma_init</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">sigma_init</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">scale_min</span><span class="p">)</span> <span class="o">/</span> <span class="n">state_dim</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+                <span class="s2">&quot;_sigma&quot;</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">action_dim</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">),</span> <span class="n">sigma_init</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">sigma_init</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+                <span class="s2">&quot;sigma_init&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">sigma_init</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+            <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sigma</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">learn_sigma</span><span class="p">:</span>
+            <span class="n">sigma</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">softplus</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_sigma</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">sigma</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_min</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sigma</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_min</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">_eps_gSDE</span><span class="p">):</span>
+        <span class="n">sigma</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">.</span><span class="n">clamp_max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_max</span><span class="p">)</span>
+        <span class="n">_err_explo</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;gSDE behavior for exploration mode </span><span class="si">{</span><span class="n">exploration_type</span><span class="p">()</span><span class="si">}</span><span class="s2"> is not defined. Choose from &#39;random&#39; or &#39;mode&#39;.&quot;</span>
+
+        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="n">_err_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;mu and state are expected to have matching batch size, got shapes </span><span class="si">{</span><span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_err_msg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_eps_gSDE</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="n">_eps_gSDE</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span> <span class="n">state</span><span class="o">.</span><span class="n">ndimension</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="p">):</span>
+            <span class="n">_err_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;noise and state are expected to have matching batch size, got shapes </span><span class="si">{</span><span class="n">_eps_gSDE</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_err_msg</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">_eps_gSDE</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">exploration_type</span><span class="p">()</span> <span class="o">!=</span> <span class="n">ExplorationType</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">:</span>
+            <span class="c1"># noise is irrelevant in with no exploration</span>
+            <span class="n">_eps_gSDE</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="o">*</span><span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="o">*</span><span class="n">sigma</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">sigma</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">sigma</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="p">(</span><span class="n">_eps_gSDE</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">exploration_type</span><span class="p">()</span> <span class="o">==</span> <span class="n">ExplorationType</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="n">_eps_gSDE</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">_eps_gSDE</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="n">prod</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="n">_eps_gSDE</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="n">_eps_gSDE</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
+                <span class="o">*</span><span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="o">*</span><span class="n">sigma</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">sigma</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">sigma</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">_eps_gSDE</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_err_explo</span><span class="p">)</span>
+
+        <span class="n">gSDE_noise</span> <span class="o">=</span> <span class="n">sigma</span> <span class="o">*</span> <span class="n">_eps_gSDE</span>
+        <span class="n">eps</span> <span class="o">=</span> <span class="p">(</span><span class="n">gSDE_noise</span> <span class="o">@</span> <span class="n">state</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">exploration_type</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="n">ExplorationType</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">,):</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">eps</span>
+        <span class="k">elif</span> <span class="n">exploration_type</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span>
+            <span class="n">ExplorationType</span><span class="o">.</span><span class="n">MODE</span><span class="p">,</span>
+            <span class="n">ExplorationType</span><span class="o">.</span><span class="n">MEAN</span><span class="p">,</span>
+            <span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">mu</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_err_explo</span><span class="p">)</span>
+
+        <span class="n">sigma</span> <span class="o">=</span> <span class="p">(</span><span class="n">sigma</span> <span class="o">*</span> <span class="n">state</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">))</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1e-5</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">sigma</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;inf sigma&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">_eps_gSDE</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_or_dtype</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">DEVICE_TYPING</span><span class="p">]):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device_or_dtype</span><span class="p">,</span> <span class="n">DEVICE_TYPING_ARGS</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">transform</span> <span class="o">=</span> <span class="n">_cast_transform_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">,</span> <span class="n">device_or_dtype</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device_or_dtype</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LazygSDEModule</span><span class="p">(</span><span class="n">LazyModuleMixin</span><span class="p">,</span> <span class="n">gSDEModule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Lazy gSDE Module.</span>
+
+<span class="sd">    This module behaves exactly as gSDEModule except that it does not require the</span>
+<span class="sd">    user to specify the action and state dimension.</span>
+<span class="sd">    If the input state is multi-dimensional (i.e. more than one state is provided), the</span>
+<span class="sd">    sigma value is initialized such that the resulting variance will match ``sigma_init``</span>
+<span class="sd">    (or 1 if no ``sigma_init`` value is provided).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        sigma_init (:obj:`float`, optional): the initial value of the standard deviation. The</span>
+<span class="sd">            softplus non-linearity is used to map the log_sigma parameter to a</span>
+<span class="sd">            positive value. Defaults to ``None`` (learned).</span>
+<span class="sd">        scale_min (:obj:`float`, optional): min value of the scale. Defaults to ``0.01``.</span>
+<span class="sd">        scale_max (:obj:`float`, optional): max value of the scale. Defaults to ``10.0``.</span>
+<span class="sd">        learn_sigma (bool, optional): if ``True``, the value of the ``sigma``</span>
+<span class="sd">            variable will be included in the module parameters, making it learnable.</span>
+<span class="sd">            Defaults to ``True``.</span>
+<span class="sd">        transform (torch.distribution.Transform, optional): a transform to apply</span>
+<span class="sd">            to the sampled action. Defaults to ``None`` (no transform).</span>
+<span class="sd">        device (torch.device, optional): device to create the model on.</span>
+<span class="sd">            Defaults to ``&quot;cpu&quot;``.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">cls_to_become</span> <span class="o">=</span> <span class="n">gSDEModule</span>
+    <span class="n">log_sigma</span><span class="p">:</span> <span class="n">UninitializedParameter</span>
+    <span class="n">_sigma</span><span class="p">:</span> <span class="n">UninitializedBuffer</span>
+    <span class="n">sigma_init</span><span class="p">:</span> <span class="n">UninitializedBuffer</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">sigma_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">scale_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">scale_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">learn_sigma</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">transform</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">d</span><span class="o">.</span><span class="n">Transform</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DEVICE_TYPING</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="n">sigma_init</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">scale_min</span><span class="o">=</span><span class="n">scale_min</span><span class="p">,</span>
+            <span class="n">scale_max</span><span class="o">=</span><span class="n">scale_max</span><span class="p">,</span>
+            <span class="n">learn_sigma</span><span class="o">=</span><span class="n">learn_sigma</span><span class="p">,</span>
+            <span class="n">transform</span><span class="o">=</span><span class="n">transform</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">factory_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device</span><span class="p">,</span>
+            <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">(),</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sigma_init</span> <span class="o">=</span> <span class="n">sigma_init</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sigma_init</span> <span class="o">=</span> <span class="n">UninitializedBuffer</span><span class="p">(</span><span class="o">**</span><span class="n">factory_kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">learn_sigma</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_sigma</span> <span class="o">=</span> <span class="n">UninitializedParameter</span><span class="p">(</span><span class="o">**</span><span class="n">factory_kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sigma</span> <span class="o">=</span> <span class="n">UninitializedBuffer</span><span class="p">(</span><span class="o">**</span><span class="n">factory_kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialize_parameters</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">mu</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">_eps_gSDE</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_uninitialized_params</span><span class="p">():</span>
+            <span class="n">action_dim</span> <span class="o">=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">state_dim</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">ndimension</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="n">state</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">ndimension</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">state_flatten_var</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">mu</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">state_flatten_var</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">reciprocal</span><span class="p">()</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">sigma_init</span><span class="o">.</span><span class="n">materialize</span><span class="p">(</span><span class="n">state_flatten_var</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">learn_sigma</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sigma_init</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">state_flatten_var</span><span class="o">.</span><span class="n">clamp_min_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_min</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">sigma_init</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
+                            <span class="n">inv_softplus</span><span class="p">((</span><span class="n">state_flatten_var</span> <span class="o">/</span> <span class="n">state_dim</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">())</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">sigma_init</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
+                            <span class="n">inv_softplus</span><span class="p">(</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">_sigma_init</span>
+                                <span class="o">*</span> <span class="p">(</span><span class="n">state_flatten_var</span> <span class="o">/</span> <span class="n">state_dim</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+                            <span class="p">)</span>
+                        <span class="p">)</span>
+
+                    <span class="bp">self</span><span class="o">.</span><span class="n">log_sigma</span><span class="o">.</span><span class="n">materialize</span><span class="p">((</span><span class="n">action_dim</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">log_sigma</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma_init</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_sigma</span><span class="p">))</span>
+
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sigma_init</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">sigma_init</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
+                            <span class="p">(</span><span class="n">state_flatten_var</span> <span class="o">/</span> <span class="n">state_dim</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">sigma_init</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
+                            <span class="p">(</span><span class="n">state_flatten_var</span> <span class="o">/</span> <span class="n">state_dim</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sigma_init</span>
+                        <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_sigma</span><span class="o">.</span><span class="n">materialize</span><span class="p">((</span><span class="n">action_dim</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_sigma</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma_init</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sigma</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="ConsistentDropout"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ConsistentDropout.html#torchrl.modules.ConsistentDropout">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ConsistentDropout</span><span class="p">(</span><span class="n">_DropoutNd</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Implements a :class:`~torch.nn.Dropout` variant with consistent dropout.</span>
+
+<span class="sd">    This method is proposed in `&quot;Consistent Dropout for Policy Gradient Reinforcement Learning&quot; (Hausknecht &amp; Wagener, 2022)</span>
+<span class="sd">    &lt;https://arxiv.org/abs/2202.11818&gt;`_.</span>
+
+<span class="sd">    This :class:`~torch.nn.Dropout` variant attempts to increase training stability and</span>
+<span class="sd">    reduce update variance by caching the dropout masks used during rollout</span>
+<span class="sd">    and reusing them during the update phase.</span>
+
+<span class="sd">    The class you are looking at is independent of the rest of TorchRL&#39;s API and does not require tensordict to be run.</span>
+<span class="sd">    :class:`~torchrl.modules.ConsistentDropoutModule` is a wrapper around ``ConsistentDropout`` that capitalizes on the extensibility</span>
+<span class="sd">    of ``TensorDict``s by storing generated dropout masks in the transition ``TensorDict`` themselves.</span>
+<span class="sd">    See this class for a detailed explanation as well as usage examples.</span>
+
+<span class="sd">    There is otherwise little conceptual deviance from the PyTorch</span>
+<span class="sd">    :class:`~torch.nn.Dropout` implementation.</span>
+
+<span class="sd">    ..note:: TorchRL&#39;s data collectors perform rollouts in :meth:`~torch.no_grad` mode but not in `eval` mode,</span>
+<span class="sd">        so the dropout masks will be applied unless the policy passed to the collector is in eval mode.</span>
+
+<span class="sd">    .. note:: Unlike other exploration modules, :class:`~torchrl.modules.ConsistentDropoutModule`</span>
+<span class="sd">      uses the ``train``/``eval`` mode to comply with the regular `Dropout` API in PyTorch.</span>
+<span class="sd">      The :func:`~torchrl.envs.utils.set_exploration_type` context manager will have no effect on</span>
+<span class="sd">      this module.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">       p (:obj:`float`, optional): Dropout probability. Defaults to ``0.5``.</span>
+
+<span class="sd">    .. seealso::</span>
+
+<span class="sd">      - :class:`~torchrl.collectors.SyncDataCollector`:</span>
+<span class="sd">        :meth:`~torchrl.collectors.SyncDataCollector.rollout()` and :meth:`~torchrl.collectors.SyncDataCollector.iterator()`</span>
+<span class="sd">      - :class:`~torchrl.collectors.MultiSyncDataCollector`:</span>
+<span class="sd">        Uses :meth:`~torchrl.collectors.collectors._main_async_collector` (:class:`~torchrl.collectors.SyncDataCollector`)</span>
+<span class="sd">        under the hood</span>
+<span class="sd">      - :class:`~torchrl.collectors.MultiaSyncDataCollector`, :class:`~torchrl.collectors.aSyncDataCollector`: Ditto.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p</span> <span class="o">=</span> <span class="n">p</span>
+
+<div class="viewcode-block" id="ConsistentDropout.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ConsistentDropout.html#torchrl.modules.ConsistentDropout.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;During training (rollouts &amp; updates), this call masks a tensor full of ones before multiplying with the input tensor.</span>
+
+<span class="sd">        During evaluation, this call results in a no-op and only the input is returned.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (torch.Tensor): the input tensor.</span>
+<span class="sd">            mask (torch.Tensor, optional): the optional mask for the dropout.</span>
+
+<span class="sd">        Returns: a tensor and a corresponding mask in train mode, and only a tensor in eval mode.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_mask</span><span class="p">(</span><span class="nb">input</span><span class="o">=</span><span class="n">x</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="n">mask</span><span class="p">,</span> <span class="n">mask</span>
+
+        <span class="k">return</span> <span class="n">x</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">input</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">dropout</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="nb">input</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">dropout</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">shape</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;input or shape must be passed to make_mask.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ConsistentDropoutModule"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ConsistentDropoutModule.html#torchrl.modules.ConsistentDropoutModule">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ConsistentDropoutModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A TensorDictModule wrapper for :class:`~ConsistentDropout`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        p (:obj:`float`, optional): Dropout probability. Default: ``0.5``.</span>
+<span class="sd">        in_keys (NestedKey or list of NestedKeys): keys to be read</span>
+<span class="sd">            from input tensordict and passed to this module.</span>
+<span class="sd">        out_keys (NestedKey or iterable of NestedKeys): keys to be written to the input tensordict.</span>
+<span class="sd">            Defaults to ``in_keys`` values.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        input_shape (tuple, optional): the shape of the input (non-batchted), used to generate the</span>
+<span class="sd">            tensordict primers with :meth:`make_tensordict_primer`.</span>
+<span class="sd">        input_dtype (torch.dtype, optional): the dtype of the input for the primer. If none is pased,</span>
+<span class="sd">            ``torch.get_default_dtype`` is assumed.</span>
+
+<span class="sd">    .. note:: To use this class within a policy, one needs the mask to be reset at reset time.</span>
+<span class="sd">      This can be achieved through a :class:`~torchrl.envs.TensorDictPrimer` transform that can be obtained</span>
+<span class="sd">      with :meth:`make_tensordict_primer`. See this method for more information.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; module = ConsistentDropoutModule(p = 0.1)</span>
+<span class="sd">        &gt;&gt;&gt; td = TensorDict({&quot;x&quot;: torch.randn(3, 4)}, [3])</span>
+<span class="sd">        &gt;&gt;&gt; module(td)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                mask_6127171760: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                x: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">p</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="n">List</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="n">List</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">input_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">input_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">):</span>
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">in_keys</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;mask_</span><span class="si">{</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out_keys</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">):</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">out_keys</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;mask_</span><span class="si">{</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">out_keys</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;in_keys and out_keys length must be 2 for consistent dropout.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="n">in_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_shape</span> <span class="o">=</span> <span class="n">input_shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_dtype</span> <span class="o">=</span> <span class="n">input_dtype</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">p</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;p must be in [0,1), got p=</span><span class="si">{</span><span class="n">p</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">consistent_dropout</span> <span class="o">=</span> <span class="n">ConsistentDropout</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ConsistentDropoutModule.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ConsistentDropoutModule.html#torchrl.modules.ConsistentDropoutModule.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">consistent_dropout</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+            <span class="n">x</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">consistent_dropout</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">)</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">mask</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">consistent_dropout</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+
+<div class="viewcode-block" id="ConsistentDropoutModule.make_tensordict_primer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ConsistentDropoutModule.html#torchrl.modules.ConsistentDropoutModule.make_tensordict_primer">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">make_tensordict_primer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Makes a tensordict primer for the environment to generate random masks during reset calls.</span>
+
+<span class="sd">        .. seealso:: :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given</span>
+<span class="sd">        module.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv, StepCounter, SerialEnv</span>
+<span class="sd">            &gt;&gt;&gt; m = Seq(</span>
+<span class="sd">            ...     Mod(torch.nn.Linear(7, 4), in_keys=[&quot;observation&quot;], out_keys=[&quot;intermediate&quot;]),</span>
+<span class="sd">            ...     ConsistentDropoutModule(</span>
+<span class="sd">            ...         p=0.5,</span>
+<span class="sd">            ...         input_shape=(2, 4),</span>
+<span class="sd">            ...         in_keys=&quot;intermediate&quot;,</span>
+<span class="sd">            ...     ),</span>
+<span class="sd">            ...     Mod(torch.nn.Linear(4, 7), in_keys=[&quot;intermediate&quot;], out_keys=[&quot;action&quot;]),</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; primer = get_primers_from_module(m)</span>
+<span class="sd">            &gt;&gt;&gt; env0 = GymEnv(&quot;Pendulum-v1&quot;).append_transform(StepCounter(5))</span>
+<span class="sd">            &gt;&gt;&gt; env1 = GymEnv(&quot;Pendulum-v1&quot;).append_transform(StepCounter(6))</span>
+<span class="sd">            &gt;&gt;&gt; env = SerialEnv(2, [lambda env=env0: env, lambda env=env1: env])</span>
+<span class="sd">            &gt;&gt;&gt; env = env.append_transform(primer)</span>
+<span class="sd">            &gt;&gt;&gt; r = env.rollout(10, m, break_when_any_done=False)</span>
+<span class="sd">            &gt;&gt;&gt; mask = [k for k in r.keys() if k.startswith(&quot;mask&quot;)][0]</span>
+<span class="sd">            &gt;&gt;&gt; assert (r[mask][0, :5] != r[mask][0, 5:6]).any()</span>
+<span class="sd">            &gt;&gt;&gt; assert (r[mask][0, :4] == r[mask][0, 4:5]).all()</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictPrimer</span>
+
+        <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_shape</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_dtype</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot infer the shape of the input automatically. &quot;</span>
+                <span class="s2">&quot;Please pass the shape of the tensor to `ConstistentDropoutModule` during construction &quot;</span>
+                <span class="s2">&quot;with the `input_shape` kwarg.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">TensorDictPrimer</span><span class="p">(</span>
+            <span class="n">primers</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">)},</span>
+            <span class="n">default_value</span><span class="o">=</span><span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">consistent_dropout</span><span class="o">.</span><span class="n">make_mask</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span>
+            <span class="p">),</span>
+        <span class="p">)</span></div></div>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+         <script src="../../../../_static/jquery.js"></script>
+         <script src="../../../../_static/underscore.js"></script>
+         <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

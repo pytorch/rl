@@ -1,0 +1,369 @@
+:orphan:
+
+README Tutos
+============
+
+Check the tutorials on torchrl documentation: https://pytorch.org/rl
+
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_getting-started-4_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_getting-started-4.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Get started with logging</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_getting-started-0_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_getting-started-0.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Get started with Environments, TED and transforms</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_getting-started-3_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_getting-started-3.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Get started with data collection and storage</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_getting-started-2_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_getting-started-2.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Getting started with model optimization</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Using pretrained models">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_pretrained_models_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_pretrained_models.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Using pretrained models</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_getting-started-5_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_getting-started-5.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Get started with your own first training loop</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_getting-started-1_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_getting-started-1.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Get started with TorchRL's modules</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Task-specific policy in multi-task environments">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_multi_task_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_multi_task.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Task-specific policy in multi-task environments</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_dqn_with_rnn_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_dqn_with_rnn.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Recurrent DQN: Training recurrent policies</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and :pytorchrl to solve a Multi-Agent Reinforcement Learning (MARL) problem.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_multiagent_ppo_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_multiagent_ppo.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and :pytorchrl to train a parametric policy network to solve the Inverted Pendulum task from the OpenAI-Gym/Farama-Gymnasium control library.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_coding_ppo_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_coding_ppo.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Reinforcement Learning (PPO) with TorchRL Tutorial</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_torchrl_envs_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_torchrl_envs.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">TorchRL envs</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_rb_tutorial_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_rb_tutorial.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Using Replay Buffers</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="TorchRL trainer: A DQN example">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_coding_dqn_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_coding_dqn.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">TorchRL trainer: A DQN example</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_pendulum_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_pendulum.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Pendulum: Writing your environment and transforms with TorchRL</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Introduction to TorchRL">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_torchrl_demo_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_torchrl_demo.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Introduction to TorchRL</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and TorchRL to solve a Competitive Multi-Agent Reinforcement Learning (MARL) problem.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_multiagent_competitive_ddpg_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_multiagent_competitive_ddpg.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="TorchRL objectives: Coding a DDPG loss">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_coding_ddpg_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_coding_ddpg.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">TorchRL objectives: Coding a DDPG loss</div>
+    </div>
+
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /tutorials/getting-started-4
+   /tutorials/getting-started-0
+   /tutorials/getting-started-3
+   /tutorials/getting-started-2
+   /tutorials/pretrained_models
+   /tutorials/getting-started-5
+   /tutorials/getting-started-1
+   /tutorials/multi_task
+   /tutorials/dqn_with_rnn
+   /tutorials/multiagent_ppo
+   /tutorials/coding_ppo
+   /tutorials/torchrl_envs
+   /tutorials/rb_tutorial
+   /tutorials/coding_dqn
+   /tutorials/pendulum
+   /tutorials/torchrl_demo
+   /tutorials/multiagent_competitive_ddpg
+   /tutorials/coding_ddpg
+
+
+.. only:: html
+
+  .. container:: sphx-glr-footer sphx-glr-footer-gallery
+
+    .. container:: sphx-glr-download sphx-glr-download-python
+
+      :download:`Download all examples in Python source code: tutorials_python.zip </tutorials/tutorials_python.zip>`
+
+    .. container:: sphx-glr-download sphx-glr-download-jupyter
+
+      :download:`Download all examples in Jupyter notebooks: tutorials_jupyter.zip </tutorials/tutorials_jupyter.zip>`
+
+
+.. only:: html
+
+ .. rst-class:: sphx-glr-signature
+
+    `Gallery generated by Sphinx-Gallery <https://sphinx-gallery.github.io>`_

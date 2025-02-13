@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.trainers.helpers
+
+
+make_redq_loss
+==============
+
+.. autofunction:: make_redq_loss

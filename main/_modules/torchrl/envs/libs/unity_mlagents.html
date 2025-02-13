@@ -1,0 +1,1708 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.envs.libs.unity_mlagents &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.envs.libs.unity_mlagents</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.envs.libs.unity_mlagents</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BoundedContinuous</span><span class="p">,</span>
+    <span class="n">Categorical</span><span class="p">,</span>
+    <span class="n">Composite</span><span class="p">,</span>
+    <span class="n">MultiCategorical</span><span class="p">,</span>
+    <span class="n">MultiOneHot</span><span class="p">,</span>
+    <span class="n">Unbounded</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_EnvWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_classproperty</span><span class="p">,</span> <span class="n">check_marl_grouping</span><span class="p">,</span> <span class="n">MarlGroupMapType</span>
+
+<span class="n">_has_unity_mlagents</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;mlagents_envs&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_registered_envs</span><span class="p">():</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_unity_mlagents</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;mlagents_envs not found. Consider downloading and installing &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;mlagents from </span><span class="si">{</span><span class="n">UnityMLAgentsWrapper</span><span class="o">.</span><span class="n">git_url</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">mlagents_envs.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_registry</span>
+
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">default_registry</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+
+<div class="viewcode-block" id="UnityMLAgentsWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.UnityMLAgentsWrapper.html#torchrl.envs.UnityMLAgentsWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">UnityMLAgentsWrapper</span><span class="p">(</span><span class="n">_EnvWrapper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Unity ML-Agents environment wrapper.</span>
+
+<span class="sd">    GitHub: https://github.com/Unity-Technologies/ml-agents</span>
+
+<span class="sd">    Documentation: https://unity-technologies.github.io/ml-agents/Python-LLAPI/</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        env (mlagents_envs.environment.UnityEnvironment): the ML-Agents</span>
+<span class="sd">            environment to wrap.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        device (torch.device, optional): if provided, the device on which the data</span>
+<span class="sd">            is to be cast. Defaults to ``None``.</span>
+<span class="sd">        batch_size (torch.Size, optional): the batch size of the environment.</span>
+<span class="sd">            Defaults to ``torch.Size([])``.</span>
+<span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
+<span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to</span>
+<span class="sd">            group agents in tensordicts for input/output. See</span>
+<span class="sd">            :class:`~torchrl.envs.utils.MarlGroupMapType` for more info. If not</span>
+<span class="sd">            specified, agents are grouped according to the group ID given by the</span>
+<span class="sd">            Unity environment. Defaults to ``None``.</span>
+<span class="sd">        categorical_actions (bool, optional): if ``True``, categorical specs</span>
+<span class="sd">            will be converted to the TorchRL equivalent</span>
+<span class="sd">            (:class:`torchrl.data.Categorical`), otherwise a one-hot encoding</span>
+<span class="sd">            will be used (:class:`torchrl.data.OneHot`).  Defaults to ``False``.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        available_envs: list of registered environments available to build</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from mlagents_envs.environment import UnityEnvironment</span>
+<span class="sd">        &gt;&gt;&gt; base_env = UnityEnvironment()</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import UnityMLAgentsWrapper</span>
+<span class="sd">        &gt;&gt;&gt; env = UnityMLAgentsWrapper(base_env)</span>
+<span class="sd">        &gt;&gt;&gt; td = env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; td = env.step(td.update(env.full_action_spec.rand()))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">git_url</span> <span class="o">=</span> <span class="s2">&quot;https://github.com/Unity-Technologies/ml-agents&quot;</span>
+    <span class="n">libname</span> <span class="o">=</span> <span class="s2">&quot;mlagents_envs&quot;</span>
+    <span class="n">_lib</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lib</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_lib</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_lib</span>
+
+        <span class="kn">import</span><span class="w"> </span><span class="nn">mlagents_envs</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">mlagents_envs.environment</span>
+
+        <span class="bp">cls</span><span class="o">.</span><span class="n">_lib</span> <span class="o">=</span> <span class="n">mlagents_envs</span>
+        <span class="k">return</span> <span class="n">mlagents_envs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">group_map</span><span class="p">:</span> <span class="n">MarlGroupMapType</span> <span class="o">|</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">categorical_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">env</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">group_map</span> <span class="o">=</span> <span class="n">group_map</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">categorical_actions</span> <span class="o">=</span> <span class="n">categorical_actions</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
+        <span class="n">mlagents_envs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span>
+        <span class="k">if</span> <span class="s2">&quot;env&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Could not find environment key &#39;env&#39; in kwargs.&quot;</span><span class="p">)</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">mlagents_envs</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">UnityEnvironment</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;env is not of type &#39;mlagents_envs.environment.UnityEnvironment&#39;&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">requires_grad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">requires_grad</span>
+        <span class="k">return</span> <span class="n">env</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_env</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_action_mask</span><span class="p">()</span>
+
+    <span class="c1"># Creates a group map where agents are grouped by the group_id given by the</span>
+    <span class="c1"># Unity environment.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_collect_agents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span>
+        <span class="n">agent_name_to_behavior_map</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">agent_name_to_group_id_map</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">steps_idx</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">behavior</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="n">steps</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">get_steps</span><span class="p">(</span><span class="n">behavior</span><span class="p">)[</span><span class="n">steps_idx</span><span class="p">]</span>
+                <span class="n">is_terminal</span> <span class="o">=</span> <span class="n">steps_idx</span> <span class="o">==</span> <span class="mi">1</span>
+                <span class="n">agent_ids</span> <span class="o">=</span> <span class="n">steps</span><span class="o">.</span><span class="n">agent_id</span>
+                <span class="n">group_ids</span> <span class="o">=</span> <span class="n">steps</span><span class="o">.</span><span class="n">group_id</span>
+
+                <span class="k">for</span> <span class="n">agent_id</span><span class="p">,</span> <span class="n">group_id</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">agent_ids</span><span class="p">,</span> <span class="n">group_ids</span><span class="p">):</span>
+                    <span class="n">agent_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;agent_</span><span class="si">{</span><span class="n">agent_id</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="k">if</span> <span class="n">agent_name</span> <span class="ow">in</span> <span class="n">agent_name_to_behavior_map</span><span class="p">:</span>
+                        <span class="c1"># Sometimes in an MLAgents environment, an agent may</span>
+                        <span class="c1"># show up in both the decision steps and the terminal</span>
+                        <span class="c1"># steps. When that happens, just skip the duplicate.</span>
+                        <span class="k">assert</span> <span class="n">is_terminal</span>
+                        <span class="k">continue</span>
+                    <span class="n">agent_name_to_behavior_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">behavior</span>
+                    <span class="n">agent_name_to_group_id_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_id</span>
+
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">agent_name_to_behavior_map</span><span class="p">,</span>
+            <span class="n">agent_name_to_group_id_map</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Creates a group map where agents are grouped by their group_id.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_default_group_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_name_to_group_id_map</span><span class="p">):</span>
+        <span class="n">group_map</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">agent_name</span><span class="p">,</span> <span class="n">group_id</span> <span class="ow">in</span> <span class="n">agent_name_to_group_id_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">group_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;group_</span><span class="si">{</span><span class="n">group_id</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">if</span> <span class="n">group_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">group_map</span><span class="p">:</span>
+                <span class="n">group_map</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">group_map</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">agent_name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">group_map</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_group_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">group_map</span><span class="p">,</span> <span class="n">agent_name_to_group_id_map</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">group_map</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">group_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_default_group_map</span><span class="p">(</span><span class="n">agent_name_to_group_id_map</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">group_map</span><span class="p">,</span> <span class="n">MarlGroupMapType</span><span class="p">):</span>
+            <span class="n">group_map</span> <span class="o">=</span> <span class="n">group_map</span><span class="o">.</span><span class="n">get_group_map</span><span class="p">(</span><span class="n">agent_name_to_group_id_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">check_marl_grouping</span><span class="p">(</span><span class="n">group_map</span><span class="p">,</span> <span class="n">agent_name_to_group_id_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">agent_name_to_group_name_map</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">agents</span> <span class="ow">in</span> <span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">agent_name</span> <span class="ow">in</span> <span class="n">agents</span><span class="p">:</span>
+                <span class="n">agent_name_to_group_name_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
+        <span class="k">return</span> <span class="n">group_map</span><span class="p">,</span> <span class="n">agent_name_to_group_name_map</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_specs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="s2">&quot;mlagents_envs.environment.UnityEnvironment&quot;</span>  <span class="c1"># noqa: F821</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># NOTE: We need to reset here because mlagents only initializes the</span>
+        <span class="c1"># agents and behaviors after reset. In order to build specs, we make the</span>
+        <span class="c1"># following assumptions about the mlagents environment:</span>
+        <span class="c1">#   * all behaviors are defined on the first step</span>
+        <span class="c1">#   * all agents request an action on the first step</span>
+        <span class="c1"># However, mlagents allows you to break these assumptions, so we probably</span>
+        <span class="c1"># will need to detect changes to the behaviors and agents on each step.</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_behavior_map</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_group_id_map</span><span class="p">,</span>
+        <span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collect_agents</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+
+        <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">group_map</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_group_name_map</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_group_map</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">group_map</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_group_id_map</span>
+        <span class="p">)</span>
+
+        <span class="n">action_spec</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">observation_spec</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">reward_spec</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">done_spec</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">agents</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">group_action_spec</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">group_observation_spec</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">group_reward_spec</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">group_done_spec</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">agent_name</span> <span class="ow">in</span> <span class="n">agents</span><span class="p">:</span>
+                <span class="n">behavior</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_behavior_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span>
+                <span class="n">behavior_spec</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="p">[</span><span class="n">behavior</span><span class="p">]</span>
+
+                <span class="c1"># Create action spec</span>
+                <span class="n">agent_action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">()</span>
+                <span class="n">env_action_spec</span> <span class="o">=</span> <span class="n">behavior_spec</span><span class="o">.</span><span class="n">action_spec</span>
+                <span class="n">discrete_branches</span> <span class="o">=</span> <span class="n">env_action_spec</span><span class="o">.</span><span class="n">discrete_branches</span>
+                <span class="n">continuous_size</span> <span class="o">=</span> <span class="n">env_action_spec</span><span class="o">.</span><span class="n">continuous_size</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">discrete_branches</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">discrete_action_spec_cls</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">MultiCategorical</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">categorical_actions</span> <span class="k">else</span> <span class="n">MultiOneHot</span>
+                    <span class="p">)</span>
+                    <span class="n">agent_action_spec</span><span class="p">[</span><span class="s2">&quot;discrete_action&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">discrete_action_spec_cls</span><span class="p">(</span>
+                        <span class="n">discrete_branches</span><span class="p">,</span>
+                        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+                        <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">continuous_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># In mlagents, continuous actions can take values between -1</span>
+                    <span class="c1"># and 1 by default:</span>
+                    <span class="c1"># https://github.com/Unity-Technologies/ml-agents/blob/22a59aad34ef46a5de05469735426feed758f8f5/ml-agents-envs/mlagents_envs/base_env.py#L395</span>
+                    <span class="n">agent_action_spec</span><span class="p">[</span><span class="s2">&quot;continuous_action&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">BoundedContinuous</span><span class="p">(</span>
+                        <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="n">continuous_size</span><span class="p">,),</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span>
+                    <span class="p">)</span>
+                <span class="n">group_action_spec</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">agent_action_spec</span>
+
+                <span class="c1"># Create observation spec</span>
+                <span class="n">agent_observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">obs_idx</span><span class="p">,</span> <span class="n">env_observation_spec</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+                    <span class="n">behavior_spec</span><span class="o">.</span><span class="n">observation_specs</span>
+                <span class="p">):</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">env_observation_spec</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">obs_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;observation_</span><span class="si">{</span><span class="n">obs_idx</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">obs_name</span> <span class="o">=</span> <span class="n">env_observation_spec</span><span class="o">.</span><span class="n">name</span>
+                    <span class="n">agent_observation_spec</span><span class="p">[</span><span class="n">obs_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+                        <span class="n">env_observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+                        <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="n">group_observation_spec</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">agent_observation_spec</span>
+
+                <span class="c1"># Create reward spec</span>
+                <span class="n">agent_reward_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">()</span>
+                <span class="n">agent_reward_spec</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+                    <span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">agent_reward_spec</span><span class="p">[</span><span class="s2">&quot;group_reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+                    <span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">group_reward_spec</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">agent_reward_spec</span>
+
+                <span class="c1"># Create done spec</span>
+                <span class="n">agent_done_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">]:</span>
+                    <span class="n">agent_done_spec</span><span class="p">[</span><span class="n">done_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Categorical</span><span class="p">(</span>
+                        <span class="mi">2</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                    <span class="p">)</span>
+                <span class="n">group_done_spec</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">agent_done_spec</span>
+
+            <span class="n">action_spec</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_action_spec</span>
+            <span class="n">observation_spec</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_observation_spec</span>
+            <span class="n">reward_spec</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_reward_spec</span>
+            <span class="n">done_spec</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_done_spec</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">action_spec</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">done_spec</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;This environment has no seed.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_agent_exists</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent_name</span><span class="p">,</span> <span class="n">group_id</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">agent_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_group_id_map</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s2">&quot;Unity environment added a new agent. This is not yet &quot;</span>
+                    <span class="s2">&quot;supported in torchrl.&quot;</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_group_id_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">!=</span> <span class="n">group_id</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s2">&quot;Unity environment changed the group of an agent. This &quot;</span>
+                    <span class="s2">&quot;is not yet supported in torchrl.&quot;</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_action_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">behavior</span><span class="p">,</span> <span class="n">behavior_spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">env_action_spec</span> <span class="o">=</span> <span class="n">behavior_spec</span><span class="o">.</span><span class="n">action_spec</span>
+            <span class="n">discrete_branches</span> <span class="o">=</span> <span class="n">env_action_spec</span><span class="o">.</span><span class="n">discrete_branches</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">discrete_branches</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">steps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">get_steps</span><span class="p">(</span><span class="n">behavior</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">env_action_mask</span> <span class="o">=</span> <span class="n">steps</span><span class="o">.</span><span class="n">action_mask</span>
+                <span class="k">if</span> <span class="n">env_action_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">combined_action_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+                            <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">env_action_mask</span>
+                        <span class="p">],</span>
+                        <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">logical_not</span><span class="p">()</span>
+
+                    <span class="k">for</span> <span class="n">agent_id</span><span class="p">,</span> <span class="n">group_id</span><span class="p">,</span> <span class="n">agent_action_mask</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                        <span class="n">steps</span><span class="o">.</span><span class="n">agent_id</span><span class="p">,</span> <span class="n">steps</span><span class="o">.</span><span class="n">group_id</span><span class="p">,</span> <span class="n">combined_action_mask</span>
+                    <span class="p">):</span>
+                        <span class="n">agent_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;agent_</span><span class="si">{</span><span class="n">agent_id</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_check_agent_exists</span><span class="p">(</span><span class="n">agent_name</span><span class="p">,</span> <span class="n">group_id</span><span class="p">)</span>
+                        <span class="n">group_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_group_name_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span>
+                            <span class="n">group_name</span><span class="p">,</span> <span class="n">agent_name</span><span class="p">,</span> <span class="s2">&quot;discrete_action&quot;</span>
+                        <span class="p">]</span><span class="o">.</span><span class="n">update_mask</span><span class="p">(</span><span class="n">agent_action_mask</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_td_out</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict_in</span><span class="p">,</span> <span class="n">is_reset</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">source</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">behavior</span><span class="p">,</span> <span class="n">behavior_spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">steps</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">get_steps</span><span class="p">(</span><span class="n">behavior</span><span class="p">)):</span>
+                <span class="n">is_terminal</span> <span class="o">=</span> <span class="n">idx</span> <span class="o">==</span> <span class="mi">1</span>
+                <span class="k">for</span> <span class="n">steps_idx</span><span class="p">,</span> <span class="p">(</span><span class="n">agent_id</span><span class="p">,</span> <span class="n">group_id</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+                    <span class="nb">zip</span><span class="p">(</span><span class="n">steps</span><span class="o">.</span><span class="n">agent_id</span><span class="p">,</span> <span class="n">steps</span><span class="o">.</span><span class="n">group_id</span><span class="p">)</span>
+                <span class="p">):</span>
+                    <span class="n">agent_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;agent_</span><span class="si">{</span><span class="n">agent_id</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_check_agent_exists</span><span class="p">(</span><span class="n">agent_name</span><span class="p">,</span> <span class="n">group_id</span><span class="p">)</span>
+                    <span class="n">group_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_group_name_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">group_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">source</span><span class="p">:</span>
+                        <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+                    <span class="k">if</span> <span class="n">agent_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">]:</span>
+                        <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">][</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+                    <span class="c1"># Add observations</span>
+                    <span class="k">for</span> <span class="n">obs_idx</span><span class="p">,</span> <span class="p">(</span>
+                        <span class="n">behavior_observation</span><span class="p">,</span>
+                        <span class="n">env_observation_spec</span><span class="p">,</span>
+                    <span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">steps</span><span class="o">.</span><span class="n">obs</span><span class="p">,</span> <span class="n">behavior_spec</span><span class="o">.</span><span class="n">observation_specs</span><span class="p">)):</span>
+                        <span class="n">observation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                            <span class="n">behavior_observation</span><span class="p">[</span><span class="n">steps_idx</span><span class="p">],</span>
+                            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+                        <span class="p">)</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">env_observation_spec</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="n">obs_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;observation_</span><span class="si">{</span><span class="n">obs_idx</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">obs_name</span> <span class="o">=</span> <span class="n">env_observation_spec</span><span class="o">.</span><span class="n">name</span>
+                        <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">][</span><span class="n">agent_name</span><span class="p">][</span><span class="n">obs_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">observation</span>
+
+                    <span class="c1"># Add rewards</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">is_reset</span><span class="p">:</span>
+                        <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">][</span><span class="n">agent_name</span><span class="p">][</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                            <span class="p">[</span><span class="n">steps</span><span class="o">.</span><span class="n">reward</span><span class="p">[</span><span class="n">steps_idx</span><span class="p">]],</span>
+                            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+                        <span class="p">)</span>
+                        <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">][</span><span class="n">agent_name</span><span class="p">][</span><span class="s2">&quot;group_reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                            <span class="p">[</span><span class="n">steps</span><span class="o">.</span><span class="n">group_reward</span><span class="p">[</span><span class="n">steps_idx</span><span class="p">]],</span>
+                            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+                        <span class="p">)</span>
+
+                    <span class="c1"># Add done</span>
+                    <span class="n">done</span> <span class="o">=</span> <span class="n">is_terminal</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_reset</span>
+                    <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">][</span><span class="n">agent_name</span><span class="p">][</span><span class="s2">&quot;done&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                        <span class="n">done</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
+                    <span class="p">)</span>
+                    <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">][</span><span class="n">agent_name</span><span class="p">][</span><span class="s2">&quot;truncated&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                        <span class="n">done</span> <span class="ow">and</span> <span class="n">steps</span><span class="o">.</span><span class="n">interrupted</span><span class="p">[</span><span class="n">steps_idx</span><span class="p">],</span>
+                        <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">][</span><span class="n">agent_name</span><span class="p">][</span><span class="s2">&quot;terminated&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                        <span class="n">done</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">steps</span><span class="o">.</span><span class="n">interrupted</span><span class="p">[</span><span class="n">steps_idx</span><span class="p">],</span>
+                        <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span>
+                    <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">tensordict_in</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># In MLAgents, a given step will only contain information for agents</span>
+            <span class="c1"># which either terminated or requested a decision during the step.</span>
+            <span class="c1"># Some agents may have neither terminated nor requested a decision,</span>
+            <span class="c1"># so we need to fill in their information from the previous step.</span>
+            <span class="k">for</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">agents</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">agent_name</span> <span class="ow">in</span> <span class="n">agents</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">group_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                        <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+                    <span class="k">if</span> <span class="n">agent_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                        <span class="n">agent_dict</span> <span class="o">=</span> <span class="p">{}</span>
+                        <span class="n">agent_behavior</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_behavior_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span>
+                        <span class="n">behavior_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="p">[</span><span class="n">agent_behavior</span><span class="p">]</span>
+                        <span class="n">td_agent_in</span> <span class="o">=</span> <span class="n">tensordict_in</span><span class="p">[</span><span class="n">group_name</span><span class="p">,</span> <span class="n">agent_name</span><span class="p">]</span>
+
+                        <span class="c1"># Add observations</span>
+                        <span class="k">for</span> <span class="n">env_observation_spec</span> <span class="ow">in</span> <span class="n">behavior_spec</span><span class="o">.</span><span class="n">observation_specs</span><span class="p">:</span>
+                            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">env_observation_spec</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                                <span class="n">obs_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;observation_</span><span class="si">{</span><span class="n">obs_idx</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="n">obs_name</span> <span class="o">=</span> <span class="n">env_observation_spec</span><span class="o">.</span><span class="n">name</span>
+                            <span class="n">agent_dict</span><span class="p">[</span><span class="n">obs_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">td_agent_in</span><span class="p">[</span><span class="n">obs_name</span><span class="p">]</span>
+
+                        <span class="c1"># Add rewards</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_reset</span><span class="p">:</span>
+                            <span class="c1"># Since the agent didn&#39;t request an decision, the</span>
+                            <span class="c1"># reward is 0</span>
+                            <span class="n">agent_dict</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                                <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span>
+                            <span class="p">)</span>
+                            <span class="n">agent_dict</span><span class="p">[</span><span class="s2">&quot;group_reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                                <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span>
+                            <span class="p">)</span>
+
+                        <span class="c1"># Add done</span>
+                        <span class="n">agent_dict</span><span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                            <span class="kc">False</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
+                        <span class="p">)</span>
+                        <span class="n">agent_dict</span><span class="p">[</span><span class="s2">&quot;terminated&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                            <span class="kc">False</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
+                        <span class="p">)</span>
+                        <span class="n">agent_dict</span><span class="p">[</span><span class="s2">&quot;truncated&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                            <span class="kc">False</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
+                        <span class="p">)</span>
+
+                        <span class="n">source</span><span class="p">[</span><span class="n">group_name</span><span class="p">][</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">agent_dict</span>
+
+        <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">tensordict_out</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_action_from_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">categorical_actions</span><span class="p">:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">tensor</span>
+        <span class="k">return</span> <span class="n">action</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># Apply actions</span>
+        <span class="k">for</span> <span class="n">behavior</span><span class="p">,</span> <span class="n">behavior_spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">env_action_spec</span> <span class="o">=</span> <span class="n">behavior_spec</span><span class="o">.</span><span class="n">action_spec</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">get_steps</span><span class="p">(</span><span class="n">behavior</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+            <span class="k">for</span> <span class="n">agent_id</span><span class="p">,</span> <span class="n">group_id</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">steps</span><span class="o">.</span><span class="n">agent_id</span><span class="p">,</span> <span class="n">steps</span><span class="o">.</span><span class="n">group_id</span><span class="p">):</span>
+                <span class="n">agent_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;agent_</span><span class="si">{</span><span class="n">agent_id</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_check_agent_exists</span><span class="p">(</span><span class="n">agent_name</span><span class="p">,</span> <span class="n">group_id</span><span class="p">)</span>
+                <span class="n">group_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_name_to_group_name_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span>
+
+                <span class="n">agent_action_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="n">group_name</span><span class="p">,</span> <span class="n">agent_name</span><span class="p">]</span>
+                <span class="n">action_tuple</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">base_env</span><span class="o">.</span><span class="n">ActionTuple</span><span class="p">()</span>
+                <span class="n">discrete_branches</span> <span class="o">=</span> <span class="n">env_action_spec</span><span class="o">.</span><span class="n">discrete_branches</span>
+                <span class="n">continuous_size</span> <span class="o">=</span> <span class="n">env_action_spec</span><span class="o">.</span><span class="n">continuous_size</span>
+
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">discrete_branches</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">discrete_spec</span> <span class="o">=</span> <span class="n">agent_action_spec</span><span class="p">[</span><span class="s2">&quot;discrete_action&quot;</span><span class="p">]</span>
+                    <span class="n">discrete_action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span>
+                        <span class="n">group_name</span><span class="p">,</span> <span class="n">agent_name</span><span class="p">,</span> <span class="s2">&quot;discrete_action&quot;</span>
+                    <span class="p">]</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">categorical_actions</span><span class="p">:</span>
+                        <span class="n">discrete_action</span> <span class="o">=</span> <span class="n">discrete_spec</span><span class="o">.</span><span class="n">to_categorical</span><span class="p">(</span><span class="n">discrete_action</span><span class="p">)</span>
+                    <span class="n">action_tuple</span><span class="o">.</span><span class="n">add_discrete</span><span class="p">(</span><span class="n">discrete_action</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+
+                <span class="k">if</span> <span class="n">continuous_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">continuous_action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span>
+                        <span class="n">group_name</span><span class="p">,</span> <span class="n">agent_name</span><span class="p">,</span> <span class="s2">&quot;continuous_action&quot;</span>
+                    <span class="p">]</span>
+                    <span class="n">action_tuple</span><span class="o">.</span><span class="n">add_continuous</span><span class="p">(</span><span class="n">continuous_action</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">set_action_for_agent</span><span class="p">(</span><span class="n">behavior</span><span class="p">,</span> <span class="n">agent_id</span><span class="p">,</span> <span class="n">action_tuple</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_action_mask</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_td_out</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_to_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_td_out</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">is_reset</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">available_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_unity_mlagents</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="n">_get_registered_envs</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="UnityMLAgentsEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.UnityMLAgentsEnv.html#torchrl.envs.UnityMLAgentsEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">UnityMLAgentsEnv</span><span class="p">(</span><span class="n">UnityMLAgentsWrapper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Unity ML-Agents environment wrapper.</span>
+
+<span class="sd">    GitHub: https://github.com/Unity-Technologies/ml-agents</span>
+
+<span class="sd">    Documentation: https://unity-technologies.github.io/ml-agents/Python-LLAPI/</span>
+
+<span class="sd">    This class can be provided any of the optional initialization arguments that</span>
+<span class="sd">    :class:`mlagents_envs.environment.UnityEnvironment` class provides. For a</span>
+<span class="sd">    list of these arguments, see:</span>
+<span class="sd">    https://unity-technologies.github.io/ml-agents/Python-LLAPI-Documentation/#__init__</span>
+
+<span class="sd">    If both ``file_name`` and ``registered_name`` are given, an error is raised.</span>
+
+<span class="sd">    If neither ``file_name`` nor``registered_name`` are given, the environment</span>
+<span class="sd">    setup waits on a localhost port, and the user must execute a Unity ML-Agents</span>
+<span class="sd">    environment binary for to connect to it.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        file_name (str, optional): if provided, the path to the Unity</span>
+<span class="sd">            environment binary. Defaults to ``None``.</span>
+<span class="sd">        registered_name (str, optional): if provided, the Unity environment</span>
+<span class="sd">            binary is loaded from the default ML-Agents registry. The list of</span>
+<span class="sd">            registered environments is in :attr:`~.available_envs`. Defaults to</span>
+<span class="sd">            ``None``.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        device (torch.device, optional): if provided, the device on which the data</span>
+<span class="sd">            is to be cast. Defaults to ``None``.</span>
+<span class="sd">        batch_size (torch.Size, optional): the batch size of the environment.</span>
+<span class="sd">            Defaults to ``torch.Size([])``.</span>
+<span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
+<span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to</span>
+<span class="sd">            group agents in tensordicts for input/output. See</span>
+<span class="sd">            :class:`~torchrl.envs.utils.MarlGroupMapType` for more info. If not</span>
+<span class="sd">            specified, agents are grouped according to the group ID given by the</span>
+<span class="sd">            Unity environment. Defaults to ``None``.</span>
+<span class="sd">        categorical_actions (bool, optional): if ``True``, categorical specs</span>
+<span class="sd">            will be converted to the TorchRL equivalent</span>
+<span class="sd">            (:class:`torchrl.data.Categorical`), otherwise a one-hot encoding</span>
+<span class="sd">            will be used (:class:`torchrl.data.OneHot`).  Defaults to ``False``.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        available_envs: list of registered environments available to build</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import UnityMLAgentsEnv</span>
+<span class="sd">        &gt;&gt;&gt; env = UnityMLAgentsEnv(registered_name=&#39;3DBall&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; td = env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; td = env.step(td.update(env.full_action_spec.rand()))</span>
+<span class="sd">        &gt;&gt;&gt; td</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                group_0: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        agent_0: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_10: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_11: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_1: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_2: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_3: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_4: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_5: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_6: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_7: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_8: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        agent_9: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                continuous_action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        group_0: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                agent_0: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_10: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_11: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_1: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_2: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_3: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_4: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_5: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_6: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_7: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_8: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                agent_9: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        VectorSensor_size8: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        group_reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                                    batch_size=torch.Size([]),</span>
+<span class="sd">                                    device=None,</span>
+<span class="sd">                                    is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([]),</span>
+<span class="sd">                            device=None,</span>
+<span class="sd">                            is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">file_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">registered_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">group_map</span><span class="p">:</span> <span class="n">MarlGroupMapType</span> <span class="o">|</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">categorical_actions</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;file_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">file_name</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;registered_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">registered_name</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">group_map</span><span class="o">=</span><span class="n">group_map</span><span class="p">,</span>
+            <span class="n">categorical_actions</span><span class="o">=</span><span class="n">categorical_actions</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_env</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">file_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">registered_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;mlagents_envs.environment.UnityEnvironment&quot;</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_unity_mlagents</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;mlagents_envs not found, unable to create environment. &quot;</span>
+                <span class="s2">&quot;Consider downloading and installing mlagents from &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">git_url</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">file_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">registered_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Both `file_name` and `registered_name` were specified, which &quot;</span>
+                <span class="s2">&quot;is not allowed. Specify one of them or neither.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">registered_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">mlagents_envs.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_registry</span>
+
+            <span class="n">env</span> <span class="o">=</span> <span class="n">default_registry</span><span class="p">[</span><span class="n">registered_name</span><span class="p">]</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">UnityEnvironment</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">requires_grad</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;requires_grad&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_build_env</span><span class="p">(</span>
+            <span class="n">env</span><span class="p">,</span>
+            <span class="n">requires_grad</span><span class="o">=</span><span class="n">requires_grad</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">file_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constructor_kwargs</span><span class="p">[</span><span class="s2">&quot;file_name&quot;</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">registered_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constructor_kwargs</span><span class="p">[</span><span class="s2">&quot;registered_name&quot;</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">registered_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">env_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">registered_name</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">env_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_name</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(env=</span><span class="si">{</span><span class="n">env_name</span><span class="si">}</span><span class="s2">, batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">, device=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">)&quot;</span></div>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+         <script src="../../../../_static/jquery.js"></script>
+         <script src="../../../../_static/underscore.js"></script>
+         <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

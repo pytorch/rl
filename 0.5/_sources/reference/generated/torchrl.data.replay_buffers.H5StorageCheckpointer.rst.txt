@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.replay_buffers
+
+
+H5StorageCheckpointer
+=====================
+
+.. autoclass:: H5StorageCheckpointer
+    :members:
+    :inherited-members:

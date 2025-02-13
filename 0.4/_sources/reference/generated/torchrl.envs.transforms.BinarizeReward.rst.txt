@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+BinarizeReward
+==============
+
+.. autoclass:: BinarizeReward
+    :members:

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+EndOfLifeTransform
+==================
+
+.. autoclass:: EndOfLifeTransform
+    :members:

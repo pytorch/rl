@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.trainers.helpers
+
+
+get_stats_random_rollout
+========================
+
+.. autofunction:: get_stats_random_rollout

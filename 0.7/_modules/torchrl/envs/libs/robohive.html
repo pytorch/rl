@@ -1,0 +1,1236 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.envs.libs.robohive &mdash; torchrl 0.7 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">0.7 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.envs.libs.robohive</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.envs.libs.robohive</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_maybe_unlock</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.gym</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">,</span>
+    <span class="n">_GymAsyncMeta</span><span class="p">,</span>
+    <span class="n">gym_backend</span><span class="p">,</span>
+    <span class="n">GymEnv</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_classproperty</span><span class="p">,</span> <span class="n">make_composite_from_td</span>
+
+<span class="n">_has_gym</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="ow">or</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="p">)</span>
+<span class="n">_has_robohive</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;robohive&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">_has_gym</span>
+
+<span class="k">if</span> <span class="n">_has_robohive</span><span class="p">:</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;sim_backend&quot;</span><span class="p">,</span> <span class="s2">&quot;MUJOCO&quot;</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">set_directory</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sets the cwd within the context.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path (Path): The path to the cwd</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">=</span> <span class="n">path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">origin</span> <span class="o">=</span> <span class="n">Path</span><span class="p">()</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fun</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">new_fun</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">set_directory</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">)):</span>
+                <span class="k">return</span> <span class="n">fun</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">new_fun</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_RoboHiveBuild</span><span class="p">(</span><span class="n">_GymAsyncMeta</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">instance</span><span class="p">:</span> <span class="n">RoboHiveEnv</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">instance</span><span class="o">.</span><span class="n">_refine_specs</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">instance</span>
+
+
+<div class="viewcode-block" id="RoboHiveEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.RoboHiveEnv.html#torchrl.envs.RoboHiveEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RoboHiveEnv</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_RoboHiveBuild</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A wrapper for RoboHive gym environments.</span>
+
+<span class="sd">    RoboHive is a collection of environments/tasks simulated with the MuJoCo physics engine exposed using the OpenAI-Gym API.</span>
+
+<span class="sd">    Github: https://github.com/vikashplus/robohive/</span>
+
+<span class="sd">    Doc: https://github.com/vikashplus/robohive/wiki</span>
+
+<span class="sd">    Paper: https://arxiv.org/abs/2310.06828</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        RoboHive requires gym 0.13.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        env_name (str): the environment name to build. Must be one of :attr:`.available_envs`</span>
+<span class="sd">        categorical_action_encoding (bool, optional): if ``True``, categorical</span>
+<span class="sd">            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),</span>
+<span class="sd">            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).</span>
+<span class="sd">            Defaults to ``False``.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        from_pixels (bool, optional): if ``True``, an attempt to return the pixel</span>
+<span class="sd">            observations from the env will be performed. By default, these observations</span>
+<span class="sd">            will be written under the ``&quot;pixels&quot;`` entry.</span>
+<span class="sd">            The method being used varies</span>
+<span class="sd">            depending on the gym version and may involve a ``wrappers.pixel_observation.PixelObservationWrapper``.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        pixels_only (bool, optional): if ``True``, only the pixel observations will</span>
+<span class="sd">            be returned (by default under the ``&quot;pixels&quot;`` entry in the output tensordict).</span>
+<span class="sd">            If ``False``, observations (eg, states) and pixels will be returned</span>
+<span class="sd">            whenever ``from_pixels=True``. Defaults to ``True``.</span>
+<span class="sd">        from_depths (bool, optional): if ``True``, an attempt to return the depth</span>
+<span class="sd">            observations from the env will be performed. By default, these observations</span>
+<span class="sd">            will be written under the ``&quot;depths&quot;`` entry. Requires ``from_pixels`` to be ``True``.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        frame_skip (int, optional): if provided, indicates for how many steps the</span>
+<span class="sd">            same action is to be repeated. The observation returned will be the</span>
+<span class="sd">            last observation of the sequence, whereas the reward will be the sum</span>
+<span class="sd">            of rewards across steps.</span>
+<span class="sd">        device (torch.device, optional): if provided, the device on which the data</span>
+<span class="sd">            is to be cast. Defaults to ``torch.device(&quot;cpu&quot;)``.</span>
+<span class="sd">        batch_size (torch.Size, optional): Only ``torch.Size([])`` will work with</span>
+<span class="sd">            ``RoboHiveEnv`` since vectorized environments are not supported within the</span>
+<span class="sd">            class. To execute more than one environment at a time, see :class:`~torchrl.envs.ParallelEnv`.</span>
+<span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
+<span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
+<span class="sd">            Defaults to ``False``.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        available_envs (list): a list of available envs to build.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import RoboHiveEnv</span>
+<span class="sd">        &gt;&gt;&gt; env = RoboHiveEnv(RoboHiveEnv.available_envs[0])</span>
+<span class="sd">        &gt;&gt;&gt; env.rollout(3)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">env_list</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">CURR_DIR</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">_has_robohive</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">robohive.envs.multi_task.substeps1</span>
+
+            <span class="k">return</span> <span class="n">robohive</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">multi_task</span><span class="o">.</span><span class="n">substeps1</span><span class="o">.</span><span class="n">CURR_DIR</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">available_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_robohive</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">register_envs</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">env_list</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">register_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_robohive</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot load robohive from the current virtual environment.&quot;</span>
+            <span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">robohive</span><span class="w"> </span><span class="kn">import</span> <span class="n">robohive_env_suite</span> <span class="k">as</span> <span class="n">robohive_envs</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">robohive.utils.prompt_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Prompt</span><span class="p">,</span> <span class="n">set_prompt_verbosity</span>
+
+        <span class="n">set_prompt_verbosity</span><span class="p">(</span><span class="n">Prompt</span><span class="o">.</span><span class="n">WARN</span><span class="p">)</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">env_list</span> <span class="o">+=</span> <span class="n">robohive_envs</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">robohive_envs</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;did not load any environment.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_env</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">pixels_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">from_depths</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;gym.core.Env&quot;</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="k">if</span> <span class="n">from_pixels</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;cameras&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;from_pixels=True will lead to a registration of ALL available cameras, &quot;</span>
+                    <span class="s2">&quot;which may lead to performance issue. &quot;</span>
+                    <span class="s2">&quot;Consider passing only the needed cameras through cameras=list_of_cameras. &quot;</span>
+                    <span class="s2">&quot;The list of available cameras for a specific environment can be obtained via &quot;</span>
+                    <span class="s2">&quot;RobohiveEnv.get_available_cams(env_name).&quot;</span>
+                <span class="p">)</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;cameras&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_available_cams</span><span class="p">(</span><span class="n">env_name</span><span class="p">)</span>
+            <span class="n">cams</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cameras&quot;</span><span class="p">))</span>
+            <span class="n">env_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">register_visual_env</span><span class="p">(</span>
+                <span class="n">cams</span><span class="o">=</span><span class="n">cams</span><span class="p">,</span> <span class="n">env_name</span><span class="o">=</span><span class="n">env_name</span><span class="p">,</span> <span class="n">from_depths</span><span class="o">=</span><span class="n">from_depths</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="s2">&quot;cameras&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;cameras&quot;</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Got a list of cameras but from_pixels is set to False.&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixels_only</span> <span class="o">=</span> <span class="n">pixels_only</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">render_device</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">render_device</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_robohive</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;gym/robohive not found, unable to create </span><span class="si">{</span><span class="n">env_name</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Consider downloading and installing dm_control from&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">git_url</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">make</span><span class="p">(</span>
+                <span class="n">env_name</span><span class="p">,</span>
+                <span class="n">frameskip</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">frame_skip</span><span class="p">,</span>
+                <span class="n">device_id</span><span class="o">=</span><span class="n">render_device</span><span class="p">,</span>
+                <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">wrapper_frame_skip</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;unexpected keyword argument &#39;frameskip&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">err</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;framek_skip&quot;</span><span class="p">)</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">make</span><span class="p">(</span>
+                <span class="n">env_name</span><span class="p">,</span> <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">device_id</span><span class="o">=</span><span class="n">render_device</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">wrapper_frame_skip</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frame_skip</span>
+        <span class="c1"># except Exception as err:</span>
+        <span class="c1">#     raise RuntimeError(f&quot;Failed to build env {env_name}.&quot;) from err</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">from_pixels</span> <span class="o">=</span> <span class="n">from_pixels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">from_depths</span> <span class="o">=</span> <span class="n">from_depths</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">render_device</span> <span class="o">=</span> <span class="n">render_device</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;read_info&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_info_dict_reader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">read_info</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">env</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="s2">&quot;gym.Env&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_make_specs</span><span class="p">(</span><span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">action_space</span><span class="o">.</span><span class="n">sample</span><span class="p">())</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_info</span><span class="p">(</span><span class="n">info</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">())</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;info&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">[</span><span class="s2">&quot;info&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">make_composite_from_td</span><span class="p">(</span><span class="n">info</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">register_visual_env</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">env_name</span><span class="p">,</span> <span class="n">cams</span><span class="p">,</span> <span class="n">from_depths</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">set_directory</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">CURR_DIR</span><span class="p">):</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">robohive.envs.env_variants</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_env_variant</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">cams</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot create a visual envs without cameras.&quot;</span><span class="p">)</span>
+            <span class="n">cams</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">cams</span><span class="p">)</span>
+            <span class="n">cams_rep</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;A:&quot;</span><span class="p">,</span> <span class="s2">&quot;A_&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">cams</span><span class="p">]</span>
+            <span class="n">new_env_name</span> <span class="o">=</span> <span class="s2">&quot;-&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">cam</span><span class="p">[:</span><span class="o">-</span><span class="mi">3</span><span class="p">]</span> <span class="k">for</span> <span class="n">cam</span> <span class="ow">in</span> <span class="n">cams_rep</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">env_name</span><span class="p">])</span>
+            <span class="n">visual_keys</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;rgb:</span><span class="si">{</span><span class="n">c</span><span class="si">}</span><span class="s2">:224x224:2d&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cams</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">from_depths</span><span class="p">:</span>
+                <span class="n">visual_keys</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot;d:</span><span class="si">{</span><span class="n">c</span><span class="si">}</span><span class="s2">:224x224:2d&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cams</span><span class="p">])</span>
+            <span class="n">register_env_variant</span><span class="p">(</span>
+                <span class="n">env_name</span><span class="p">,</span>
+                <span class="n">variants</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;visual_keys&quot;</span><span class="p">:</span> <span class="n">visual_keys</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="n">variant_id</span><span class="o">=</span><span class="n">new_env_name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">env_name</span> <span class="o">=</span> <span class="n">new_env_name</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">env_list</span> <span class="o">+=</span> <span class="p">[</span><span class="n">env_name</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">env_name</span>
+
+    <span class="nd">@_maybe_unlock</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_refine_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">_gym_to_torchrl_spec_transform</span><span class="p">(</span>
+            <span class="n">env</span><span class="o">.</span><span class="n">action_space</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="c1"># get a np rollout</span>
+        <span class="n">rollout</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;done&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">get_obs</span><span class="p">():</span>
+            <span class="n">_dict</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">obs_dict</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obs_dict</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_pixels</span><span class="p">:</span>
+                <span class="n">visual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">get_exteroception</span><span class="p">()</span>
+                <span class="n">obs_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">visual</span><span class="p">)</span>
+            <span class="n">pixel_list</span><span class="p">,</span> <span class="n">depth_list</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">obs_key</span> <span class="ow">in</span> <span class="n">obs_dict</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">obs_key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;rgb&quot;</span><span class="p">):</span>
+                    <span class="n">pix</span> <span class="o">=</span> <span class="n">obs_dict</span><span class="p">[</span><span class="n">obs_key</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">pix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                        <span class="n">pix</span> <span class="o">=</span> <span class="n">pix</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+                    <span class="n">pixel_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pix</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">obs_key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;d:&quot;</span><span class="p">):</span>
+                    <span class="n">dep</span> <span class="o">=</span> <span class="n">obs_dict</span><span class="p">[</span><span class="n">obs_key</span><span class="p">]</span>
+                    <span class="n">dep</span> <span class="o">=</span> <span class="n">dep</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+                    <span class="n">depth_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dep</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">obs_key</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">obs_keys</span><span class="p">:</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">obs_dict</span><span class="p">[</span><span class="n">obs_key</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                        <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+                    <span class="n">_dict</span><span class="p">[</span><span class="n">obs_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">if</span> <span class="n">pixel_list</span><span class="p">:</span>
+                <span class="n">_dict</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">pixel_list</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">depth_list</span><span class="p">:</span>
+                <span class="n">_dict</span><span class="p">[</span><span class="s2">&quot;depths&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">depth_list</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">_dict</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="n">_dict</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">get_obs</span><span class="p">())</span>
+            <span class="n">_dict</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">action</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">action_space</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">trunc</span><span class="p">,</span> <span class="n">term</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_transform</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">action</span><span class="p">))</span>
+            <span class="n">_dict</span><span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">_dict</span><span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">_dict</span><span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">_dict</span><span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">_dict</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_obs</span><span class="p">()</span>
+            <span class="n">rollout</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">_dict</span><span class="p">,</span> <span class="p">[])</span>
+
+        <span class="n">observation_spec</span> <span class="o">=</span> <span class="n">make_composite_from_td</span><span class="p">(</span>
+            <span class="n">rollout</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">observation_spec</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>  <span class="c1"># default</span>
+
+        <span class="n">rollout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">return_contiguous</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span>
+        <span class="n">rollout</span> <span class="o">=</span> <span class="n">rollout</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">rollout</span> <span class="o">=</span> <span class="n">rollout</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="n">make_composite_from_td</span><span class="p">(</span><span class="n">rollout</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">reset_data</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">reset_data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">reset_data</span><span class="p">,</span> <span class="p">{}</span>
+        <span class="k">return</span> <span class="n">reset_data</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_from_pixels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the from_pixels attribute to an existing environment.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            from_pixels (bool): new value for the from_pixels attribute</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">from_pixels</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_pixels</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">from_pixels</span> <span class="o">=</span> <span class="n">from_pixels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_refine_specs</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">read_obs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation</span><span class="p">):</span>
+        <span class="c1"># the info is missing from the reset</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">obs_dict</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">observations</span><span class="p">[</span><span class="s2">&quot;t&quot;</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="c1"># recover vec</span>
+        <span class="n">obsdict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">pixel_list</span><span class="p">,</span> <span class="n">depth_list</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_pixels</span><span class="p">:</span>
+            <span class="n">visual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">get_exteroception</span><span class="p">()</span>
+            <span class="n">observations</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">visual</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">observations</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;rgb&quot;</span><span class="p">):</span>
+                <span class="n">pix</span> <span class="o">=</span> <span class="n">observations</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">pix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">pix</span> <span class="o">=</span> <span class="n">pix</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+                <span class="n">pixel_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pix</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;d:&quot;</span><span class="p">):</span>
+                <span class="n">dep</span> <span class="o">=</span> <span class="n">observations</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                <span class="n">dep</span> <span class="o">=</span> <span class="n">dep</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+                <span class="n">depth_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dep</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">obs_keys</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">observations</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+                <span class="n">obsdict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>  <span class="c1"># ravel helps with images</span>
+        <span class="c1"># if obsvec:</span>
+        <span class="c1">#     obsvec = np.concatenate(obsvec, 0)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_pixels</span><span class="p">:</span>
+            <span class="n">obsdict</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;pixels&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">pixel_list</span><span class="p">,</span> <span class="mi">0</span><span class="p">)})</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_pixels</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_depths</span><span class="p">:</span>
+            <span class="n">obsdict</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;depths&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">depth_list</span><span class="p">,</span> <span class="mi">0</span><span class="p">)})</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">obsdict</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">read_obs</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">read_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">tensordict_out</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">info</span><span class="p">:</span>
+            <span class="n">info_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">info_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">tensordict_out</span>
+            <span class="n">tensordict_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="n">info_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">())</span>
+            <span class="k">return</span> <span class="n">tensordict_out</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">TensorDict</span><span class="p">(</span><span class="n">info</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="o">.</span><span class="n">filter_non_tensor_data</span><span class="p">()</span>
+            <span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">&quot;obs_dict&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">obs_keys</span><span class="p">,</span> <span class="s2">&quot;act&quot;</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;info&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">info_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">[</span><span class="s2">&quot;info&quot;</span><span class="p">]</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">func</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+                <span class="n">spec</span> <span class="o">=</span> <span class="n">info_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="kc">None</span>
+                <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">info_spec</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+            <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">named_apply</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">nested_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">out</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+                    <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,))</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span> <span class="k">else</span> <span class="n">x</span><span class="p">,</span> <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">tensordict_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict_out</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_env</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">render_device</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">render_device</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">render_device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_device</span><span class="p">:</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">_build_env</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_constructor_kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_available_cams</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">env_name</span><span class="p">):</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">()</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="n">env_name</span><span class="p">)</span>
+        <span class="n">cams</span> <span class="o">=</span> <span class="p">[</span><span class="n">env</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">id2name</span><span class="p">(</span><span class="n">ic</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span> <span class="k">for</span> <span class="n">ic</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">ncam</span><span class="p">)]</span>
+        <span class="k">return</span> <span class="n">cams</span></div>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+         <script src="../../../../_static/jquery.js"></script>
+         <script src="../../../../_static/underscore.js"></script>
+         <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

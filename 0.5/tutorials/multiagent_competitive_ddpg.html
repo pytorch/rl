@@ -1,0 +1,1914 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial &mdash; torchrl 0.5 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Task-specific policy in multi-task environments" href="multi_task.html" />
+    <link rel="prev" title="Using Replay Buffers" href="rb_tutorial.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2023">
+                  <span class="dropdown-title">Contributor Awards - 2023</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                  <p></p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.5 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+      <li>Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/tutorials/multiagent_competitive_ddpg.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+
+    <div class="pytorch-call-to-action-links">
+      <div id="tutorial-type">tutorials/multiagent_competitive_ddpg</div>
+
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../_static/images/pytorch-colab.svg"/>
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../_static/images/pytorch-download.svg"/>
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../_static/images/pytorch-github.svg"/>
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </div>
+
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-tutorials-multiagent-competitive-ddpg-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="competitive-multi-agent-reinforcement-learning-ddpg-with-torchrl-tutorial">
+<span id="sphx-glr-tutorials-multiagent-competitive-ddpg-py"></span><h1>Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial<a class="headerlink" href="#competitive-multi-agent-reinforcement-learning-ddpg-with-torchrl-tutorial" title="Permalink to this heading">¶</a></h1>
+<p><strong>Author</strong>: <a class="reference external" href="https://github.com/matteobettini">Matteo Bettini</a></p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p>The <a class="reference external" href="https://github.com/facebookresearch/BenchMARL">BenchMARL</a> library provides state-of-the-art
+implementations of MARL algorithms using TorchRL.</p>
+</div>
+<p>This tutorial demonstrates how to use PyTorch and TorchRL to
+solve a Competitive Multi-Agent Reinforcement Learning (MARL) problem.</p>
+<p>For ease of use, this tutorial will follow the general structure of the already available <a class="reference internal" href="multiagent_ppo.html"><span class="doc">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</span></a>.</p>
+<p>In this tutorial, we will use the <em>simple_tag</em> environment from the
+<a class="reference external" href="https://arxiv.org/abs/1706.02275">MADDPG paper</a>. This environment is part
+of a set called <a class="reference external" href="https://github.com/openai/multiagent-particle-envs">MultiAgentParticleEnvironments (MPE)</a>
+introduced with the paper.</p>
+<p>There are currently multiple simulators providing MPE environments.
+In this tutorial we show how to train this environment in TorchRL using either:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://pettingzoo.farama.org/">PettingZoo</a>, in the traditional CPU version of the environment;</p></li>
+<li><p><a class="reference external" href="https://github.com/proroklab/VectorizedMultiAgentSimulator">VMAS</a>, which provides a vectorized implementation in PyTorch,
+able to simulate multiple environments on a GPU to speed up computation.</p></li>
+</ul>
+<figure class="align-default" id="id1">
+<img alt="Simple tag" src="https://github.com/matteobettini/vmas-media/blob/main/media/scenarios/simple_tag.gif?raw=true" />
+<figcaption>
+<p><span class="caption-text">Multi-agent <em>simple_tag</em> scenario</span><a class="headerlink" href="#id1" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Key learnings:</p>
+<ul class="simple">
+<li><p>How to use competitive multi-agent environments in TorchRL, how their specs work, and how they integrate with the library;</p></li>
+<li><p>How to use Parallel PettingZoo and VMAS environments with multiple agent groups in TorchRL;</p></li>
+<li><p>How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralised critic)</p></li>
+<li><p>How we can use <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> to carry multi-agent multi-group data;</p></li>
+<li><p>How we can tie all the library components (collectors, modules, replay buffers, and losses) in an off-policy multi-agent MADDPG/IDDPG training loop.</p></li>
+</ul>
+<p>If you are running this in Google Colab, make sure you install the following dependencies:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>!pip3<span class="w"> </span>install<span class="w"> </span>torchrl
+!pip3<span class="w"> </span>install<span class="w"> </span>vmas
+!pip3<span class="w"> </span>install<span class="w"> </span>pettingzoo<span class="o">[</span>mpe<span class="o">]==</span><span class="m">1</span>.24.3
+!pip3<span class="w"> </span>install<span class="w"> </span>tqdm
+</pre></div>
+</div>
+<p>Deep Deterministic Policy Gradient (DDPG) is an off-policy actor-critic algorithm
+where a deterministic policy is optimised using the gradients from the critic network.
+For more information, see the <a class="reference external" href="https://arxiv.org/abs/1509.02971">Deep Deterministic Policy Gradients</a> paper.
+This kind of algorithm is typicall trained off-policy. For more info on off-policy learning see
+<em>Sutton, Richard S., and Andrew G. Barto. Reinforcement learning: An introduction. MIT press, 2018</em>.</p>
+<figure class="align-default" id="id2">
+<img alt="Off-policy learning" src="https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/off-policy-vmas-loop-min.png" />
+<figcaption>
+<p><span class="caption-text">Off-policy learning</span><a class="headerlink" href="#id2" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>This approach has been extended to multi-agent learning in <a class="reference external" href="https://arxiv.org/abs/1706.02275">Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments</a>,
+which introduces the Multi Agent DDPG (MADDPG) algorithm.
+In multi-agent settings, things are a bit different. We now have multiple policies <span class="math notranslate nohighlight">\(\mathbf{\pi}\)</span>,
+one for each agent. Policies are typically local and decentralised. This means that
+the policy for a single agent will output an action for that agent based only on its observation.
+In the MARL literature, this is referred to as <strong>decentralised execution</strong>.
+On the other hand, different formulations exist for the critic, mainly:</p>
+<ul class="simple">
+<li><p>In <a class="reference external" href="https://arxiv.org/abs/1706.02275">MADDPG</a> the critic is centralised and takes as input the global state and global action
+of the system. The global state can be a global observation or simply the concatenation of the agents’ observation.
+The global action is the concatenation of agent actions. MADDPG
+can be used in contexts where <strong>centralised training</strong> is performed as it needs access to global information.</p></li>
+<li><p>In IDDPG, the critic takes as input just the observation and action of one agent.
+This allows <strong>decentralised training</strong> as both the critic and the policy will only need local
+information to compute their outputs.</p></li>
+</ul>
+<p>Centralised critics help overcome the non-stationary of multiple agents learning concurrently, but,
+on the other hand, they may be impacted by their large input space.
+In this tutorial, we will be able to train both formulations, and we will also discuss how
+parameter-sharing (the practice of sharing the network parameters across the agents) impacts each.</p>
+<p>The structure of this tutorial is as follows:</p>
+<ol class="arabic simple">
+<li><p>Initially, we will establish a set of hyperparameters for use.</p></li>
+<li><p>Subsequently, we will construct a multi-agent environment, utilizing TorchRL’s
+wrapper for either PettingZoo or VMAS.</p></li>
+<li><p>Following that, we will formulate the policy and critic networks, discussing the effects of various choices on
+parameter sharing and critic centralisation.</p></li>
+<li><p>Afterwards, we will create the sampling collector and the replay buffer.</p></li>
+<li><p>In the end, we will execute our training loop and examine the outcomes.</p></li>
+</ol>
+<p>If you are operating this in Colab or on a machine with a GUI, you will also have the opportunity
+to render and visualize your own trained policy before and after the training process.</p>
+<p>Import our dependencies:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">tempfile</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">pyplot</span> <span class="k">as</span> <span class="n">plt</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
+
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">multiprocessing</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyMemmapStorage</span><span class="p">,</span> <span class="n">RandomSampler</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">check_env_specs</span><span class="p">,</span>
+    <span class="n">ExplorationType</span><span class="p">,</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">PettingZooEnv</span></a><span class="p">,</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">RewardSum</span></a><span class="p">,</span>
+    <span class="n">set_exploration_type</span><span class="p">,</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">,</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">VmasEnv</span></a><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="p">(</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">AdditiveGaussianModule</span></a><span class="p">,</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MultiAgentMLP</span></a><span class="p">,</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ProbabilisticActor</span></a><span class="p">,</span>
+    <a href="https://pytorch.org/docs/stable/distributions.html#torch.distributions.transformed_distribution.TransformedDistribution" title="torch.distributions.transformed_distribution.TransformedDistribution" class="sphx-glr-backref-module-torch-distributions-transformed_distribution sphx-glr-backref-type-py-class"><span class="n">TanhDelta</span></a><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DDPGLoss</span></a><span class="p">,</span> <span class="n">SoftUpdate</span><span class="p">,</span> <span class="n">ValueEstimators</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.record</span> <span class="kn">import</span> <span class="n">CSVLogger</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">PixelRenderTransform</span></a><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">VideoRecorder</span></a>
+
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
+
+<span class="c1"># Check if we&#39;re building the doc, in which case disable video rendering</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">is_sphinx</span> <span class="o">=</span> <span class="n">__sphinx_build__</span>
+<span class="k">except</span> <span class="ne">NameError</span><span class="p">:</span>
+    <span class="n">is_sphinx</span> <span class="o">=</span> <span class="kc">False</span>
+</pre></div>
+</div>
+<section id="define-hyperparameters">
+<h2>Define Hyperparameters<a class="headerlink" href="#define-hyperparameters" title="Permalink to this heading">¶</a></h2>
+<p>We set the hyperparameters for our tutorial.
+Depending on the resources
+available, one may choose to execute the policy and the simulator on GPU or on another
+device.
+You can tune some of these values to adjust the computational requirements.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Seed</span>
+<span class="n">seed</span> <span class="o">=</span> <span class="mi">0</span>
+<a href="https://pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+
+<span class="c1"># Devices</span>
+<span class="n">is_fork</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;fork&quot;</span>
+<a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a> <span class="o">=</span> <span class="p">(</span>
+    <a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">if</span> <a href="https://pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_fork</span>
+    <span class="k">else</span> <a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="c1"># Sampling</span>
+<span class="n">frames_per_batch</span> <span class="o">=</span> <span class="mi">1_000</span>  <span class="c1"># Number of team frames collected per sampling iteration</span>
+<span class="n">n_iters</span> <span class="o">=</span> <span class="mi">10</span>  <span class="c1"># Number of sampling and training iterations</span>
+<span class="n">total_frames</span> <span class="o">=</span> <span class="n">frames_per_batch</span> <span class="o">*</span> <span class="n">n_iters</span>
+
+<span class="c1"># We will stop training the evaders after this many iterations,</span>
+<span class="c1"># should be 0 &lt;= iteration_when_stop_training_evaders &lt;= n_iters</span>
+<span class="n">iteration_when_stop_training_evaders</span> <span class="o">=</span> <span class="n">n_iters</span> <span class="o">//</span> <span class="mi">2</span>
+
+<span class="c1"># Replay buffer</span>
+<span class="n">memory_size</span> <span class="o">=</span> <span class="mi">1_000_000</span>  <span class="c1"># The replay buffer of each group can store this many frames</span>
+
+<span class="c1"># Training</span>
+<span class="n">n_optimiser_steps</span> <span class="o">=</span> <span class="mi">100</span>  <span class="c1"># Number of optimisation steps per training iteration</span>
+<span class="n">train_batch_size</span> <span class="o">=</span> <span class="mi">128</span>  <span class="c1"># Number of frames trained in each optimiser step</span>
+<span class="n">lr</span> <span class="o">=</span> <span class="mf">3e-4</span>  <span class="c1"># Learning rate</span>
+<span class="n">max_grad_norm</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># Maximum norm for the gradients</span>
+
+<span class="c1"># DDPG</span>
+<span class="n">gamma</span> <span class="o">=</span> <span class="mf">0.99</span>  <span class="c1"># Discount factor</span>
+<span class="n">polyak_tau</span> <span class="o">=</span> <span class="mf">0.005</span>  <span class="c1"># Tau for the soft-update of the target network</span>
+</pre></div>
+</div>
+</section>
+<section id="environment">
+<h2>Environment<a class="headerlink" href="#environment" title="Permalink to this heading">¶</a></h2>
+<p>Multi-agent environments simulate multiple agents interacting with the world.
+TorchRL API allows integrating various types of multi-agent environment flavours.
+In this tutorial we will focus on environments where multiple agent groups interact in parallel.
+That is: at every step all agents will get an observation and take an action synchronously.</p>
+<p>Furthermore, the TorchRL MARL API allows to separate agents into groups. Each group will be a separate entry in the
+tensordict. The data of agents within a group is stacked together. Therefore, by choosing how to group your agents,
+you can decide which data is stacked/kept as separate entries.
+The grouping strategy can be specified at construction in environments like VMAS and PettingZoo.
+For more info on grouping, see <code class="xref py py-class docutils literal notranslate"><span class="pre">MarlGroupMapType</span></code>.</p>
+<p>In the <em>simple_tag</em> environment
+there are two teams of agents: the chasers (or “adversaries”) (red circles) and the evaders (or “agents”) (green circles).
+Chasers are rewarded for touching evaders (+10).
+Upon a contact the team of chasers is collectively rewarded and the
+evader touched is penalized with the same value (-10).
+Evaders have higher speed and acceleration than chasers.
+In the environment there are also obstacles (black circles).
+Agents and obstacles are spawned according to a uniform random distribution.
+Agents act in a 2D continuous world with drag and elastic collisions.
+Their actions are 2D continuous forces which determine their acceleration.
+Each agent observes its position,
+velocity, relative positions to all other agents and obstacles, and velocities of evaders.</p>
+<p>The PettingZoo and VMAS versions differ slightly in the reward functions as PettingZoo penalizes evaders for going
+out-of-bounds, while VMAS impedes it physically. This is the reason why you will observe that in VMAS the rewards of the
+two teams are identical, just with opposite sign, while in PettingZoo the evaders will have lower rewards.</p>
+<p>We will now instantiate the environment.
+For this tutorial, we will limit the episodes to <code class="docutils literal notranslate"><span class="pre">max_steps</span></code>, after which the terminated flag is set. This is
+functionality is already provided in the PettingZoo and VMAS simulators but the TorchRL <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.StepCounter.html#torchrl.envs.transforms.StepCounter" title="torchrl.envs.transforms.StepCounter"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepCounter</span></code></a>
+transform could alternatively be used.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">max_steps</span> <span class="o">=</span> <span class="mi">100</span>  <span class="c1"># Environment steps before done</span>
+
+<span class="n">n_chasers</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">n_evaders</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">n_obstacles</span> <span class="o">=</span> <span class="mi">2</span>
+
+<span class="n">use_vmas</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># Set this to True for a great performance speedup</span>
+
+<span class="k">if</span> <span class="ow">not</span> <span class="n">use_vmas</span><span class="p">:</span>
+    <span class="n">base_env</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">PettingZooEnv</span></a><span class="p">(</span>
+        <span class="n">task</span><span class="o">=</span><span class="s2">&quot;simple_tag_v3&quot;</span><span class="p">,</span>
+        <span class="n">parallel</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Use the Parallel version</span>
+        <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+        <span class="c1"># Scenario specific</span>
+        <span class="n">continuous_actions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">num_good</span><span class="o">=</span><span class="n">n_evaders</span><span class="p">,</span>
+        <span class="n">num_adversaries</span><span class="o">=</span><span class="n">n_chasers</span><span class="p">,</span>
+        <span class="n">num_obstacles</span><span class="o">=</span><span class="n">n_obstacles</span><span class="p">,</span>
+        <span class="n">max_cycles</span><span class="o">=</span><span class="n">max_steps</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">num_vmas_envs</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">frames_per_batch</span> <span class="o">//</span> <span class="n">max_steps</span>
+    <span class="p">)</span>  <span class="c1"># Number of vectorized environments. frames_per_batch collection will be divided among these environments</span>
+    <span class="n">base_env</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">VmasEnv</span></a><span class="p">(</span>
+        <span class="n">scenario</span><span class="o">=</span><span class="s2">&quot;simple_tag&quot;</span><span class="p">,</span>
+        <span class="n">num_envs</span><span class="o">=</span><span class="n">num_vmas_envs</span><span class="p">,</span>
+        <span class="n">continuous_actions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="o">=</span><span class="n">max_steps</span><span class="p">,</span>
+        <a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+        <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+        <span class="c1"># Scenario specific</span>
+        <span class="n">num_good_agents</span><span class="o">=</span><span class="n">n_evaders</span><span class="p">,</span>
+        <span class="n">num_adversaries</span><span class="o">=</span><span class="n">n_chasers</span><span class="p">,</span>
+        <span class="n">num_landmarks</span><span class="o">=</span><span class="n">n_obstacles</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<section id="group-map">
+<h3>Group map<a class="headerlink" href="#group-map" title="Permalink to this heading">¶</a></h3>
+<p>PettingZoo and VMAS environments use the TorchRL MARL grouping API.
+We can access the group map, mapping each group to the agents in it, as follows:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;group_map: </span><span class="si">{</span><span class="n">base_env</span><span class="o">.</span><span class="n">group_map</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>group_map: {&#39;adversary&#39;: [&#39;adversary_0&#39;, &#39;adversary_1&#39;], &#39;agent&#39;: [&#39;agent_0&#39;]}
+</pre></div>
+</div>
+<p>as we can see it contains 2 groups: “agents” (evaders) and “adversaries” (chasers).</p>
+<p>The environment is not only defined by its simulator and transforms, but also
+by a series of metadata that describe what can be expected during its
+execution.
+For efficiency purposes, TorchRL is quite stringent when it comes to
+environment specs, but you can easily check that your environment specs are
+adequate.
+In our example, the simulator wrapper takes care of setting the proper specs for your base_env, so
+you should not have to care about this.</p>
+<p>There are four specs to look at:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">action_spec</span></code> defines the action space;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reward_spec</span></code> defines the reward domain;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">done_spec</span></code> defines the done domain;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">observation_spec</span></code> which defines the domain of all other outputs from environment steps;</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;action_spec:&quot;</span><span class="p">,</span> <span class="n">base_env</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reward_spec:&quot;</span><span class="p">,</span> <span class="n">base_env</span><span class="o">.</span><span class="n">full_reward_spec</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;done_spec:&quot;</span><span class="p">,</span> <span class="n">base_env</span><span class="o">.</span><span class="n">full_done_spec</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;observation_spec:&quot;</span><span class="p">,</span> <span class="n">base_env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>action_spec: CompositeSpec(
+    adversary: CompositeSpec(
+        action: BoundedTensorSpec(
+            shape=torch.Size([10, 2, 2]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        device=cpu,
+        shape=torch.Size([10, 2])),
+    agent: CompositeSpec(
+        action: BoundedTensorSpec(
+            shape=torch.Size([10, 1, 2]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([10, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([10, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        device=cpu,
+        shape=torch.Size([10, 1])),
+    device=cpu,
+    shape=torch.Size([10]))
+reward_spec: CompositeSpec(
+    adversary: CompositeSpec(
+        reward: UnboundedContinuousTensorSpec(
+            shape=torch.Size([10, 2, 1]),
+            space=None,
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        device=cpu,
+        shape=torch.Size([10, 2])),
+    agent: CompositeSpec(
+        reward: UnboundedContinuousTensorSpec(
+            shape=torch.Size([10, 1, 1]),
+            space=None,
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        device=cpu,
+        shape=torch.Size([10, 1])),
+    device=cpu,
+    shape=torch.Size([10]))
+done_spec: CompositeSpec(
+    done: DiscreteTensorSpec(
+        shape=torch.Size([10, 1]),
+        space=DiscreteBox(n=2),
+        device=cpu,
+        dtype=torch.bool,
+        domain=discrete),
+    terminated: DiscreteTensorSpec(
+        shape=torch.Size([10, 1]),
+        space=DiscreteBox(n=2),
+        device=cpu,
+        dtype=torch.bool,
+        domain=discrete),
+    device=cpu,
+    shape=torch.Size([10]))
+observation_spec: CompositeSpec(
+    adversary: CompositeSpec(
+        observation: UnboundedContinuousTensorSpec(
+            shape=torch.Size([10, 2, 14]),
+            space=None,
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        device=cpu,
+        shape=torch.Size([10, 2])),
+    agent: CompositeSpec(
+        observation: UnboundedContinuousTensorSpec(
+            shape=torch.Size([10, 1, 12]),
+            space=None,
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        device=cpu,
+        shape=torch.Size([10, 1])),
+    device=cpu,
+    shape=torch.Size([10]))
+</pre></div>
+</div>
+<p>Using the commands just shown we can access the domain of each value.</p>
+<p>We can see that all specs are structured as a dictionary, with the root always containing the group names.
+This structure will be followed in all tensordict data coming and going to the environment.
+Furthermore, the specs of each group have leading shape <code class="docutils literal notranslate"><span class="pre">(n_agents_in_that_group)</span></code> (1 for agents, 2 for adversaries),
+meaning that the tensor data of that group will always have that leading shape (agents within a group have the data stacked).</p>
+<p>Looking at the <code class="docutils literal notranslate"><span class="pre">done_spec</span></code>, we can see that there are some keys that are outside of agent groups
+(<code class="docutils literal notranslate"><span class="pre">&quot;done&quot;,</span> <span class="pre">&quot;terminated&quot;,</span> <span class="pre">&quot;truncated&quot;</span></code>), which do not have a leading multi-agent dimension.
+These keys are shared by all agents and represent the environment global done state used for resetting.
+By default, like in this case, parallel PettingZoo environments are done when any agent is done, but this behaviour
+can be overridden by setting <code class="docutils literal notranslate"><span class="pre">done_on_any</span></code> at PettingZoo environment construction.</p>
+<p>To quickly access the keys for each of these values in tensordicts, we can simply ask the environment for the
+respective keys, and
+we will immediately understand which are per-agent and which shared.
+This info will be useful in order to tell all other TorchRL components where to find each value</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;action_keys:&quot;</span><span class="p">,</span> <span class="n">base_env</span><span class="o">.</span><span class="n">action_keys</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reward_keys:&quot;</span><span class="p">,</span> <span class="n">base_env</span><span class="o">.</span><span class="n">reward_keys</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;done_keys:&quot;</span><span class="p">,</span> <span class="n">base_env</span><span class="o">.</span><span class="n">done_keys</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>action_keys: [(&#39;adversary&#39;, &#39;action&#39;), (&#39;agent&#39;, &#39;action&#39;)]
+reward_keys: [(&#39;adversary&#39;, &#39;reward&#39;), (&#39;agent&#39;, &#39;reward&#39;)]
+done_keys: [&#39;done&#39;, &#39;terminated&#39;]
+</pre></div>
+</div>
+</section>
+<section id="transforms">
+<h3>Transforms<a class="headerlink" href="#transforms" title="Permalink to this heading">¶</a></h3>
+<p>We can append any TorchRL transform we need to our environment.
+These will modify its input/output in some desired way.
+We stress that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.</p>
+<p>For example, in this case, we will instantiate a <code class="docutils literal notranslate"><span class="pre">RewardSum</span></code> transform which will sum rewards over the episode.
+We will tell this transform where to find the reset keys for each reward key.
+Essentially we just say that the
+episode reward of each group should be reset when the <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> tensordict key is set, meaning that <code class="docutils literal notranslate"><span class="pre">env.reset()</span></code>
+was called.
+The transformed environment will inherit
+the device and meta-data of the wrapped environment, and transform these depending on the sequence
+of transforms it contains.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">(</span>
+    <span class="n">base_env</span><span class="p">,</span>
+    <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">RewardSum</span></a><span class="p">(</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="n">base_env</span><span class="o">.</span><span class="n">reward_keys</span><span class="p">,</span>
+        <span class="n">reset_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;_reset&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">base_env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>the <code class="xref py py-func docutils literal notranslate"><span class="pre">check_env_specs()</span></code> function runs a small rollout and compares its output against the environment
+specs. If no error is raised, we can be confident that the specs are properly defined:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">check_env_specs</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="rollout">
+<h3>Rollout<a class="headerlink" href="#rollout" title="Permalink to this heading">¶</a></h3>
+<p>For fun, let us see what a simple random rollout looks like. You can
+call <cite>env.rollout(n_steps)</cite> and get an overview of what the environment inputs
+and outputs look like. Actions will automatically be drawn at random from the action spec
+domain.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">n_rollout_steps</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="n">rollout</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="n">n_rollout_steps</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;rollout of </span><span class="si">{</span><span class="n">n_rollout_steps</span><span class="si">}</span><span class="s2"> steps:&quot;</span><span class="p">,</span> <span class="n">rollout</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Shape of the rollout TensorDict:&quot;</span><span class="p">,</span> <span class="n">rollout</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>rollout of 5 steps: TensorDict(
+    fields={
+        adversary: TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 5, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                episode_reward: Tensor(shape=torch.Size([10, 5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 5, 2, 14]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10, 5, 2]),
+            device=cpu,
+            is_shared=False),
+        agent: TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 5, 1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                episode_reward: Tensor(shape=torch.Size([10, 5, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 5, 1, 12]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10, 5, 1]),
+            device=cpu,
+            is_shared=False),
+        done: Tensor(shape=torch.Size([10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        next: TensorDict(
+            fields={
+                adversary: TensorDict(
+                    fields={
+                        episode_reward: Tensor(shape=torch.Size([10, 5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        observation: Tensor(shape=torch.Size([10, 5, 2, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 5, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([10, 5, 2]),
+                    device=cpu,
+                    is_shared=False),
+                agent: TensorDict(
+                    fields={
+                        episode_reward: Tensor(shape=torch.Size([10, 5, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        observation: Tensor(shape=torch.Size([10, 5, 1, 12]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([10, 5, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([10, 5, 1]),
+                    device=cpu,
+                    is_shared=False),
+                done: Tensor(shape=torch.Size([10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([10, 5]),
+            device=cpu,
+            is_shared=False),
+        terminated: Tensor(shape=torch.Size([10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+    batch_size=torch.Size([10, 5]),
+    device=cpu,
+    is_shared=False)
+Shape of the rollout TensorDict: torch.Size([10, 5])
+</pre></div>
+</div>
+<p>We can see that our rollout has <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> of <code class="docutils literal notranslate"><span class="pre">(n_rollout_steps)</span></code>.
+This means that all the tensors in it will have this leading dimension.</p>
+<p>Looking more in depth, we can see that the output tensordict can be divided in the following way:</p>
+<ul class="simple">
+<li><p><em>In the root</em> (accessible by running <code class="docutils literal notranslate"><span class="pre">rollout.exclude(&quot;next&quot;)</span></code> ) we will find all the keys that are available
+after a reset is called at the first timestep. We can see their evolution through the rollout steps by indexing
+the <code class="docutils literal notranslate"><span class="pre">n_rollout_steps</span></code> dimension. Among these keys, we will find the ones that are different for each agent
+in the <code class="docutils literal notranslate"><span class="pre">rollout[group_name]</span></code> tensordicts, which will have batch size <code class="docutils literal notranslate"><span class="pre">(n_rollout_steps,</span> <span class="pre">n_agents_in_group)</span></code>
+signifying that it is storing the additional agent dimension. The ones outside the group tensordicts
+will be the shared ones.</p></li>
+<li><p><em>In the next</em> (accessible by running <code class="docutils literal notranslate"><span class="pre">rollout.get(&quot;next&quot;)</span></code> ). We will find the same structure as the root with some minor differences highlighted below.</p></li>
+</ul>
+<p>In TorchRL the convention is that done and observations will be present in both root and next (as these are
+available both at reset time and after a step). Action will only be available in root (as there is no action
+resulting from a step) and reward will only be available in next (as there is no reward at reset time).
+This structure follows the one in <strong>Reinforcement Learning: An Introduction (Sutton and Barto)</strong> where root represents data at time <span class="math notranslate nohighlight">\(t\)</span> and
+next represents data at time <span class="math notranslate nohighlight">\(t+1\)</span> of a world step.</p>
+</section>
+<section id="render-a-random-rollout">
+<h3>Render a random rollout<a class="headerlink" href="#render-a-random-rollout" title="Permalink to this heading">¶</a></h3>
+<p>If you are on Google Colab, or on a machine with OpenGL and a GUI, you can actually render a random rollout.
+This will give you an idea of what a random policy will achieve in this task, in order to compare it
+with the policy you will train yourself!</p>
+<p>To render a rollout, follow the instructions in the <em>Render</em> section at the end of this tutorial
+and just remove the line <code class="docutils literal notranslate"><span class="pre">policy=agents_exploration_policy</span></code> from <code class="docutils literal notranslate"><span class="pre">env.rollout()</span></code>.</p>
+</section>
+</section>
+<section id="policy">
+<h2>Policy<a class="headerlink" href="#policy" title="Permalink to this heading">¶</a></h2>
+<p>DDPG utilises a deterministic policy. This means that our
+neural network will output the action to take.
+As the action is continuous, we use a Tanh-Delta distribution to respect the
+action space boundaries. The only thing that this class does is apply a Tanh transformation to make sure the action
+is withing the domain bounds.</p>
+<p>Another important decision we need to make is whether we want the agents within a team to <strong>share the policy parameters</strong>.
+On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
+each other’s experiences. This will also result in faster training.
+On the other hand, it will make them behaviourally <em>homogenous</em>, as they will in fact share the same model.
+For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
+speed, but it is important to always think about this decision in your own problems!</p>
+<p>We design the policy in three steps.</p>
+<p><strong>First</strong>: define a neural network <code class="docutils literal notranslate"><span class="pre">n_obs_per_agent</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">n_actions_per_agents</span></code></p>
+<p>For this we use the <code class="docutils literal notranslate"><span class="pre">MultiAgentMLP</span></code>, a TorchRL module made exactly for
+multiple agents, with much customisation available.</p>
+<p>We will define a different policy for each group and store them in a dictionary.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">policy_modules</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">group</span><span class="p">,</span> <span class="n">agents</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">share_parameters_policy</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># Can change this based on the group</span>
+
+    <span class="n">policy_net</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MultiAgentMLP</span></a><span class="p">(</span>
+        <span class="n">n_agent_inputs</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">[</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span>
+            <span class="o">-</span><span class="mi">1</span>
+        <span class="p">],</span>  <span class="c1"># n_obs_per_agent</span>
+        <span class="n">n_agent_outputs</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span>
+            <span class="o">-</span><span class="mi">1</span>
+        <span class="p">],</span>  <span class="c1"># n_actions_per_agents</span>
+        <span class="n">n_agents</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">agents</span><span class="p">),</span>  <span class="c1"># Number of agents in the group</span>
+        <span class="n">centralised</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># the policies are decentralised (i.e., each agent will act from its local observation)</span>
+        <span class="n">share_params</span><span class="o">=</span><span class="n">share_parameters_policy</span><span class="p">,</span>
+        <a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">num_cells</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+        <span class="n">activation_class</span><span class="o">=</span><a href="https://pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Wrap the neural network in a :class:`~tensordict.nn.TensorDictModule`.</span>
+    <span class="c1"># This is simply a module that will read the ``in_keys`` from a tensordict, feed them to the</span>
+    <span class="c1"># neural networks, and write the</span>
+    <span class="c1"># outputs in-place at the ``out_keys``.</span>
+
+    <span class="n">policy_module</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span>
+        <span class="n">policy_net</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">)],</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;param&quot;</span><span class="p">)],</span>
+    <span class="p">)</span>  <span class="c1"># We just name the input and output that the network will read and write to the input tensordict</span>
+    <span class="n">policy_modules</span><span class="p">[</span><span class="n">group</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy_module</span>
+</pre></div>
+</div>
+<p><strong>Second</strong>: wrap the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code> in a <code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticActor</span></code></p>
+<p>We now need to build the TanhDelta distribution.
+We instruct the <code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticActor</span></code>
+class to build a <a class="reference internal" href="../reference/generated/torchrl.modules.TanhDelta.html#torchrl.modules.TanhDelta" title="torchrl.modules.TanhDelta"><code class="xref py py-class docutils literal notranslate"><span class="pre">TanhDelta</span></code></a> out of the policy action
+parameters. We also provide the minimum and maximum values of this
+distribution, which we gather from the environment specs.</p>
+<p>The name of the <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> (and hence the name of the <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> from
+the <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code> above) has to end with the
+<a class="reference internal" href="../reference/generated/torchrl.modules.TanhDelta.html#torchrl.modules.TanhDelta" title="torchrl.modules.TanhDelta"><code class="xref py py-class docutils literal notranslate"><span class="pre">TanhDelta</span></code></a> distribution constructor keyword arguments (param).</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">policies</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">group</span><span class="p">,</span> <span class="n">_agents</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">policy</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ProbabilisticActor</span></a><span class="p">(</span>
+        <span class="n">module</span><span class="o">=</span><span class="n">policy_modules</span><span class="p">[</span><span class="n">group</span><span class="p">],</span>
+        <span class="n">spec</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">],</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;param&quot;</span><span class="p">)],</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">)],</span>
+        <span class="n">distribution_class</span><span class="o">=</span><a href="https://pytorch.org/docs/stable/distributions.html#torch.distributions.transformed_distribution.TransformedDistribution" title="torch.distributions.transformed_distribution.TransformedDistribution" class="sphx-glr-backref-module-torch-distributions-transformed_distribution sphx-glr-backref-type-py-class"><span class="n">TanhDelta</span></a><span class="p">,</span>
+        <span class="n">distribution_kwargs</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;low&quot;</span><span class="p">:</span> <span class="n">env</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">,</span>
+            <span class="s2">&quot;high&quot;</span><span class="p">:</span> <span class="n">env</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="n">return_log_prob</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">policies</span><span class="p">[</span><span class="n">group</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy</span>
+</pre></div>
+</div>
+<p><strong>Third</strong>: Exploration</p>
+<p>Since the DDPG policy is deterministic, we need a way to perform exploration during collection.</p>
+<p>For this purpose, we need to append an exploration layer to our policies before passing them to the collector.
+In this case we use a <code class="xref py py-class docutils literal notranslate"><span class="pre">AdditiveGaussianModule</span></code>, which adds gaussian noise to our action
+(and clamps it if the noise makes the action out of bounds).</p>
+<p>This exploration wrapper uses a <code class="docutils literal notranslate"><span class="pre">sigma</span></code> parameter which is multiplied by the noise to determine its magnitude.
+Sigma can be annealed throughout training to reduce exploration.
+Sigma will go from <code class="docutils literal notranslate"><span class="pre">sigma_init</span></code> to <code class="docutils literal notranslate"><span class="pre">sigma_end</span></code> in <code class="docutils literal notranslate"><span class="pre">annealing_num_steps</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">exploration_policies</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">group</span><span class="p">,</span> <span class="n">_agents</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">exploration_policy</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span>
+        <span class="n">policies</span><span class="p">[</span><span class="n">group</span><span class="p">],</span>
+        <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">AdditiveGaussianModule</span></a><span class="p">(</span>
+            <span class="n">spec</span><span class="o">=</span><span class="n">policies</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">spec</span><span class="p">,</span>
+            <span class="n">annealing_num_steps</span><span class="o">=</span><span class="n">total_frames</span>
+            <span class="o">//</span> <span class="mi">2</span><span class="p">,</span>  <span class="c1"># Number of frames after which sigma is sigma_end</span>
+            <span class="n">action_key</span><span class="o">=</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">),</span>
+            <span class="n">sigma_init</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>  <span class="c1"># Initial value of the sigma</span>
+            <span class="n">sigma_end</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>  <span class="c1"># Final value of the sigma</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">exploration_policies</span><span class="p">[</span><span class="n">group</span><span class="p">]</span> <span class="o">=</span> <span class="n">exploration_policy</span>
+</pre></div>
+</div>
+</section>
+<section id="critic-network">
+<h2>Critic network<a class="headerlink" href="#critic-network" title="Permalink to this heading">¶</a></h2>
+<p>The critic network is a crucial component of the DDPG algorithm, even though it
+isn’t used at sampling time. This module will read the observations &amp; actions taken and
+return the corresponding value estimates.</p>
+<p>As before, one should think carefully about the decision of <strong>sharing the critic parameters</strong> within an agent group.
+In general, parameter sharing will grant faster training convergence, but there are a few important
+considerations to be made:</p>
+<ul class="simple">
+<li><p>Sharing is not recommended when agents have different reward functions, as the critics will need to learn
+to assign different values to the same state (e.g., in mixed cooperative-competitive settings).
+In this case, since the two groups are already using separate networks, the sharing decision only applies
+for agents within a group, which we already know have the same reward function.</p></li>
+<li><p>In decentralised training settings, sharing cannot be performed without additional infrastructure to
+synchronise parameters.</p></li>
+</ul>
+<p>In all other cases where the reward function (to be differentiated from the reward) is the same for all agents
+in a group (as in the current scenario),
+sharing can provide improved performance. This can come at the cost of homogeneity in the agent strategies.
+In general, the best way to know which choice is preferable is to quickly experiment both options.</p>
+<p>Here is also where we have to choose between <strong>MADDPG and IDDPG</strong>:</p>
+<ul class="simple">
+<li><p>With MADDPG, we will obtain a central critic with full-observability
+(i.e., it will take all the concatenated global agent observations and actions as input).
+We can do this because we are in a simulator
+and training is centralised.</p></li>
+<li><p>With IDDPG, we will have a local decentralised critic, just like the policy.</p></li>
+</ul>
+<p>In any case, the critic output will have shape <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">n_agents_in_group,</span> <span class="pre">1)</span></code>.
+If the critic is centralised and shared,
+all the values along the <code class="docutils literal notranslate"><span class="pre">n_agents_in_group</span></code> dimension will be identical.</p>
+<p>As with the policy, we create a critic network for each group and store them in a dictionary.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">critics</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">group</span><span class="p">,</span> <span class="n">agents</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">share_parameters_critic</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># Can change for each group</span>
+    <span class="n">MADDPG</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># IDDPG if False, can change for each group</span>
+
+    <span class="c1"># This module applies the lambda function: reading the action and observation entries for the group</span>
+    <span class="c1"># and concatenating them in a new ``(group, &quot;obs_action&quot;)`` entry</span>
+    <span class="n">cat_module</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">obs</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="torch.cat" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cat</span></a><span class="p">([</span><span class="n">obs</span><span class="p">,</span> <span class="n">action</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">),</span> <span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">)],</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="p">[(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;obs_action&quot;</span><span class="p">)],</span>
+    <span class="p">)</span>
+
+    <span class="n">critic_module</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span>
+        <span class="n">module</span><span class="o">=</span><a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MultiAgentMLP</span></a><span class="p">(</span>
+            <span class="n">n_agent_inputs</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">[</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="o">+</span> <span class="n">env</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">n_agent_outputs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>  <span class="c1"># 1 value per agent</span>
+            <span class="n">n_agents</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">agents</span><span class="p">),</span>
+            <span class="n">centralised</span><span class="o">=</span><span class="n">MADDPG</span><span class="p">,</span>
+            <span class="n">share_params</span><span class="o">=</span><span class="n">share_parameters_critic</span><span class="p">,</span>
+            <a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">num_cells</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+            <span class="n">activation_class</span><span class="o">=</span><a href="https://pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="p">[(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;obs_action&quot;</span><span class="p">)],</span>  <span class="c1"># Read ``(group, &quot;obs_action&quot;)``</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span>
+            <span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;state_action_value&quot;</span><span class="p">)</span>
+        <span class="p">],</span>  <span class="c1"># Write ``(group, &quot;state_action_value&quot;)``</span>
+    <span class="p">)</span>
+
+    <span class="n">critics</span><span class="p">[</span><span class="n">group</span><span class="p">]</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span>
+        <span class="n">cat_module</span><span class="p">,</span> <span class="n">critic_module</span>
+    <span class="p">)</span>  <span class="c1"># Run them in sequence</span>
+</pre></div>
+</div>
+<p>Let us try our policy and critic modules. As pointed earlier, the usage of
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code> makes it possible to directly read the output
+of the environment to run these modules, as they know what information to read
+and where to write it.</p>
+<p>We can see that after each group’s networks are run their output keys are added to the data under the
+group entry.</p>
+<p><strong>From this point on, the multi-agent-specific components have been instantiated, and we will simply use the same
+components as in single-agent learning. Isn’t this fantastic?</strong></p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">reset_td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">group</span><span class="p">,</span> <span class="n">_agents</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Running value and policy for group &#39;</span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2">&#39;:&quot;</span><span class="p">,</span>
+        <span class="n">critics</span><span class="p">[</span><span class="n">group</span><span class="p">](</span><span class="n">policies</span><span class="p">[</span><span class="n">group</span><span class="p">](</span><span class="n">reset_td</span><span class="p">)),</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Running value and policy for group &#39;adversary&#39;: TensorDict(
+    fields={
+        adversary: TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                episode_reward: Tensor(shape=torch.Size([10, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs_action: Tensor(shape=torch.Size([10, 2, 16]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 2, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                param: Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_action_value: Tensor(shape=torch.Size([10, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10, 2]),
+            device=cpu,
+            is_shared=False),
+        agent: TensorDict(
+            fields={
+                episode_reward: Tensor(shape=torch.Size([10, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 1, 12]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10, 1]),
+            device=cpu,
+            is_shared=False),
+        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+    batch_size=torch.Size([10]),
+    device=cpu,
+    is_shared=False)
+Running value and policy for group &#39;agent&#39;: TensorDict(
+    fields={
+        adversary: TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                episode_reward: Tensor(shape=torch.Size([10, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs_action: Tensor(shape=torch.Size([10, 2, 16]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 2, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                param: Tensor(shape=torch.Size([10, 2, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_action_value: Tensor(shape=torch.Size([10, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10, 2]),
+            device=cpu,
+            is_shared=False),
+        agent: TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([10, 1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                episode_reward: Tensor(shape=torch.Size([10, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs_action: Tensor(shape=torch.Size([10, 1, 14]), device=cpu, dtype=torch.float32, is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 1, 12]), device=cpu, dtype=torch.float32, is_shared=False),
+                param: Tensor(shape=torch.Size([10, 1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_action_value: Tensor(shape=torch.Size([10, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10, 1]),
+            device=cpu,
+            is_shared=False),
+        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+    batch_size=torch.Size([10]),
+    device=cpu,
+    is_shared=False)
+</pre></div>
+</div>
+</section>
+<section id="data-collector">
+<h2>Data collector<a class="headerlink" href="#data-collector" title="Permalink to this heading">¶</a></h2>
+<p>TorchRL provides a set of data collector classes. Briefly, these
+classes execute three operations: reset an environment, compute an action
+using the policy and the latest observation, execute a step in the environment, and repeat
+the last two steps until the environment signals a stop (or reaches a done
+state).</p>
+<p>We will use the simplest possible data collector, which has the same output as an environment rollout,
+with the only difference that it will auto reset done states until the desired frames are collected.</p>
+<p>We need to feed it our exploration policies. Furthermore, to run the policies from all groups as if they were one,
+we put them in a sequence. They will not interfere with each other as each group writes and reads keys in different places.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Put exploration policies from each group in a sequence</span>
+<span class="n">agents_exploration_policy</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span><span class="o">*</span><span class="n">exploration_policies</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+
+<span class="n">collector</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a><span class="p">(</span>
+    <span class="n">env</span><span class="p">,</span>
+    <span class="n">agents_exploration_policy</span><span class="p">,</span>
+    <a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="replay-buffer">
+<h2>Replay buffer<a class="headerlink" href="#replay-buffer" title="Permalink to this heading">¶</a></h2>
+<p>Replay buffers are a common building piece of off-policy RL algorithms.
+There are many types of buffers, in this tutorial we use a basic buffer to store and sample tensordict
+data randomly.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">replay_buffers</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">group</span><span class="p">,</span> <span class="n">_agents</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
+        <span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span>
+            <span class="n">memory_size</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a>
+        <span class="p">),</span>  <span class="c1"># We will store up to memory_size multi-agent transitions</span>
+        <span class="n">sampler</span><span class="o">=</span><span class="n">RandomSampler</span><span class="p">(),</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="n">train_batch_size</span><span class="p">,</span>  <span class="c1"># We will sample batches of this size</span>
+    <span class="p">)</span>
+    <span class="n">replay_buffers</span><span class="p">[</span><span class="n">group</span><span class="p">]</span> <span class="o">=</span> <span class="n">replay_buffer</span>
+</pre></div>
+</div>
+</section>
+<section id="loss-function">
+<h2>Loss function<a class="headerlink" href="#loss-function" title="Permalink to this heading">¶</a></h2>
+<p>The DDPG loss can be directly imported from TorchRL for convenience using the
+<a class="reference internal" href="../reference/generated/torchrl.objectives.DDPGLoss.html#torchrl.objectives.DDPGLoss" title="torchrl.objectives.DDPGLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">DDPGLoss</span></code></a> class. This is the easiest way of utilising DDPG:
+it hides away the mathematical operations of DDPG and the control flow that
+goes with it.</p>
+<p>It is also possible to have different policies for each group.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">losses</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">group</span><span class="p">,</span> <span class="n">_agents</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">loss_module</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DDPGLoss</span></a><span class="p">(</span>
+        <span class="n">actor_network</span><span class="o">=</span><span class="n">policies</span><span class="p">[</span><span class="n">group</span><span class="p">],</span>  <span class="c1"># Use the non-explorative policies</span>
+        <span class="n">value_network</span><span class="o">=</span><span class="n">critics</span><span class="p">[</span><span class="n">group</span><span class="p">],</span>
+        <span class="n">delay_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Whether to use a target network for the value</span>
+        <span class="n">loss_function</span><span class="o">=</span><span class="s2">&quot;l2&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">loss_module</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
+        <span class="n">state_action_value</span><span class="o">=</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;state_action_value&quot;</span><span class="p">),</span>
+        <span class="n">reward</span><span class="o">=</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+        <span class="n">done</span><span class="o">=</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
+        <span class="n">terminated</span><span class="o">=</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">loss_module</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span><span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD0</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">)</span>
+
+    <span class="n">losses</span><span class="p">[</span><span class="n">group</span><span class="p">]</span> <span class="o">=</span> <span class="n">loss_module</span>
+
+<span class="n">target_updaters</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">group</span><span class="p">:</span> <span class="n">SoftUpdate</span><span class="p">(</span><a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss</span></a><span class="p">,</span> <span class="n">tau</span><span class="o">=</span><span class="n">polyak_tau</span><span class="p">)</span> <span class="k">for</span> <span class="n">group</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss</span></a> <span class="ow">in</span> <span class="n">losses</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<span class="p">}</span>
+
+<span class="n">optimisers</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">group</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;loss_actor&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span>
+            <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">flatten_keys</span></a><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="n">lr</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;loss_value&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span>
+            <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss</span><span class="o">.</span><span class="n">value_network_params</span><span class="o">.</span><span class="n">flatten_keys</span></a><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="n">lr</span>
+        <span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">for</span> <span class="n">group</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss</span></a> <span class="ow">in</span> <span class="n">losses</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="training-utils">
+<h2>Training utils<a class="headerlink" href="#training-utils" title="Permalink to this heading">¶</a></h2>
+<p>We do have to define two helper functions that we will use in the training loop.
+They are very simple and do not contain any important logic.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">process_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    If the `(group, &quot;terminated&quot;)` and `(group, &quot;done&quot;)` keys are not present, create them by expanding</span>
+<span class="sd">    `&quot;terminated&quot;` and `&quot;done&quot;`.</span>
+<span class="sd">    This is needed to present them with the same shape as the reward to the loss.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+        <span class="n">group_shape</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">get_item_shape</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+        <span class="n">nested_done_key</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)</span>
+        <span class="n">nested_terminated_key</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">nested_done_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="n">nested_done_key</span><span class="p">,</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">((</span><span class="o">*</span><span class="n">group_shape</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">nested_terminated_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="n">nested_terminated_key</span><span class="p">,</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">))</span>
+                <span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">expand</span><span class="p">((</span><span class="o">*</span><span class="n">group_shape</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="n">batch</span>
+</pre></div>
+</div>
+</section>
+<section id="training-loop">
+<h2>Training loop<a class="headerlink" href="#training-loop" title="Permalink to this heading">¶</a></h2>
+<p>We now have all the pieces needed to code our training loop.
+The steps include:</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Collect data for all groups</dt><dd><ul>
+<li><dl class="simple">
+<dt>Loop over groups</dt><dd><ul>
+<li><p>Store group data in group buffer</p></li>
+<li><dl class="simple">
+<dt>Loop over epochs</dt><dd><ul>
+<li><p>Sample from group buffer</p></li>
+<li><p>Compute loss on sampled data</p></li>
+<li><p>Back propagate loss</p></li>
+<li><p>Optimise</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>Repeat</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>Repeat</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>Repeat</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span>
+    <span class="n">total</span><span class="o">=</span><span class="n">n_iters</span><span class="p">,</span>
+    <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+        <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;episode_reward_mean_</span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2"> = 0&quot;</span> <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">keys</span><span class="p">()]</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">episode_reward_mean_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">group</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+<span class="n">train_group_map</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="p">)</span>
+
+<span class="c1"># Training/collection iterations</span>
+<span class="k">for</span> <span class="n">iteration</span><span class="p">,</span> <span class="n">batch</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
+    <span class="n">current_frames</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">process_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># Util to expand done keys if needed</span>
+    <span class="c1"># Loop over groups</span>
+    <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">train_group_map</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">group_batch</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span>
+            <span class="o">*</span><span class="p">[</span>
+                <span class="n">key</span>
+                <span class="k">for</span> <span class="n">_group</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">_group</span> <span class="o">!=</span> <span class="n">group</span>
+                <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">[</span><span class="n">_group</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">_group</span><span class="p">)]</span>
+            <span class="p">]</span>
+        <span class="p">)</span>  <span class="c1"># Exclude data from other groups</span>
+        <span class="n">group_batch</span> <span class="o">=</span> <span class="n">group_batch</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+            <span class="o">-</span><span class="mi">1</span>
+        <span class="p">)</span>  <span class="c1"># This just affects the leading dimensions in batch_size of the tensordict</span>
+        <span class="n">replay_buffers</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">group_batch</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_optimiser_steps</span><span class="p">):</span>
+            <span class="n">subdata</span> <span class="o">=</span> <span class="n">replay_buffers</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+            <span class="n">loss_vals</span> <span class="o">=</span> <span class="n">losses</span><span class="p">[</span><span class="n">group</span><span class="p">](</span><span class="n">subdata</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">loss_name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;loss_actor&quot;</span><span class="p">,</span> <span class="s2">&quot;loss_value&quot;</span><span class="p">]:</span>
+                <a href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss</span></a> <span class="o">=</span> <span class="n">loss_vals</span><span class="p">[</span><span class="n">loss_name</span><span class="p">]</span>
+                <a href="https://pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimiser</span></a> <span class="o">=</span> <span class="n">optimisers</span><span class="p">[</span><span class="n">group</span><span class="p">][</span><span class="n">loss_name</span><span class="p">]</span>
+
+                <a href="https://pytorch.org/docs/stable/generated/torch.Tensor.backward.html#torch.Tensor.backward" title="torch.Tensor.backward" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-method"><span class="n">loss</span><span class="o">.</span><span class="n">backward</span></a><span class="p">()</span>
+
+                <span class="c1"># Optional</span>
+                <span class="n">params</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimiser</span></a><span class="o">.</span><span class="n">param_groups</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
+                <a href="https://pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html#torch.nn.utils.clip_grad_norm_" title="torch.nn.utils.clip_grad_norm_" class="sphx-glr-backref-module-torch-nn-utils sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">clip_grad_norm_</span></a><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">max_grad_norm</span><span class="p">)</span>
+
+                <a href="https://pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam.step" title="torch.optim.Adam.step" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-method"><span class="n">optimiser</span><span class="o">.</span><span class="n">step</span></a><span class="p">()</span>
+                <a href="https://pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam.zero_grad" title="torch.optim.Adam.zero_grad" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-method"><span class="n">optimiser</span><span class="o">.</span><span class="n">zero_grad</span></a><span class="p">()</span>
+
+            <span class="c1"># Soft-update the target network</span>
+            <span class="n">target_updaters</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+
+        <span class="c1"># Exploration sigma anneal update</span>
+        <span class="n">exploration_policies</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">current_frames</span><span class="p">)</span>
+
+    <span class="c1"># Stop training a certain group when a condition is met (e.g., number of training iterations)</span>
+    <span class="k">if</span> <span class="n">iteration</span> <span class="o">==</span> <span class="n">iteration_when_stop_training_evaders</span><span class="p">:</span>
+        <span class="k">del</span> <span class="n">train_group_map</span><span class="p">[</span><span class="s2">&quot;agent&quot;</span><span class="p">]</span>
+
+    <span class="c1"># Logging</span>
+    <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">episode_reward_mean</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span> <span class="s2">&quot;episode_reward&quot;</span><span class="p">))[</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">))</span>
+            <span class="p">]</span>
+            <span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+            <span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="n">episode_reward_mean_map</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">episode_reward_mean</span><span class="p">)</span>
+
+    <span class="n">pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span>
+        <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="sa">f</span><span class="s2">&quot;episode_reward_mean_</span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="n">episode_reward_mean_map</span><span class="p">[</span><span class="n">group</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+            <span class="p">]</span>
+        <span class="p">),</span>
+        <span class="n">refresh</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-pytb notranslate"><div class="highlight"><pre><span></span><span class="gt">Traceback (most recent call last):</span>
+  File <span class="nb">&quot;/pytorch/rl/docs/source/reference/generated/tutorials/multiagent_competitive_ddpg.py&quot;</span>, line <span class="m">820</span>, in <span class="n">&lt;module&gt;</span>
+<span class="w">    </span><span class="n">exploration_policies</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">current_frames</span><span class="p">)</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.8/site-packages/tensordict/nn/common.py&quot;</span>, line <span class="m">1302</span>, in <span class="n">__getattr__</span>
+<span class="w">    </span><span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getattr__</span><span class="p">(</span><span class="s2">&quot;module&quot;</span><span class="p">),</span> <span class="n">name</span><span class="p">)</span>
+  File <span class="nb">&quot;/pytorch/rl/env/lib/python3.8/site-packages/torch/nn/modules/module.py&quot;</span>, line <span class="m">1914</span>, in <span class="n">__getattr__</span>
+<span class="w">    </span><span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+<span class="gr">AttributeError</span>: <span class="n">&#39;ModuleList&#39; object has no attribute &#39;step&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="results">
+<h2>Results<a class="headerlink" href="#results" title="Permalink to this heading">¶</a></h2>
+<p>We can plot the mean reward obtained per episode.</p>
+<p>To make training last longer, increase the <code class="docutils literal notranslate"><span class="pre">n_iters</span></code> hyperparameter.</p>
+<p>When running this script locally, you may need to close the opened window to
+proceed with the rest of the screen.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span><span class="p">,</span> <span class="n">axs</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+    <span class="n">axs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">episode_reward_mean_map</span><span class="p">[</span><span class="n">group</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Episode reward mean </span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">axs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Reward&quot;</span><span class="p">)</span>
+    <span class="n">axs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span>
+        <span class="n">x</span><span class="o">=</span><span class="n">iteration_when_stop_training_evaders</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Agent (evader) stop training&quot;</span><span class="p">,</span>
+        <span class="n">color</span><span class="o">=</span><span class="s2">&quot;orange&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">axs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">axs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Training iterations&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="render">
+<h2>Render<a class="headerlink" href="#render" title="Permalink to this heading">¶</a></h2>
+<p><em>Rendering instruction are for VMAS</em>, aka when running with <code class="docutils literal notranslate"><span class="pre">use_vmas=True</span></code>.</p>
+<p>TorchRL offers some utils to record and save rendered videos. You can learn more about these tools
+<a class="reference internal" href="../reference/envs.html#environment-recorders"><span class="std std-ref">here</span></a>.</p>
+<p>In the following code-block, we append a transform that will call the <code class="xref py py-meth docutils literal notranslate"><span class="pre">render()</span></code> method from the VMAS
+wrapped environment and save the stack of frames to a <cite>mp4</cite> file which location is determined by the custom
+logger <cite>video_logger</cite>. Note that this code may require some external dependencies such as torchvision.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">use_vmas</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_sphinx</span><span class="p">:</span>
+    <span class="c1"># Replace tmpdir with any desired path where the video should be saved</span>
+    <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
+        <span class="n">video_logger</span> <span class="o">=</span> <span class="n">CSVLogger</span><span class="p">(</span><span class="s2">&quot;vmas_logs&quot;</span><span class="p">,</span> <span class="n">tmpdir</span><span class="p">,</span> <span class="n">video_format</span><span class="o">=</span><span class="s2">&quot;mp4&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Creating rendering env&quot;</span><span class="p">)</span>
+        <span class="n">env_with_render</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">base_env</span><span class="p">,</span> <span class="n">env</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+        <span class="n">env_with_render</span> <span class="o">=</span> <span class="n">env_with_render</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+            <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">PixelRenderTransform</span></a><span class="p">(</span>
+                <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">],</span>
+                <span class="c1"># the np.ndarray has a negative stride and needs to be copied before being cast to a tensor</span>
+                <span class="n">preproc</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+                <span class="n">as_non_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="c1"># asking for array rather than on-screen rendering</span>
+                <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;rgb_array&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">env_with_render</span> <span class="o">=</span> <span class="n">env_with_render</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+            <a href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">VideoRecorder</span></a><span class="p">(</span><span class="n">logger</span><span class="o">=</span><span class="n">video_logger</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">&quot;vmas_rendered&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="n">ExplorationType</span><span class="o">.</span><span class="n">MODE</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Rendering rollout...&quot;</span><span class="p">)</span>
+            <span class="n">env_with_render</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">agents_exploration_policy</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Saving the video...&quot;</span><span class="p">)</span>
+        <span class="n">env_with_render</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">dump</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Saved! Saved directory tree:&quot;</span><span class="p">)</span>
+        <span class="n">video_logger</span><span class="o">.</span><span class="n">print_log_dir</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="conclusion-and-next-steps">
+<h2>Conclusion and next steps<a class="headerlink" href="#conclusion-and-next-steps" title="Permalink to this heading">¶</a></h2>
+<p>In this tutorial, we have seen:</p>
+<ul class="simple">
+<li><p>How to create a competitive multi-group multi-agent environment in TorchRL, how its specs work, and how it integrates with the library;</p></li>
+<li><p>How to create multi-agent network architectures in TorchRL for multiple groups;</p></li>
+<li><p>How we can use <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code> to carry multi-agent multi-group data;</p></li>
+<li><p>How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent multi-group MADDPG/IDDPG training loop.</p></li>
+</ul>
+<p>Now that you are proficient with multi-agent DDPG, you can check out all the TorchRL multi-agent implementations in the
+GitHub repository.
+These are code-only scripts of many MARL algorithms such as the ones seen in this tutorial,
+QMIX, MADDPG, IQL, and many more!</p>
+<p>Also do remember to check out our tutorial: <a class="reference internal" href="multiagent_ppo.html"><span class="doc">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</span></a>.</p>
+<p>Finally, you can modify the parameters of this tutorial to try many other configurations and scenarios
+to become a MARL master.</p>
+<p><a class="reference external" href="https://pettingzoo.farama.org/">PettingZoo</a> and VMAS contain many more scenarios.
+Here are a few videos of some possible scenarios you can try in VMAS.</p>
+<figure class="align-default" id="id3">
+<img alt="VMAS scenarios" src="https://github.com/matteobettini/vmas-media/blob/main/media/vmas_scenarios_more.gif?raw=true" />
+<figcaption>
+<p><span class="caption-text">Scenarios available in <a class="reference external" href="https://github.com/proroklab/VectorizedMultiAgentSimulator">VMAS</a></span><a class="headerlink" href="#id3" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 58.493 seconds)</p>
+<p><strong>Estimated memory usage:</strong>  3114 MB</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-multiagent-competitive-ddpg-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/f3b53654a2b96b82010dd96f73ff5151/multiagent_competitive_ddpg.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">multiagent_competitive_ddpg.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/d30bb6552cc07dec0f1da33382d3fa02/multiagent_competitive_ddpg.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">multiagent_competitive_ddpg.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/5128e829b7152f5a40050c479b691f69/multiagent_competitive_ddpg.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">multiagent_competitive_ddpg.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="multi_task.html" class="btn btn-neutral float-right" title="Task-specific policy in multi-task environments" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="rb_tutorial.html" class="btn btn-neutral" title="Using Replay Buffers" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a><ul>
+<li><a class="reference internal" href="#define-hyperparameters">Define Hyperparameters</a></li>
+<li><a class="reference internal" href="#environment">Environment</a><ul>
+<li><a class="reference internal" href="#group-map">Group map</a></li>
+<li><a class="reference internal" href="#transforms">Transforms</a></li>
+<li><a class="reference internal" href="#rollout">Rollout</a></li>
+<li><a class="reference internal" href="#render-a-random-rollout">Render a random rollout</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#policy">Policy</a></li>
+<li><a class="reference internal" href="#critic-network">Critic network</a></li>
+<li><a class="reference internal" href="#data-collector">Data collector</a></li>
+<li><a class="reference internal" href="#replay-buffer">Replay buffer</a></li>
+<li><a class="reference internal" href="#loss-function">Loss function</a></li>
+<li><a class="reference internal" href="#training-utils">Training utils</a></li>
+<li><a class="reference internal" href="#training-loop">Training loop</a></li>
+<li><a class="reference internal" href="#results">Results</a></li>
+<li><a class="reference internal" href="#render">Render</a></li>
+<li><a class="reference internal" href="#conclusion-and-next-steps">Conclusion and next steps</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../_static/doctools.js"></script>
+         <script src="../_static/design-tabs.js"></script>
+         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2023</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

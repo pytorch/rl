@@ -1,0 +1,1599 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.data.datasets.openx &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.data.datasets.openx</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.data.datasets.openx</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_tensordict</span><span class="p">,</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">pad</span><span class="p">,</span> <span class="n">TensorDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_is_non_tensor</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.datasets.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDatasetExperienceReplay</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.datasets.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_get_root_dir</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictReplayBuffer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.samplers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Sampler</span><span class="p">,</span>
+    <span class="n">SliceSampler</span><span class="p">,</span>
+    <span class="n">SliceSamplerWithoutReplacement</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.storages</span><span class="w"> </span><span class="kn">import</span> <span class="n">_collate_id</span><span class="p">,</span> <span class="n">Storage</span><span class="p">,</span> <span class="n">TensorStorage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.writers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ImmutableDatasetWriter</span><span class="p">,</span> <span class="n">Writer</span>
+
+<span class="n">_has_datasets</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;datasets&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="n">_has_tv</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="OpenXExperienceReplay"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.datasets.OpenXExperienceReplay.html#torchrl.data.datasets.OpenXExperienceReplay">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">OpenXExperienceReplay</span><span class="p">(</span><span class="n">BaseDatasetExperienceReplay</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Open X-Embodiment datasets experience replay.</span>
+
+<span class="sd">    The Open X-Embodiment Dataset contains 1M+ real robot trajectories</span>
+<span class="sd">    spanning 22 robot embodiments, collected through a collaboration between</span>
+<span class="sd">    21 institutions, demonstrating 527 skills (160266 tasks).</span>
+
+<span class="sd">    Website: https://robotics-transformer-x.github.io/</span>
+
+<span class="sd">    GitHub: https://github.com/google-deepmind/open_x_embodiment</span>
+
+<span class="sd">    Paper: https://arxiv.org/abs/2310.08864</span>
+
+<span class="sd">    The data format follows the :ref:`TED convention &lt;TED-format&gt;`.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        Non-tensor data will be written in the tensordict data using the</span>
+<span class="sd">        :class:`~tensordict.tensorclass.NonTensorData` primitive.</span>
+<span class="sd">        For instance, the `language_instruction` field in the data will</span>
+<span class="sd">        be stored in `data.get_non_tensor(&quot;language_instruction&quot;)` (or equivalently</span>
+<span class="sd">        `data.get(&quot;language_instruction&quot;).data`). See the documentation of this</span>
+<span class="sd">        class for more information on how to interact with non-tensor data</span>
+<span class="sd">        stored in a :class:`~tensordict.TensorDict`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        dataset_id (str): The dataset to be downloaded.</span>
+<span class="sd">            Must be part of ``OpenXExperienceReplay.available_datasets``.</span>
+<span class="sd">        batch_size (int): Batch-size used during sampling.</span>
+<span class="sd">            Can be overridden by `data.sample(batch_size)` if necessary.</span>
+<span class="sd">            See ``num_slices`` and ``slice_len`` keyword arguments for a refined</span>
+<span class="sd">            sampling strategy.</span>
+<span class="sd">            If the ``batch_size`` is ``None`` (default), iterating over the</span>
+<span class="sd">            dataset will deliver trajectories one at a time *whereas* calling</span>
+<span class="sd">            :meth:`sample` will *still* require a batch-size to be provided.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        shuffle (bool, optional): if ``True``, trajectories are delivered in a</span>
+<span class="sd">            random order when the dataset is iterated over.</span>
+<span class="sd">            If ``False``, the dataset is iterated over in the pre-defined order.</span>
+
+<span class="sd">            .. warning::</span>
+<span class="sd">              shuffle=False will also impact the sampling. We advice users to</span>
+<span class="sd">              create a copy of the dataset where the ``shuffle`` attribute of the</span>
+<span class="sd">              sampler is set to ``False`` if they wish to enjoy the two different</span>
+<span class="sd">              behaviors (shuffled and not) within the same code base.</span>
+
+<span class="sd">        num_slices (int, optional): the number of slices in a batch. This</span>
+<span class="sd">            corresponds to the number of trajectories present in a batch.</span>
+<span class="sd">            Once collected, the batch is presented as a concatenation of</span>
+<span class="sd">            sub-trajectories that can be recovered through `batch.reshape(num_slices, -1)`.</span>
+<span class="sd">            The `batch_size` must be divisible by `num_slices` if provided.</span>
+<span class="sd">            This argument is exclusive with ``slice_len``.</span>
+<span class="sd">            If the ``num_slices`` argument equates the ``batch_size``, each sample</span>
+<span class="sd">            will belong to a different trajectory.</span>
+<span class="sd">            If neither ``slice_len`` nor ``num_slice`` are provided:</span>
+<span class="sd">            whenever a trajectory has a length shorter than the</span>
+<span class="sd">            batch-size, a contiguous slice of it of length `batch_size` will be</span>
+<span class="sd">            sampled. If the trajectory length is insufficient, an exception will</span>
+<span class="sd">            be raised unless `pad` is not `None`.</span>
+<span class="sd">        slice_len (int, optional): the length of slices in a batch. This</span>
+<span class="sd">            corresponds to the length of trajectories present in a batch.</span>
+<span class="sd">            Once collected, the batch is presented as a concatenation of</span>
+<span class="sd">            sub-trajectories that can be recovered through `batch.reshape(-1, slice_len)`.</span>
+<span class="sd">            The `batch_size` must be divisible by `slice_len` if provided.</span>
+<span class="sd">            This argument is exclusive with ``num_slice``.</span>
+<span class="sd">            If the ``slice_len`` argument equates ``1``, each sample</span>
+<span class="sd">            will belong to a different trajectory.</span>
+<span class="sd">            If neither ``slice_len`` nor ``num_slice`` are provided:</span>
+<span class="sd">            whenever a trajectory has a length shorter than the</span>
+<span class="sd">            batch-size, a contiguous slice of it of length `batch_size` will be</span>
+<span class="sd">            sampled. If the trajectory length is insufficient, an exception will</span>
+<span class="sd">            be raised unless `pad` is not `None`.</span>
+
+<span class="sd">            .. note::</span>
+<span class="sd">              The ``slice_len`` (but not ``num_slices``) can be used when</span>
+<span class="sd">              iterating over a dataset without passing a batch-size in the,</span>
+<span class="sd">              constructor. In these cases, a random sub-sequence of the</span>
+<span class="sd">              trajectory will be chosen.</span>
+
+<span class="sd">        replacement (bool, optional): if ``False``, sampling will be done</span>
+<span class="sd">            without replacement. Defaults to ``True`` for downloaded datasets,</span>
+<span class="sd">            ``False`` for streamed datasets.</span>
+<span class="sd">        pad (bool, :obj:`float` or None): if ``True``, trajectories of insufficient length</span>
+<span class="sd">            given the `slice_len` or `num_slices` arguments will be padded with</span>
+<span class="sd">            0s. If another value is provided, it will be used for padding. If</span>
+<span class="sd">            ``False`` or ``None`` (default) any encounter with a trajectory of</span>
+<span class="sd">            insufficient length will raise an exception.</span>
+<span class="sd">        root (Path or str, optional): The OpenX dataset root directory.</span>
+<span class="sd">            The actual dataset memory-mapped files will be saved under</span>
+<span class="sd">            `&lt;root&gt;/&lt;dataset_id&gt;`. If none is provided, it defaults to</span>
+<span class="sd">            ``~/.cache/torchrl/openx`.</span>
+<span class="sd">        streaming (bool, optional): if ``True``, the data won&#39;t be downloaded but</span>
+<span class="sd">            read from a stream instead.</span>
+
+<span class="sd">            .. note:: The formatting of the data __will change__ when `download=True`</span>
+<span class="sd">                compared to `streaming=True`. If the data is downloaded and</span>
+<span class="sd">                the sampler is left untouched (ie, `num_slices=None`, `slice_len=None`</span>
+<span class="sd">                and `sampler=None`, transitions will be sampled randomly from</span>
+<span class="sd">                the dataset. This isn&#39;t possible at a reasonable cost with</span>
+<span class="sd">                `streaming=True`: in this case, trajectories will be sampled</span>
+<span class="sd">                one at a time and delivered as such (with cropping to comply with</span>
+<span class="sd">                the batch-size etc). The behavior of the two modalities is</span>
+<span class="sd">                much more similar when `num_slices` and `slice_len` are specified,</span>
+<span class="sd">                as in these cases, views of sub-episodes will be returned in both</span>
+<span class="sd">                cases.</span>
+
+<span class="sd">        download (bool or str, optional): Whether the dataset should be downloaded if</span>
+<span class="sd">            not found. Defaults to ``True``. Download can also be passed as &quot;force&quot;,</span>
+<span class="sd">            in which case the downloaded data will be overwritten.</span>
+<span class="sd">        sampler (Sampler, optional): the sampler to be used. If none is provided</span>
+<span class="sd">            a default RandomSampler() will be used.</span>
+<span class="sd">        writer (Writer, optional): the writer to be used. If none is provided</span>
+<span class="sd">            a default :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter` will be used.</span>
+<span class="sd">        collate_fn (callable, optional): merges a list of samples to form a</span>
+<span class="sd">            mini-batch of Tensor(s)/outputs.  Used when using batched</span>
+<span class="sd">            loading from a map-style dataset.</span>
+<span class="sd">        pin_memory (bool): whether pin_memory() should be called on the rb</span>
+<span class="sd">            samples.</span>
+<span class="sd">        prefetch (int, optional): number of next batches to be prefetched</span>
+<span class="sd">            using multithreading.</span>
+<span class="sd">        transform (Transform, optional): Transform to be executed when sample() is called.</span>
+<span class="sd">            To chain transforms use the :class:`~torchrl.envs.transforms.transforms.Compose` class.</span>
+<span class="sd">        split_trajs (bool, optional): if ``True``, the trajectories will be split</span>
+<span class="sd">            along the first dimension and padded to have a matching shape.</span>
+<span class="sd">            To split the trajectories, the ``&quot;done&quot;`` signal will be used, which</span>
+<span class="sd">            is recovered via ``done = truncated | terminated``. In other words,</span>
+<span class="sd">            it is assumed that any ``truncated`` or ``terminated`` signal is</span>
+<span class="sd">            equivalent to the end of a trajectory.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        strict_length (bool, optional): if ``False``, trajectories of length</span>
+<span class="sd">            shorter than `slice_len` (or `batch_size // num_slices`) will be</span>
+<span class="sd">            allowed to appear in the batch.</span>
+<span class="sd">            Be mindful that this can result in effective `batch_size`  shorter</span>
+<span class="sd">            than the one asked for! Trajectories can be split using</span>
+<span class="sd">            :func:`torchrl.collectors.split_trajectories`. Defaults to ``True``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.datasets import OpenXExperienceReplay</span>
+<span class="sd">        &gt;&gt;&gt; import tempfile</span>
+<span class="sd">        &gt;&gt;&gt; # Download the data, and sample 128 elements in each batch out of two trajectories</span>
+<span class="sd">        &gt;&gt;&gt; num_slices = 2</span>
+<span class="sd">        &gt;&gt;&gt; with tempfile.TemporaryDirectory() as root:</span>
+<span class="sd">        ...     dataset = OpenXExperienceReplay(&quot;cmu_stretch&quot;, batch_size=128,</span>
+<span class="sd">        ...         num_slices=num_slices, download=True, streaming=False,</span>
+<span class="sd">        ...         root=root,</span>
+<span class="sd">        ...         )</span>
+<span class="sd">        ...     for batch in dataset:</span>
+<span class="sd">        ...         print(batch.reshape(num_slices, -1))</span>
+<span class="sd">        ...         break</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([2, 64, 8]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                discount: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                episode: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int32, is_shared=False),</span>
+<span class="sd">                index: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                is_init: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                language_embedding: Tensor(shape=torch.Size([2, 64, 512]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                language_instruction: NonTensorData(</span>
+<span class="sd">                    data=&#39;lift open green garbage can lid&#39;,</span>
+<span class="sd">                    batch_size=torch.Size([2, 64]),</span>
+<span class="sd">                    device=cpu,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                image: Tensor(shape=torch.Size([2, 64, 3, 128, 128]), device=cpu, dtype=torch.uint8, is_shared=False),</span>
+<span class="sd">                                state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},</span>
+<span class="sd">                            batch_size=torch.Size([2, 64]),</span>
+<span class="sd">                            device=cpu,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([2, 64]),</span>
+<span class="sd">                    device=cpu,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        image: Tensor(shape=torch.Size([2, 64, 3, 128, 128]), device=cpu, dtype=torch.uint8, is_shared=False),</span>
+<span class="sd">                        state: Tensor(shape=torch.Size([2, 64, 4]), device=cpu, dtype=torch.float64, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([2, 64]),</span>
+<span class="sd">                    device=cpu,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([2, 64, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([2, 64]),</span>
+<span class="sd">            device=cpu,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; # Read data from a stream. Deliver entire trajectories when iterating</span>
+<span class="sd">        &gt;&gt;&gt; dataset = OpenXExperienceReplay(&quot;cmu_stretch&quot;,</span>
+<span class="sd">        ...     num_slices=num_slices, download=False, streaming=True)</span>
+<span class="sd">        &gt;&gt;&gt; for data in dataset: # data does not have a consistent shape</span>
+<span class="sd">        ...     break</span>
+<span class="sd">        &gt;&gt;&gt; # Define batch-size dynamically</span>
+<span class="sd">        &gt;&gt;&gt; data = dataset.sample(128)  # delivers 2 sub-trajectories of length 64</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">available_datasets</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;fractal20220817_data&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;kuka&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;bridge&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;taco_play&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;jaco_play&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;berkeley_cable_routing&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;roboturk&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;nyu_door_opening_surprising_effectiveness&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;viola&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;berkeley_autolab_ur5&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;toto&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;language_table&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;columbia_cairlab_pusht_real&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;stanford_kuka_multimodal_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;nyu_rot_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;stanford_hydra_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;austin_buds_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;nyu_franka_play_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;maniskill_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;furniture_bench_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;cmu_franka_exploration_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ucsd_kitchen_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ucsd_pick_and_place_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;austin_sailor_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;austin_sirius_dataset_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;bc_z&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;usc_cloth_sim_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;utokyo_pr2_opening_fridge_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;utokyo_pr2_tabletop_manipulation_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;utokyo_saytap_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;utokyo_xarm_pick_and_place_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;utokyo_xarm_bimanual_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;robo_net&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;berkeley_mvp_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;berkeley_rpt_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;kaist_nonprehensile_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;stanford_mask_vit_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;tokyo_u_lsmo_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dlr_sara_pour_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dlr_sara_grid_clamp_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dlr_edan_shared_control_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;asu_table_top_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;stanford_robocook_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;eth_agent_affordances&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;imperialcollege_sawyer_wrist_cam&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;iamlab_cmu_pickup_insert_converted_externally_to_rlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;uiuc_d3field&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;utaustin_mutex&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;berkeley_fanuc_manipulation&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;cmu_playing_with_food&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;cmu_play_fusion&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;cmu_stretch&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;berkeley_gnm_recon&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;berkeley_gnm_cory_hall&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;berkeley_gnm_sac_son&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+
+    <span class="c1"># some very high number that should be above all trajecory lengths in the dataset</span>
+    <span class="n">_MAX_TRAJ_LEN</span> <span class="o">=</span> <span class="mi">1_000_000</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataset_id</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">num_slices</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">slice_len</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pad</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">replacement</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">streaming</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">root</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">download</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">sampler</span><span class="p">:</span> <span class="n">Sampler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">writer</span><span class="p">:</span> <span class="n">Writer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pin_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">prefetch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">transform</span><span class="p">:</span> <span class="s2">&quot;torchrl.envs.Transform&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa-F821</span>
+        <span class="n">split_trajs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">strict_length</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">download</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">streaming</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">download</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">streaming</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="n">download</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">download</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">streaming</span>
+        <span class="k">elif</span> <span class="n">streaming</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">streaming</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">download</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">download</span> <span class="o">=</span> <span class="n">download</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">streaming</span> <span class="o">=</span> <span class="n">streaming</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span> <span class="o">=</span> <span class="n">dataset_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span> <span class="o">=</span> <span class="n">split_trajs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span> <span class="o">=</span> <span class="n">shuffle</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span> <span class="o">=</span> <span class="n">num_slices</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span> <span class="o">=</span> <span class="n">slice_len</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pad</span> <span class="o">=</span> <span class="n">pad</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strict_length</span> <span class="o">=</span> <span class="n">strict_length</span>
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;num_slices or slice_len can be not None, but not both.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">split_trajs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">streaming</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">replacement</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">replacement</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="n">pad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;the `pad` argument is to be used only with streaming datasets.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">root</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">root</span> <span class="o">=</span> <span class="n">_get_root_dir</span><span class="p">(</span><span class="s2">&quot;openx&quot;</span><span class="p">)</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">download</span> <span class="o">==</span> <span class="s2">&quot;force&quot;</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">download</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_downloaded</span><span class="p">()</span>
+            <span class="p">):</span>
+                <span class="k">if</span> <span class="n">download</span> <span class="o">==</span> <span class="s2">&quot;force&quot;</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path_root</span><span class="p">):</span>
+                    <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path_root</span><span class="p">)</span>
+
+                <span class="n">storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_download_and_preproc</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">storage</span> <span class="o">=</span> <span class="n">TensorStorage</span><span class="p">(</span><span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">dataset_id</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">num_slices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">slice_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;`num_slices` and `slice_len` are exclusive with the `sampler` argument.&quot;</span>
+                    <span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">replacement</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="s2">&quot;shuffle=False can only be used when replacement=False.&quot;</span>
+                        <span class="p">)</span>
+                    <span class="n">sampler</span> <span class="o">=</span> <span class="n">SliceSampler</span><span class="p">(</span>
+                        <span class="n">num_slices</span><span class="o">=</span><span class="n">num_slices</span><span class="p">,</span>
+                        <span class="n">slice_len</span><span class="o">=</span><span class="n">slice_len</span><span class="p">,</span>
+                        <span class="n">strict_length</span><span class="o">=</span><span class="n">strict_length</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">sampler</span> <span class="o">=</span> <span class="n">SliceSamplerWithoutReplacement</span><span class="p">(</span>
+                        <span class="n">num_slices</span><span class="o">=</span><span class="n">num_slices</span><span class="p">,</span>
+                        <span class="n">slice_len</span><span class="o">=</span><span class="n">slice_len</span><span class="p">,</span>
+                        <span class="n">strict_length</span><span class="o">=</span><span class="n">strict_length</span><span class="p">,</span>
+                        <span class="n">shuffle</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">,</span>
+                    <span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">replacement</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="c1"># replacement can be False or None</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;replacement=True is not available with streamed datasets.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">download</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;download and streaming cannot be set to ``True`` concomitantly.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">storage</span> <span class="o">=</span> <span class="n">_StreamingStorage</span><span class="p">(</span>
+                <span class="n">dataset_id</span><span class="o">=</span><span class="n">dataset_id</span><span class="p">,</span>
+                <span class="n">shuffle</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">,</span>
+                <span class="n">num_slices</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span><span class="p">,</span>
+                <span class="n">slice_len</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span><span class="p">,</span>
+                <span class="n">pad</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pad</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">sampler</span> <span class="o">=</span> <span class="n">_StreamingSampler</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">writer</span> <span class="o">=</span> <span class="n">ImmutableDatasetWriter</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">collate_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">collate_fn</span> <span class="o">=</span> <span class="n">_collate_id</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">storage</span><span class="o">=</span><span class="n">storage</span><span class="p">,</span>
+            <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+            <span class="n">writer</span><span class="o">=</span><span class="n">writer</span><span class="p">,</span>
+            <span class="n">collate_fn</span><span class="o">=</span><span class="n">collate_fn</span><span class="p">,</span>
+            <span class="n">pin_memory</span><span class="o">=</span><span class="n">pin_memory</span><span class="p">,</span>
+            <span class="n">prefetch</span><span class="o">=</span><span class="n">prefetch</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">transform</span><span class="o">=</span><span class="n">transform</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># we can still iterate over the dataset</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="n">_StreamingStorage</span><span class="p">):</span>
+                <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="c1"># truncate the trajs with slice_len</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span> <span class="o">=</span> <span class="mi">1</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="k">yield from</span> <span class="bp">self</span>
+                <span class="k">finally</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># if we don&#39;t have a batch size but we know how many trajectories</span>
+                <span class="c1"># we want in each batch, we can build that on the fly.</span>
+                <span class="c1"># The only time we can do this is if num_slices is given but not</span>
+                <span class="c1"># slice_len.</span>
+                <span class="n">num_slices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">num_slices</span><span class="p">:</span>
+                    <span class="n">num_slices</span> <span class="o">=</span> <span class="mi">1</span>
+                <span class="n">sampler</span> <span class="o">=</span> <span class="n">SliceSamplerWithoutReplacement</span><span class="p">(</span>
+                    <span class="n">num_slices</span><span class="o">=</span><span class="n">num_slices</span><span class="p">,</span>
+                    <span class="n">strict_length</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">shuffle</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_MAX_TRAJ_LEN</span>
+                <span class="k">yield from</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
+                    <span class="n">storage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span>
+                    <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+                    <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+                    <span class="n">transform</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__iter__</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">data_path</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">streaming</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span> <span class="o">+</span> <span class="s2">&quot;_split&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_path_root</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">data_path_root</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">streaming</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_downloaded</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path_root</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_download_and_preproc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_datasets</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;the `datasets` library is required for the dataset </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">datasets</span>
+
+        <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">cache_dir</span><span class="p">:</span>
+            <span class="n">dataset</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">load_dataset</span><span class="p">(</span>
+                <span class="s2">&quot;jxu124/OpenX-Embodiment&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="p">,</span>
+                <span class="n">streaming</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">split</span><span class="o">=</span><span class="s2">&quot;train&quot;</span><span class="p">,</span>
+                <span class="n">cache_dir</span><span class="o">=</span><span class="n">cache_dir</span><span class="p">,</span>
+                <span class="n">trust_remote_code</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="c1"># iterate over the dataset a first time to count elements</span>
+            <span class="n">total_frames</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">tqdm</span>
+
+                <span class="n">_has_tqdm</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;counting&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+                <span class="n">_has_tqdm</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">pbar</span> <span class="o">=</span> <span class="n">dataset</span>
+
+            <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">pbar</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">total_frames</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;data.pickle&quot;</span><span class="p">][</span><span class="s2">&quot;steps&quot;</span><span class="p">]:</span>
+                        <span class="n">td</span> <span class="o">=</span> <span class="n">_make_tensordict_image_conv</span><span class="p">(</span><span class="n">step</span><span class="p">)</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+                        <span class="c1"># format td: requires td to have a non-null batch_size</span>
+                        <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="o">*</span><span class="n">td</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                        <span class="n">_format_data</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                        <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">total_frames</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data.pickle&quot;</span><span class="p">][</span><span class="s2">&quot;steps&quot;</span><span class="p">])</span>
+            <span class="n">td_data</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">total_frames</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">expand_non_tensor</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">NonTensorData</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">maybe_to_stack</span><span class="p">()</span>
+                <span class="k">return</span> <span class="n">x</span>
+
+            <span class="n">td_data</span> <span class="o">=</span> <span class="n">td_data</span><span class="o">.</span><span class="n">_apply_nest</span><span class="p">(</span>
+                <span class="n">expand_non_tensor</span><span class="p">,</span>
+                <span class="n">is_leaf</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_is_non_tensor</span><span class="p">(</span><span class="n">x</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">td_data</span> <span class="o">=</span> <span class="n">td_data</span><span class="o">.</span><span class="n">memmap_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">_has_tqdm</span><span class="p">:</span>
+                <span class="n">pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;preproc&quot;</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="n">total_frames</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">pbar</span> <span class="o">=</span> <span class="n">dataset</span>
+            <span class="n">idx0</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">idx1</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">episode</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">pbar</span><span class="p">:</span>
+                <span class="n">current_ep</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+                    <span class="p">[</span>
+                        <span class="n">_make_tensordict_image_conv</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;data.pickle&quot;</span><span class="p">][</span><span class="s2">&quot;steps&quot;</span><span class="p">]</span>
+                    <span class="p">]</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+                <span class="n">_format_data</span><span class="p">(</span><span class="n">current_ep</span><span class="p">,</span> <span class="n">episode</span><span class="p">)</span>
+                <span class="n">episode</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">idx1</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">current_ep</span><span class="p">)</span>
+                <span class="n">td_data</span><span class="p">[</span><span class="n">idx0</span><span class="p">:</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="n">current_ep</span>
+                <span class="n">idx0</span> <span class="o">=</span> <span class="n">idx1</span>
+                <span class="k">if</span> <span class="n">_has_tqdm</span><span class="p">:</span>
+                    <span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">current_ep</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">return</span> <span class="n">TensorStorage</span><span class="p">(</span><span class="n">td_data</span><span class="o">.</span><span class="n">lock_</span><span class="p">())</span></div>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_StreamingStorage</span><span class="p">(</span><span class="n">Storage</span><span class="p">):</span>
+    <span class="n">SLICE_MISMATCH</span> <span class="o">=</span> <span class="s2">&quot;The batch_size </span><span class="si">{}</span><span class="s2"> must be divisible by num_slices </span><span class="si">{}</span><span class="s2"> or slice_len </span><span class="si">{}</span><span class="s2"> if provided.&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataset_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">repo</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;jxu124/OpenX-Embodiment&quot;</span><span class="p">,</span>
+        <span class="n">split</span><span class="o">=</span><span class="s2">&quot;train&quot;</span><span class="p">,</span>
+        <span class="n">base_path</span><span class="o">=</span><span class="s2">&quot;data.pickle&quot;</span><span class="p">,</span>
+        <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">truncate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">num_slices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">slice_len</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">pad</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span> <span class="o">=</span> <span class="n">shuffle</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span> <span class="o">=</span> <span class="n">dataset_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">repo</span> <span class="o">=</span> <span class="n">repo</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">split</span> <span class="o">=</span> <span class="n">split</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_path</span> <span class="o">=</span> <span class="n">base_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">truncate</span> <span class="o">=</span> <span class="n">truncate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span> <span class="o">=</span> <span class="n">num_slices</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span> <span class="o">=</span> <span class="n">slice_len</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pad</span> <span class="o">=</span> <span class="n">pad</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_datasets</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;the `datasets` library is required for the dataset </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">datasets</span>
+
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">load_dataset</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">repo</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="p">,</span> <span class="n">streaming</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">split</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">split</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">:</span>
+            <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">shuffle</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">episode</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_path</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">base_path</span><span class="p">]</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">_make_tensordict_image_conv</span><span class="p">(</span><span class="n">step</span><span class="p">)</span> <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;steps&quot;</span><span class="p">]]</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+            <span class="n">_format_data</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">episode</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">_slice_data</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">slice_len</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span><span class="p">,</span> <span class="n">pad_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pad</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">data</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">range</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">range</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">index</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="n">index</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="c1"># we use a range to indicate how much data we want</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;iterable datasets do not support indexing.&quot;</span><span class="p">)</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">data_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">episode</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">stop</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">batch_size</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">SLICE_MISMATCH</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="n">num_slices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span>
+            <span class="n">slice_len</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="o">//</span> <span class="n">num_slices</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">batch_size</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">SLICE_MISMATCH</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="n">slice_len</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span>
+            <span class="c1"># num_slices = batch_size // slice_len</span>
+
+        <span class="k">while</span> <span class="n">total</span> <span class="o">&lt;</span> <span class="n">batch_size</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_iter</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dataset_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_iter</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_path</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">base_path</span><span class="p">]</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">_make_tensordict_image_conv</span><span class="p">(</span><span class="n">step</span><span class="p">)</span> <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;steps&quot;</span><span class="p">]]</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+            <span class="n">_format_data</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">episode</span><span class="p">)</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">_slice_data</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">slice_len</span><span class="o">=</span><span class="n">slice_len</span><span class="p">,</span> <span class="n">pad_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pad</span><span class="p">)</span>
+            <span class="n">data_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="n">total</span> <span class="o">+=</span> <span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="n">episode</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncate</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">data</span><span class="p">[:</span> <span class="n">index</span><span class="o">.</span><span class="n">stop</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">state_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;state_dict.json&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;repo&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">repo</span><span class="p">,</span>
+            <span class="s2">&quot;split&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">split</span><span class="p">,</span>
+            <span class="s2">&quot;dataset_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="p">,</span>
+            <span class="s2">&quot;shuffle&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">,</span>
+            <span class="s2">&quot;base_path&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_path</span><span class="p">,</span>
+            <span class="s2">&quot;truncated&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncate</span><span class="p">,</span>
+            <span class="s2">&quot;num_slices&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_slices</span><span class="p">,</span>
+            <span class="s2">&quot;slice_len&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_len</span><span class="p">,</span>
+            <span class="s2">&quot;pad&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">loads</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">state_dict</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;state_dict.json&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> does not have a length. Use a downloaded dataset to &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;access this property.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_slice_data</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">slice_len</span><span class="p">,</span> <span class="n">pad_value</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">slice_len</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">pad_value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The trajectory length (</span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">) is shorter than the slice length (</span><span class="si">{</span><span class="n">slice_len</span><span class="si">}</span><span class="s2">). &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Decrease the slice length or provide a padding value.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">pad_value</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">pad_value</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">pad</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">slice_len</span> <span class="o">-</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">value</span><span class="o">=</span><span class="n">pad_value</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">random_range</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">((</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">slice_len</span><span class="p">)</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(()))</span><span class="o">.</span><span class="n">floor</span><span class="p">()</span><span class="o">.</span><span class="n">int</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="n">random_range</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">random_range</span><span class="p">,</span> <span class="n">random_range</span> <span class="o">+</span> <span class="n">slice_len</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">random_range</span><span class="p">]</span>
+    <span class="n">truncated</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">))</span>
+    <span class="n">truncated</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">index_fill</span><span class="p">(</span>
+        <span class="n">truncated</span><span class="p">,</span>
+        <span class="n">dim</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">index</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">truncated</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">done</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">))</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">),</span> <span class="n">truncated</span><span class="p">)</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span> <span class="n">truncated</span> <span class="o">|</span> <span class="n">done</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">data</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_StreamingSampler</span><span class="p">(</span><span class="n">Sampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">),</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">loads</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+
+<span class="n">OPENX_KEY_MAP</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;is_first&quot;</span><span class="p">:</span> <span class="s2">&quot;is_init&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;is_last&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
+    <span class="s2">&quot;is_terminal&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">),</span>
+    <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_format_data</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">episode</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="n">observation_</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;observation&quot;</span><span class="p">)</span>
+    <span class="n">observation_pad</span> <span class="o">=</span> <span class="n">pad</span><span class="p">(</span><span class="n">observation_</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">),</span> <span class="n">observation_pad</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">newkey</span> <span class="ow">in</span> <span class="n">OPENX_KEY_MAP</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">newkey</span><span class="p">)</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">),</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">))</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">)),</span>
+    <span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">):</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">),</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="o">!=</span> <span class="s2">&quot;reward&quot;</span><span class="p">:</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">))))</span>
+
+    <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+        <span class="s2">&quot;episode&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">episode</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_make_tensordict_image_conv</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+    <span class="c1"># in some datasets, the images are not well converted.</span>
+    <span class="c1"># before building the tensordict, we load the PIL image and convert it to a tensor</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">img_bytes</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">][</span><span class="s2">&quot;image&quot;</span><span class="p">][</span><span class="s2">&quot;bytes&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_tv</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;the `torchvision` library is required to read the image observation.&quot;</span>
+            <span class="p">)</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torchvision.transforms.v2.functional</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
+
+        <span class="n">img</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">img_bytes</span><span class="p">))</span>
+        <span class="n">tensor</span> <span class="o">=</span> <span class="n">torchvision</span><span class="o">.</span><span class="n">transforms</span><span class="o">.</span><span class="n">v2</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">pil_to_tensor</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">][</span><span class="s2">&quot;image&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">return</span> <span class="n">make_tensordict</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+         <script src="../../../../_static/jquery.js"></script>
+         <script src="../../../../_static/underscore.js"></script>
+         <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

@@ -1,0 +1,1418 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.envs.custom.chess &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+f1c42e0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.envs.custom.chess</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.envs.custom.chess</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Binary</span><span class="p">,</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Categorical</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span><span class="p">,</span> <span class="n">Unbounded</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_EnvPostInit</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_classproperty</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_ChessMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">include_hash</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;include_hash&quot;</span><span class="p">)</span>
+        <span class="n">include_hash_inv</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;include_hash_inv&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_hash</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hash</span>
+
+            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">in_keys_inv</span> <span class="o">=</span> <span class="p">[]</span> <span class="k">if</span> <span class="n">include_hash_inv</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">out_keys_inv</span> <span class="o">=</span> <span class="p">[]</span> <span class="k">if</span> <span class="n">include_hash_inv</span> <span class="k">else</span> <span class="kc">None</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">maybe_add_keys</span><span class="p">(</span><span class="n">condition</span><span class="p">,</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">condition</span><span class="p">:</span>
+                    <span class="n">in_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">in_key</span><span class="p">)</span>
+                    <span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">out_key</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">include_hash_inv</span><span class="p">:</span>
+                        <span class="n">in_keys_inv</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">in_key</span><span class="p">)</span>
+                        <span class="n">out_keys_inv</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">out_key</span><span class="p">)</span>
+
+            <span class="n">maybe_add_keys</span><span class="p">(</span><span class="n">instance</span><span class="o">.</span><span class="n">include_san</span><span class="p">,</span> <span class="s2">&quot;san&quot;</span><span class="p">,</span> <span class="s2">&quot;san_hash&quot;</span><span class="p">)</span>
+            <span class="n">maybe_add_keys</span><span class="p">(</span><span class="n">instance</span><span class="o">.</span><span class="n">include_fen</span><span class="p">,</span> <span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="s2">&quot;fen_hash&quot;</span><span class="p">)</span>
+            <span class="n">maybe_add_keys</span><span class="p">(</span><span class="n">instance</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">,</span> <span class="s2">&quot;pgn&quot;</span><span class="p">,</span> <span class="s2">&quot;pgn_hash&quot;</span><span class="p">)</span>
+
+            <span class="n">instance</span> <span class="o">=</span> <span class="n">instance</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+                <span class="n">Hash</span><span class="p">(</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="p">,</span> <span class="n">in_keys_inv</span><span class="p">,</span> <span class="n">out_keys_inv</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">include_hash_inv</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s2">&quot;&#39;include_hash_inv=True&#39; can only be set if&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;&#39;include_hash=True&#39;, but got &#39;include_hash=</span><span class="si">{</span><span class="n">include_hash</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mask_actions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionMask</span>
+
+            <span class="n">instance</span> <span class="o">=</span> <span class="n">instance</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">ActionMask</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">instance</span>
+
+
+<div class="viewcode-block" id="ChessEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ChessEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_ChessMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A chess environment that follows the TorchRL API.</span>
+
+<span class="sd">    This environment simulates a chess game using the `chess` library. It supports various state representations</span>
+<span class="sd">    and can be configured to include different types of observations such as SAN, FEN, PGN, and legal moves.</span>
+
+<span class="sd">    Requires: the `chess` library. More info `here &lt;https://python-chess.readthedocs.io/en/latest/&gt;`__.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        stateful (bool): Whether to keep track of the internal state of the board.</span>
+<span class="sd">            If False, the state will be stored in the observation and passed back</span>
+<span class="sd">            to the environment on each call. Default: ``True``.</span>
+<span class="sd">        include_san (bool): Whether to include SAN (Standard Algebraic Notation) in the observations. Default: ``False``.</span>
+
+<span class="sd">            .. note:: The `&quot;san&quot;` entry corresponding to `rollout[&quot;action&quot;]` will be found in `rollout[&quot;next&quot;, &quot;san&quot;]`,</span>
+<span class="sd">                whereas the value at the root `rollout[&quot;san&quot;]` will correspond to the value of the san preceding the</span>
+<span class="sd">                same index action.</span>
+
+<span class="sd">        include_fen (bool): Whether to include FEN (Forsyth-Edwards Notation) in the observations. Default: ``False``.</span>
+<span class="sd">        include_pgn (bool): Whether to include PGN (Portable Game Notation) in the observations. Default: ``False``.</span>
+<span class="sd">        include_legal_moves (bool): Whether to include legal moves in the observations. Default: ``False``.</span>
+<span class="sd">        include_hash (bool): Whether to include hash transformations in the environment. Default: ``False``.</span>
+<span class="sd">        mask_actions (bool): if ``True``, a :class:`~torchrl.envs.ActionMask` transform will be appended</span>
+<span class="sd">            to the env to make sure that the actions are properly masked. Default: ``True``.</span>
+<span class="sd">        pixels (bool): Whether to include pixel-based observations of the board. Default: ``False``.</span>
+
+<span class="sd">    .. note:: The action spec is a :class:`~torchrl.data.Categorical` with a number of actions equal to the number of possible SAN moves.</span>
+<span class="sd">        The action space is structured as a categorical distribution over all possible SAN moves, with the legal moves</span>
+<span class="sd">        being a subset of this space. The environment uses a mask to ensure only legal moves are selected.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import ChessEnv</span>
+<span class="sd">        &gt;&gt;&gt; _ = torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; env = ChessEnv(include_fen=True, include_san=True, include_pgn=True, include_legal_moves=True)</span>
+<span class="sd">        &gt;&gt;&gt; print(env)</span>
+<span class="sd">        TransformedEnv(</span>
+<span class="sd">            env=ChessEnv(),</span>
+<span class="sd">            transform=ActionMask(keys=[&#39;action&#39;, &#39;action_mask&#39;]))</span>
+<span class="sd">        &gt;&gt;&gt; r = env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rand_step(r))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                action_mask: Tensor(shape=torch.Size([29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                fen: NonTensorData(data=rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1, batch_size=torch.Size([]), device=None),</span>
+<span class="sd">                legal_moves: Tensor(shape=torch.Size([219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        action_mask: Tensor(shape=torch.Size([29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        fen: NonTensorData(data=rnbqkbnr/pppppppp/8/8/5P2/8/PPPPP1PP/RNBQKBNR b KQkq - 0 1, batch_size=torch.Size([]), device=None),</span>
+<span class="sd">                        legal_moves: Tensor(shape=torch.Size([219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                        pgn: NonTensorData(data=[Event &quot;?&quot;]</span>
+<span class="sd">                        [Site &quot;?&quot;]</span>
+<span class="sd">                        [Date &quot;????.??.??&quot;]</span>
+<span class="sd">                        [Round &quot;?&quot;]</span>
+<span class="sd">                        [White &quot;?&quot;]</span>
+<span class="sd">                        [Black &quot;?&quot;]</span>
+<span class="sd">                        [Result &quot;*&quot;]</span>
+
+<span class="sd">                        1. f4 *, batch_size=torch.Size([]), device=None),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        san: NonTensorData(data=f4, batch_size=torch.Size([]), device=None),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        turn: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                pgn: NonTensorData(data=[Event &quot;?&quot;]</span>
+<span class="sd">                [Site &quot;?&quot;]</span>
+<span class="sd">                [Date &quot;????.??.??&quot;]</span>
+<span class="sd">                [Round &quot;?&quot;]</span>
+<span class="sd">                [White &quot;?&quot;]</span>
+<span class="sd">                [Black &quot;?&quot;]</span>
+<span class="sd">                [Result &quot;*&quot;]</span>
+
+<span class="sd">                *, batch_size=torch.Size([]), device=None),</span>
+<span class="sd">                san: NonTensorData(data=&lt;start&gt;, batch_size=torch.Size([]), device=None),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                turn: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(1000))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([96]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                action_mask: Tensor(shape=torch.Size([96, 29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                fen: NonTensorStack(</span>
+<span class="sd">                    [&#39;rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ...,</span>
+<span class="sd">                    batch_size=torch.Size([96]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                legal_moves: Tensor(shape=torch.Size([96, 219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        action_mask: Tensor(shape=torch.Size([96, 29275]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        fen: NonTensorStack(</span>
+<span class="sd">                            [&#39;rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b ...,</span>
+<span class="sd">                            batch_size=torch.Size([96]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        legal_moves: Tensor(shape=torch.Size([96, 219]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                        pgn: NonTensorStack(</span>
+<span class="sd">                            [&#39;[Event &quot;?&quot;]\n[Site &quot;?&quot;]\n[Date &quot;????.??.??&quot;]\n[R...,</span>
+<span class="sd">                            batch_size=torch.Size([96]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                        san: NonTensorStack(</span>
+<span class="sd">                            [&#39;Nf3&#39;, &#39;Na6&#39;, &#39;c4&#39;, &#39;f6&#39;, &#39;h4&#39;, &#39;Rb8&#39;, &#39;Na3&#39;, &#39;Ra...,</span>
+<span class="sd">                            batch_size=torch.Size([96]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        turn: Tensor(shape=torch.Size([96]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([96]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                pgn: NonTensorStack(</span>
+<span class="sd">                    [&#39;[Event &quot;?&quot;]\n[Site &quot;?&quot;]\n[Date &quot;????.??.??&quot;]\n[R...,</span>
+<span class="sd">                    batch_size=torch.Size([96]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                san: NonTensorStack(</span>
+<span class="sd">                    [&#39;&lt;start&gt;&#39;, &#39;Nf3&#39;, &#39;Na6&#39;, &#39;c4&#39;, &#39;f6&#39;, &#39;h4&#39;, &#39;Rb8&#39;,...,</span>
+<span class="sd">                    batch_size=torch.Size([96]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([96, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                turn: Tensor(shape=torch.Size([96]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([96]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_hash_table</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_PGN_RESTART</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;[Event &quot;?&quot;]</span>
+<span class="s2">[Site &quot;?&quot;]</span>
+<span class="s2">[Date &quot;????.??.??&quot;]</span>
+<span class="s2">[Round &quot;?&quot;]</span>
+<span class="s2">[White &quot;?&quot;]</span>
+<span class="s2">[Black &quot;?&quot;]</span>
+<span class="s2">[Result &quot;*&quot;]</span>
+
+<span class="s2">*&quot;&quot;&quot;</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lib</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">chess</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">chess.pgn</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;The `chess` library could not be found. Make sure you installed it through `pip install chess`.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">chess</span>
+
+    <span class="n">_san_moves</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">san_moves</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_san_moves</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;san_moves.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;r+&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">_san_moves</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_san_moves</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_legal_moves_to_index</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">board</span><span class="p">:</span> <span class="s2">&quot;chess.Board&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">return_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">pad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># trust the board</span>
+                <span class="k">pass</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+                <span class="n">fen</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="n">fen</span> <span class="o">=</span> <span class="n">fen</span><span class="o">.</span><span class="n">data</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
+                <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">)</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="n">pgn</span><span class="o">.</span><span class="n">data</span>
+                <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pgn_to_board</span><span class="p">(</span><span class="n">pgn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">board</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span>
+
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_san_moves</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">board</span><span class="o">.</span><span class="n">san</span><span class="p">(</span><span class="n">m</span><span class="p">))</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">board</span><span class="o">.</span><span class="n">legal_moves</span><span class="p">],</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">return_mask</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_move_index_to_mask</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pad</span><span class="p">:</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span>
+                <span class="n">indices</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">218</span> <span class="o">-</span> <span class="n">indices</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span> <span class="n">value</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_mask</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">indices</span><span class="p">,</span> <span class="n">mask</span>
+        <span class="k">return</span> <span class="n">indices</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_move_index_to_mask</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">san_moves</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span><span class="o">.</span><span class="n">index_fill_</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="kc">True</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">stateful</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">include_san</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_fen</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_pgn</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_legal_moves</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_hash</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_hash_inv</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">mask_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">pixels</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">chess</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">turn</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">()),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_san</span> <span class="o">=</span> <span class="n">include_san</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span> <span class="o">=</span> <span class="n">include_fen</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span> <span class="o">=</span> <span class="n">include_pgn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span> <span class="o">=</span> <span class="n">mask_actions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_legal_moves</span> <span class="o">=</span> <span class="n">include_legal_moves</span>
+        <span class="k">if</span> <span class="n">include_legal_moves</span><span class="p">:</span>
+            <span class="c1"># 218 max possible legal moves per chess board position</span>
+            <span class="c1"># https://www.stmintz.com/ccc/index.php?id=424966</span>
+            <span class="c1"># len(self.san_moves)+1 is the padding value</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;legal_moves&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
+                <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">218</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_san</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;san&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;Nc6&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_pgn</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;pgn&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">example_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_PGN_RESTART</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_fen</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;fen&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;any&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">stateful</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="n">include_pgn</span> <span class="ow">or</span> <span class="n">include_fen</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;At least one state representation (pgn or fen) must be enabled when stateful &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;is </span><span class="si">{</span><span class="n">stateful</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span> <span class="o">=</span> <span class="n">stateful</span>
+
+        <span class="c1"># state_spec is loosely defined as such - it&#39;s not really an issue that extra keys</span>
+        <span class="c1"># can go missing but it allows us to reset the env using fen passed to the reset</span>
+        <span class="c1"># method.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_state_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixels</span> <span class="o">=</span> <span class="n">pixels</span>
+        <span class="k">if</span> <span class="n">pixels</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;cairosvg&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">&quot;Please install cairosvg to use this environment with pixel rendering.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">&quot;Please install torchvision to use this environment with pixel rendering.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">390</span><span class="p">,</span> <span class="mi">390</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_reward_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">reward</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;action_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Binary</span><span class="p">(</span>
+                <span class="n">n</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
+            <span class="p">)</span>
+
+        <span class="c1"># done spec generated automatically</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board</span> <span class="o">=</span> <span class="n">chess</span><span class="o">.</span><span class="n">Board</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">set_provisional_n</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">legal_moves</span><span class="p">)))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_done</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">board</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">board</span><span class="o">.</span><span class="n">is_game_over</span><span class="p">()</span> <span class="o">|</span> <span class="n">board</span><span class="o">.</span><span class="n">is_fifty_moves</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">fen</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">pgn</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dest</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+                <span class="n">fen</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">fen</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">fen</span> <span class="o">=</span> <span class="n">fen</span><span class="o">.</span><span class="n">data</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">pgn</span> <span class="o">=</span> <span class="n">pgn</span><span class="o">.</span><span class="n">data</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dest</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">fen</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">fen</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_done</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot reset to a fen that is a gameover state.&quot;</span> <span class="sa">f</span><span class="s2">&quot; fen: </span><span class="si">{</span><span class="n">fen</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pgn_to_board</span><span class="p">(</span><span class="n">pgn</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span> <span class="ow">and</span> <span class="n">fen</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">fen</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span> <span class="ow">and</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">pgn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_board_to_pgn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">)</span>
+
+        <span class="n">turn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">turn</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_san</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">move_stack</span><span class="p">:</span>
+                <span class="n">move</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">move</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">move</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;san&quot;</span><span class="p">,</span> <span class="s2">&quot;&lt;start&gt;&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;san&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="o">.</span><span class="n">san</span><span class="p">(</span><span class="n">move</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="n">fen</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">,</span> <span class="n">pgn</span><span class="p">)</span>
+        <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;turn&quot;</span><span class="p">,</span> <span class="n">turn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_legal_moves</span><span class="p">:</span>
+            <span class="n">moves_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_legal_moves_to_index</span><span class="p">(</span>
+                <span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+                <span class="n">moves_idx</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">moves_idx</span>
+                <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;action_mask&quot;</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;legal_moves&quot;</span><span class="p">,</span> <span class="n">moves_idx</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;action_mask&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_legal_moves_to_index</span><span class="p">(</span>
+                    <span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_mask</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;pixels&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_tensor_image</span><span class="p">(</span><span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">dest</span>
+
+    <span class="n">_cairosvg_lib</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_cairosvg</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="n">csvg</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_cairosvg_lib</span>
+        <span class="k">if</span> <span class="n">csvg</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">cairosvg</span>
+
+            <span class="n">csvg</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_cairosvg_lib</span> <span class="o">=</span> <span class="n">cairosvg</span>
+        <span class="k">return</span> <span class="n">csvg</span>
+
+    <span class="n">_torchvision_lib</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_torchvision</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="n">tv</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_torchvision_lib</span>
+        <span class="k">if</span> <span class="n">tv</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">torchvision</span>
+
+            <span class="n">tv</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_torchvision_lib</span> <span class="o">=</span> <span class="n">torchvision</span>
+        <span class="k">return</span> <span class="n">tv</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_tensor_image</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">board</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
+
+            <span class="n">svg</span> <span class="o">=</span> <span class="n">board</span><span class="o">.</span><span class="n">_repr_svg_</span><span class="p">()</span>
+            <span class="c1"># Convert SVG to PNG using cairosvg</span>
+            <span class="n">png_data</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">_cairosvg</span><span class="o">.</span><span class="n">svg2png</span><span class="p">(</span><span class="n">bytestring</span><span class="o">=</span><span class="n">svg</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">),</span> <span class="n">write_to</span><span class="o">=</span><span class="n">png_data</span><span class="p">)</span>
+            <span class="n">png_data</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="c1"># Open the PNG image using Pillow</span>
+            <span class="n">img</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">png_data</span><span class="p">)</span>
+            <span class="n">img</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_torchvision</span><span class="o">.</span><span class="n">transforms</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">pil_to_tensor</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Chess rendering requires cairosvg, PIL and torchvision to be installed.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">img</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pgn_to_board</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">pgn_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">board</span><span class="p">:</span> <span class="s2">&quot;chess.Board&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># noqa: F821</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;chess.Board&quot;</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">pgn_io</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(</span><span class="n">pgn_string</span><span class="p">)</span>
+        <span class="n">game</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">pgn</span><span class="o">.</span><span class="n">read_game</span><span class="p">(</span><span class="n">pgn_io</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">board</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">board</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">Board</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">board</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">move</span> <span class="ow">in</span> <span class="n">game</span><span class="o">.</span><span class="n">mainline_moves</span><span class="p">():</span>
+            <span class="n">board</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">move</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">board</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_add_move_to_pgn</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">pgn_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">move</span><span class="p">:</span> <span class="s2">&quot;chess.Move&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">pgn_io</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(</span><span class="n">pgn_string</span><span class="p">)</span>
+        <span class="n">game</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">pgn</span><span class="o">.</span><span class="n">read_game</span><span class="p">(</span><span class="n">pgn_io</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">game</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid PGN string&quot;</span><span class="p">)</span>
+        <span class="n">game</span><span class="o">.</span><span class="n">end</span><span class="p">()</span><span class="o">.</span><span class="n">add_variation</span><span class="p">(</span><span class="n">move</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">game</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_board_to_pgn</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">board</span><span class="p">:</span> <span class="s2">&quot;chess.Board&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">game</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">pgn</span><span class="o">.</span><span class="n">Game</span><span class="o">.</span><span class="n">from_board</span><span class="p">(</span><span class="n">board</span><span class="p">)</span>
+        <span class="n">pgn_string</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">game</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pgn_string</span>
+
+<div class="viewcode-block" id="ChessEnv.get_legal_moves"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.get_legal_moves">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_legal_moves</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">uci</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List the legal moves in a position.</span>
+
+<span class="sd">        To choose one of the actions, the &quot;action&quot; key can be set to the index</span>
+<span class="sd">        of the move in this list.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDict, optional): Tensordict containing the fen</span>
+<span class="sd">                string of a position. Required if not stateful. If stateful,</span>
+<span class="sd">                this argument is ignored and the current state of the env is</span>
+<span class="sd">                used instead.</span>
+
+<span class="sd">            uci (bool, optional): If ``False``, moves are given in SAN format.</span>
+<span class="sd">                If ``True``, moves are given in UCI format. Default is</span>
+<span class="sd">                ``False``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;tensordict must be given since this env is not stateful&quot;</span>
+                <span class="p">)</span>
+            <span class="n">fen</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+            <span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
+        <span class="n">moves</span> <span class="o">=</span> <span class="n">board</span><span class="o">.</span><span class="n">legal_moves</span>
+
+        <span class="k">if</span> <span class="n">uci</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">board</span><span class="o">.</span><span class="n">uci</span><span class="p">(</span><span class="n">move</span><span class="p">)</span> <span class="k">for</span> <span class="n">move</span> <span class="ow">in</span> <span class="n">moves</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">board</span><span class="o">.</span><span class="n">san</span><span class="p">(</span><span class="n">move</span><span class="p">)</span> <span class="k">for</span> <span class="n">move</span> <span class="ow">in</span> <span class="n">moves</span><span class="p">]</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+        <span class="c1"># action</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">)</span>
+        <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span>
+
+        <span class="n">pgn</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">fen</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+                <span class="n">fen</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+                <span class="n">board</span><span class="o">.</span><span class="n">set_fen</span><span class="p">(</span><span class="n">fen</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+                <span class="n">board</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pgn_to_board</span><span class="p">(</span><span class="n">pgn</span><span class="p">,</span> <span class="n">board</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Not enough information to deduce the board. If stateful=False, include_pgn or include_fen must be True.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="n">san</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">san_moves</span><span class="p">[</span><span class="n">action</span><span class="p">]</span>
+        <span class="n">board</span><span class="o">.</span><span class="n">push_san</span><span class="p">(</span><span class="n">san</span><span class="p">)</span>
+
+        <span class="n">dest</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+
+        <span class="c1"># Collect data</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_fen</span><span class="p">:</span>
+            <span class="n">fen</span> <span class="o">=</span> <span class="n">board</span><span class="o">.</span><span class="n">fen</span><span class="p">()</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;fen&quot;</span><span class="p">,</span> <span class="n">fen</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_pgn</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">pgn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_move_to_pgn</span><span class="p">(</span><span class="n">pgn</span><span class="p">,</span> <span class="n">board</span><span class="o">.</span><span class="n">move_stack</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">pgn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_board_to_pgn</span><span class="p">(</span><span class="n">board</span><span class="p">)</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;pgn&quot;</span><span class="p">,</span> <span class="n">pgn</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_san</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;san&quot;</span><span class="p">,</span> <span class="n">san</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_legal_moves</span><span class="p">:</span>
+            <span class="n">moves_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_legal_moves_to_index</span><span class="p">(</span>
+                <span class="n">board</span><span class="o">=</span><span class="n">board</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+                <span class="n">moves_idx</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">moves_idx</span>
+                <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;action_mask&quot;</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;legal_moves&quot;</span><span class="p">,</span> <span class="n">moves_idx</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;action_mask&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_legal_moves_to_index</span><span class="p">(</span>
+                    <span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_mask</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="n">turn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">board</span><span class="o">.</span><span class="n">turn</span><span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_done</span><span class="p">(</span><span class="n">board</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">board</span><span class="o">.</span><span class="n">is_checkmate</span><span class="p">():</span>
+            <span class="c1"># turn flips after every move, even if the game is over</span>
+            <span class="c1"># winner = not turn</span>
+            <span class="n">reward_val</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># if winner == self.lib.WHITE else 0</span>
+        <span class="k">elif</span> <span class="n">done</span><span class="p">:</span>
+            <span class="n">reward_val</span> <span class="o">=</span> <span class="mf">0.5</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">reward_val</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="n">reward</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">reward_val</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="n">reward</span><span class="p">)</span>
+        <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;turn&quot;</span><span class="p">,</span> <span class="n">turn</span><span class="p">)</span>
+        <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">done</span><span class="p">])</span>
+        <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;terminated&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">done</span><span class="p">])</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels</span><span class="p">:</span>
+            <span class="n">dest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;pixels&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_tensor_image</span><span class="p">(</span><span class="n">board</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">dest</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="o">...</span>
+
+<div class="viewcode-block" id="ChessEnv.cardinality"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.cardinality">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cardinality</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_action_space</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">cardinality</span><span class="p">()</span></div></div>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+         <script src="../../../../_static/jquery.js"></script>
+         <script src="../../../../_static/underscore.js"></script>
+         <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

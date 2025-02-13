@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.trainers.helpers
+
+
+sync_async_collector
+====================
+
+.. autofunction:: sync_async_collector

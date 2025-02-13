@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+MultiDiscreteTensorSpec
+=======================
+
+.. autoclass:: MultiDiscreteTensorSpec
+    :members:
+    :inherited-members:

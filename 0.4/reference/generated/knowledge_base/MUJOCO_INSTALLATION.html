@@ -1,0 +1,991 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Working with MuJoCo-based environments &mdash; torchrl 0.4 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Common PyTorch errors and solutions" href="PRO-TIPS.html" />
+    <link rel="prev" title="Working with habitat-lab" href="HABITAT.html" />
+  <!-- Google Analytics -->
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-117752657-2"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'UA-117752657-2');
+    </script>
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torcharrow">
+                  <span class="dropdown-title">torcharrow</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn about the PyTorch foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  0.4
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../index.html">API Reference</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../knowledge_base.html">Knowledge Base</a> &gt;</li>
+        
+      <li>Working with MuJoCo-based environments</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../../../_sources/reference/generated/knowledge_base/MUJOCO_INSTALLATION.rst.txt" rel="nofollow"><img src="../../../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+          <div class="pytorch-call-to-action-links">
+            <div id="tutorial-type">reference/generated/knowledge_base/MUJOCO_INSTALLATION</div>
+
+            <div id="google-colab-link">
+              <img class="call-to-action-img" src="../../../_static/images/pytorch-colab.svg"/>
+              <div class="call-to-action-desktop-view">Run in Google Colab</div>
+              <div class="call-to-action-mobile-view">Colab</div>
+            </div>
+            <div id="download-notebook-link">
+              <img class="call-to-action-notebook-img" src="../../../_static/images/pytorch-download.svg"/>
+              <div class="call-to-action-desktop-view">Download Notebook</div>
+              <div class="call-to-action-mobile-view">Notebook</div>
+            </div>
+            <div id="github-view-link">
+              <img class="call-to-action-img" src="../../../_static/images/pytorch-github.svg"/>
+              <div class="call-to-action-desktop-view">View on GitHub</div>
+              <div class="call-to-action-mobile-view">GitHub</div>
+            </div>
+          </div>
+
+        
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="working-with-mujoco-based-environments">
+<h1>Working with MuJoCo-based environments<a class="headerlink" href="#working-with-mujoco-based-environments" title="Permalink to this heading">¶</a></h1>
+<p>From its <a class="reference external" href="https://github.com/deepmind/mujoco/">official repository</a>,</p>
+<blockquote>
+<div><p>MuJoCo stands for Multi-Joint dynamics with Contact. It is a general purpose
+physics engine that aims to facilitate research and development in robotics,
+biomechanics, graphics and animation, machine learning, and other areas which
+demand fast and accurate simulation of articulated structures interacting with
+their environment.</p>
+</div></blockquote>
+<p>Recently, MuJoCo was <a class="reference external" href="https://www.deepmind.com/blog/open-sourcing-mujoco">acquired and open-sourced</a> by DeepMind.
+Since then, the library is accessible to whomever without licence.
+Python bindings were incorporated in the library, making the reliance on mujoco-py obsolete.
+However, a series of libraries keep a legacy on the old mujoco bindings.</p>
+<p>In this document, we detail issues and pro-tips for the new and old bindings of
+the library.</p>
+<section id="installing-mujoco">
+<h2>Installing MuJoCo<a class="headerlink" href="#installing-mujoco" title="Permalink to this heading">¶</a></h2>
+<section id="prerequisite-for-rendering-all-mujoco-versions">
+<h3>Prerequisite for rendering (all mujoco versions)<a class="headerlink" href="#prerequisite-for-rendering-all-mujoco-versions" title="Permalink to this heading">¶</a></h3>
+<p>MuJoCo offers some great rendering capabilities.
+To do so, MuJoCo will use one of the following backends: glfw, osmesa or egl.
+Of these, glfw will not work in headless environments. On the other hand, osmesa
+will not run on GPU. Therefore, our advice is to use the egl backend.</p>
+<p>If you have a sudo access on your machine, you can install the following dependencies
+to enable fast rendering:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>libglfw3<span class="w"> </span>libglew2.0<span class="w"> </span>libgl1-mesa-glx<span class="w"> </span>libosmesa6
+</pre></div>
+</div>
+<p>If you don’t, these libraries can be installed via conda but be aware of the fact
+that this is not the intended workflow and things may not work as expected:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>conda<span class="w"> </span>activate<span class="w"> </span>mujoco_env
+$<span class="w"> </span>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>glew
+$<span class="w"> </span>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>mesalib
+$<span class="w"> </span>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>anaconda<span class="w"> </span>mesa-libgl-cos6-x86_64
+$<span class="w"> </span>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>menpo<span class="w"> </span>glfw3
+</pre></div>
+</div>
+<p>In both cases, when running your code, you will want to tell mujoco which backend to use.
+This can be done by setting the appropriate environment variables.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>conda<span class="w"> </span>env<span class="w"> </span>config<span class="w"> </span>vars<span class="w"> </span><span class="nb">set</span><span class="w"> </span><span class="nv">MUJOCO_GL</span><span class="o">=</span>egl<span class="w"> </span><span class="nv">PYOPENGL_PLATFORM</span><span class="o">=</span>egl
+$<span class="w"> </span>conda<span class="w"> </span>deactivate<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>conda<span class="w"> </span>activate<span class="w"> </span>mujoco_env
+</pre></div>
+</div>
+</section>
+<section id="new-bindindgs-2-1-2">
+<h3>New bindindgs (≥ 2.1.2)<a class="headerlink" href="#new-bindindgs-2-1-2" title="Permalink to this heading">¶</a></h3>
+<p>You can install the pre-built binaries from the <a class="reference external" href="https://github.com/deepmind/mujoco/releases">mujoco release page</a>.
+However, in most cases, you will only need the python bindings.
+These can be installed via pip.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>mujoco_env<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.9
+$<span class="w"> </span>conda<span class="w"> </span>activate<span class="w"> </span>mujoco_env
+$<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>mujoco
+</pre></div>
+</div>
+</section>
+<section id="old-bindings-2-1-1-mujoco-py">
+<h3>Old bindings (≤ 2.1.1): mujoco-py<a class="headerlink" href="#old-bindings-2-1-1-mujoco-py" title="Permalink to this heading">¶</a></h3>
+<p>In some cases, you may need to use the old mujoco bindings. For instance, this
+be the case when using some legacy code that used mujoco-py instead of the new
+bindings, because of cluster requirements etc.
+Refer to the <a class="reference external" href="https://github.com/openai/mujoco-py#install-mujoco">mujoco-py README.md</a>.
+Using <code class="docutils literal notranslate"><span class="pre">conda</span></code>, your setup should look like this:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>mujoco_env<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.9
+$<span class="w"> </span>conda<span class="w"> </span>activate<span class="w"> </span>mujoco_env
+$<span class="w"> </span>mkdir<span class="w"> </span>~/.mujoco
+$<span class="w"> </span><span class="nb">cd</span><span class="w"> </span>~/.mujoco
+$<span class="w"> </span><span class="c1"># check here for 2.1.0 versions https://github.com/deepmind/mujoco/releases/tag/2.1.0</span>
+$<span class="w"> </span><span class="c1"># check here for earlier versions http://roboti.us/download.html</span>
+$<span class="w"> </span>wget<span class="w"> </span>https://github.com/deepmind/mujoco/releases/download/2.1.0/mujoco210-linux-x86_64.tar.gz
+$<span class="w"> </span>tar<span class="w"> </span>-xf<span class="w"> </span>mujoco210-linux-x86_64.tar.gz
+$<span class="w"> </span><span class="c1"># for versions &lt; 2.1.0, we need a licence file. Since mujoco is now free of</span>
+$<span class="w"> </span><span class="c1"># of charge, this can obtained easily</span>
+$<span class="w"> </span>wget<span class="w"> </span>http://roboti.us/file/mjkey.txt
+$<span class="w"> </span><span class="c1"># let&#39;s tell conda about our mujoco repo</span>
+$<span class="w"> </span>conda<span class="w"> </span>env<span class="w"> </span>config<span class="w"> </span>vars<span class="w"> </span><span class="nb">set</span><span class="w"> </span><span class="nv">MJLIB_PATH</span><span class="o">=</span>/path/to/home/.mujoco/mujoco210/bin/libmujoco210.so<span class="w"> </span><span class="se">\</span>
+$<span class="w"> </span>&gt;<span class="w"> </span><span class="nv">LD_LIBRARY_PATH</span><span class="o">=</span><span class="nv">$LD_LIBRARY_PATH</span>:/path/to/home/.mujoco/mujoco210/bin<span class="w"> </span><span class="se">\</span>
+$<span class="w"> </span>&gt;<span class="w"> </span><span class="nv">MUJOCO_PY_MUJOCO_PATH</span><span class="o">=</span>/path/to/home/.mujoco/mujoco210
+$<span class="w"> </span><span class="c1"># For versions &lt; 2.1.0, we must link the key too</span>
+$<span class="w"> </span>conda<span class="w"> </span>env<span class="w"> </span>config<span class="w"> </span>vars<span class="w"> </span><span class="nb">set</span><span class="w"> </span><span class="nv">MUJOCO_PY_MJKEY_PATH</span><span class="o">=</span>/path/to/home/.mujoco/mjkey.txt
+$<span class="w"> </span><span class="c1"># reload the env</span>
+$<span class="w"> </span>conda<span class="w"> </span>deactivate<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>conda<span class="w"> </span>activate<span class="w"> </span>mujoco_env
+</pre></div>
+</div>
+<section id="option-1-installing-mujoco-py-with-pip">
+<h4>Option 1: installing mujoco-py with pip<a class="headerlink" href="#option-1-installing-mujoco-py-with-pip" title="Permalink to this heading">¶</a></h4>
+<p>We <strong>do not</strong> recommend this as it may be hard to change code later on, since
+there are known issues when trying to use GPUs for rendering with native mujoco-py
+code. Refer to Option 2 here below if that is the intended usage.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>conda<span class="w"> </span>activate<span class="w"> </span>mujoco_env
+$<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>mujoco-py
+</pre></div>
+</div>
+</section>
+<section id="option-2-installing-mujoco-py-from-a-cloned-repo">
+<h4>Option 2: installing mujoco-py from a cloned repo<a class="headerlink" href="#option-2-installing-mujoco-py-from-a-cloned-repo" title="Permalink to this heading">¶</a></h4>
+<p>We recommend installing mujoco-py via cloning the repo and installing it
+locally. In case one must force mujoco-py to install against cuda or modify the
+path to the nvidia driver (especially with older versions of mujoco-py), cloning
+the repo will facilitate those hacks.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>conda<span class="w"> </span>activate<span class="w"> </span>mujoco_env
+$<span class="w"> </span><span class="nb">cd</span><span class="w"> </span>path/to/where/mujoco-py/must/be/cloned
+$<span class="w"> </span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/openai/mujoco-py
+$<span class="w"> </span><span class="nb">cd</span><span class="w"> </span>mujoco-py
+$<span class="w"> </span>python<span class="w"> </span>setup.py<span class="w"> </span>develop
+$<span class="w"> </span><span class="c1"># the following line of code needs to be adatped, depending on where nvidia drivers are located</span>
+$<span class="w"> </span>conda<span class="w"> </span>env<span class="w"> </span>config<span class="w"> </span>vars<span class="w"> </span><span class="nb">set</span><span class="w"> </span><span class="nv">LD_LIBRARY_PATH</span><span class="o">=</span><span class="nv">$LD_LIBRARY_PATH</span>:/usr/lib/nvidia
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">mujoco-py</span></code> will execute some building operations the first time it is imported
+in a python script.
+This means that compatibility issues may go unnoticed until  you actually run
+your script for the first time.
+To complete the installation, run the following commands:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>python
+&gt;&gt;&gt;<span class="w"> </span>import<span class="w"> </span>mujoco_py
+</pre></div>
+</div>
+<p>This should trigger the building pipeline.</p>
+<p><strong>Sanity check</strong></p>
+<p>To check that your mujoco-py has been built against the GPU, run</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">mujoco_py</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">mujoco_py</span><span class="o">.</span><span class="n">cymj</span><span class="p">)</span> <span class="c1"># check it has the tag: linuxgpuextensionbuilder</span>
+</pre></div>
+</div>
+<p>The result should contain a filename with the tag <code class="docutils literal notranslate"><span class="pre">linuxgpuextensionbuilder</span></code>.</p>
+</section>
+</section>
+</section>
+<section id="common-issues-during-import-or-when-rendering-mujoco-environments">
+<h2>Common Issues during import or when rendering Mujoco Environments<a class="headerlink" href="#common-issues-during-import-or-when-rendering-mujoco-environments" title="Permalink to this heading">¶</a></h2>
+<p>The above setup will most likely cause some problems. We give a list of known
+issues when running <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">mujoco_py</span></code> and some troubleshooting for each of them:</p>
+<ol class="arabic">
+<li><p>GL/glew.h not found</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">mujoco</span><span class="o">-</span><span class="n">py</span><span class="o">/</span><span class="n">mujoco_py</span><span class="o">/</span><span class="n">gl</span><span class="o">/</span><span class="n">eglshim</span><span class="o">.</span><span class="n">c</span><span class="p">:</span><span class="mi">4</span><span class="p">:</span><span class="mi">10</span><span class="p">:</span> <span class="n">fatal</span> <span class="n">error</span><span class="p">:</span> <span class="n">GL</span><span class="o">/</span><span class="n">glew</span><span class="o">.</span><span class="n">h</span><span class="p">:</span> <span class="n">No</span> <span class="n">such</span> <span class="n">file</span> <span class="ow">or</span> <span class="n">directory</span>
+<span class="mi">4</span> <span class="o">|</span> <span class="c1">#include &lt;GL/glew.h&gt;</span>
+  <span class="o">|</span>          <span class="o">^~~~~~~~~~~</span>
+</pre></div>
+</div>
+<p><em>Solution</em>: install glew and glew-devel</p>
+<ul class="simple">
+<li><p>Ubuntu: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt-get</span> <span class="pre">install</span> <span class="pre">libglew-dev</span> <span class="pre">libglew</span></code></p></li>
+<li><p>CentOS: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">yum</span> <span class="pre">install</span> <span class="pre">glew</span> <span class="pre">glew-devel</span></code></p></li>
+<li><p>Conda: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">-c</span> <span class="pre">conda-forge</span> <span class="pre">glew</span></code></p></li>
+</ul>
+</li>
+<li><div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">include</span><span class="o">/</span><span class="n">GL</span><span class="o">/</span><span class="n">glu</span><span class="o">.</span><span class="n">h</span><span class="p">:</span><span class="mi">38</span><span class="p">:</span><span class="mi">10</span><span class="p">:</span> <span class="n">fatal</span> <span class="n">error</span><span class="p">:</span> <span class="n">GL</span><span class="o">/</span><span class="n">gl</span><span class="o">.</span><span class="n">h</span><span class="p">:</span> <span class="n">No</span> <span class="n">such</span> <span class="n">file</span> <span class="ow">or</span> <span class="n">directory</span>
+  <span class="c1">#include &lt;GL/gl.h&gt;</span>
+           <span class="o">^~~~~~~~~</span>
+</pre></div>
+</div>
+<p><em>Solution</em>: This should disappear once <code class="docutils literal notranslate"><span class="pre">mesalib</span></code> is installed: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">-y</span> <span class="pre">-c</span> <span class="pre">conda-forge</span> <span class="pre">mesalib</span></code></p>
+</li>
+<li><div class="highlight-default notranslate"><div class="highlight"><pre><span></span>ImportError: /lib/x86_64-linux-gnu/libstdc++.so.6: version `GLIBCXX_3.4.29&#39; not found (required by /path/to/conda/envs/compile/bin/../lib/libOSMesa.so.8)
+</pre></div>
+</div>
+<p><em>Solution</em>: Install libgcc, e.g.: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">libgcc</span> <span class="pre">-y</span></code>. Then make sure that it is being loaded during execution:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>export LD_PRELOAD=$LD_PRELOAD:/path/to/conda/envs/compile/lib/libstdc++.so.6
+</pre></div>
+</div>
+</li>
+<li><div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="ne">FileNotFoundError</span><span class="p">:</span> <span class="p">[</span><span class="n">Errno</span> <span class="mi">2</span><span class="p">]</span> <span class="n">No</span> <span class="n">such</span> <span class="n">file</span> <span class="ow">or</span> <span class="n">directory</span><span class="p">:</span> <span class="s1">&#39;patchelf&#39;</span>
+</pre></div>
+</div>
+<p><em>Solution</em>: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">patchelf</span></code></p>
+</li>
+<li><div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="ne">ImportError</span><span class="p">:</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">x86_64</span><span class="o">-</span><span class="n">linux</span><span class="o">-</span><span class="n">gnu</span><span class="o">/</span><span class="n">libOpenGL</span><span class="o">.</span><span class="n">so</span><span class="mf">.0</span><span class="p">:</span> <span class="n">undefined</span> <span class="n">symbol</span><span class="p">:</span> <span class="n">_glapi_tls_Current</span>
+</pre></div>
+</div>
+<p><em>Solution</em>: Link conda to the right <code class="docutils literal notranslate"><span class="pre">libOpenGL.so</span></code> file (replace <code class="docutils literal notranslate"><span class="pre">/path/to/conda</span></code> and <code class="docutils literal notranslate"><span class="pre">mujoco_env</span></code> with the proper paths and names):</p>
+<div class="highlight-shelf notranslate"><div class="highlight"><pre><span></span>conda install -y -c conda-forge libglvnd-glx-cos7-x86_64 --force-reinstall
+conda install -y -c conda-forge xvfbwrapper --force-reinstall
+conda env config vars set LD_PRELOAD=/path/to/conda/envs/mujoco_env/x86_64-conda-linux-gnu/sysroot/usr/lib64/libGLdispatch.so.0
+</pre></div>
+</div>
+</li>
+<li><div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mujoco</span><span class="o">.</span><span class="n">FatalError</span><span class="p">:</span> <span class="n">gladLoadGL</span> <span class="n">error</span>
+
+<span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">conda</span><span class="o">/</span><span class="n">envs</span><span class="o">/</span><span class="n">mj_envs</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">python3</span><span class="mf">.8</span><span class="o">/</span><span class="n">site</span><span class="o">-</span><span class="n">packages</span><span class="o">/</span><span class="n">glfw</span><span class="o">/</span><span class="fm">__init__</span><span class="o">.</span><span class="n">py</span><span class="p">:</span><span class="mi">912</span><span class="p">:</span> <span class="n">GLFWError</span><span class="p">:</span> <span class="p">(</span><span class="mi">65537</span><span class="p">)</span> <span class="sa">b</span><span class="s1">&#39;The GLFW library is not initialized&#39;</span>
+</pre></div>
+</div>
+<p><em>Solution</em>: This can usually be sovled by setting EGL as your mujoco_gl backend: <code class="docutils literal notranslate"><span class="pre">MUJOCO_GL=egl</span> <span class="pre">python</span> <span class="pre">myscript.py</span></code></p>
+</li>
+<li><p>RuntimeError with error stack like this when running jobs using schedulers like slurm:</p></li>
+</ol>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>    <span class="n">File</span> <span class="s2">&quot;mjrendercontext.pyx&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">46</span><span class="p">,</span> <span class="ow">in</span> <span class="n">mujoco_py</span><span class="o">.</span><span class="n">cymj</span><span class="o">.</span><span class="n">MjRenderContext</span><span class="o">.</span><span class="fm">__init__</span>
+
+    <span class="n">File</span> <span class="s2">&quot;mjrendercontext.pyx&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">114</span><span class="p">,</span> <span class="ow">in</span> <span class="n">mujoco_py</span><span class="o">.</span><span class="n">cymj</span><span class="o">.</span>    <span class="n">MjRenderContext</span><span class="o">.</span><span class="n">_setup_opengl_context</span>
+
+    <span class="n">File</span> <span class="s2">&quot;opengl_context.pyx&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">130</span><span class="p">,</span> <span class="ow">in</span> <span class="n">mujoco_py</span><span class="o">.</span><span class="n">cymj</span><span class="o">.</span><span class="n">OffscreenOpenGLContext</span><span class="o">.</span><span class="fm">__init__</span>
+
+<span class="ne">RuntimeError</span><span class="p">:</span> <span class="n">Failed</span> <span class="n">to</span> <span class="n">initialize</span> <span class="n">OpenGL</span>
+</pre></div>
+</div>
+<blockquote>
+<div><p>Mujoco’s EGL code indexes devices globally while CUDA_VISIBLE_DEVICES
+(when used with job schedulers like slurm) returns the local device ids.
+This can be worked around by setting the <code class="docutils literal notranslate"><span class="pre">GPUS</span></code> environment variable to the
+global device id. For slurm, it can be obtained using <code class="docutils literal notranslate"><span class="pre">SLURM_STEP_GPUS</span></code> enviroment variable.</p>
+</div></blockquote>
+<ol class="arabic" start="8">
+<li><p>Rendered images are completely black.</p>
+<p><em>Solution</em>: Make sure to call <code class="docutils literal notranslate"><span class="pre">env.render()</span></code> before reading the pixels.</p>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">patchelf</span></code> dependency is missing.</p>
+<p><em>Solution</em>: Install using <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">patchelf</span></code> or <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">patchelf</span></code></p>
+</li>
+<li><p>Errors like “Onscreen rendering needs 101 device”</p>
+<p><em>Solution</em>: Make sure to set <code class="docutils literal notranslate"><span class="pre">DISPLAY</span></code> environment variable correctly.</p>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ImportError:</span> <span class="pre">Cannot</span> <span class="pre">initialize</span> <span class="pre">a</span> <span class="pre">headless</span> <span class="pre">EGL</span> <span class="pre">display.</span></code></p>
+<p><em>Solution</em>: Make sure you have installed mujoco and all its dependencies (see instructions above).
+Make sure you have set the <code class="docutils literal notranslate"><span class="pre">MUJOCO_GL=egl</span></code>.
+Make sure you have a GPU accessible on your machine.</p>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cannot</span> <span class="pre">find</span> <span class="pre">-lGL:</span> <span class="pre">No</span> <span class="pre">such</span> <span class="pre">file</span> <span class="pre">or</span> <span class="pre">directory</span></code></p>
+<p><em>Solution</em>: call <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">-c</span> <span class="pre">anaconda</span> <span class="pre">mesa-libgl-devel-cos6-x86_64</span></code></p>
+</li>
+<li><div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="ne">RuntimeError</span><span class="p">:</span> <span class="n">Failed</span> <span class="n">to</span> <span class="n">initialize</span> <span class="n">OpenGL</span>
+</pre></div>
+</div>
+<p><em>Solution</em>: Install libEGL:</p>
+<ul class="simple">
+<li><p>Ubuntu: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">libegl-dev</span> <span class="pre">libegl</span></code></p></li>
+<li><p>CentOS: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">yum</span> <span class="pre">install</span> <span class="pre">mesa-libEGL</span> <span class="pre">mesa-libEGL-devel</span></code></p></li>
+<li><p>Conda: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">-c</span> <span class="pre">anaconda</span> <span class="pre">mesa-libegl-cos6-x86_64</span></code></p></li>
+</ul>
+</li>
+<li><div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fatal</span> <span class="n">error</span><span class="p">:</span> <span class="n">X11</span><span class="o">/</span><span class="n">Xlib</span><span class="o">.</span><span class="n">h</span><span class="p">:</span> <span class="n">No</span> <span class="n">such</span> <span class="n">file</span> <span class="ow">or</span> <span class="n">directory</span>
+   <span class="o">|</span> <span class="c1">#include &lt;X11/Xlib.h&gt;</span>
+   <span class="o">|</span>          <span class="o">^~~~~~~~~~~~</span>
+</pre></div>
+</div>
+<p><em>Solution</em>: Install X11:</p>
+<ul class="simple">
+<li><p>Ubuntu: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">libx11-dev</span></code></p></li>
+<li><p>CentOS: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">yum</span> <span class="pre">install</span> <span class="pre">libX11</span></code></p></li>
+<li><p>Conda: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">-c</span> <span class="pre">conda-forge</span> <span class="pre">xorg-libx11</span></code></p></li>
+</ul>
+</li>
+<li><div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fatal</span> <span class="n">error</span><span class="p">:</span> <span class="n">GL</span><span class="o">/</span><span class="n">osmesa</span><span class="o">.</span><span class="n">h</span><span class="p">:</span> <span class="n">No</span> <span class="n">such</span> <span class="n">file</span> <span class="ow">or</span> <span class="n">directory</span>
+    <span class="mi">1</span> <span class="o">|</span> <span class="c1">#include &lt;GL/osmesa.h&gt;</span>
+      <span class="o">|</span>          <span class="o">^~~~~~~~~~~~~</span>
+<span class="n">compilation</span> <span class="n">terminated</span><span class="o">.</span>
+</pre></div>
+</div>
+<p><em>Solution</em>: Install Osmesa:</p>
+<ul class="simple">
+<li><p>Ubuntu: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt-get</span> <span class="pre">install</span> <span class="pre">libosmesa6-dev</span></code></p></li>
+<li><p>CentOS: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">yum</span> <span class="pre">install</span> <span class="pre">mesa-libOSMesa-devel</span></code></p></li>
+<li><p>Conda: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">-c</span> <span class="pre">menpo</span> <span class="pre">osmesa</span></code></p></li>
+</ul>
+</li>
+</ol>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="PRO-TIPS.html" class="btn btn-neutral float-right" title="Common PyTorch errors and solutions" accesskey="n" rel="next">Next <img src="../../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="HABITAT.html" class="btn btn-neutral" title="Working with habitat-lab" accesskey="p" rel="prev"><img src="../../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">Working with MuJoCo-based environments</a><ul>
+<li><a class="reference internal" href="#installing-mujoco">Installing MuJoCo</a><ul>
+<li><a class="reference internal" href="#prerequisite-for-rendering-all-mujoco-versions">Prerequisite for rendering (all mujoco versions)</a></li>
+<li><a class="reference internal" href="#new-bindindgs-2-1-2">New bindindgs (≥ 2.1.2)</a></li>
+<li><a class="reference internal" href="#old-bindings-2-1-1-mujoco-py">Old bindings (≤ 2.1.1): mujoco-py</a><ul>
+<li><a class="reference internal" href="#option-1-installing-mujoco-py-with-pip">Option 1: installing mujoco-py with pip</a></li>
+<li><a class="reference internal" href="#option-2-installing-mujoco-py-from-a-cloned-repo">Option 2: installing mujoco-py from a cloned repo</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#common-issues-during-import-or-when-rendering-mujoco-environments">Common Issues during import or when rendering Mujoco Environments</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+         <script src="../../../_static/jquery.js"></script>
+         <script src="../../../_static/underscore.js"></script>
+         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../_static/doctools.js"></script>
+         <script src="../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torcharrow">torcharrow</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/data">TorchData</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchrec">TorchRec</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+           <ul class="resources-mobile-menu-items">
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

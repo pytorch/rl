@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+ObservationNorm
+===============
+
+.. autoclass:: ObservationNorm
+    :members:

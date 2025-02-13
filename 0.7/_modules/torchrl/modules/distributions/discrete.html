@@ -1,0 +1,1395 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.modules.distributions.discrete &mdash; torchrl 0.7 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">0.7 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.modules.distributions.discrete</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.modules.distributions.discrete</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">wraps</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">D</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn.functional</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">F</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributions.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_property</span><span class="p">,</span> <span class="n">logits_to_probs</span><span class="p">,</span> <span class="n">probs_to_logits</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;OneHotCategorical&quot;</span><span class="p">,</span> <span class="s2">&quot;MaskedCategorical&quot;</span><span class="p">,</span> <span class="s2">&quot;Ordinal&quot;</span><span class="p">,</span> <span class="s2">&quot;OneHotOrdinal&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_treat_categorical_params</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">params</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">params</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">rand_one_hot</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">do_softmax</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">do_softmax</span><span class="p">:</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand_like</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_one_hot_wrapper</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent_dist</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent_dist</span> <span class="o">=</span> <span class="n">parent_dist</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">):</span>
+        <span class="nd">@wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">wrapped</span><span class="p">(</span><span class="n">_self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parent_dist</span><span class="p">,</span> <span class="n">func</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)(</span><span class="n">_self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">_self</span><span class="o">.</span><span class="n">num_samples</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">one_hot</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">wrapped</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ReparamGradientStrategy</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">PassThrough</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">RelaxedOneHot</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mi">2</span>
+
+
+<div class="viewcode-block" id="OneHotCategorical"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">OneHotCategorical</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;One-hot categorical distribution.</span>
+
+<span class="sd">    This class behaves exactly as torch.distributions.Categorical except that it reads and produces one-hot encodings</span>
+<span class="sd">    of the discrete tensors.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        logits (torch.Tensor): event log probabilities (unnormalized)</span>
+<span class="sd">        probs (torch.Tensor): event probabilities</span>
+<span class="sd">        grad_method (ReparamGradientStrategy, optional): strategy to gather</span>
+<span class="sd">            reparameterized samples.</span>
+<span class="sd">            ``ReparamGradientStrategy.PassThrough`` will compute the sample gradients</span>
+<span class="sd">             by using the softmax valued log-probability as a proxy to the</span>
+<span class="sd">             sample gradients.</span>
+<span class="sd">            ``ReparamGradientStrategy.RelaxedOneHot`` will use</span>
+<span class="sd">            :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; logits = torch.randn(4)</span>
+<span class="sd">        &gt;&gt;&gt; dist = OneHotCategorical(logits=logits)</span>
+<span class="sd">        &gt;&gt;&gt; print(dist.rsample((3,)))</span>
+<span class="sd">        tensor([[1., 0., 0., 0.],</span>
+<span class="sd">                [0., 0., 0., 1.],</span>
+<span class="sd">                [1., 0., 0., 0.]])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">num_params</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="c1"># This is to make the compiler happy, see https://github.com/pytorch/pytorch/issues/140266</span>
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">probs_to_logits</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">)</span>
+
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">logits_to_probs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">logits</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">probs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">grad_method</span><span class="p">:</span> <span class="n">ReparamGradientStrategy</span> <span class="o">=</span> <span class="n">ReparamGradientStrategy</span><span class="o">.</span><span class="n">PassThrough</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="n">_treat_categorical_params</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
+        <span class="n">probs</span> <span class="o">=</span> <span class="n">_treat_categorical_params</span><span class="p">(</span><span class="n">probs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grad_method</span> <span class="o">=</span> <span class="n">grad_method</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">probs</span><span class="o">=</span><span class="n">probs</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_param</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+<div class="viewcode-block" id="OneHotCategorical.log_prob"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical.log_prob">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;logits&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">deterministic_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span>
+
+<div class="viewcode-block" id="OneHotCategorical.entropy"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical.entropy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">min_real</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">min</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="nb">min</span><span class="o">=</span><span class="n">min_real</span><span class="p">)</span>
+        <span class="n">p_log_p</span> <span class="o">=</span> <span class="n">logits</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">p_log_p</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="OneHotCategorical.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical.sample">[docs]</a>    <span class="nd">@_one_hot_wrapper</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="o">...</span></div>
+
+<div class="viewcode-block" id="OneHotCategorical.rsample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical.rsample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">sample_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sample_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([])</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;logits&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">logits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logits</span>
+            <span class="n">probs</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">probs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">grad_method</span> <span class="o">==</span> <span class="n">ReparamGradientStrategy</span><span class="o">.</span><span class="n">RelaxedOneHot</span><span class="p">:</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="n">D</span><span class="o">.</span><span class="n">relaxed_categorical</span><span class="o">.</span><span class="n">RelaxedOneHotCategorical</span><span class="p">(</span>
+                <span class="mf">1.0</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="n">probs</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="n">logits</span>
+            <span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">rsample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">copy_</span><span class="p">((</span><span class="n">out</span> <span class="o">==</span> <span class="n">out</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">out</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">grad_method</span> <span class="o">==</span> <span class="n">ReparamGradientStrategy</span><span class="o">.</span><span class="n">PassThrough</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">probs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">probs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">+</span> <span class="n">probs</span> <span class="o">-</span> <span class="n">probs</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">out</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unknown reparametrization strategy </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">reparam_strategy</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="MaskedCategorical"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MaskedCategorical</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;MaskedCategorical distribution.</span>
+
+<span class="sd">    Reference:</span>
+<span class="sd">    https://www.tensorflow.org/agents/api_docs/python/tf_agents/distributions/masked/MaskedCategorical</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        logits (torch.Tensor): event log probabilities (unnormalized)</span>
+<span class="sd">        probs (torch.Tensor): event probabilities. If provided, the probabilities</span>
+<span class="sd">            corresponding to masked items will be zeroed and the probability</span>
+<span class="sd">            re-normalized along its last dimension.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        mask (torch.Tensor): A boolean mask of the same shape as ``logits``/``probs``</span>
+<span class="sd">            where ``False`` entries are the ones to be masked. Alternatively,</span>
+<span class="sd">            if ``sparse_mask`` is True, it represents the list of valid indices</span>
+<span class="sd">            in the distribution. Exclusive with ``indices``.</span>
+<span class="sd">        indices (torch.Tensor): A dense index tensor representing which actions</span>
+<span class="sd">            must be taken into account. Exclusive with ``mask``.</span>
+<span class="sd">        neg_inf (:obj:`float`, optional): The log-probability value allocated to</span>
+<span class="sd">            invalid (out-of-mask) indices. Defaults to -inf.</span>
+<span class="sd">        padding_value: The padding value in the mask tensor. When</span>
+<span class="sd">            sparse_mask == True, the padding_value will be ignored.</span>
+
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; logits = torch.randn(4) / 100  # almost equal probabilities</span>
+<span class="sd">        &gt;&gt;&gt; mask = torch.tensor([True, False, True, True])</span>
+<span class="sd">        &gt;&gt;&gt; dist = MaskedCategorical(logits=logits, mask=mask)</span>
+<span class="sd">        &gt;&gt;&gt; sample = dist.sample((10,))</span>
+<span class="sd">        &gt;&gt;&gt; print(sample)  # no `1` in the sample</span>
+<span class="sd">        tensor([2, 3, 0, 2, 2, 0, 2, 0, 2, 2])</span>
+<span class="sd">        &gt;&gt;&gt; print(dist.log_prob(sample))</span>
+<span class="sd">        tensor([-1.1203, -1.0928, -1.0831, -1.1203, -1.1203, -1.0831, -1.1203, -1.0831,</span>
+<span class="sd">                -1.1203, -1.1203])</span>
+<span class="sd">        &gt;&gt;&gt; print(dist.log_prob(torch.ones_like(sample)))</span>
+<span class="sd">        tensor([-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf])</span>
+<span class="sd">        &gt;&gt;&gt; # with probabilities</span>
+<span class="sd">        &gt;&gt;&gt; prob = torch.ones(10)</span>
+<span class="sd">        &gt;&gt;&gt; prob = prob / prob.sum()</span>
+<span class="sd">        &gt;&gt;&gt; mask = torch.tensor([False] + 9 * [True])  # first outcome is masked</span>
+<span class="sd">        &gt;&gt;&gt; dist = MaskedCategorical(probs=prob, mask=mask)</span>
+<span class="sd">        &gt;&gt;&gt; print(dist.log_prob(torch.arange(10)))</span>
+<span class="sd">        tensor([   -inf, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972,</span>
+<span class="sd">                -2.1972, -2.1972])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">probs_to_logits</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">)</span>
+
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">logits_to_probs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">logits</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">probs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">neg_inf</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;-inf&quot;</span><span class="p">),</span>
+        <span class="n">padding_value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="o">^</span> <span class="p">(</span><span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;A ``mask`` or some ``indices`` must be provided for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2">, but not both.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">indices</span>
+            <span class="n">sparse_mask</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">sparse_mask</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="k">if</span> <span class="n">probs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Either `probs` or `logits` must be specified, but not both.&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># unnormalized logits</span>
+            <span class="n">probs</span> <span class="o">=</span> <span class="n">probs</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">probs</span><span class="p">[</span><span class="o">~</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">probs</span> <span class="o">=</span> <span class="n">probs</span> <span class="o">/</span> <span class="n">probs</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">probs</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask_logits</span><span class="p">(</span>
+            <span class="n">logits</span><span class="p">,</span>
+            <span class="n">mask</span><span class="p">,</span>
+            <span class="n">neg_inf</span><span class="o">=</span><span class="n">neg_inf</span><span class="p">,</span>
+            <span class="n">sparse_mask</span><span class="o">=</span><span class="n">sparse_mask</span><span class="p">,</span>
+            <span class="n">padding_value</span><span class="o">=</span><span class="n">padding_value</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">neg_inf</span> <span class="o">=</span> <span class="n">neg_inf</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span> <span class="o">=</span> <span class="n">mask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sparse_mask</span> <span class="o">=</span> <span class="n">sparse_mask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_padding_value</span> <span class="o">=</span> <span class="n">padding_value</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="n">num_samples</span>
+
+<div class="viewcode-block" id="MaskedCategorical.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.sample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">sample_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sample_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">sample_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+
+        <span class="n">ret</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sparse_mask</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">ret</span>
+
+        <span class="n">size</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+        <span class="n">outer_dim</span> <span class="o">=</span> <span class="n">sample_shape</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="n">inner_dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="n">idx_3d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">outer_dim</span><span class="p">,</span> <span class="n">inner_dim</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">idx_3d</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">ret</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">outer_dim</span><span class="p">,</span> <span class="n">inner_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">ret</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">size</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MaskedCategorical.log_prob"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.log_prob">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sparse_mask</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+        <span class="n">idx_3d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_events</span><span class="p">)</span>
+        <span class="n">val_3d</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">idx_3d</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">idx_3d</span> <span class="o">==</span> <span class="n">val_3d</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">int</span><span class="p">()</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">idx</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+        <span class="c1"># Fill masked values with neg_inf.</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">val_3d</span><span class="p">)</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">masked_fill</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">logical_not</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span> <span class="bp">self</span><span class="o">.</span><span class="n">neg_inf</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ret</span><span class="o">.</span><span class="n">resize_as</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_mask_logits</span><span class="p">(</span>
+        <span class="n">logits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">mask</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">neg_inf</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;-inf&quot;</span><span class="p">),</span>
+        <span class="n">sparse_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">padding_value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">logits</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">sparse_mask</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">logits</span><span class="o">.</span><span class="n">masked_fill</span><span class="p">(</span><span class="o">~</span><span class="n">mask</span><span class="p">,</span> <span class="n">neg_inf</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">padding_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">padding_mask</span> <span class="o">=</span> <span class="n">mask</span> <span class="o">==</span> <span class="n">padding_value</span>
+            <span class="k">if</span> <span class="n">padding_value</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="c1"># Avoid invalid indices in mask.</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">masked_fill</span><span class="p">(</span><span class="n">padding_mask</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">padding_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logits</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">padding_mask</span><span class="p">,</span> <span class="n">neg_inf</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">logits</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">deterministic_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span></div>
+
+
+<div class="viewcode-block" id="MaskedOneHotCategorical"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MaskedOneHotCategorical</span><span class="p">(</span><span class="n">MaskedCategorical</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;MaskedCategorical distribution.</span>
+
+<span class="sd">    Reference:</span>
+<span class="sd">    https://www.tensorflow.org/agents/api_docs/python/tf_agents/distributions/masked/MaskedCategorical</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        logits (torch.Tensor): event log probabilities (unnormalized)</span>
+<span class="sd">        probs (torch.Tensor): event probabilities. If provided, the probabilities</span>
+<span class="sd">            corresponding to masked items will be zeroed and the probability</span>
+<span class="sd">            re-normalized along its last dimension.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        mask (torch.Tensor): A boolean mask of the same shape as ``logits``/``probs``</span>
+<span class="sd">            where ``False`` entries are the ones to be masked. Alternatively,</span>
+<span class="sd">            if ``sparse_mask`` is True, it represents the list of valid indices</span>
+<span class="sd">            in the distribution. Exclusive with ``indices``.</span>
+<span class="sd">        indices (torch.Tensor): A dense index tensor representing which actions</span>
+<span class="sd">            must be taken into account. Exclusive with ``mask``.</span>
+<span class="sd">        neg_inf (:obj:`float`, optional): The log-probability value allocated to</span>
+<span class="sd">            invalid (out-of-mask) indices. Defaults to -inf.</span>
+<span class="sd">        padding_value: The padding value in then mask tensor when</span>
+<span class="sd">            sparse_mask == True, the padding_value will be ignored.</span>
+<span class="sd">        grad_method (ReparamGradientStrategy, optional): strategy to gather</span>
+<span class="sd">            reparameterized samples.</span>
+<span class="sd">            ``ReparamGradientStrategy.PassThrough`` will compute the sample gradients</span>
+<span class="sd">             by using the softmax valued log-probability as a proxy to the</span>
+<span class="sd">             samples gradients.</span>
+<span class="sd">            ``ReparamGradientStrategy.RelaxedOneHot`` will use</span>
+<span class="sd">            :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; logits = torch.randn(4) / 100  # almost equal probabilities</span>
+<span class="sd">        &gt;&gt;&gt; mask = torch.tensor([True, False, True, True])</span>
+<span class="sd">        &gt;&gt;&gt; dist = MaskedOneHotCategorical(logits=logits, mask=mask)</span>
+<span class="sd">        &gt;&gt;&gt; sample = dist.sample((10,))</span>
+<span class="sd">        &gt;&gt;&gt; print(sample)  # no `1` in the sample</span>
+<span class="sd">        tensor([[0, 0, 1, 0],</span>
+<span class="sd">                [0, 0, 0, 1],</span>
+<span class="sd">                [1, 0, 0, 0],</span>
+<span class="sd">                [0, 0, 1, 0],</span>
+<span class="sd">                [0, 0, 1, 0],</span>
+<span class="sd">                [1, 0, 0, 0],</span>
+<span class="sd">                [0, 0, 1, 0],</span>
+<span class="sd">                [1, 0, 0, 0],</span>
+<span class="sd">                [0, 0, 1, 0],</span>
+<span class="sd">                [0, 0, 1, 0]])</span>
+<span class="sd">        &gt;&gt;&gt; print(dist.log_prob(sample))</span>
+<span class="sd">        tensor([-1.1203, -1.0928, -1.0831, -1.1203, -1.1203, -1.0831, -1.1203, -1.0831,</span>
+<span class="sd">                -1.1203, -1.1203])</span>
+<span class="sd">        &gt;&gt;&gt; sample_non_valid = torch.zeros_like(sample)</span>
+<span class="sd">        &gt;&gt;&gt; sample_non_valid[..., 1] = 1</span>
+<span class="sd">        &gt;&gt;&gt; print(dist.log_prob(sample_non_valid))</span>
+<span class="sd">        tensor([-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf])</span>
+<span class="sd">        &gt;&gt;&gt; # with probabilities</span>
+<span class="sd">        &gt;&gt;&gt; prob = torch.ones(10)</span>
+<span class="sd">        &gt;&gt;&gt; prob = prob / prob.sum()</span>
+<span class="sd">        &gt;&gt;&gt; mask = torch.tensor([False] + 9 * [True])  # first outcome is masked</span>
+<span class="sd">        &gt;&gt;&gt; dist = MaskedOneHotCategorical(probs=prob, mask=mask)</span>
+<span class="sd">        &gt;&gt;&gt; s = torch.arange(10)</span>
+<span class="sd">        &gt;&gt;&gt; s = torch.nn.functional.one_hot(s, 10)</span>
+<span class="sd">        &gt;&gt;&gt; print(dist.log_prob(s))</span>
+<span class="sd">        tensor([   -inf, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972,</span>
+<span class="sd">                -2.1972, -2.1972])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">probs_to_logits</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">)</span>
+
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">logits_to_probs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">logits</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">probs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">neg_inf</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;-inf&quot;</span><span class="p">),</span>
+        <span class="n">padding_value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">grad_method</span><span class="p">:</span> <span class="n">ReparamGradientStrategy</span> <span class="o">=</span> <span class="n">ReparamGradientStrategy</span><span class="o">.</span><span class="n">PassThrough</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grad_method</span> <span class="o">=</span> <span class="n">grad_method</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span>
+            <span class="n">probs</span><span class="o">=</span><span class="n">probs</span><span class="p">,</span>
+            <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+            <span class="n">indices</span><span class="o">=</span><span class="n">indices</span><span class="p">,</span>
+            <span class="n">neg_inf</span><span class="o">=</span><span class="n">neg_inf</span><span class="p">,</span>
+            <span class="n">padding_value</span><span class="o">=</span><span class="n">padding_value</span><span class="p">,</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="MaskedOneHotCategorical.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical.sample">[docs]</a>    <span class="nd">@_one_hot_wrapper</span><span class="p">(</span><span class="n">MaskedCategorical</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="o">...</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">deterministic_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;logits&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MaskedOneHotCategorical.log_prob"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical.log_prob">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="MaskedOneHotCategorical.rsample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical.rsample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">sample_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sample_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([])</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;logits&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">logits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logits</span>
+            <span class="n">probs</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">probs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">grad_method</span> <span class="o">==</span> <span class="n">ReparamGradientStrategy</span><span class="o">.</span><span class="n">RelaxedOneHot</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sparse_mask</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">probs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">probs_extended</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                        <span class="p">(</span><span class="o">*</span><span class="n">probs</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">),</span>
+                        <span class="mi">0</span><span class="p">,</span>
+                        <span class="n">device</span><span class="o">=</span><span class="n">probs</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                        <span class="n">dtype</span><span class="o">=</span><span class="n">probs</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">probs_extended</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+                        <span class="n">probs_extended</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="p">,</span> <span class="n">probs</span>
+                    <span class="p">)</span>
+                    <span class="n">logits_extended</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">probs_extended</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                        <span class="p">(</span><span class="o">*</span><span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">),</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">neg_inf</span><span class="p">,</span>
+                        <span class="n">device</span><span class="o">=</span><span class="n">logits</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                        <span class="n">dtype</span><span class="o">=</span><span class="n">logits</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">logits_extended</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+                        <span class="n">probs_extended</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="p">,</span> <span class="n">logits</span>
+                    <span class="p">)</span>
+                    <span class="n">probs_extended</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">probs_extended</span> <span class="o">=</span> <span class="n">probs</span>
+                <span class="n">logits_extended</span> <span class="o">=</span> <span class="n">logits</span>
+
+            <span class="n">d</span> <span class="o">=</span> <span class="n">D</span><span class="o">.</span><span class="n">relaxed_categorical</span><span class="o">.</span><span class="n">RelaxedOneHotCategorical</span><span class="p">(</span>
+                <span class="mf">1.0</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="n">probs_extended</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="n">logits_extended</span>
+            <span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">rsample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">copy_</span><span class="p">((</span><span class="n">out</span> <span class="o">==</span> <span class="n">out</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">out</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">grad_method</span> <span class="o">==</span> <span class="n">ReparamGradientStrategy</span><span class="o">.</span><span class="n">PassThrough</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">probs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">probs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sparse_mask</span><span class="p">:</span>
+                <span class="n">probs_extended</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                    <span class="p">(</span><span class="o">*</span><span class="n">probs</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">),</span>
+                    <span class="mi">0</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">probs</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">probs</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">probs_extended</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">probs_extended</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="p">,</span> <span class="n">probs</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">probs_extended</span> <span class="o">=</span> <span class="n">probs</span>
+
+            <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">+</span> <span class="n">probs_extended</span> <span class="o">-</span> <span class="n">probs_extended</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">out</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unknown reparametrization strategy </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">reparam_strategy</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="Ordinal"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.Ordinal.html#torchrl.modules.Ordinal">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Ordinal</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A discrete distribution for learning to sample from finite ordered sets.</span>
+
+<span class="sd">    It is defined in contrast with the `Categorical` distribution, which does</span>
+<span class="sd">    not impose any notion of proximity or ordering over its support&#39;s atoms.</span>
+<span class="sd">    The `Ordinal` distribution explicitly encodes those concepts, which is</span>
+<span class="sd">    useful for learning discrete sampling from continuous sets. See §5 of</span>
+<span class="sd">    `Tang &amp; Agrawal, 2020&lt;https://arxiv.org/pdf/1901.10500.pdf&gt;`_ for details.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This class is mostly useful when you want to learn a distribution over</span>
+<span class="sd">        a finite set which is obtained by discretising a continuous set.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        scores (torch.Tensor): a tensor of shape [..., N] where N is the size of the set which supports the distributions.</span>
+<span class="sd">            Typically, the output of a neural network parametrising the distribution.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; num_atoms, num_samples = 5, 20</span>
+<span class="sd">        &gt;&gt;&gt; mean = (num_atoms - 1) / 2  # Target mean for samples, centered around the middle atom</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(42)</span>
+<span class="sd">        &gt;&gt;&gt; logits = torch.ones((num_atoms), requires_grad=True)</span>
+<span class="sd">        &gt;&gt;&gt; optimizer = torch.optim.Adam([logits], lr=0.1)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Perform optimisation loop to minimise deviation from `mean`</span>
+<span class="sd">        &gt;&gt;&gt; for _ in range(20):</span>
+<span class="sd">        &gt;&gt;&gt;     sampler = Ordinal(scores=logits)</span>
+<span class="sd">        &gt;&gt;&gt;     samples = sampler.sample((num_samples,))</span>
+<span class="sd">        &gt;&gt;&gt;     # Define loss to encourage samples around the mean by penalising deviation from mean</span>
+<span class="sd">        &gt;&gt;&gt;     loss = torch.mean((samples - mean) ** 2 * sampler.log_prob(samples))</span>
+<span class="sd">        &gt;&gt;&gt;     loss.backward()</span>
+<span class="sd">        &gt;&gt;&gt;     optimizer.step()</span>
+<span class="sd">        &gt;&gt;&gt;     optimizer.zero_grad()</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; sampler.probs</span>
+<span class="sd">        tensor([0.0308, 0.1586, 0.4727, 0.2260, 0.1120], ...)</span>
+<span class="sd">        &gt;&gt;&gt; # Print histogram to observe sample distribution frequency across 5 bins (0, 1, 2, 3, and 4)</span>
+<span class="sd">        &gt;&gt;&gt; torch.histogram(sampler.sample((1000,)).reshape(-1).float(), bins=num_atoms)</span>
+<span class="sd">        torch.return_types.histogram(</span>
+<span class="sd">            hist=tensor([ 24., 158., 478., 228., 112.]),</span>
+<span class="sd">            bin_edges=tensor([0.0000, 0.8000, 1.6000, 2.4000, 3.2000, 4.0000]))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="n">_generate_ordinal_logits</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OneHotOrdinal"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotOrdinal.html#torchrl.modules.OneHotOrdinal">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">OneHotOrdinal</span><span class="p">(</span><span class="n">OneHotCategorical</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The one-hot version of the :class:`~tensordict.nn.distributions.Ordinal` distribution.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        scores (torch.Tensor): a tensor of shape [..., N] where N is the size of the set which supports the distributions.</span>
+<span class="sd">            Typically, the output of a neural network parametrising the distribution.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="n">_generate_ordinal_logits</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_generate_ordinal_logits</span><span class="p">(</span><span class="n">scores</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Implements Eq. 4 of `Tang &amp; Agrawal, 2020&lt;https://arxiv.org/pdf/1901.10500.pdf&gt;`__.&quot;&quot;&quot;</span>
+    <span class="c1"># Assigns Bernoulli-like probabilities for each class in the set</span>
+    <span class="n">log_probs</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">logsigmoid</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+    <span class="n">complementary_log_probs</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">logsigmoid</span><span class="p">(</span><span class="o">-</span><span class="n">scores</span><span class="p">)</span>
+
+    <span class="c1"># Total log-probability for being &quot;larger than k&quot;</span>
+    <span class="n">larger_than_log_probs</span> <span class="o">=</span> <span class="n">log_probs</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Total log-probability for being &quot;smaller than k&quot;</span>
+    <span class="n">smaller_than_log_probs</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">complementary_log_probs</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="n">dims</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="n">dims</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="o">-</span> <span class="n">complementary_log_probs</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">larger_than_log_probs</span> <span class="o">+</span> <span class="n">smaller_than_log_probs</span>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+         <script src="../../../../_static/jquery.js"></script>
+         <script src="../../../../_static/underscore.js"></script>
+         <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

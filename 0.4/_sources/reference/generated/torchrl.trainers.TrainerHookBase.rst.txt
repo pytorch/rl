@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers
+
+
+TrainerHookBase
+===============
+
+.. autoclass:: TrainerHookBase
+    :members:
+    :inherited-members:

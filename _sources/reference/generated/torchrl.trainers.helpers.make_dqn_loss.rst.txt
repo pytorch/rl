@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.trainers.helpers
+
+
+make_dqn_loss
+=============
+
+.. autofunction:: make_dqn_loss

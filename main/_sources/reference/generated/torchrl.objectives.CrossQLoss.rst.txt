@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+CrossQLoss
+==========
+
+.. autoclass:: CrossQLoss
+    :members:

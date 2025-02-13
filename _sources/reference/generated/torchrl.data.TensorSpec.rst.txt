@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+TensorSpec
+==========
+
+.. autoclass:: TensorSpec
+    :members:
+    :inherited-members:

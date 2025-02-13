@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+AdaptiveKLController
+====================
+
+.. autoclass:: AdaptiveKLController
+    :members:
+    :inherited-members:

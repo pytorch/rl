@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers
+
+
+LogValidationReward
+===================
+
+.. autoclass:: LogValidationReward
+    :members:
+    :inherited-members:

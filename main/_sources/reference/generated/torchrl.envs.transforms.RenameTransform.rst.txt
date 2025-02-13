@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+RenameTransform
+===============
+
+.. autoclass:: RenameTransform
+    :members:

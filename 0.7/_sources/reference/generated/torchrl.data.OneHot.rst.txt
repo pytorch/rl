@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+OneHot
+======
+
+.. autoclass:: OneHot
+    :members:
+    :inherited-members:

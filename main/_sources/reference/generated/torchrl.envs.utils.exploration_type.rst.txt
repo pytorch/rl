@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs.utils
+
+
+exploration_type
+================
+
+.. autofunction:: exploration_type

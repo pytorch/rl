@@ -1,0 +1,1431 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.modules package &mdash; torchrl 0.7 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Actor" href="generated/torchrl.modules.tensordict_module.Actor.html" />
+    <link rel="prev" title="register_gym_spec_conversion" href="generated/torchrl.envs.register_gym_spec_conversion.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.7 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+      <li>torchrl.modules package</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/modules.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="torchrl-modules-package">
+<h1>torchrl.modules package<a class="headerlink" href="#torchrl-modules-package" title="Permalink to this heading">¶</a></h1>
+<section id="tensordict-modules-actors-exploration-value-models-and-generative-models">
+<span id="ref-modules"></span><h2>TensorDict modules: Actors, exploration, value models and generative models<a class="headerlink" href="#tensordict-modules-actors-exploration-value-models-and-generative-models" title="Permalink to this heading">¶</a></h2>
+<p id="tdmodules">TorchRL offers a series of module wrappers aimed at making it easy to build
+RL models from the ground up. These wrappers are exclusively based on
+<code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code>.
+They can loosely be split in three categories:
+policies (actors), including exploration strategies,
+value model and simulation models (in model-based contexts).</p>
+<p>The main features are:</p>
+<ul class="simple">
+<li><p>Integration of the specs in your model to ensure that the model output matches
+what your environment expects as input;</p></li>
+<li><p>Probabilistic modules that can automatically sample from a chosen distribution
+and/or return the distribution of interest;</p></li>
+<li><p>Custom containers for Q-Value learning, model-based agents and others.</p></li>
+</ul>
+<section id="tensordictmodules-and-safemodules">
+<h3>TensorDictModules and SafeModules<a class="headerlink" href="#tensordictmodules-and-safemodules" title="Permalink to this heading">¶</a></h3>
+<p>TorchRL <a class="reference internal" href="generated/torchrl.modules.tensordict_module.SafeModule.html#torchrl.modules.tensordict_module.SafeModule" title="torchrl.modules.tensordict_module.SafeModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">SafeModule</span></code></a> allows you to
+check the you model output matches what is to be expected for the environment.
+This should be used whenever your model is to be recycled across multiple
+environments for instance, and when you want to make sure that the outputs
+(e.g. the action) always satisfies the bounds imposed by the environment.
+Here is an example of how to use that feature with the
+<a class="reference internal" href="generated/torchrl.modules.tensordict_module.Actor.html#torchrl.modules.tensordict_module.Actor" title="torchrl.modules.tensordict_module.Actor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Actor</span></code></a> class:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">action_spec</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">Actor</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">spec</span><span class="o">=</span><span class="n">action_spec</span><span class="p">,</span> <span class="n">safe</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">safe</span></code> flag ensures that the output is always within the bounds of the
+<code class="docutils literal notranslate"><span class="pre">action_spec</span></code> domain: if the network output violates these bounds it will be
+projected (in a L1-manner) into the desired domain.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.Actor.html#torchrl.modules.tensordict_module.Actor" title="torchrl.modules.tensordict_module.Actor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Actor</span></code></a>(*args, **kwargs)</p></td>
+<td><p>General class for deterministic actors in RL.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.MultiStepActorWrapper.html#torchrl.modules.tensordict_module.MultiStepActorWrapper" title="torchrl.modules.tensordict_module.MultiStepActorWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiStepActorWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A wrapper around a multi-action actor.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.SafeModule.html#torchrl.modules.tensordict_module.SafeModule" title="torchrl.modules.tensordict_module.SafeModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SafeModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code> subclass that accepts a <a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorSpec</span></code></a> as argument to control the output domain.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.SafeSequential.html#torchrl.modules.tensordict_module.SafeSequential" title="torchrl.modules.tensordict_module.SafeSequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SafeSequential</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A safe sequence of TensorDictModules.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.TanhModule.html#torchrl.modules.tensordict_module.TanhModule" title="torchrl.modules.tensordict_module.TanhModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TanhModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A Tanh module for deterministic policies with bounded action space.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exploration-wrappers-and-modules">
+<h3>Exploration wrappers and modules<a class="headerlink" href="#exploration-wrappers-and-modules" title="Permalink to this heading">¶</a></h3>
+<p>To efficiently explore the environment, TorchRL proposes a series of modules
+that will override the action sampled by the policy by a noisier version.
+Their behavior is controlled by <a class="reference internal" href="generated/torchrl.envs.utils.exploration_type.html#torchrl.envs.utils.exploration_type" title="torchrl.envs.utils.exploration_type"><code class="xref py py-func docutils literal notranslate"><span class="pre">exploration_type()</span></code></a>:
+if the exploration is set to <code class="docutils literal notranslate"><span class="pre">ExplorationType.RANDOM</span></code>, the exploration is active. In all
+other cases, the action written in the tensordict is simply the network output.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Unlike other exploration modules, <a class="reference internal" href="generated/torchrl.modules.ConsistentDropoutModule.html#torchrl.modules.ConsistentDropoutModule" title="torchrl.modules.ConsistentDropoutModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConsistentDropoutModule</span></code></a>
+uses the <code class="docutils literal notranslate"><span class="pre">train</span></code>/<code class="docutils literal notranslate"><span class="pre">eval</span></code> mode to comply with the regular <cite>Dropout</cite> API in PyTorch.
+The <a class="reference internal" href="generated/torchrl.envs.utils.set_exploration_type.html#torchrl.envs.utils.set_exploration_type" title="torchrl.envs.utils.set_exploration_type"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_exploration_type()</span></code></a> context manager will have no effect on
+this module.</p>
+</div>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.AdditiveGaussianModule.html#torchrl.modules.AdditiveGaussianModule" title="torchrl.modules.AdditiveGaussianModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdditiveGaussianModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Additive Gaussian PO module.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.ConsistentDropoutModule.html#torchrl.modules.ConsistentDropoutModule" title="torchrl.modules.ConsistentDropoutModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConsistentDropoutModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A TensorDictModule wrapper for <a class="reference internal" href="generated/torchrl.modules.ConsistentDropout.html#torchrl.modules.ConsistentDropout" title="torchrl.modules.ConsistentDropout"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConsistentDropout</span></code></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.EGreedyModule.html#torchrl.modules.EGreedyModule" title="torchrl.modules.EGreedyModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EGreedyModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Epsilon-Greedy exploration module.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.OrnsteinUhlenbeckProcessModule.html#torchrl.modules.OrnsteinUhlenbeckProcessModule" title="torchrl.modules.OrnsteinUhlenbeckProcessModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OrnsteinUhlenbeckProcessModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Ornstein-Uhlenbeck exploration policy module.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="probabilistic-actors">
+<h3>Probabilistic actors<a class="headerlink" href="#probabilistic-actors" title="Permalink to this heading">¶</a></h3>
+<p>Some algorithms such as PPO require a probabilistic policy to be implemented.
+In TorchRL, these policies take the form of a model, followed by a distribution
+constructor.</p>
+<blockquote>
+<div><div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The choice of a probabilistic or regular actor class depends on the algorithm
+that is being implemented. On-policy algorithms usually require a probabilistic
+actor, off-policy usually have a deterministic actor with an extra exploration
+strategy. There are, however, many exceptions to this rule.</p>
+</div>
+</div></blockquote>
+<p>The model reads an input (typically some observation from the environment)
+and outputs the parameters of a distribution, while the distribution constructor
+reads these parameters and gets a random sample from the distribution and/or
+provides a <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> object.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">NormalParamExtractor</span><span class="p">,</span> <span class="n">TensorDictSequential</span><span class="p">,</span> <span class="n">TensorDictModule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">SafeProbabilisticModule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Normal</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">action_spec</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">2</span><span class="p">),</span> <span class="n">NormalParamExtractor</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># build the first module, which maps the observation on the mean and sd of the normal distribution</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># build the distribution constructor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">prob_module</span> <span class="o">=</span> <span class="n">SafeProbabilisticModule</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">distribution_class</span><span class="o">=</span><span class="n">Normal</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">return_log_prob</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">spec</span><span class="o">=</span><span class="n">action_spec</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">prob_module</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># execute a rollout</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">policy</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>To facilitate the construction of probabilistic policies, we provide a dedicated
+<a class="reference internal" href="generated/torchrl.modules.tensordict_module.ProbabilisticActor.html#torchrl.modules.tensordict_module.ProbabilisticActor" title="torchrl.modules.tensordict_module.ProbabilisticActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticActor</span></code></a>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProbabilisticActor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">ProbabilisticActor</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">model</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">distribution_class</span><span class="o">=</span><span class="n">Normal</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">return_log_prob</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">spec</span><span class="o">=</span><span class="n">action_spec</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+<p>which alleviates the need to specify a constructor and putting it with the
+module in a sequence.</p>
+<p>Outputs of this policy will contain a <code class="docutils literal notranslate"><span class="pre">&quot;loc&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;scale&quot;</span></code> entries, an
+<code class="docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code> sampled according to the normal distribution and the log-probability
+of this action.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.ProbabilisticActor.html#torchrl.modules.tensordict_module.ProbabilisticActor" title="torchrl.modules.tensordict_module.ProbabilisticActor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticActor</span></code></a>(*args, **kwargs)</p></td>
+<td><p>General class for probabilistic actors in RL.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.SafeProbabilisticModule.html#torchrl.modules.tensordict_module.SafeProbabilisticModule" title="torchrl.modules.tensordict_module.SafeProbabilisticModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SafeProbabilisticModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.ProbabilisticTensorDictModule</span></code> subclass that accepts a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorSpec</span></code> as an argument to control the output domain.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html#torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential" title="torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SafeProbabilisticTensorDictSequential</span></code></a>(*args, ...)</p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.ProbabilisticTensorDictSequential</span></code> subclass that accepts a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorSpec</span></code> as argument to control the output domain.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="q-value-actors">
+<h3>Q-Value actors<a class="headerlink" href="#q-value-actors" title="Permalink to this heading">¶</a></h3>
+<p>Q-Value actors are a type of policy that selects actions based on the maximum value
+(or “quality”) of a state-action pair. This value can be represented as a table or a
+function. For discrete action spaces with continuous states, it’s common to use a non-linear
+model like a neural network to represent this function.</p>
+<section id="qvalueactor">
+<h4>QValueActor<a class="headerlink" href="#qvalueactor" title="Permalink to this heading">¶</a></h4>
+<p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">QValueActor</span></code> class takes in a module and an action
+specification, and outputs the selected action and its corresponding value.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">OneHot</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.tensordict_module.actors</span><span class="w"> </span><span class="kn">import</span> <span class="n">QValueActor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a tensor dict with an observation</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s1">&#39;observation&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="p">[</span><span class="mi">5</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define the action space</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">OneHot</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a linear module to output action values</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a QValueActor instance</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">qvalue_actor</span> <span class="o">=</span> <span class="n">QValueActor</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">action_spec</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Run the actor on the tensor dict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">qvalue_actor</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        action: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">        action_value: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        chosen_action_value: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        observation: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([5]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+<p>This will output a tensor dict with the selected action and its corresponding value.</p>
+</section>
+<section id="distributional-q-learning">
+<h4>Distributional Q-Learning<a class="headerlink" href="#distributional-q-learning" title="Permalink to this heading">¶</a></h4>
+<p>Distributional Q-learning is a variant of Q-learning that represents the value function as a
+probability distribution over possible values, rather than a single scalar value.
+This allows the agent to learn about the uncertainty in the environment and make more informed
+decisions.
+In TorchRL, distributional Q-learning is implemented using the <code class="xref py py-class docutils literal notranslate"><span class="pre">DistributionalQValueActor</span></code>
+class. This class takes in a module, an action specification, and a support vector, and outputs the selected
+action and its corresponding value distribution.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">OneHot</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributionalQValueActor</span><span class="p">,</span> <span class="n">MLP</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a tensor dict with an observation</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s1">&#39;observation&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="p">[</span><span class="mi">5</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define the action space</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">OneHot</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define the number of bins for the value distribution</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nbins</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create an MLP module to output logits for the value distribution</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span><span class="n">out_features</span><span class="o">=</span><span class="p">(</span><span class="n">nbins</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">depth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a DistributionalQValueActor instance</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">qvalue_actor</span> <span class="o">=</span> <span class="n">DistributionalQValueActor</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">action_spec</span><span class="p">,</span> <span class="n">support</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nbins</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Run the actor on the tensor dict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">qvalue_actor</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        action: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">        action_value: Tensor(shape=torch.Size([5, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([5]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+<p>This will output a tensor dict with the selected action and its corresponding value distribution.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.QValueActor.html#torchrl.modules.tensordict_module.QValueActor" title="torchrl.modules.tensordict_module.QValueActor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QValueActor</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A Q-Value actor class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.QValueModule.html#torchrl.modules.tensordict_module.QValueModule" title="torchrl.modules.tensordict_module.QValueModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QValueModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Q-Value TensorDictModule for Q-value policies.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.DistributionalQValueActor.html#torchrl.modules.tensordict_module.DistributionalQValueActor" title="torchrl.modules.tensordict_module.DistributionalQValueActor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributionalQValueActor</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A Distributional DQN actor class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.DistributionalQValueModule.html#torchrl.modules.tensordict_module.DistributionalQValueModule" title="torchrl.modules.tensordict_module.DistributionalQValueModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributionalQValueModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Distributional Q-Value hook for Q-value policies.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="value-operators-and-joined-models">
+<h3>Value operators and joined models<a class="headerlink" href="#value-operators-and-joined-models" title="Permalink to this heading">¶</a></h3>
+<p>TorchRL provides a series of value operators that wrap value networks to
+soften the interface with the rest of the library.
+The basic building block is <a class="reference internal" href="generated/torchrl.modules.tensordict_module.ValueOperator.html#torchrl.modules.tensordict_module.ValueOperator" title="torchrl.modules.tensordict_module.ValueOperator"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.modules.tensordict_module.ValueOperator</span></code></a>:
+given an input state (and possibly action), it will automatically write a <code class="docutils literal notranslate"><span class="pre">&quot;state_value&quot;</span></code>
+(or <code class="docutils literal notranslate"><span class="pre">&quot;state_action_value&quot;</span></code>) in the tensordict, depending on what the input is.
+As such, this class accounts for both value and quality networks.
+Three classes are also proposed to group together a policy and a value network.
+The <a class="reference internal" href="generated/torchrl.modules.tensordict_module.ActorCriticOperator.html#torchrl.modules.tensordict_module.ActorCriticOperator" title="torchrl.modules.tensordict_module.ActorCriticOperator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActorCriticOperator</span></code></a> is an joined actor-quality network with shared parameters:
+it reads an observation, pass it through a
+common backbone, writes a hidden state, feeds this hidden state to the policy,
+then takes the hidden state and the action and provides the quality of the state-action
+pair.
+The <a class="reference internal" href="generated/torchrl.modules.tensordict_module.ActorValueOperator.html#torchrl.modules.tensordict_module.ActorValueOperator" title="torchrl.modules.tensordict_module.ActorValueOperator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActorValueOperator</span></code></a> is a joined actor-value network with shared parameters:
+it reads an observation, pass it through a
+common backbone, writes a hidden state, feeds this hidden state to the policy
+and value modules to output an action and a state value.
+Finally, the <a class="reference internal" href="generated/torchrl.modules.tensordict_module.ActorCriticWrapper.html#torchrl.modules.tensordict_module.ActorCriticWrapper" title="torchrl.modules.tensordict_module.ActorCriticWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActorCriticWrapper</span></code></a> is a joined actor and value network
+without shared parameters. It is mainly intended as a replacement for
+<a class="reference internal" href="generated/torchrl.modules.tensordict_module.ActorValueOperator.html#torchrl.modules.tensordict_module.ActorValueOperator" title="torchrl.modules.tensordict_module.ActorValueOperator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActorValueOperator</span></code></a> when a script needs to account for both options.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">make_actor</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="n">make_value</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="n">shared_params</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">common</span> <span class="o">=</span> <span class="n">make_common</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="n">model</span> <span class="o">=</span> <span class="n">ActorValueOperator</span><span class="p">(</span><span class="n">common</span><span class="p">,</span> <span class="n">actor</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">else</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">model</span> <span class="o">=</span> <span class="n">ActorValueOperator</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_policy_operator</span><span class="p">()</span>  <span class="c1"># will work in both cases</span>
+</pre></div>
+</div>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.ActorCriticOperator.html#torchrl.modules.tensordict_module.ActorCriticOperator" title="torchrl.modules.tensordict_module.ActorCriticOperator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActorCriticOperator</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Actor-critic operator.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.ActorCriticWrapper.html#torchrl.modules.tensordict_module.ActorCriticWrapper" title="torchrl.modules.tensordict_module.ActorCriticWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActorCriticWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Actor-value operator without common module.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.ActorValueOperator.html#torchrl.modules.tensordict_module.ActorValueOperator" title="torchrl.modules.tensordict_module.ActorValueOperator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActorValueOperator</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Actor-value operator.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.ValueOperator.html#torchrl.modules.tensordict_module.ValueOperator" title="torchrl.modules.tensordict_module.ValueOperator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ValueOperator</span></code></a>(*args, **kwargs)</p></td>
+<td><p>General class for value functions in RL.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.DecisionTransformerInferenceWrapper.html#torchrl.modules.tensordict_module.DecisionTransformerInferenceWrapper" title="torchrl.modules.tensordict_module.DecisionTransformerInferenceWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DecisionTransformerInferenceWrapper</span></code></a>(*args, ...)</p></td>
+<td><p>Inference Action Wrapper for the Decision Transformer.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="domain-specific-tensordict-modules">
+<h3>Domain-specific TensorDict modules<a class="headerlink" href="#domain-specific-tensordict-modules" title="Permalink to this heading">¶</a></h3>
+<p>These modules include dedicated solutions for MBRL or RLHF pipelines.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.LMHeadActorValueOperator.html#torchrl.modules.tensordict_module.LMHeadActorValueOperator" title="torchrl.modules.tensordict_module.LMHeadActorValueOperator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LMHeadActorValueOperator</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Builds an Actor-Value operator from an huggingface-like <a href="#id1"><span class="problematic" id="id2">*</span></a>LMHeadModel.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.tensordict_module.WorldModelWrapper.html#torchrl.modules.tensordict_module.WorldModelWrapper" title="torchrl.modules.tensordict_module.WorldModelWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WorldModelWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>World model wrapper.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="hooks">
+<h2>Hooks<a class="headerlink" href="#hooks" title="Permalink to this heading">¶</a></h2>
+<p>The Q-value hooks are used by the <a class="reference internal" href="generated/torchrl.modules.tensordict_module.QValueActor.html#torchrl.modules.tensordict_module.QValueActor" title="torchrl.modules.tensordict_module.QValueActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueActor</span></code></a> and <a class="reference internal" href="generated/torchrl.modules.tensordict_module.DistributionalQValueActor.html#torchrl.modules.tensordict_module.DistributionalQValueActor" title="torchrl.modules.tensordict_module.DistributionalQValueActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributionalQValueActor</span></code></a>
+modules and those should be preferred in general as they are easier to create
+and use.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.QValueHook.html#torchrl.modules.QValueHook" title="torchrl.modules.QValueHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QValueHook</span></code></a>(action_space[, var_nums, ...])</p></td>
+<td><p>Q-Value hook for Q-value policies.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.DistributionalQValueHook.html#torchrl.modules.DistributionalQValueHook" title="torchrl.modules.DistributionalQValueHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributionalQValueHook</span></code></a>(action_space, support)</p></td>
+<td><p>Distributional Q-Value hook for Q-value policies.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="models">
+<h2>Models<a class="headerlink" href="#models" title="Permalink to this heading">¶</a></h2>
+<p>TorchRL provides a series of useful “regular” (ie non-tensordict) nn.Module
+classes for RL usage.</p>
+<section id="regular-modules">
+<h3>Regular modules<a class="headerlink" href="#regular-modules" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.BatchRenorm1d.html#torchrl.modules.BatchRenorm1d" title="torchrl.modules.BatchRenorm1d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BatchRenorm1d</span></code></a>(num_features, *[, momentum, ...])</p></td>
+<td><p>BatchRenorm Module (<a class="reference external" href="https://arxiv.org/abs/1702.03275">https://arxiv.org/abs/1702.03275</a>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.ConsistentDropout.html#torchrl.modules.ConsistentDropout" title="torchrl.modules.ConsistentDropout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConsistentDropout</span></code></a>([p])</p></td>
+<td><p>Implements a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html#torch.nn.Dropout" title="(in PyTorch v2.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dropout</span></code></a> variant with consistent dropout.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.Conv3dNet.html#torchrl.modules.Conv3dNet" title="torchrl.modules.Conv3dNet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Conv3dNet</span></code></a>(in_features, depth, num_cells, ...)</p></td>
+<td><p>A 3D-convolutional neural network.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.ConvNet.html#torchrl.modules.ConvNet" title="torchrl.modules.ConvNet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConvNet</span></code></a>(in_features, depth, num_cells, ...)</p></td>
+<td><p>A convolutional neural network.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.MLP.html#torchrl.modules.MLP" title="torchrl.modules.MLP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MLP</span></code></a>(in_features, out_features, depth, ...)</p></td>
+<td><p>A multi-layer perceptron.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.Squeeze2dLayer.html#torchrl.modules.Squeeze2dLayer" title="torchrl.modules.Squeeze2dLayer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Squeeze2dLayer</span></code></a>()</p></td>
+<td><p>Squeezing layer for convolutional neural networks.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.SqueezeLayer.html#torchrl.modules.SqueezeLayer" title="torchrl.modules.SqueezeLayer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SqueezeLayer</span></code></a>([dims])</p></td>
+<td><p>Squeezing layer.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="algorithm-specific-modules">
+<h3>Algorithm-specific modules<a class="headerlink" href="#algorithm-specific-modules" title="Permalink to this heading">¶</a></h3>
+<p>These networks implement sub-networks that have shown to be useful for specific
+algorithms, such as DQN, DDPG or Dreamer.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.DTActor.html#torchrl.modules.DTActor" title="torchrl.modules.DTActor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DTActor</span></code></a>(state_dim, action_dim[, ...])</p></td>
+<td><p>Decision Transformer Actor class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.DdpgCnnActor.html#torchrl.modules.DdpgCnnActor" title="torchrl.modules.DdpgCnnActor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DdpgCnnActor</span></code></a>(action_dim[, conv_net_kwargs, ...])</p></td>
+<td><p>DDPG Convolutional Actor class.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.DdpgCnnQNet.html#torchrl.modules.DdpgCnnQNet" title="torchrl.modules.DdpgCnnQNet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DdpgCnnQNet</span></code></a>([conv_net_kwargs, ...])</p></td>
+<td><p>DDPG Convolutional Q-value class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.DdpgMlpActor.html#torchrl.modules.DdpgMlpActor" title="torchrl.modules.DdpgMlpActor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DdpgMlpActor</span></code></a>(action_dim[, mlp_net_kwargs, ...])</p></td>
+<td><p>DDPG Actor class.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.DdpgMlpQNet.html#torchrl.modules.DdpgMlpQNet" title="torchrl.modules.DdpgMlpQNet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DdpgMlpQNet</span></code></a>([mlp_net_kwargs_net1, ...])</p></td>
+<td><p>DDPG Q-value MLP class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.DecisionTransformer.html#torchrl.modules.DecisionTransformer" title="torchrl.modules.DecisionTransformer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DecisionTransformer</span></code></a>(state_dim, action_dim[, ...])</p></td>
+<td><p>Online Decion Transformer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.DistributionalDQNnet.html#torchrl.modules.DistributionalDQNnet" title="torchrl.modules.DistributionalDQNnet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributionalDQNnet</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Distributional Deep Q-Network softmax layer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.DreamerActor.html#torchrl.modules.DreamerActor" title="torchrl.modules.DreamerActor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerActor</span></code></a>(out_features[, depth, ...])</p></td>
+<td><p>Dreamer actor network.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.DuelingCnnDQNet.html#torchrl.modules.DuelingCnnDQNet" title="torchrl.modules.DuelingCnnDQNet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DuelingCnnDQNet</span></code></a>(out_features[, ...])</p></td>
+<td><p>Dueling CNN Q-network.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.GRUCell.html#torchrl.modules.GRUCell" title="torchrl.modules.GRUCell"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GRUCell</span></code></a>(input_size, hidden_size[, bias, ...])</p></td>
+<td><p>A gated recurrent unit (GRU) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.GRU.html#torchrl.modules.GRU" title="torchrl.modules.GRU"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GRU</span></code></a>(input_size, hidden_size[, num_layers, ...])</p></td>
+<td><p>A PyTorch module for executing multiple steps of a multi-layer GRU.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule" title="torchrl.modules.GRUModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GRUModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>An embedder for an GRU module.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.LSTMCell.html#torchrl.modules.LSTMCell" title="torchrl.modules.LSTMCell"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LSTMCell</span></code></a>(input_size, hidden_size[, bias, ...])</p></td>
+<td><p>A long short-term memory (LSTM) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.LSTM.html#torchrl.modules.LSTM" title="torchrl.modules.LSTM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LSTM</span></code></a>(input_size, hidden_size[, num_layers, ...])</p></td>
+<td><p>A PyTorch module for executing multiple steps of a multi-layer LSTM.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LSTMModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>An embedder for an LSTM module.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.ObsDecoder.html#torchrl.modules.ObsDecoder" title="torchrl.modules.ObsDecoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ObsDecoder</span></code></a>([channels, num_layers, ...])</p></td>
+<td><p>Observation decoder network.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.ObsEncoder.html#torchrl.modules.ObsEncoder" title="torchrl.modules.ObsEncoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ObsEncoder</span></code></a>([channels, num_layers, depth])</p></td>
+<td><p>Observation encoder network.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor" title="torchrl.modules.OnlineDTActor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OnlineDTActor</span></code></a>(state_dim, action_dim[, ...])</p></td>
+<td><p>Online Decision Transformer Actor class.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.RSSMPosterior.html#torchrl.modules.RSSMPosterior" title="torchrl.modules.RSSMPosterior"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RSSMPosterior</span></code></a>([hidden_dim, state_dim, scale_lb])</p></td>
+<td><p>The posterior network of the RSSM.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.RSSMPrior.html#torchrl.modules.RSSMPrior" title="torchrl.modules.RSSMPrior"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RSSMPrior</span></code></a>(action_spec[, hidden_dim, ...])</p></td>
+<td><p>The prior network of the RSSM.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code></a>([mode])</p></td>
+<td><p>Context manager for setting RNNs recurrent mode.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.recurrent_mode.html#torchrl.modules.recurrent_mode" title="torchrl.modules.recurrent_mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recurrent_mode</span></code></a>()</p></td>
+<td><p>Returns the current sampling type.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="multi-agent-specific-modules">
+<h3>Multi-agent-specific modules<a class="headerlink" href="#multi-agent-specific-modules" title="Permalink to this heading">¶</a></h3>
+<p>These networks implement models that can be used in multi-agent contexts.
+They use <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.6)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to execute multiple networks all at once on the
+network inputs. Because the parameters are batched, initialization may differ
+from what is usually done with other PyTorch modules, see
+<a class="reference internal" href="generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.get_stateful_net" title="torchrl.modules.MultiAgentNetBase.get_stateful_net"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_stateful_net()</span></code></a>
+for more information.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase" title="torchrl.modules.MultiAgentNetBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiAgentNetBase</span></code></a>(*, n_agents[, ...])</p></td>
+<td><p>A base class for multi-agent networks.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.MultiAgentMLP.html#torchrl.modules.MultiAgentMLP" title="torchrl.modules.MultiAgentMLP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiAgentMLP</span></code></a>(n_agent_inputs, ...)</p></td>
+<td><p>Mult-agent MLP.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.MultiAgentConvNet.html#torchrl.modules.MultiAgentConvNet" title="torchrl.modules.MultiAgentConvNet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiAgentConvNet</span></code></a>(n_agents, centralized, ...)</p></td>
+<td><p>Multi-agent CNN.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.QMixer.html#torchrl.modules.QMixer" title="torchrl.modules.QMixer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QMixer</span></code></a>(state_shape, mixing_embed_dim, ...)</p></td>
+<td><p>QMix mixer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.VDNMixer.html#torchrl.modules.VDNMixer" title="torchrl.modules.VDNMixer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VDNMixer</span></code></a>(n_agents, device)</p></td>
+<td><p>Value-Decomposition Network mixer.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="exploration">
+<h2>Exploration<a class="headerlink" href="#exploration" title="Permalink to this heading">¶</a></h2>
+<p>Noisy linear layers are a popular way of exploring the environment without
+altering the actions, but by integrating the stochasticity in the weight
+configuration.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear" title="torchrl.modules.NoisyLinear"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NoisyLinear</span></code></a>(in_features, out_features[, ...])</p></td>
+<td><p>Noisy Linear Layer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.NoisyLazyLinear.html#torchrl.modules.NoisyLazyLinear" title="torchrl.modules.NoisyLazyLinear"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NoisyLazyLinear</span></code></a>(out_features[, bias, ...])</p></td>
+<td><p>Noisy Lazy Linear Layer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.reset_noise.html#torchrl.modules.reset_noise" title="torchrl.modules.reset_noise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset_noise</span></code></a>(layer)</p></td>
+<td><p>Resets the noise of noisy layers.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="planners">
+<h2>Planners<a class="headerlink" href="#planners" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.CEMPlanner.html#torchrl.modules.CEMPlanner" title="torchrl.modules.CEMPlanner"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CEMPlanner</span></code></a>(*args, **kwargs)</p></td>
+<td><p>CEMPlanner Module.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.MPCPlannerBase.html#torchrl.modules.MPCPlannerBase" title="torchrl.modules.MPCPlannerBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MPCPlannerBase</span></code></a>(*args, **kwargs)</p></td>
+<td><p>MPCPlannerBase abstract Module.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.MPPIPlanner.html#torchrl.modules.MPPIPlanner" title="torchrl.modules.MPPIPlanner"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MPPIPlanner</span></code></a>(*args, **kwargs)</p></td>
+<td><p>MPPI Planner Module.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="distributions">
+<h2>Distributions<a class="headerlink" href="#distributions" title="Permalink to this heading">¶</a></h2>
+<p>Some distributions are typically used in RL scripts.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.Delta.html#torchrl.modules.Delta" title="torchrl.modules.Delta"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Delta</span></code></a>(param[, atol, rtol, batch_shape, ...])</p></td>
+<td><p>Delta distribution.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.IndependentNormal.html#torchrl.modules.IndependentNormal" title="torchrl.modules.IndependentNormal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IndependentNormal</span></code></a>(loc, scale[, upscale, ...])</p></td>
+<td><p>Implements a Normal distribution with location scaling.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.TanhNormal.html#torchrl.modules.TanhNormal" title="torchrl.modules.TanhNormal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TanhNormal</span></code></a>(loc, scale[, upscale, low, high, ...])</p></td>
+<td><p>Implements a TanhNormal distribution with location scaling.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.TruncatedNormal.html#torchrl.modules.TruncatedNormal" title="torchrl.modules.TruncatedNormal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TruncatedNormal</span></code></a>(loc, scale[, upscale, low, ...])</p></td>
+<td><p>Implements a Truncated Normal distribution with location scaling.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.TanhDelta.html#torchrl.modules.TanhDelta" title="torchrl.modules.TanhDelta"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TanhDelta</span></code></a>(param[, low, high, event_dims, ...])</p></td>
+<td><p>Implements a Tanh transformed_in Delta distribution.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical" title="torchrl.modules.OneHotCategorical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OneHotCategorical</span></code></a>([logits, probs, grad_method])</p></td>
+<td><p>One-hot categorical distribution.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical" title="torchrl.modules.MaskedCategorical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MaskedCategorical</span></code></a>([logits, probs, mask, ...])</p></td>
+<td><p>MaskedCategorical distribution.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical" title="torchrl.modules.MaskedOneHotCategorical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MaskedOneHotCategorical</span></code></a>([logits, probs, ...])</p></td>
+<td><p>MaskedCategorical distribution.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.Ordinal.html#torchrl.modules.Ordinal" title="torchrl.modules.Ordinal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Ordinal</span></code></a>(scores)</p></td>
+<td><p>A discrete distribution for learning to sample from finite ordered sets.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.OneHotOrdinal.html#torchrl.modules.OneHotOrdinal" title="torchrl.modules.OneHotOrdinal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OneHotOrdinal</span></code></a>(scores)</p></td>
+<td><p>The one-hot version of the <code class="xref py py-class docutils literal notranslate"><span class="pre">Ordinal</span></code> distribution.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="utils">
+<h2>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h2>
+<p>The module utils include functionals used to do some custom mappings as well as a tool to
+build <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code> instances from a given module.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.utils.mappings.html#torchrl.modules.utils.mappings" title="torchrl.modules.utils.mappings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mappings</span></code></a>(key)</p></td>
+<td><p>Given an input string, returns a surjective function f(x): R -&gt; R^+.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.utils.inv_softplus.html#torchrl.modules.utils.inv_softplus" title="torchrl.modules.utils.inv_softplus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">inv_softplus</span></code></a>(bias)</p></td>
+<td><p>Inverse softplus function.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.utils.biased_softplus.html#torchrl.modules.utils.biased_softplus" title="torchrl.modules.utils.biased_softplus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">biased_softplus</span></code></a>(bias[, min_val])</p></td>
+<td><p>A biased softplus module.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.utils.get_primers_from_module.html#torchrl.modules.utils.get_primers_from_module" title="torchrl.modules.utils.get_primers_from_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_primers_from_module</span></code></a>(module)</p></td>
+<td><p>Get all tensordict primers from all submodules of a module.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.VmapModule.html#torchrl.modules.VmapModule" title="torchrl.modules.VmapModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VmapModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A TensorDictModule wrapper to vmap over the input.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/torchrl.modules.tensordict_module.Actor.html" class="btn btn-neutral float-right" title="Actor" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/torchrl.envs.register_gym_spec_conversion.html" class="btn btn-neutral" title="register_gym_spec_conversion" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">torchrl.modules package</a><ul>
+<li><a class="reference internal" href="#tensordict-modules-actors-exploration-value-models-and-generative-models">TensorDict modules: Actors, exploration, value models and generative models</a><ul>
+<li><a class="reference internal" href="#tensordictmodules-and-safemodules">TensorDictModules and SafeModules</a></li>
+<li><a class="reference internal" href="#exploration-wrappers-and-modules">Exploration wrappers and modules</a></li>
+<li><a class="reference internal" href="#probabilistic-actors">Probabilistic actors</a></li>
+<li><a class="reference internal" href="#q-value-actors">Q-Value actors</a><ul>
+<li><a class="reference internal" href="#qvalueactor">QValueActor</a></li>
+<li><a class="reference internal" href="#distributional-q-learning">Distributional Q-Learning</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#value-operators-and-joined-models">Value operators and joined models</a></li>
+<li><a class="reference internal" href="#domain-specific-tensordict-modules">Domain-specific TensorDict modules</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#hooks">Hooks</a></li>
+<li><a class="reference internal" href="#models">Models</a><ul>
+<li><a class="reference internal" href="#regular-modules">Regular modules</a></li>
+<li><a class="reference internal" href="#algorithm-specific-modules">Algorithm-specific modules</a></li>
+<li><a class="reference internal" href="#multi-agent-specific-modules">Multi-agent-specific modules</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#exploration">Exploration</a></li>
+<li><a class="reference internal" href="#planners">Planners</a></li>
+<li><a class="reference internal" href="#distributions">Distributions</a></li>
+<li><a class="reference internal" href="#utils">Utils</a><ul>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../_static/doctools.js"></script>
+         <script src="../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

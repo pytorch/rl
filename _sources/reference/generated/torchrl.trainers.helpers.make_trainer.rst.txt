@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.trainers.helpers
+
+
+make_trainer
+============
+
+.. autofunction:: make_trainer

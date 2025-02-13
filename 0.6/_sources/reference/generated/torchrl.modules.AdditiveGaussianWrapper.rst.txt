@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+AdditiveGaussianWrapper
+=======================
+
+.. autoclass:: AdditiveGaussianWrapper
+    :members:
