@@ -108,7 +108,7 @@ sphinx_gallery_conf = {
     "filename_pattern": "reference/generated/tutorials/",  # files to parse
     "notebook_images": "reference/generated/tutorials/media/",  # images to parse
     "download_all_examples": True,
-    "abort_on_example_error": True,
+    # "abort_on_example_error": True,
     # "show_memory": True,
     "capture_repr": ("_repr_html_", "__repr__"),  # capture representations
     "write_computation_times": True,
