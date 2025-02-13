@@ -2538,6 +2538,8 @@ class NonTensor(TensorSpec):
         )
 
     def is_in(self, val: Any) -> bool:
+        if not isinstance(val, torch.Tensor) and not is_tensor_collection(val):
+            return True
         shape = torch.broadcast_shapes(self._safe_shape, val.shape)
         return (
             is_non_tensor(val)
@@ -4487,6 +4489,8 @@ class Composite(TensorSpec):
             to ``None``.
         shape (torch.Size): the leading shape of all the leaves. Equivalent
             to the batch-size of the corresponding tensordicts.
+        data_cls (type, optional): the tensordict subclass (TensorDict, TensorClass, tensorclass...) that should be
+            enforced in the env. Defaults to ``None``.
 
     Examples:
         >>> pixels_spec = Bounded(
@@ -4555,6 +4559,48 @@ class Composite(TensorSpec):
         cls._device = None
         cls._is_locked = False
         return super().__new__(cls)
+
+    def __init__(
+        self,
+        *args,
+        shape: torch.Size = None,
+        device: torch.device = None,
+        data_cls: type | None = None,
+        **kwargs,
+    ):
+        # For compatibility with TensorDict
+        batch_size = kwargs.pop("batch_size", None)
+        if batch_size is not None:
+            if shape is not None:
+                raise TypeError("Cannot specify both batch_size and shape.")
+            shape = batch_size
+
+        if shape is None:
+            shape = _size(())
+        self._shape = _size(shape)
+        self._specs = {}
+
+        _device = (
+            _make_ordinal_device(torch.device(device)) if device is not None else device
+        )
+        self._device = _device
+        if len(args):
+            if len(args) > 1:
+                raise RuntimeError(
+                    "Got multiple arguments, when at most one is expected for Composite."
+                )
+            argdict = args[0]
+            if not isinstance(argdict, (dict, Composite)):
+                raise RuntimeError(
+                    f"Expected a dictionary of specs, but got an argument of type {type(argdict)}."
+                )
+            for k, item in argdict.items():
+                if isinstance(item, dict):
+                    item = Composite(item, shape=shape, device=_device)
+                self[k] = item
+        for k, item in kwargs.items():
+            self[k] = item
+        self.data_cls = data_cls
 
     @property
     def batch_size(self):
@@ -4704,42 +4750,6 @@ class Composite(TensorSpec):
         self._specs[name] = spec
         return self
 
-    def __init__(
-        self, *args, shape: torch.Size = None, device: torch.device = None, **kwargs
-    ):
-        # For compatibility with TensorDict
-        batch_size = kwargs.pop("batch_size", None)
-        if batch_size is not None:
-            if shape is not None:
-                raise TypeError("Cannot specify both batch_size and shape.")
-            shape = batch_size
-
-        if shape is None:
-            shape = _size(())
-        self._shape = _size(shape)
-        self._specs = {}
-
-        _device = (
-            _make_ordinal_device(torch.device(device)) if device is not None else device
-        )
-        self._device = _device
-        if len(args):
-            if len(args) > 1:
-                raise RuntimeError(
-                    "Got multiple arguments, when at most one is expected for Composite."
-                )
-            argdict = args[0]
-            if not isinstance(argdict, (dict, Composite)):
-                raise RuntimeError(
-                    f"Expected a dictionary of specs, but got an argument of type {type(argdict)}."
-                )
-            for k, item in argdict.items():
-                if isinstance(item, dict):
-                    item = Composite(item, shape=shape, device=_device)
-                self[k] = item
-        for k, item in kwargs.items():
-            self[k] = item
-
     @property
     def device(self) -> DEVICE_TYPING:
         return self._device
@@ -4868,6 +4878,8 @@ class Composite(TensorSpec):
     ) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
             out = vals.empty()  # create and empty tensordict similar to vals
+        elif self.data_cls is not None:
+            out = {}
         else:
             out = TensorDict._new_unsafe({}, _size([]))
         for key, item in vals.items():
@@ -4885,6 +4897,8 @@ class Composite(TensorSpec):
                 raise RuntimeError(
                     f"Encoding key {key} raised a RuntimeError. Scroll up to know more."
                 ) from err
+        if self.data_cls is not None:
+            return self.data_cls.from_dict(out)
         return out
 
     def __repr__(self) -> str:
@@ -4910,6 +4924,14 @@ class Composite(TensorSpec):
                 self._specs[_key].type_check(value[_key], _key)
 
     def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
+        # TODO: make warnings for these
+        # if val.device != self.device:
+        #     print(val.device, self.device)
+        #     return False
+        # if val.shape[-self.ndim:] != self.shape:
+        #     return False
+        if self.data_cls is not None and type(val) != self.data_cls:
+            return False
         for key, item in self._specs.items():
             if item is None or (isinstance(item, Composite) and item.is_empty()):
                 continue
@@ -4934,12 +4956,16 @@ class Composite(TensorSpec):
         for key, item in self.items():
             if item is not None:
                 _dict[key] = item.rand(shape)
+        if self.data_cls is None:
+            cls = TensorDict
+        else:
+            cls = self.data_cls
         # No need to run checks since we know Composite is compliant with
         # TensorDict requirements
-        return TensorDict(
+        return cls.from_dict(
             _dict,
             batch_size=_size([*shape, *_remove_neg_shapes(self.shape)]),
-            device=self._device,
+            device=self.device,
         )
 
     def keys(
@@ -5046,7 +5072,9 @@ class Composite(TensorSpec):
             key: val.reshape((*shape, *val.shape[self.ndimension() :]))
             for key, val in self._specs.items()
         }
-        return Composite(_specs, shape=shape)
+        return self.__class__(
+            _specs, shape=shape, device=self.device, data_cls=self.data_cls
+        )
 
     def _unflatten(self, dim, sizes):
         shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
@@ -5073,7 +5101,9 @@ class Composite(TensorSpec):
                 kwargs[key] = value
                 continue
             kwargs[key] = value.to(dest)
-        return self.__class__(**kwargs, device=_device, shape=self.shape)
+        return self.__class__(
+            **kwargs, device=_device, shape=self.shape, data_cls=self.data_cls
+        )
 
     def clone(self) -> Composite:
         """Clones the Composite spec.
@@ -5091,6 +5121,7 @@ class Composite(TensorSpec):
             },
             device=device,
             shape=self.shape,
+            data_cls=self.data_cls,
         )
 
     def cardinality(self) -> int:
@@ -5112,6 +5143,10 @@ class Composite(TensorSpec):
         while self_without_batch.ndim:
             self_without_batch = self_without_batch[0]
         samples = {key: spec.enumerate() for key, spec in self_without_batch.items()}
+        if self.data_cls is not None:
+            cls = self.data_cls
+        else:
+            cls = TensorDict
         if samples:
             idx_rep = torch.meshgrid(
                 *(torch.arange(s.shape[0]) for s in samples.values()), indexing="ij"
@@ -5121,7 +5156,7 @@ class Composite(TensorSpec):
                 key: sample[idx]
                 for ((key, sample), idx) in zip(samples.items(), idx_rep)
             }
-            samples = TensorDict(
+            samples = cls.from_dict(
                 samples, batch_size=idx_rep[0].shape[:1], device=self.device
             )
             # Expand
@@ -5129,7 +5164,7 @@ class Composite(TensorSpec):
                 samples = samples.reshape(-1, *(1,) * self.ndim)
                 samples = samples.expand(samples.shape[0], *self.shape)
         else:
-            samples = TensorDict(batch_size=self.shape, device=self.device)
+            samples = cls.from_dict({}, batch_size=self.shape, device=self.device)
         return samples
 
     def empty(self):
@@ -5142,6 +5177,7 @@ class Composite(TensorSpec):
             {},
             device=device,
             shape=self.shape,
+            data_cls=self.data_cls,
         )
 
     def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
@@ -5154,13 +5190,19 @@ class Composite(TensorSpec):
             device = self.device
         except RuntimeError:
             device = self._device
-        return TensorDict(
+
+        if self.data_cls is not None:
+            cls = self.data_cls
+        else:
+            cls = TensorDict
+
+        return cls.from_dict(
             {
                 key: self[key].zero(shape)
                 for key in self.keys(True)
                 if isinstance(key, str) and self[key] is not None
             },
-            _size([*shape, *self._safe_shape]),
+            batch_size=_size([*shape, *self._safe_shape]),
             device=device,
         )
 
@@ -5171,6 +5213,7 @@ class Composite(TensorSpec):
             and self._device == other._device
             and set(self._specs.keys()) == set(other._specs.keys())
             and all((self._specs[key] == spec) for (key, spec) in other._specs.items())
+            and other.cls == self.data_cls
         )
 
     def update(self, dict_or_spec: Union[Composite, Dict[str, TensorSpec]]) -> None:
@@ -5220,6 +5263,7 @@ class Composite(TensorSpec):
             specs,
             shape=shape,
             device=device,
+            data_cls=self.data_cls,
         )
         return out
 
@@ -5237,10 +5281,11 @@ class Composite(TensorSpec):
             except RuntimeError:
                 device = self._device
 
-            return Composite(
+            return self.__class__(
                 {key: value.squeeze(dim) for key, value in self.items()},
                 shape=shape,
                 device=device,
+                data_cls=self.data_cls,
             )
 
         if self.shape.count(1) == 0:
@@ -5263,13 +5308,14 @@ class Composite(TensorSpec):
         except RuntimeError:
             device = self._device
 
-        return Composite(
+        return self.__class__(
             {
                 key: value.unsqueeze(dim) if value is not None else None
                 for key, value in self.items()
             },
             shape=shape,
             device=device,
+            data_cls=self.data_cls,
         )
 
     def unbind(self, dim: int = 0):
@@ -5287,6 +5333,7 @@ class Composite(TensorSpec):
                 {key: val[i] for key, val in unbound_vals.items()},
                 shape=shape,
                 device=self.device,
+                data_cls=self.data_cls,
             )
             for i in range(self.shape[dim])
         )
