@@ -1691,6 +1691,14 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 device=device,
                 filter_empty=True,
             )
+            if tensordict.device != device:
+                tensordict = tensordict._fast_apply(
+                    lambda x: x.to(device, non_blocking=self.non_blocking)
+                    if x.device != device
+                    else x,
+                    device=device,
+                    filter_empty=True,
+                )
             self._sync_w2m()
         else:
             next_td = next_td.clone().clear_device_()
