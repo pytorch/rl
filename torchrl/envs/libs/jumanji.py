@@ -169,7 +169,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         device (torch.device, optional): if provided, the device on which the data
             is to be cast. Defaults to ``torch.device("cpu")``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
         jit (bool, optional): whether the step and reset method should be wrapped in `jit`.
             Defaults to ``False``.
@@ -776,7 +776,7 @@ class JumanjiEnv(JumanjiWrapper):
             With ``jumanji``, this indicates the number of vectorized environments.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
