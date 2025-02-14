@@ -163,6 +163,81 @@ provides more information on how to design a custom environment from scratch.
     GymLikeEnv
     EnvMetaData
 
+Partial steps and partial resets
+--------------------------------
+
+TorchRL allows environments to reset some but not all the environments, or run a step in one but not all environments.
+If there is only one environment in the batch, then a partial reset / step is also allowed with the behavior detailed
+below.
+
+Batching environments and locking the batch
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. _ref_batch_locked:
+
+Before detailing what partial resets and partial steps do, we must distinguish cases where an environment has
+a batch size of its own (mostly stateful environments) or when the environment is just a mere module that, given an
+input of arbitrary size, batches the operations over all elements (mostly stateless environments).
+
+This is controlled via the :attr:`~torchrl.envs.batch_locked` attribute: a batch-locked environment requires all input
+tensordicts to have the same batch-size as the env's. Typical examples of these environments are
+:class:`~torchrl.envs.GymEnv` and related. Batch-unlocked envs are by contrast allowed to work with any input size.
+Notable examples are :class:`~torchrl.envs.BraxEnv` or :class:`~torchrl.envs.JumanjiEnv`.
+
+Executing partial steps in a batch-unlocked environment is straightforward: one just needs to mask the part of the
+tensordict that does not need to be executed, pass the other part to `step` and merge the results with the previous
+input.
+
+Batched environments (:class:`~torchrl.envs.ParallelEnv` and :class:`~torchrl.envs.SerialEnv`) can also deal with
+partial steps easily, they just pass the actions to the sub-environments that are required to be executed.
+
+In all other cases, TorchRL assumes that the environment handles the partial steps correctly.
+
+.. warning:: This means that custom environments may silently run the non-required steps as there is no way for torchrl
+    to control what happens within the `_step` method!
+
+Partial Steps
+~~~~~~~~~~~~~
+
+.. _ref_partial_steps:
+
+Partial steps are controlled via the temporary key `"_step"` which points to a boolean mask of the
+size of the tensordict that holds it. The classes armed to deal with this are:
+
+- Batched environments: :class:`~torchrl.envs.ParallelEnv` and :class:`~torchrl.envs.SerialEnv` will dispatch the
+  action to and only to the environments where `"_step"` is `True`;
+- Batch-unlocked environments;
+- Unbatched environments (i.e., environments without batch size). In these environments, the :meth:`~torchrl.envs.EnvBase.step`
+  method will first look for a `"_step"` entry and, if present, act accordingly.
+  If a :class:`~torchrl.envs.Transform` instance passes a `"_step"` entry to the tensordict, it is also captured by
+  :class:`~torchrl.envs.TransformedEnv`'s own `_step` method which will skip the `base_env.step` as well as any further
+  transformation.
+
+When dealing with partial steps, the strategy is always to use the step output and mask missing values with the previous
+content of the input tensordict, if present, or a `0`-valued tensor if the tensor cannot be found. This means that
+if the input tensordict does not contain all the previous observations, then the output tensordict will be 0-valued for
+all the non-stepped elements. Within batched environments, data collectors and rollouts utils, this is an issue that
+is not observed because these classes handle the passing of data properly.
+
+Partial steps are an essential feature of :meth:`~torchrl.envs.EnvBase.rollout` when `break_when_all_done` is `True`,
+as the environments with a `True` done state will need to be skipped during calls to `_step`.
+
+The :class:`~torchrl.envs.ConditionalSkip` transform allows you to programmatically ask for (partial) step skips.
+
+Partial Resets
+~~~~~~~~~~~~~~
+
+.. _ref_partial_resets:
+
+Partial resets work pretty much like partial steps, but with the `"_reset"` entry.
+
+The same restrictions of partial steps apply to partial resets.
+
+Likewise, partial resets are an essential feature of :meth:`~torchrl.envs.EnvBase.rollout` when `break_when_any_done` is `True`,
+as the environments with a `True` done state will need to be reset, but not others.
+
+See te following paragraph for a deep dive in partial resets within batched and vectorized environments.
+
 Vectorized envs
 ---------------
 
@@ -212,6 +287,7 @@ component (sub-environments or agents) should be reset.
 This allows to reset some but not all of the components.
 
 The ``"_reset"`` key has two distinct functionalities:
+
 1. During a call to :meth:`~.EnvBase._reset`, the ``"_reset"`` key may or may
    not be present in the input tensordict. TorchRL's convention is that the
    absence of the ``"_reset"`` key at a given ``"done"`` level indicates
@@ -885,6 +961,7 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    ConditionalSkip
     Crop
     DTypeCastTransform
     DeviceCastTransform
@@ -899,7 +976,8 @@ to be able to create this other composition:
     Hash
     InitTracker
     KLRewardTransform
-    LineariseReward
+    LineariseRewards
+    MultiAction
     NoopResetEnv
     ObservationNorm
     ObservationTransform
