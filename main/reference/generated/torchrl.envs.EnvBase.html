@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+67c3e9a) &#x25BC</span></a>
     </div>
     
 
@@ -750,6 +750,24 @@ accessed from this module using the given name</p></li>
 <dt class="sig sig-object py" id="torchrl.envs.EnvBase.add_truncated_keys">
 <span class="sig-name descname"><span class="pre">add_truncated_keys</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.envs.EnvBase" title="torchrl.envs.common.EnvBase"><span class="pre">EnvBase</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/common.html#EnvBase.add_truncated_keys"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.EnvBase.add_truncated_keys" title="Permalink to this definition">¶</a></dt>
 <dd><p>Adds truncated keys to the environment.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.EnvBase.all_actions">
+<span class="sig-name descname"><span class="pre">all_actions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">TensorDictBase</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="reference internal" href="../../_modules/torchrl/envs/common.html#EnvBase.all_actions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.EnvBase.all_actions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates all possible actions from the action spec.</p>
+<p>This only works in environments with fully discrete actions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tensordict</strong> (<em>TensorDictBase</em><em>, </em><em>optional</em>) – If given, <a class="reference internal" href="#id1" title="torchrl.envs.EnvBase.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a>
+is called with this tensordict.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a tensordict object with the “action” entry updated with a batch of
+all possible actions. The actions are stacked together in the
+leading dimension.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">

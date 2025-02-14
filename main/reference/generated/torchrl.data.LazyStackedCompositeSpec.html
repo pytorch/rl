@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+67c3e9a) &#x25BC</span></a>
     </div>
     
 
@@ -521,10 +521,16 @@ to <code class="docutils literal notranslate"><span class="pre">TensorDict(...,<
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.LazyStackedCompositeSpec.enumerate">
-<span class="sig-name descname"><span class="pre">enumerate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.enumerate" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">enumerate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.enumerate" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns all the samples that can be obtained from the TensorSpec.</p>
 <p>The samples will be stacked along the first dimension.</p>
 <p>This method is only implemented for discrete specs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>use_mask</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> and the spec has a mask,
+samples that are masked are excluded. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">

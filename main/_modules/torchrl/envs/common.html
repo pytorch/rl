@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+ab76027) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+67c3e9a) &#x25BC</span></a>
     </div>
     
 
@@ -3251,6 +3251,27 @@
                 <span class="sa">f</span><span class="s2">&quot;Expected a tensordict with shape==env.batch_size, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
+
+<div class="viewcode-block" id="EnvBase.all_actions"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.all_actions">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">all_actions</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generates all possible actions from the action spec.</span>
+
+<span class="sd">        This only works in environments with fully discrete actions.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase, optional): If given, :meth:`~.reset`</span>
+<span class="sd">                is called with this tensordict.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            a tensordict object with the &quot;action&quot; entry updated with a batch of</span>
+<span class="sd">            all possible actions. The actions are stacked together in the</span>
+<span class="sd">            leading dimension.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span><span class="o">.</span><span class="n">enumerate</span><span class="p">(</span><span class="n">use_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="EnvBase.rand_action"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.rand_action">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rand_action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Performs a random action given the action_spec attribute.</span>
