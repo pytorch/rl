@@ -540,7 +540,7 @@ class BinaryBox(Box):
 
 
 @dataclass(repr=False)
-class TensorSpec:
+class TensorSpec(metaclass=abc.ABCMeta):
     """Parent class of the tensor meta-data containers.
 
     TorchRL's TensorSpec are used to present what input/output is to be expected for a specific class,
@@ -675,6 +675,11 @@ class TensorSpec:
             self.assert_is_in(val)
         return val
 
+    @abc.abstractmethod
+    def __eq__(self, other: Any) -> bool:
+        # Implement minimal version if super() is called
+        return type(self) is type(other)
+
     def __ne__(self, other):
         return not (self == other)
 
@@ -734,12 +739,30 @@ class TensorSpec:
     ) -> torch.Tensor | TensorDictBase:
         """Indexes the input tensor.
 
+        This method is to be used with specs that encode one or more categorical variables (e.g.,
+        :class:`~torchrl.data.OneHot` or :class:`~torchrl.data.Categorical`), such that indexing of a tensor
+        with a sample can be done without caring about the actual representation of the index.
+
         Args:
             index (int, torch.Tensor, slice or list): index of the tensor
             tensor_to_index: tensor to be indexed
 
         Returns:
             indexed tensor
+
+        Exanples:
+            >>> from torchrl.data import OneHot
+            >>> import torch
+            >>>
+            >>> one_hot = OneHot(n=100)
+            >>> categ = one_hot.to_categorical_spec()
+            >>> idx_one_hot = torch.zeros((100,), dtype=torch.bool)
+            >>> idx_one_hot[50] = 1
+            >>> print(one_hot.index(idx_one_hot, torch.arange(100)))
+            tensor(50)
+            >>> idx_categ = one_hot.to_categorical(idx_one_hot)
+            >>> print(categ.index(idx_categ, torch.arange(100)))
+            tensor(50)
 
         """
         ...
@@ -1302,6 +1325,31 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
 
     """
 
+    def _reshape(
+        self,
+        *args,
+        **kwargs,
+    ) -> Any:
+        raise NotImplementedError(
+            f"`reshape` is not implemented for {type(self).__name__} specs."
+        )
+
+    def cardinality(
+        self,
+        *args,
+        **kwargs,
+    ) -> Any:
+        raise NotImplementedError(
+            f"`cardinality` is not implemented for {type(self).__name__} specs."
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError(
+            f"`index` is not implemented for {type(self).__name__} specs."
+        )
+
     def __eq__(self, other):
         if not isinstance(other, Stacked):
             return False
@@ -1823,7 +1871,7 @@ class OneHot(TensorSpec):
                 f"Only tensors are allowed for indexing using "
                 f"{self.__class__.__name__}.index(...)"
             )
-        index = index.nonzero().squeeze()
+        index = index.nonzero(as_tuple=True)[-1]
         index = index.expand((*tensor_to_index.shape[:-1], index.shape[-1]))
         return tensor_to_index.gather(-1, index)
 
@@ -2141,6 +2189,11 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             dtype=dtype,
             domain=domain,
         )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError("Indexing not implemented for Bounded.")
 
     def enumerate(self) -> Any:
         raise NotImplementedError(
@@ -2478,11 +2531,19 @@ class NonTensor(TensorSpec):
         eq = eq & (self.example_data == getattr(other, "example_data", None))
         return eq
 
+    def _project(self) -> Any:
+        raise NotImplementedError("Cannot project a NonTensorSpec.")
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError("Cannot use index with a NonTensorSpec.")
+
     def cardinality(self) -> Any:
-        raise RuntimeError("Cannot enumerate a NonTensorSpec.")
+        raise NotImplementedError("Cannot enumerate a NonTensorSpec.")
 
     def enumerate(self) -> Any:
-        raise RuntimeError("Cannot enumerate a NonTensorSpec.")
+        raise NotImplementedError("Cannot enumerate a NonTensorSpec.")
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> NonTensor:
         if isinstance(dest, torch.dtype):
@@ -2743,6 +2804,16 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         super().__init__(
             shape=shape, space=box, device=device, dtype=dtype, domain=domain, **kwargs
         )
+
+    def cardinality(self) -> int:
+        raise NotImplementedError(
+            "`cardinality` is not implemented for Unbounded specs."
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError("`index` is not implemented for Unbounded specs.")
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Unbounded:
         if isinstance(dest, torch.dtype):
@@ -3515,6 +3586,14 @@ class Categorical(TensorSpec):
         out = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
         return out
 
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        idx = index.expand(
+            tensor_to_index.shape[: -self.ndim] + torch.Size([-1] * self.ndim)
+        )
+        return tensor_to_index.gather(-1, idx)
+
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if val.dtype not in (torch.int, torch.long):
             val = torch.round(val)
@@ -3851,8 +3930,49 @@ class Choice(TensorSpec):
                 .item()
             )
 
+    def enumerate(self, use_mask: bool = False) -> List[Any]:
+        return [s for choice in self._choices for s in choice.enumerate()]
+
+    def _project(
+        self, val: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError(
+            "_project is not implemented for Choice. If this feature is required, please raise "
+            "an issue on TorchRL github repo."
+        )
+
+    def _reshape(self, shape: torch.Size) -> T:
+        return self.__class__(
+            [choice.reshape(shape) for choice in self._choices],
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError(
+            "index is not implemented for Choice. If this feature is required, please raise "
+            "an issue on TorchRL github repo."
+        )
+
+    @property
+    def num_choices(self):
+        """Number of choices for the spec."""
+        return len(self._choices)
+
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Choice:
         return self.__class__([choice.to(dest) for choice in self._choices])
+
+    def __eq__(self, other):
+        if not isinstance(other, Choice):
+            return False
+        if self.num_choices != other.num_choices:
+            return False
+        return all(
+            (s0 == s1).all()
+            if isinstance(s0, torch.Tensor) or is_tensor_collection(s0)
+            else s0 == s1
+            for s0, s1 in zip(self._choices, other._choices)
+        )
 
 
 @dataclass(repr=False)
@@ -4584,6 +4704,21 @@ class Composite(TensorSpec):
                         f"Composite.shape={self.shape}."
                     )
         self._shape = _size(value)
+
+    def _project(
+        self, val: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        cls = TensorDict
+        return cls.from_dict(
+            {k: item._project(val[k]) for k, item in self.items()},
+            batch_size=self.shape,
+            device=self.device,
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError("`index` is not implemented for Composite specs.")
 
     def is_empty(self, recurse: bool = False):
         """Whether the composite spec contains specs or not.
@@ -5507,6 +5642,31 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
     heterogeneous specs may occur (same semantic but different shape).
 
     """
+
+    def _reshape(
+        self,
+        *args,
+        **kwargs,
+    ) -> Any:
+        raise NotImplementedError(
+            f"`reshape` is not implemented for {type(self).__name__} specs."
+        )
+
+    def cardinality(
+        self,
+        *args,
+        **kwargs,
+    ) -> Any:
+        raise NotImplementedError(
+            f"`cardinality` is not implemented for {type(self).__name__} specs."
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError(
+            f"`index` is not implemented for {type(self).__name__} specs."
+        )
 
     def update(self, dict) -> None:
         for key, item in dict.items():
