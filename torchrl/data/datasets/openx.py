@@ -123,7 +123,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The OpenX dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/openx`.
+            `~/.cache/torchrl/atari`.openx`.
         streaming (bool, optional): if ``True``, the data won't be downloaded but
             read from a stream instead.
 
