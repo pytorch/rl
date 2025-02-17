@@ -2540,10 +2540,10 @@ class NonTensor(TensorSpec):
         raise NotImplementedError("Cannot use index with a NonTensorSpec.")
 
     def cardinality(self) -> Any:
-        raise NotImplementedError("Cannot enumerate a NonTensorSpec.")
+        raise NotImplementedError("Cannot enumerate a NonTensor spec.")
 
     def enumerate(self) -> Any:
-        raise NotImplementedError("Cannot enumerate a NonTensorSpec.")
+        raise NotImplementedError("Cannot enumerate a NonTensor spec.")
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> NonTensor:
         if isinstance(dest, torch.dtype):
@@ -5621,7 +5621,7 @@ class Composite(TensorSpec):
                     sub_spec._check_unlock()
             self._check_unlock()
         except RuntimeError as err:
-            self.lock_()
+            self.lock_(recurse=recurse)
             raise err
         return self
 
