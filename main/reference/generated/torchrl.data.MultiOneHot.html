@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+67c3e9a) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+bd78913) &#x25BC</span></a>
     </div>
     
 
@@ -591,6 +591,9 @@ from it if the current dimension is a singleton.</p>
 <dt class="sig sig-object py" id="torchrl.data.MultiOneHot.index">
 <span class="sig-name descname"><span class="pre">index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.6)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">slice</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor_to_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.6)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.6)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/data/tensor_specs.html#MultiOneHot.index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.MultiOneHot.index" title="Permalink to this definition">¶</a></dt>
 <dd><p>Indexes the input tensor.</p>
+<p>This method is to be used with specs that encode one or more categorical variables (e.g.,
+<a class="reference internal" href="torchrl.data.OneHot.html#torchrl.data.OneHot" title="torchrl.data.OneHot"><code class="xref py py-class docutils literal notranslate"><span class="pre">OneHot</span></code></a> or <a class="reference internal" href="torchrl.data.Categorical.html#torchrl.data.Categorical" title="torchrl.data.Categorical"><code class="xref py py-class docutils literal notranslate"><span class="pre">Categorical</span></code></a>), such that indexing of a tensor
+with a sample can be done without caring about the actual representation of the index.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -600,6 +603,23 @@ from it if the current dimension is a singleton.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>indexed tensor</p>
+</dd>
+</dl>
+<dl>
+<dt>Exanples:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">OneHot</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">one_hot</span> <span class="o">=</span> <span class="n">OneHot</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">categ</span> <span class="o">=</span> <span class="n">one_hot</span><span class="o">.</span><span class="n">to_categorical_spec</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">idx_one_hot</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">100</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">idx_one_hot</span><span class="p">[</span><span class="mi">50</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">one_hot</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">idx_one_hot</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">100</span><span class="p">)))</span>
+<span class="go">tensor(50)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">idx_categ</span> <span class="o">=</span> <span class="n">one_hot</span><span class="o">.</span><span class="n">to_categorical</span><span class="p">(</span><span class="n">idx_one_hot</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">categ</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">idx_categ</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">100</span><span class="p">)))</span>
+<span class="go">tensor(50)</span>
+</pre></div>
+</div>
 </dd>
 </dl>
 </dd></dl>
