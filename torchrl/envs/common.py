@@ -2831,6 +2831,27 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 f"got {tensordict.batch_size} and {self.batch_size}"
             )
 
+    def all_actions(
+        self, tensordict: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
+        """Generates all possible actions from the action spec.
+
+        This only works in environments with fully discrete actions.
+
+        Args:
+            tensordict (TensorDictBase, optional): If given, :meth:`~.reset`
+                is called with this tensordict.
+
+        Returns:
+            a tensordict object with the "action" entry updated with a batch of
+            all possible actions. The actions are stacked together in the
+            leading dimension.
+        """
+        if tensordict is not None:
+            self.reset(tensordict)
+
+        return self.full_action_spec.enumerate(use_mask=True)
+
     def rand_action(self, tensordict: Optional[TensorDictBase] = None):
         """Performs a random action given the action_spec attribute.
 

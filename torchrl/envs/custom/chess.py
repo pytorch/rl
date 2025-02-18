@@ -7,7 +7,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import pathlib
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -356,6 +356,19 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
 
     def _is_done(self, board):
         return board.is_game_over() | board.is_fifty_moves()
+
+    def all_actions(
+        self, tensordict: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
+        if not self.mask_actions:
+            raise RuntimeError(
+                (
+                    "Cannot generate legal actions since 'mask_actions=False' was "
+                    "set. If you really want to generate all actions, not just "
+                    "legal ones, call 'env.full_action_spec.enumerate()'."
+                )
+            )
+        return super().all_actions(tensordict)
 
     def _reset(self, tensordict=None):
         fen = None
