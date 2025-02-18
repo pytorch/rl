@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+edfa25d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
     </div>
     
 
@@ -501,32 +501,33 @@
 <span class="sd">            If a single ``hash_module`` is provided but no aggregator is passed, it will take</span>
 <span class="sd">            the value of the hash_module. If no ``hash_module`` or a list of ``hash_modules`` is</span>
 <span class="sd">            provided but no aggregator is passed, it will default to ``SipHash``.</span>
-<span class="sd">       clone (bool, optional): if ``True``, a shallow clone of the input TensorDict will be</span>
+<span class="sd">        clone (bool, optional): if ``True``, a shallow clone of the input TensorDict will be</span>
 <span class="sd">            returned. This can be used to retrieve the integer index within the storage,</span>
 <span class="sd">            corresponding to a given input tensordict. This can be overridden at runtime by</span>
 <span class="sd">            providing the ``clone`` argument to the forward method.</span>
 <span class="sd">            Defaults to ``False``.</span>
-<span class="sd">    d</span>
-<span class="sd">        Examples:</span>
-<span class="sd">            &gt;&gt;&gt; query_module = QueryModule(</span>
-<span class="sd">            ...     in_keys=[&quot;key1&quot;, &quot;key2&quot;],</span>
-<span class="sd">            ...     index_key=&quot;index&quot;,</span>
-<span class="sd">            ...     hash_module=SipHash(),</span>
-<span class="sd">            ... )</span>
-<span class="sd">            &gt;&gt;&gt; query = TensorDict(</span>
-<span class="sd">            ...     {</span>
-<span class="sd">            ...         &quot;key1&quot;: torch.Tensor([[1], [1], [1], [2]]),</span>
-<span class="sd">            ...         &quot;key2&quot;: torch.Tensor([[3], [3], [2], [3]]),</span>
-<span class="sd">            ...         &quot;other&quot;: torch.randn(4),</span>
-<span class="sd">            ...     },</span>
-<span class="sd">            ...     batch_size=(4,),</span>
-<span class="sd">            ... )</span>
-<span class="sd">            &gt;&gt;&gt; res = query_module(query)</span>
-<span class="sd">            &gt;&gt;&gt; # The first two pairs of key1 and key2 match</span>
-<span class="sd">            &gt;&gt;&gt; assert res[&quot;index&quot;][0] == res[&quot;index&quot;][1]</span>
-<span class="sd">            &gt;&gt;&gt; # The last three pairs of key1 and key2 have at least one mismatching value</span>
-<span class="sd">            &gt;&gt;&gt; assert res[&quot;index&quot;][1] != res[&quot;index&quot;][2]</span>
-<span class="sd">            &gt;&gt;&gt; assert res[&quot;index&quot;][2] != res[&quot;index&quot;][3]</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; query_module = QueryModule(</span>
+<span class="sd">        ...     in_keys=[&quot;key1&quot;, &quot;key2&quot;],</span>
+<span class="sd">        ...     index_key=&quot;index&quot;,</span>
+<span class="sd">        ...     hash_module=SipHash(),</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; query = TensorDict(</span>
+<span class="sd">        ...     {</span>
+<span class="sd">        ...         &quot;key1&quot;: torch.Tensor([[1], [1], [1], [2]]),</span>
+<span class="sd">        ...         &quot;key2&quot;: torch.Tensor([[3], [3], [2], [3]]),</span>
+<span class="sd">        ...         &quot;other&quot;: torch.randn(4),</span>
+<span class="sd">        ...     },</span>
+<span class="sd">        ...     batch_size=(4,),</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; res = query_module(query)</span>
+<span class="sd">        &gt;&gt;&gt; # The first two pairs of key1 and key2 match</span>
+<span class="sd">        &gt;&gt;&gt; assert res[&quot;index&quot;][0] == res[&quot;index&quot;][1]</span>
+<span class="sd">        &gt;&gt;&gt; # The last three pairs of key1 and key2 have at least one mismatching value</span>
+<span class="sd">        &gt;&gt;&gt; assert res[&quot;index&quot;][1] != res[&quot;index&quot;][2]</span>
+<span class="sd">        &gt;&gt;&gt; assert res[&quot;index&quot;][2] != res[&quot;index&quot;][3]</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+edfa25d) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
     </div>
     
 
@@ -454,17 +454,21 @@ If a list of callables is provided, its length must equate the number of in_keys
 <li><p><strong>hash_to_int</strong> (<em>Callable</em><em>[</em><em>[</em><em>int</em><em>]</em><em>, </em><em>int</em><em>]</em><em>, </em><em>optional</em>) – a stateful function that
 maps a hash value to a non-negative integer corresponding to an index in a
 storage. Defaults to <code class="xref py py-class docutils literal notranslate"><span class="pre">HashToInt</span></code>.</p></li>
-<li><p><strong>aggregator</strong> – a hash function to group multiple hashes
+<li><p><strong>aggregator</strong> (<em>Callable</em><em>[</em><em>[</em><em>int</em><em>]</em><em>, </em><em>int</em><em>]</em><em>, </em><em>optional</em>) – a hash function to group multiple hashes
 together. This argument should only be passed when there is more than one <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>.
 If a single <code class="docutils literal notranslate"><span class="pre">hash_module</span></code> is provided but no aggregator is passed, it will take
 the value of the hash_module. If no <code class="docutils literal notranslate"><span class="pre">hash_module</span></code> or a list of <code class="docutils literal notranslate"><span class="pre">hash_modules</span></code> is
 provided but no aggregator is passed, it will default to <code class="docutils literal notranslate"><span class="pre">SipHash</span></code>.</p></li>
+<li><p><strong>clone</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a shallow clone of the input TensorDict will be
+returned. This can be used to retrieve the integer index within the storage,
+corresponding to a given input tensordict. This can be overridden at runtime by
+providing the <code class="docutils literal notranslate"><span class="pre">clone</span></code> argument to the forward method.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
-<dl>
-<dt>d</dt><dd><dl>
-<dt>Examples:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">query_module</span> <span class="o">=</span> <span class="n">QueryModule</span><span class="p">(</span>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">query_module</span> <span class="o">=</span> <span class="n">QueryModule</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;key1&quot;</span><span class="p">,</span> <span class="s2">&quot;key2&quot;</span><span class="p">],</span>
 <span class="gp">... </span>    <span class="n">index_key</span><span class="o">=</span><span class="s2">&quot;index&quot;</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">hash_module</span><span class="o">=</span><span class="n">SipHash</span><span class="p">(),</span>
@@ -485,10 +489,6 @@ provided but no aggregator is passed, it will default to <code class="docutils l
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">res</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">][</span><span class="mi">2</span><span class="p">]</span> <span class="o">!=</span> <span class="n">res</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">][</span><span class="mi">3</span><span class="p">]</span>
 </pre></div>
 </div>
-</dd>
-</dl>
-</dd>
-</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.QueryModule.add_module">
 <span class="sig-name descname"><span class="pre">add_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.6)"><span class="pre">Module</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.data.QueryModule.add_module" title="Permalink to this definition">¶</a></dt>

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+edfa25d) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
     </div>
     
 
@@ -460,17 +460,17 @@ content. If used with other structures, the transforms should be
 encoded with a <code class="docutils literal notranslate"><span class="pre">&quot;data&quot;</span></code> leading key that will be used to
 construct a tensordict from the non-tensordict content.</p></li>
 <li><p><strong>batch_size</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>the batch size to be used when sample() is
-called.
-.. note:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>The batch-size can be specified at construction time via the
-``batch_size`` argument, or at sampling time. The former should
+called.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The batch-size can be specified at construction time via the
+<code class="docutils literal notranslate"><span class="pre">batch_size</span></code> argument, or at sampling time. The former should
 be preferred whenever the batch-size is consistent across the
 experiment. If the batch-size is likely to change, it can be
-passed to the :meth:`~.sample` method. This option is
+passed to the <a class="reference internal" href="#torchrl.data.TensorDictReplayBuffer.sample" title="torchrl.data.TensorDictReplayBuffer.sample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code></a> method. This option is
 incompatible with prefetching (since this requires to know the
 batch-size in advance) as well as with samplers that have a
-``drop_last`` argument.
-</pre></div>
+<code class="docutils literal notranslate"><span class="pre">drop_last</span></code> argument.</p>
 </div>
 </p></li>
 <li><p><strong>priority_key</strong> (<em>str</em><em>, </em><em>optional</em>) – the key at which priority is assumed to
