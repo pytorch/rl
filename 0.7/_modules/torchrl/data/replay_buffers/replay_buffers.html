@@ -520,6 +520,7 @@
 <span class="sd">            is used with PyTree structures (see example below).</span>
 <span class="sd">        batch_size (int, optional): the batch size to be used when sample() is</span>
 <span class="sd">            called.</span>
+
 <span class="sd">            .. note::</span>
 <span class="sd">              The batch-size can be specified at construction time via the</span>
 <span class="sd">              ``batch_size`` argument, or at sampling time. The former should</span>
@@ -529,6 +530,7 @@
 <span class="sd">              incompatible with prefetching (since this requires to know the</span>
 <span class="sd">              batch-size in advance) as well as with samplers that have a</span>
 <span class="sd">              ``drop_last`` argument.</span>
+
 <span class="sd">        dim_extend (int, optional): indicates the dim to consider for</span>
 <span class="sd">            extension when calling :meth:`extend`. Defaults to ``storage.ndim-1``.</span>
 <span class="sd">            When using ``dim_extend &gt; 0``, we recommend using the ``ndim``</span>
@@ -549,6 +551,7 @@
 <span class="sd">                    &gt;&gt;&gt; for d in data.unbind(1):</span>
 <span class="sd">                    ...     rb.add(d)</span>
 <span class="sd">                    &gt;&gt;&gt; rb.extend(data)</span>
+
 <span class="sd">        generator (torch.Generator, optional): a generator to use for sampling.</span>
 <span class="sd">            Using a dedicated generator for the replay buffer can allow a fine-grained control</span>
 <span class="sd">            over seeding, for instance keeping the global seed different but the RB seed identical</span>
@@ -1003,6 +1006,7 @@
 
 <span class="sd">        .. note:: Hooks are currently not serialized when saving a replay buffer: they must</span>
 <span class="sd">            be manually re-initialized every time the buffer is created.</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">register_save_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span></div>
 
@@ -1347,8 +1351,8 @@
 <span class="sd">            construct a tensordict from the non-tensordict content.</span>
 <span class="sd">        batch_size (int, optional): the batch size to be used when sample() is</span>
 <span class="sd">            called.</span>
-<span class="sd">            .. note::</span>
-<span class="sd">              The batch-size can be specified at construction time via the</span>
+
+<span class="sd">            .. note:: The batch-size can be specified at construction time via the</span>
 <span class="sd">              ``batch_size`` argument, or at sampling time. The former should</span>
 <span class="sd">              be preferred whenever the batch-size is consistent across the</span>
 <span class="sd">              experiment. If the batch-size is likely to change, it can be</span>
@@ -1356,6 +1360,7 @@
 <span class="sd">              incompatible with prefetching (since this requires to know the</span>
 <span class="sd">              batch-size in advance) as well as with samplers that have a</span>
 <span class="sd">              ``drop_last`` argument.</span>
+
 <span class="sd">        dim_extend (int, optional): indicates the dim to consider for</span>
 <span class="sd">            extension when calling :meth:`extend`. Defaults to ``storage.ndim-1``.</span>
 <span class="sd">            When using ``dim_extend &gt; 0``, we recommend using the ``ndim``</span>
@@ -1472,6 +1477,7 @@
 <span class="sd">            construct a tensordict from the non-tensordict content.</span>
 <span class="sd">        batch_size (int, optional): the batch size to be used when sample() is</span>
 <span class="sd">            called.</span>
+
 <span class="sd">            .. note::</span>
 <span class="sd">              The batch-size can be specified at construction time via the</span>
 <span class="sd">              ``batch_size`` argument, or at sampling time. The former should</span>
@@ -1481,6 +1487,7 @@
 <span class="sd">              incompatible with prefetching (since this requires to know the</span>
 <span class="sd">              batch-size in advance) as well as with samplers that have a</span>
 <span class="sd">              ``drop_last`` argument.</span>
+
 <span class="sd">        priority_key (str, optional): the key at which priority is assumed to</span>
 <span class="sd">            be stored within TensorDicts added to this ReplayBuffer.</span>
 <span class="sd">            This is to be used when the sampler is of type</span>
@@ -1506,6 +1513,7 @@
 <span class="sd">                    &gt;&gt;&gt; for d in data.unbind(1):</span>
 <span class="sd">                    ...     rb.add(d)</span>
 <span class="sd">                    &gt;&gt;&gt; rb.extend(data)</span>
+
 <span class="sd">        generator (torch.Generator, optional): a generator to use for sampling.</span>
 <span class="sd">            Using a dedicated generator for the replay buffer can allow a fine-grained control</span>
 <span class="sd">            over seeding, for instance keeping the global seed different but the RB seed identical</span>
@@ -1815,6 +1823,7 @@
 <span class="sd">            construct a tensordict from the non-tensordict content.</span>
 <span class="sd">        batch_size (int, optional): the batch size to be used when sample() is</span>
 <span class="sd">            called.</span>
+
 <span class="sd">            .. note::</span>
 <span class="sd">              The batch-size can be specified at construction time via the</span>
 <span class="sd">              ``batch_size`` argument, or at sampling time. The former should</span>
@@ -1824,6 +1833,7 @@
 <span class="sd">              incompatible with prefetching (since this requires to know the</span>
 <span class="sd">              batch-size in advance) as well as with samplers that have a</span>
 <span class="sd">              ``drop_last`` argument.</span>
+
 <span class="sd">        priority_key (str, optional): the key at which priority is assumed to</span>
 <span class="sd">            be stored within TensorDicts added to this ReplayBuffer.</span>
 <span class="sd">            This is to be used when the sampler is of type</span>
@@ -1852,6 +1862,7 @@
 <span class="sd">                    &gt;&gt;&gt; for d in data.unbind(1):</span>
 <span class="sd">                    ...     rb.add(d)</span>
 <span class="sd">                    &gt;&gt;&gt; rb.extend(data)</span>
+
 <span class="sd">        generator (torch.Generator, optional): a generator to use for sampling.</span>
 <span class="sd">            Using a dedicated generator for the replay buffer can allow a fine-grained control</span>
 <span class="sd">            over seeding, for instance keeping the global seed different but the RB seed identical</span>
@@ -2090,6 +2101,7 @@
 <span class="sd">            Defaults to ``None`` (global default generator).</span>
 
 <span class="sd">            .. warning:: As of now, the generator has no effect on the transforms.</span>
+
 <span class="sd">        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.</span>
 <span class="sd">            Defaults to ``False``.</span>
 
