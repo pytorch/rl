@@ -1017,7 +1017,7 @@ class TestLSTMModule:
             data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
             assert (data.get(("next", "recurrent_state_c")) != 0.0).all()
             assert (data.get("recurrent_state_c") != 0.0).any()
-        return data
+        return data  # noqa
 
     @pytest.mark.parametrize("python_based", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
@@ -1438,7 +1438,7 @@ class TestGRUModule:
             data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
             assert (data.get("recurrent_state") != 0.0).any()
             assert (data.get(("next", "recurrent_state")) != 0.0).all()
-        return data
+        return data  # noqa
 
     @pytest.mark.parametrize("python_based", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])

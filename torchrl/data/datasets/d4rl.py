@@ -106,7 +106,7 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The D4RL dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/d4rl`.
+            `~/.cache/torchrl/atari`.d4rl`.
         download (bool, optional): Whether the dataset should be downloaded if
             not found. Defaults to ``True``.
         **env_kwargs (key-value pairs): additional kwargs for
