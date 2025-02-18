@@ -1375,7 +1375,7 @@ class Compose(Transform):
         return tensordict_reset
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in self.transforms:
+        for t in reversed(self.transforms):
             tensordict = t._reset_env_preprocess(tensordict)
         return tensordict
 
