@@ -297,8 +297,8 @@ class Transform(nn.Module):
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Inverts the input to :meth:`TransformedEnv._reset`, if needed."""
         if self.enable_inv_on_reset:
-            with _set_missing_tolerance(self.transform, True):
-                tensordict = self.transform.inv(tensordict)
+            with _set_missing_tolerance(self, True):
+                tensordict = self.inv(tensordict)
         return tensordict
 
     def init(self, tensordict) -> None:

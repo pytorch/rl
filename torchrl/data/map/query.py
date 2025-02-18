@@ -86,26 +86,26 @@ class QueryModule(TensorDictModuleBase):
             providing the ``clone`` argument to the forward method.
             Defaults to ``False``.
 
-        Examples:
-            >>> query_module = QueryModule(
-            ...     in_keys=["key1", "key2"],
-            ...     index_key="index",
-            ...     hash_module=SipHash(),
-            ... )
-            >>> query = TensorDict(
-            ...     {
-            ...         "key1": torch.Tensor([[1], [1], [1], [2]]),
-            ...         "key2": torch.Tensor([[3], [3], [2], [3]]),
-            ...         "other": torch.randn(4),
-            ...     },
-            ...     batch_size=(4,),
-            ... )
-            >>> res = query_module(query)
-            >>> # The first two pairs of key1 and key2 match
-            >>> assert res["index"][0] == res["index"][1]
-            >>> # The last three pairs of key1 and key2 have at least one mismatching value
-            >>> assert res["index"][1] != res["index"][2]
-            >>> assert res["index"][2] != res["index"][3]
+    Examples:
+        >>> query_module = QueryModule(
+        ...     in_keys=["key1", "key2"],
+        ...     index_key="index",
+        ...     hash_module=SipHash(),
+        ... )
+        >>> query = TensorDict(
+        ...     {
+        ...         "key1": torch.Tensor([[1], [1], [1], [2]]),
+        ...         "key2": torch.Tensor([[3], [3], [2], [3]]),
+        ...         "other": torch.randn(4),
+        ...     },
+        ...     batch_size=(4,),
+        ... )
+        >>> res = query_module(query)
+        >>> # The first two pairs of key1 and key2 match
+        >>> assert res["index"][0] == res["index"][1]
+        >>> # The last three pairs of key1 and key2 have at least one mismatching value
+        >>> assert res["index"][1] != res["index"][2]
+        >>> assert res["index"][2] != res["index"][3]
 
     """
 
