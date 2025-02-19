@@ -1954,31 +1954,23 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         next_tensordict.update(self.full_reward_spec.zero())
 
         # Copy the data from tensordict in `next`
-        result_keys = []
-
-        def select_and_clone(k, x, y):
-            result_keys.append(k)
+        def select_and_clone(x, y):
             if y is not None:
                 if y.device == x.device:
                     return x.clone()
                 return x.to(y.device)
 
-        result = tensordict._fast_apply(
-            select_and_clone,
-            next_tensordict,
-            device=next_tensordict.device,
-            batch_size=next_tensordict.batch_size,
-            default=None,
-            filter_empty=True,
-            is_leaf=_is_leaf_nontensor,
-            named=True,
-        )
-        result.update(
-            next_tensordict.select(
-                *[k for k in next_tensordict.keys(True, True) if k not in result_keys]
+        next_tensordict.update(
+            tensordict._fast_apply(
+                select_and_clone,
+                next_tensordict,
+                device=next_tensordict.device,
+                batch_size=next_tensordict.batch_size,
+                default=None,
+                filter_empty=True,
+                is_leaf=_is_leaf_nontensor,
             )
         )
-
         return next_tensordict
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
