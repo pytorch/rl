@@ -47,51 +47,41 @@ forest.observation_keys = [f"{pgn_or_fen}_hash", "turn", "action_mask"]
 C = 2.0**0.5
 
 
-def traversal_priority_UCB1(tree):
-    if tree.rollout[-1]["next", "_visits"] == 0:
-        res = float("inf")
+def traversal_priority_UCB1(tree, root_visits):
+    subtree = tree.subtree
+    td_subtree = subtree.rollout[:, -1]["next"]
+    visits = td_subtree["_visits"]
+    reward_sum = td_subtree["_reward_sum"].clone()
+
+    # If it's black's turn, flip the reward, since black wants to
+    # optimize for the lowest reward, not highest.
+    if not subtree.rollout[0, 0]["turn"]:
+        reward_sum = -reward_sum
+
+    if tree.rollout is None:
+        parent_visits = root_visits
     else:
-        if tree.parent.rollout is None:
-            parent_visits = 0
-            for child in tree.parent.subtree:
-                parent_visits += child.rollout[-1]["next", "_visits"]
-        else:
-            parent_visits = tree.parent.rollout[-1]["next", "_visits"]
-            assert parent_visits > 0
-
-        value_avg = (
-            tree.rollout[-1]["next", "_reward_sum"]
-            / tree.rollout[-1]["next", "_visits"]
-        )
-
-        # If it's black's turn, flip the reward, since black wants to optimize
-        # for the lowest reward.
-        if not tree.rollout[0]["turn"]:
-            value_avg = -value_avg
-
-        res = (
-            value_avg
-            + C
-            * torch.sqrt(torch.log(parent_visits) / tree.rollout[-1]["next", "_visits"])
-        ).item()
-
-    return res
+        parent_visits = tree.rollout[-1]["next", "_visits"]
+    reward_sum = reward_sum.squeeze(-1)
+    priority = (reward_sum + C * torch.sqrt(torch.log(parent_visits))) / visits
+    priority[visits == 0] = float("inf")
+    return priority
 
 
-def _traverse_MCTS_one_step(forest, tree, env, max_rollout_steps):
+def _traverse_MCTS_one_step(forest, tree, env, max_rollout_steps, root_visits):
     done = False
-    trees_visited = []
+    td_trees_visited = []
 
     while not done:
         if tree.subtree is None:
-            td_tree = tree.rollout[-1]["next"]
+            td_tree = tree.rollout[-1]["next"].clone()
 
             if (td_tree["_visits"] > 0 or tree.parent is None) and not td_tree["done"]:
                 actions = env.all_actions(td_tree)
                 subtrees = []
 
                 for action in actions:
-                    td = env.step(env.reset(td_tree.clone()).update(action)).update(
+                    td = env.step(env.reset(td_tree).update(action)).update(
                         TensorDict(
                             {
                                 ("next", "_visits"): 0,
@@ -106,6 +96,8 @@ def _traverse_MCTS_one_step(forest, tree, env, max_rollout_steps):
                     )
                     subtrees.append(new_node)
 
+                # NOTE: This whole script runs about 2x faster with lazy stack
+                # versus eager stack.
                 tree.subtree = TensorDict.lazy_stack(subtrees)
                 chosen_idx = torch.randint(0, len(subtrees), ()).item()
                 rollout_state = subtrees[chosen_idx].rollout[-1]["next"]
@@ -124,15 +116,12 @@ def _traverse_MCTS_one_step(forest, tree, env, max_rollout_steps):
             done = True
 
         else:
-            priorities = torch.tensor(
-                [traversal_priority_UCB1(subtree) for subtree in tree.subtree]
-            )
+            priorities = traversal_priority_UCB1(tree, root_visits)
             chosen_idx = torch.argmax(priorities).item()
             tree = tree.subtree[chosen_idx]
-            trees_visited.append(tree)
+            td_trees_visited.append(tree.rollout[-1]["next"])
 
-    for tree in trees_visited:
-        td = tree.rollout[-1]["next"]
+    for td in td_trees_visited:
         td["_visits"] += 1
         td["_reward_sum"] += rollout_reward
 
@@ -149,7 +138,7 @@ def traverse_MCTS(forest, root, env, num_steps, max_rollout_steps):
         max_rollout_steps (int): Maximum number of steps for each rollout.
     """
     if root not in forest:
-        for action in env.all_actions(root.clone()):
+        for action in env.all_actions(root):
             td = env.step(env.reset(root.clone()).update(action)).update(
                 TensorDict(
                     {
@@ -162,8 +151,12 @@ def traverse_MCTS(forest, root, env, num_steps, max_rollout_steps):
 
     tree = forest.get_tree(root)
 
+    # TODO: Add this to the root node
+    root_visits = torch.tensor([0])
+
     for _ in range(num_steps):
-        _traverse_MCTS_one_step(forest, tree, env, max_rollout_steps)
+        _traverse_MCTS_one_step(forest, tree, env, max_rollout_steps, root_visits)
+        root_visits += 1
 
     return tree
 
