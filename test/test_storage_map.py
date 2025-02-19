@@ -684,6 +684,77 @@ class TestMCTSForest:
                 ).all()
                 prev_tree = subtree
 
+    def test_to_string(self):
+        forest = MCTSForest()
+
+        td_root = TensorDict(
+            {
+                "observation": 0,
+            }
+        )
+
+        rollouts_data = [
+            # [(action, obs), ...]
+            [(3, 123), (1, 456)],
+            [(2, 359), (2, 3094)],
+            [(3, 123), (9, 392), (6, 989), (20, 809), (21, 847)],
+            [(1, 75)],
+            [(3, 123), (0, 948)],
+            [(2, 359), (2, 3094), (10, 68)],
+            [(2, 359), (2, 3094), (11, 9045)],
+        ]
+
+        obs_string_check = "\n".join(
+            [
+                "(0,) [123]",
+                " (0, 0) [456]",
+                " (0, 1) [392, 989, 809, 847]",
+                " (0, 2) [948]",
+                "(1,) [359, 3094]",
+                " (1, 0) [68]",
+                " (1, 1) [9045]",
+                "(2,) [75]",
+            ]
+        )
+
+        action_string_check = "\n".join(
+            [
+                "(0,) [3]",
+                " (0, 0) [1]",
+                " (0, 1) [9, 6, 20, 21]",
+                " (0, 2) [0]",
+                "(1,) [2, 2]",
+                " (1, 0) [10]",
+                " (1, 1) [11]",
+                "(2,) [1]",
+            ]
+        )
+
+        for rollout_data in rollouts_data:
+            td = td_root.clone().unsqueeze(0)
+            for action, obs in rollout_data:
+                td = td.update(
+                    TensorDict(
+                        {
+                            "action": [action],
+                            "next": TensorDict({"observation": [obs]}, [1]),
+                        },
+                        [1],
+                    )
+                )
+                forest.extend(td)
+                td = td["next"].clone()
+
+        obs_string = forest.to_string(
+            td_root, lambda tree: tree.rollout["next", "observation"].tolist()
+        )
+        assert obs_string == obs_string_check
+
+        action_string = forest.to_string(
+            td_root, lambda tree: tree.rollout["action"].tolist()
+        )
+        assert action_string == action_string_check
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

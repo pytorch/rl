@@ -604,6 +604,42 @@ class Tree(TensorClass["nocast"]):
             f"Unknown plotting backend {backend} with figure {figure}."
         )
 
+    def to_string(self, node_format_fn):
+        """Generates a string representation of the tree.
+
+        This function can pull out information from each of the nodes in a tree,
+        so it can be useful for debugging. The nodes are listed line-by-line.
+        Each line contains the path to the node, followed by the string
+        representation of that node generated with :arg:`node_format_fn`. Each
+        line is indented according to number of steps in the path required to
+        get to the corresponding node.
+
+        Args:
+            node_format_fn (Callable): User-defined function to generate a
+                string for each node of the tree. The signature must be
+                ``(Tree) -> Any``, and the output must be convertible to
+                a string.
+        """
+        queue = [
+            # tree, path
+            (self, ()),
+        ]
+
+        strings = []
+
+        while len(queue) > 0:
+            self, path = queue.pop()
+            if self.subtree is not None:
+                for subtree_idx, subtree in reversed(list(enumerate(self.subtree))):
+                    queue.append((subtree, path + (subtree_idx,)))
+
+            if self.rollout is not None:
+                level = len(path)
+                string = node_format_fn(self)
+                strings.append(f"{' ' * (level - 1)}{path} {string}")
+
+        return "\n".join(strings)
+
 
 class MCTSForest:
     """A collection of MCTS trees.
@@ -1163,6 +1199,27 @@ class MCTSForest:
 
     def __len__(self):
         return len(self.data_map)
+
+    def to_string(self, td_root, node_format_fn):
+        """Generates a string representation of a tree in the forest.
+
+        This function can pull out information from each of the nodes in a tree,
+        so it can be useful for debugging. The nodes are listed line-by-line.
+        Each line contains the path to the node, followed by the string
+        representation of that node generated with :arg:`node_format_fn`. Each
+        line is indented according to number of steps in the path required to
+        get to the corresponding node.
+
+        Args:
+            td_root (TensorDict): Root of the tree.
+
+            node_format_fn (Callable): User-defined function to generate a
+                string for each node of the tree. The signature must be
+                ``(Tree) -> Any``, and the output must be convertible to
+                a string.
+        """
+        tree = self.get_tree(td_root)
+        return tree.to_string(node_format_fn)
 
 
 def _make_list_of_nestedkeys(obj: Any, attr: str) -> List[NestedKey]:
