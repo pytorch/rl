@@ -2691,7 +2691,6 @@ def _run_worker_pipe_direct(
                 event.record()
                 event.synchronize()
             mp_event.set()
-            child_pipe.send()
             if consolidate:
                 try:
                     child_pipe.send(
