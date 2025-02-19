@@ -330,6 +330,8 @@ class Tree(TensorClass["nocast"]):
                 return TensorDict.lazy_stack(
                     [self._from_tensordict(r) for r in parent_result]
                 )
+            if parent_result is None:
+                return None
             return self._from_tensordict(parent_result)
 
     @property
@@ -1226,6 +1228,11 @@ class MCTSForest:
 
     def __len__(self):
         return len(self.data_map)
+
+    def __contains__(self, root: TensorDictBase):
+        if self.node_map is None:
+            return False
+        return root.select(*self.node_map.in_keys) in self.node_map
 
     def to_string(self, td_root, node_format_fn):
         """Generates a string representation of a tree in the forest.
