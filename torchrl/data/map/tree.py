@@ -604,6 +604,42 @@ class Tree(TensorClass["nocast"]):
             f"Unknown plotting backend {backend} with figure {figure}."
         )
 
+    def to_string(self, node_format_fn):
+        """Generates a string representation of the tree.
+
+        This function can pull out information from each of the nodes in a tree,
+        so it can be useful for debugging. The nodes are listed line-by-line.
+        Each line contains the path to the node, followed by the string
+        representation of that node generated with :arg:`node_format_fn`. Each
+        line is indented according to number of steps in the path required to
+        get to the corresponding node.
+
+        Args:
+            node_format_fn (Callable): User-defined function to generate a
+                string for each node of the tree. The signature must be
+                ``(Tree) -> Any``, and the output must be convertible to
+                a string.
+        """
+        queue = [
+            # tree, path
+            (self, ()),
+        ]
+
+        strings = []
+
+        while len(queue) > 0:
+            self, path = queue.pop()
+            if self.subtree is not None:
+                for subtree_idx, subtree in reversed(list(enumerate(self.subtree))):
+                    queue.append((subtree, path + (subtree_idx,)))
+
+            if self.rollout is not None:
+                level = len(path)
+                string = node_format_fn(self)
+                strings.append(f"{' ' * (level - 1)}{path} {string}")
+
+        return "\n".join(strings)
+
 
 class MCTSForest:
     """A collection of MCTS trees.
@@ -967,6 +1003,33 @@ class MCTSForest:
             self.max_size = self.data_map.max_size
 
     def extend(self, rollout, *, return_node: bool = False):
+        """Add a rollout to the forest.
+
+        Nodes are only added to a tree at points where rollouts diverge from
+        each other and at the endpoints of rollouts.
+
+        If there is no existing tree that matches the first steps of the
+        rollout, a new tree is added. Only one node is created, for the final
+        step.
+
+        If there is an existing tree that matches, the rollout is added to that
+        tree. If the rollout diverges from all other rollouts in the tree at
+        some step, a new node is created before the step where the rollouts
+        diverge, and a leaf node is created for the final step of the rollout.
+        If all of the rollout's steps match with a previously added rollout,
+        nothing changes.  If the rollout matches up to a leaf node of a tree but
+        continues beyond it, that node is extended to the end of the rollout,
+        and no new nodes are created.
+
+        Args:
+            rollout (TensorDict): The rollout to add to the forest.
+            return_node (bool, optional): If True, the method returns the added
+                node. Default is ``False``.
+
+        Returns:
+            Tree: The node that was added to the forest. This is only
+                returned if ``return_node`` is True.
+        """
         source, dest = (
             rollout.exclude("next").copy(),
             rollout.select("next", *self.action_keys).copy(),
@@ -1163,6 +1226,27 @@ class MCTSForest:
 
     def __len__(self):
         return len(self.data_map)
+
+    def to_string(self, td_root, node_format_fn):
+        """Generates a string representation of a tree in the forest.
+
+        This function can pull out information from each of the nodes in a tree,
+        so it can be useful for debugging. The nodes are listed line-by-line.
+        Each line contains the path to the node, followed by the string
+        representation of that node generated with :arg:`node_format_fn`. Each
+        line is indented according to number of steps in the path required to
+        get to the corresponding node.
+
+        Args:
+            td_root (TensorDict): Root of the tree.
+
+            node_format_fn (Callable): User-defined function to generate a
+                string for each node of the tree. The signature must be
+                ``(Tree) -> Any``, and the output must be convertible to
+                a string.
+        """
+        tree = self.get_tree(td_root)
+        return tree.to_string(node_format_fn)
 
 
 def _make_list_of_nestedkeys(obj: Any, attr: str) -> List[NestedKey]:
