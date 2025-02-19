@@ -330,8 +330,6 @@ class Tree(TensorClass["nocast"]):
                 return TensorDict.lazy_stack(
                     [self._from_tensordict(r) for r in parent_result]
                 )
-            if parent_result is None:
-                return None
             return self._from_tensordict(parent_result)
 
     @property
