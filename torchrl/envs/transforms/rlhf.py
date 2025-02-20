@@ -158,25 +158,25 @@ class KLRewardTransform(Transform):
             tensordict_reset = self._call(tensordict_reset)
         return tensordict_reset
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         # run the actor on the tensordict
-        action = tensordict.get("action", None)
+        action = next_tensordict.get("action", None)
         if action is None:
             # being called after reset or without action, skipping
             if self.out_keys[0] != ("reward",) and self.parent is not None:
-                tensordict.set(self.out_keys[0], self.parent.reward_spec.zero())
-            return tensordict
+                next_tensordict.set(self.out_keys[0], self.parent.reward_spec.zero())
+            return next_tensordict
         with self.frozen_params.to_module(self.functional_actor):
-            dist = self.functional_actor.get_dist(tensordict.clone(False))
+            dist = self.functional_actor.get_dist(next_tensordict.clone(False))
         # get the log_prob given the original model
         log_prob = dist.log_prob(action)
         reward_key = self.in_keys[0]
-        reward = tensordict.get("next").get(reward_key)
-        curr_log_prob = tensordict.get(self.sample_log_prob_key)
+        reward = next_tensordict.get("next").get(reward_key)
+        curr_log_prob = next_tensordict.get(self.sample_log_prob_key)
         # we use the unbiased consistent estimator of the KL: log_p(x) - log_q(x) when x ~ p(x)
         kl = (curr_log_prob - log_prob).view_as(reward)
-        tensordict.set(("next", *self.out_keys[0]), reward + self.coef * kl)
-        return tensordict
+        next_tensordict.set(("next", *self.out_keys[0]), reward + self.coef * kl)
+        return next_tensordict
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase

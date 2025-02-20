@@ -58,13 +58,13 @@ class _VIPNet(Transform):
         self.del_keys = del_keys
 
     @set_lazy_legacy(False)
-    def _call(self, tensordict):
-        with tensordict.view(-1) as tensordict_view:
+    def _call(self, next_tensordict):
+        with next_tensordict.view(-1) as tensordict_view:
             super()._call(tensordict_view)
 
         if self.del_keys:
-            tensordict.exclude(*self.in_keys, inplace=True)
-        return tensordict
+            next_tensordict.exclude(*self.in_keys, inplace=True)
+        return next_tensordict
 
     forward = _call
 
