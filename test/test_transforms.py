@@ -33,7 +33,7 @@ from tensordict import (
 from tensordict.nn import TensorDictSequential
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
-from torchrl._utils import _replace_last, prod
+from torchrl._utils import _replace_last, prod, set_auto_unwrap_transformed_env
 
 from torchrl.collectors import MultiSyncDataCollector
 from torchrl.data import (
@@ -9846,6 +9846,40 @@ def test_added_transforms_are_in_eval_mode():
 
 
 class TestTransformedEnv:
+    @pytest.mark.filterwarnings("error")
+    def test_nested_transformed_env(self):
+        base_env = ContinuousActionVecMockEnv()
+        t1 = RewardScaling(0, 1)
+        t2 = RewardScaling(0, 2)
+
+        def test_unwrap():
+            env = TransformedEnv(TransformedEnv(base_env, t1), t2)
+            assert env.base_env is base_env
+            assert isinstance(env.transform, Compose)
+            children = list(env.transform.transforms.children())
+            assert len(children) == 2
+            assert children[0].scale == 1
+            assert children[1].scale == 2
+
+        def test_wrap(auto_unwrap=None):
+            env = TransformedEnv(
+                TransformedEnv(base_env, t1), t2, auto_unwrap=auto_unwrap
+            )
+            assert env.base_env is not base_env
+            assert isinstance(env.base_env.transform, RewardScaling)
+            assert isinstance(env.transform, RewardScaling)
+
+        with pytest.warns(FutureWarning):
+            test_unwrap()
+
+        test_wrap(False)
+
+        with set_auto_unwrap_transformed_env(True):
+            test_unwrap()
+
+        with set_auto_unwrap_transformed_env(False):
+            test_wrap()
+
     def test_attr_error(self):
         class BuggyTransform(Transform):
             def transform_observation_spec(
@@ -9934,20 +9968,6 @@ class TestTransformedEnv:
             t1._allow_done_after_reset = False
         base_env._allow_done_after_reset = False
         assert not t1._allow_done_after_reset
-
-
-def test_nested_transformed_env():
-    base_env = ContinuousActionVecMockEnv()
-    t1 = RewardScaling(0, 1)
-    t2 = RewardScaling(0, 2)
-    env = TransformedEnv(TransformedEnv(base_env, t1), t2)
-
-    assert env.base_env is base_env
-    assert isinstance(env.transform, Compose)
-    children = list(env.transform.transforms.children())
-    assert len(children) == 2
-    assert children[0].scale == 1
-    assert children[1].scale == 2
 
 
 def test_transform_parent():
