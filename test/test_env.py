@@ -1628,6 +1628,7 @@ class TestParallel:
             transformed_out=transformed_out,
             device=device,
             N=N,
+            local_mp_ctx="spawn",
         )
 
         try:
@@ -1666,6 +1667,7 @@ class TestParallel:
             transformed_out=False,
             device=device,
             N=3,
+            local_mp_ctx="spawn" if torch.cuda.device_count() else mp_ctx,
         )
         env_parallel_out, env_serial_out, _, env0_out = _make_envs(
             env_name,
@@ -1674,6 +1676,7 @@ class TestParallel:
             transformed_out=True,
             device=device,
             N=3,
+            local_mp_ctx="spawn" if torch.cuda.device_count() else mp_ctx,
         )
         try:
             torch.manual_seed(0)
