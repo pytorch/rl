@@ -3213,9 +3213,11 @@ class TestCompile:
 @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
 class TestCollectorsNonTensor:
     class AddNontTensorData(Transform):
-        def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-            tensordict["nt"] = f"a string! - {tensordict.get('step_count').item()}"
-            return tensordict
+        def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+            next_tensordict[
+                "nt"
+            ] = f"a string! - {next_tensordict.get('step_count').item()}"
+            return next_tensordict
 
         def _reset(
             self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
