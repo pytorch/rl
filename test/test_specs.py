@@ -19,7 +19,7 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import _unravel_key_to_tuple
+from tensordict.utils import _unravel_key_to_tuple, set_capture_non_tensor_stack
 from torchrl._utils import _make_ordinal_device
 
 from torchrl.data.tensor_specs import (
@@ -2503,6 +2503,7 @@ class TestStack:
         "input_type",
         ["bounded_spec", "categorical_spec", "nontensor"],
     )
+    @set_capture_non_tensor_stack(False)
     def test_stack_choice(self, input_type, shape, stack_dim):
         if input_type == "bounded_spec":
             choices = [Bounded(0, 2.5, shape), Bounded(10, 12, shape)]
