@@ -138,8 +138,8 @@ class EndOfLifeTransform(Transform):
             lives = torch.as_tensor([_lives() for _lives in lives])
         return lives
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return tensordict
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        return next_tensordict
 
     def _step(self, tensordict, next_tensordict):
         parent = self.parent
