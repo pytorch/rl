@@ -410,7 +410,7 @@ class SMACv2Wrapper(_EnvWrapper):
         self.action_spec.update_mask(mask)
         return mask
 
-    def close(self):
+    def close(self, *, raise_if_closed: bool = True):
         # Closes StarCraft II
         self._env.close()
 

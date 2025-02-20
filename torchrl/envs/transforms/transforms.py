@@ -1026,7 +1026,7 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
-            tensordict = self.transform._reset_env_preprocess(tensordict)
+        tensordict = self.transform._reset_env_preprocess(tensordict)
         tensordict_reset = self.base_env._reset(tensordict, **kwargs)
         if tensordict is None:
             # make sure all transforms see a source tensordict
@@ -1083,8 +1083,8 @@ but got an object of type {type(transform)}."""
     def is_closed(self, value: bool):
         self.base_env.is_closed = value
 
-    def close(self):
-        self.base_env.close()
+    def close(self, *, raise_if_closed: bool = True):
+        self.base_env.close(raise_if_closed=raise_if_closed)
         self.is_closed = True
 
     def empty_cache(self):
