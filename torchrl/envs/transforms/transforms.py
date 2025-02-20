@@ -61,6 +61,7 @@ from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
     _replace_last,
+    auto_unwrap_transformed_env,
     logger as torchrl_logger,
 )
 
@@ -705,7 +706,11 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
     Keyword Args:
         auto_unwrap (bool, optional): if ``True``, wrapping a transformed env in  transformed env
             unwraps the transforms of the inner TransformedEnv in the outer one (the new instance).
-            Defaults to ``True``
+            Defaults to ``True``.
+
+            .. note:: This behavior will switch to ``False`` in v0.9.
+
+            .. seealso:: :class:`~torchrl.set_auto_unwrap_transformed_env`
 
     Examples:
         >>> env = GymEnv("Pendulum-v0")
@@ -724,7 +729,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         transform: Optional[Transform] = None,
         cache_specs: bool = True,
         *,
-        auto_unwrap: bool = True,
+        auto_unwrap: bool | None = None,
         **kwargs,
     ):
         self._transform = None
@@ -737,7 +742,24 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
         # Type matching must be exact here, because subtyping could introduce differences in behavior that must
         # be contained within the subclass.
-        if type(env) is TransformedEnv and type(self) is TransformedEnv and auto_unwrap:
+        if type(env) is TransformedEnv and type(self) is TransformedEnv:
+            if auto_unwrap is None:
+                auto_unwrap = auto_unwrap_transformed_env(allow_none=True)
+                if auto_unwrap is None:
+                    warnings.warn(
+                        "The default behavior of TransformedEnv will change in version 0.9. "
+                        "Nested TransformedEnvs will no longer be automatically unwrapped by default. "
+                        "To prepare for this change, use set_auto_unwrap_transformed_env(val: bool) "
+                        "as a decorator or context manager, or set the environment variable "
+                        "AUTO_UNWRAP_TRANSFORMED_ENV to 'False'.",
+                        FutureWarning,
+                        stacklevel=2,
+                    )
+                    auto_unwrap = True
+        else:
+            auto_unwrap = False
+
+        if auto_unwrap:
             self._set_env(env.base_env, device)
             if type(transform) is not Compose:
                 # we don't use isinstance as some transforms may be subclassed from
@@ -768,6 +790,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             self._set_env(env, device)
             if transform is None:
                 transform = Compose()
+
         self.transform = transform
 
         self._last_obs = None
@@ -1026,7 +1049,7 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
-            tensordict = self.transform._reset_env_preprocess(tensordict)
+        tensordict = self.transform._reset_env_preprocess(tensordict)
         tensordict_reset = self.base_env._reset(tensordict, **kwargs)
         if tensordict is None:
             # make sure all transforms see a source tensordict
@@ -1083,8 +1106,8 @@ but got an object of type {type(transform)}."""
     def is_closed(self, value: bool):
         self.base_env.is_closed = value
 
-    def close(self):
-        self.base_env.close()
+    def close(self, *, raise_if_closed: bool = True):
+        self.base_env.close(raise_if_closed=raise_if_closed)
         self.is_closed = True
 
     def empty_cache(self):
