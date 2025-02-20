@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>implement_for &mdash; torchrl main documentation</title>
+  <title>auto_unwrap_transformed_env &mdash; torchrl main documentation</title>
   
 
   
@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Knowledge Base" href="../knowledge_base.html" />
-    <link rel="prev" title="torchrl._utils package" href="../utils.html" />
+    <link rel="prev" title="set_auto_unwrap_transformed_env" href="torchrl.set_auto_unwrap_transformed_env.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fb641de) &#x25BC</span></a>
     </div>
     
 
@@ -389,13 +389,13 @@
         
           <li><a href="../utils.html">torchrl._utils package</a> &gt;</li>
         
-      <li>implement_for</li>
+      <li>auto_unwrap_transformed_env</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl._utils.implement_for.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.auto_unwrap_transformed_env.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -427,89 +427,31 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="implement-for">
-<h1>implement_for<a class="headerlink" href="#implement-for" title="Permalink to this heading">¶</a></h1>
+  <section id="auto-unwrap-transformed-env">
+<h1>auto_unwrap_transformed_env<a class="headerlink" href="#auto-unwrap-transformed-env" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl._utils.implement_for">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl._utils.</span></span><span class="sig-name descname"><span class="pre">implement_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">from_version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compilable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/_utils.html#implement_for"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl._utils.implement_for" title="Permalink to this definition">¶</a></dt>
-<dd><p>A version decorator that checks the version in the environment and implements a function with the fitting one.</p>
-<p>If specified module is missing or there is no fitting implementation, call of the decorated function
-will lead to the explicit error.
-In case of intersected ranges, last fitting implementation is used.</p>
-<p>This wrapper also works to implement different backends for a same function (eg. gym vs gymnasium,
-numpy vs jax-numpy etc).</p>
+<dt class="sig sig-object py" id="torchrl.auto_unwrap_transformed_env">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.</span></span><span class="sig-name descname"><span class="pre">auto_unwrap_transformed_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">allow_none</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/_utils.html#auto_unwrap_transformed_env"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.auto_unwrap_transformed_env" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the current setting for automatically unwrapping TransformedEnv instances.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>module_name</strong> (<em>str</em><em> or </em><em>callable</em>) – version is checked for the module with this
-name (e.g. “gym”). If a callable is provided, it should return the
-module.</p></li>
-<li><p><strong>from_version</strong> – version from which implementation is compatible. Can be open (None).</p></li>
-<li><p><strong>to_version</strong> – version from which implementation is no longer compatible. Can be open (None).</p></li>
-</ul>
-</dd>
-<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>class_method</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the function will be written as a class method.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>compilable</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the module import happens
-only on the first call to the wrapped function. If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
-module import happens when the wrapped function is initialized. This
-allows the wrapped function to work well with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>allow_none</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, returns <code class="docutils literal notranslate"><span class="pre">None</span></code> if no setting has been
+specified. Otherwise, returns the default setting. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.13&quot;</span><span class="p">,</span> <span class="s2">&quot;0.14&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="c1"># Older gym versions will return x + 1</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span>
-<span class="gp">...</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="s2">&quot;0.14&quot;</span><span class="p">,</span> <span class="s2">&quot;0.23&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="c1"># More recent gym versions will return x + 2</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">2</span>
-<span class="gp">...</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">import_module</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">),</span> <span class="s2">&quot;0.23&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="c1"># More recent gym versions will return x + 2</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">2</span>
-<span class="gp">...</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">fun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="c1"># If gymnasium is to be used instead of gym, x+3 will be returned</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">3</span>
-<span class="gp">...</span>
-</pre></div>
-</div>
-<p>This indicates that the function is compatible with gym 0.13+, but doesn’t with gym 0.14+.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl._utils.implement_for.get_class_that_defined_method">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_class_that_defined_method</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/_utils.html#implement_for.get_class_that_defined_method"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl._utils.implement_for.get_class_that_defined_method" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns the class of a method, if it is defined, and None otherwise.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl._utils.implement_for.import_module">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">import_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="../../_modules/torchrl/_utils.html#implement_for.import_module"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl._utils.implement_for.import_module" title="Permalink to this definition">¶</a></dt>
-<dd><p>Imports module and returns its version.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl._utils.implement_for.module_set">
-<span class="sig-name descname"><span class="pre">module_set</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/_utils.html#implement_for.module_set"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl._utils.implement_for.module_set" title="Permalink to this definition">¶</a></dt>
-<dd><p>Sets the function in its module, if it exists already.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl._utils.implement_for.reset">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">setters_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrl._utils.implement_for" title="torchrl._utils.implement_for"><span class="pre">implement_for</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/_utils.html#implement_for.reset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl._utils.implement_for.reset" title="Permalink to this definition">¶</a></dt>
-<dd><p>Resets the setters in setter_dict.</p>
-<p><code class="docutils literal notranslate"><span class="pre">setter_dict</span></code> is a copy of implementations. We just need to iterate through its
-values and call <a class="reference internal" href="#torchrl._utils.implement_for.module_set" title="torchrl._utils.implement_for.module_set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">module_set()</span></code></a> for each.</p>
-</dd></dl>
-
+<p>seealso: <a class="reference internal" href="torchrl.set_auto_unwrap_transformed_env.html#torchrl.set_auto_unwrap_transformed_env" title="torchrl.set_auto_unwrap_transformed_env"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_auto_unwrap_transformed_env()</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>The current setting for automatically unwrapping TransformedEnv</dt><dd><p>instances.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool or None</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
@@ -525,7 +467,7 @@ values and call <a class="reference internal" href="#torchrl._utils.implement_fo
         <a href="../knowledge_base.html" class="btn btn-neutral float-right" title="Knowledge Base" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="../utils.html" class="btn btn-neutral" title="torchrl._utils package" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.set_auto_unwrap_transformed_env.html" class="btn btn-neutral" title="set_auto_unwrap_transformed_env" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -559,7 +501,7 @@ values and call <a class="reference internal" href="#torchrl._utils.implement_fo
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">implement_for</a></li>
+<li><a class="reference internal" href="#">auto_unwrap_transformed_env</a></li>
 </ul>
 
             </div>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fb641de) &#x25BC</span></a>
     </div>
     
 
@@ -702,7 +702,7 @@
 <span class="n">_CKPT_BACKEND</span> <span class="o">=</span> <span class="n">_Dynamic_CKPT_BACKEND</span><span class="p">()</span>
 
 
-<div class="viewcode-block" id="implement_for"><a class="viewcode-back" href="../../reference/generated/torchrl._utils.implement_for.html#torchrl._utils.implement_for">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">implement_for</span><span class="p">:</span>
+<div class="viewcode-block" id="implement_for"><a class="viewcode-back" href="../../reference/generated/torchrl.implement_for.html#torchrl.implement_for">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">implement_for</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A version decorator that checks the version in the environment and implements a function with the fitting one.</span>
 
 <span class="sd">    If specified module is missing or there is no fitting implementation, call of the decorated function</span>
@@ -781,7 +781,7 @@
             <span class="n">to_version</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">version</span> <span class="o">&lt;</span> <span class="n">parse</span><span class="p">(</span><span class="n">to_version</span><span class="p">)</span>
         <span class="p">)</span>
 
-<div class="viewcode-block" id="implement_for.get_class_that_defined_method"><a class="viewcode-back" href="../../reference/generated/torchrl._utils.implement_for.html#torchrl._utils.implement_for.get_class_that_defined_method">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="implement_for.get_class_that_defined_method"><a class="viewcode-back" href="../../reference/generated/torchrl.implement_for.html#torchrl.implement_for.get_class_that_defined_method">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">get_class_that_defined_method</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the class of a method, if it is defined, and None otherwise.&quot;&quot;&quot;</span>
         <span class="n">out</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="vm">__globals__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="vm">__qualname__</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span> <span class="kc">None</span><span class="p">)</span>
@@ -815,7 +815,7 @@
             <span class="bp">cls</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmodule</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span>
 
-<div class="viewcode-block" id="implement_for.module_set"><a class="viewcode-back" href="../../reference/generated/torchrl._utils.implement_for.html#torchrl._utils.implement_for.module_set">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">module_set</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="implement_for.module_set"><a class="viewcode-back" href="../../reference/generated/torchrl.implement_for.html#torchrl.implement_for.module_set">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">module_set</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the function in its module, if it exists already.&quot;&quot;&quot;</span>
         <span class="n">prev_setter</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_implementations</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_func_name</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">prev_setter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -833,7 +833,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="nb">setattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="implement_for.import_module"><a class="viewcode-back" href="../../reference/generated/torchrl._utils.implement_for.html#torchrl._utils.implement_for.import_module">[docs]</a>    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="implement_for.import_module"><a class="viewcode-back" href="../../reference/generated/torchrl.implement_for.html#torchrl.implement_for.import_module">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">import_module</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Callable</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Imports module and returns its version.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">module_name</span><span class="p">):</span>
@@ -929,7 +929,7 @@
             <span class="k">return</span> <span class="n">fn</span>
         <span class="k">return</span> <span class="n">unsupported</span>
 
-<div class="viewcode-block" id="implement_for.reset"><a class="viewcode-back" href="../../reference/generated/torchrl._utils.implement_for.html#torchrl._utils.implement_for.reset">[docs]</a>    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="implement_for.reset"><a class="viewcode-back" href="../../reference/generated/torchrl.implement_for.html#torchrl.implement_for.reset">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">setters_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">implement_for</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Resets the setters in setter_dict.</span>
 
@@ -1405,6 +1405,89 @@
             <span class="k">return</span> <span class="n">compiled_model</span><span class="p">(</span><span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">count_and_compile</span>
+
+
+<span class="c1"># auto unwrap control</span>
+<span class="n">_DEFAULT_AUTO_UNWRAP</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">_AUTO_UNWRAP</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;AUTO_UNWRAP_TRANSFORMED_ENV&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="set_auto_unwrap_transformed_env"><a class="viewcode-back" href="../../reference/generated/torchrl.set_auto_unwrap_transformed_env.html#torchrl.set_auto_unwrap_transformed_env">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">set_auto_unwrap_transformed_env</span><span class="p">(</span><span class="n">_DecoratorContextManager</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A context manager or decorator to control whether TransformedEnv should automatically unwrap nested TransformedEnv instances.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        mode (bool): Whether to automatically unwrap nested :class:`~torchrl.envs.TransformedEnv`</span>
+<span class="sd">            instances. If ``False``, :class:`~torchrl.envs.TransformedEnv` will not unwrap nested instances.</span>
+<span class="sd">            Defaults to ``True``.</span>
+
+<span class="sd">    .. note:: Until v0.9, this will raise a warning if :class:`~torchrl.envs.TransformedEnv` are nested</span>
+<span class="sd">        and the value is not set explicitly (`auto_unwrap=True` default behavior).</span>
+<span class="sd">        You can set the value of :func:`~torchrl.envs.auto_unwrap_transformed_env`</span>
+<span class="sd">        through:</span>
+
+<span class="sd">        - The ``AUTO_UNWRAP_TRANSFORMED_ENV`` environment variable;</span>
+<span class="sd">        - By setting ``torchrl.set_auto_unwrap_transformed_env(val: bool).set()`` at the</span>
+<span class="sd">          beginning of your script;</span>
+<span class="sd">        - By using ``torchrl.set_auto_unwrap_transformed_env(val: bool)`` as a context</span>
+<span class="sd">          manager or a decorator.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.envs.TransformedEnv`</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; with set_auto_unwrap_transformed_env(False):</span>
+<span class="sd">        ...     env = TransformedEnv(TransformedEnv(env))</span>
+<span class="sd">        ...     assert not isinstance(env.base_env, TransformedEnv)</span>
+<span class="sd">        &gt;&gt;&gt; @set_auto_unwrap_transformed_env(False)</span>
+<span class="sd">        ... def my_function():</span>
+<span class="sd">        ...     env = TransformedEnv(TransformedEnv(env))</span>
+<span class="sd">        ...     assert not isinstance(env.base_env, TransformedEnv)</span>
+<span class="sd">        ...     return env</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">clone</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">set_auto_unwrap_transformed_env</span><span class="p">:</span>
+        <span class="c1"># override this method if your children class takes __init__ parameters</span>
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">global</span> <span class="n">_AUTO_UNWRAP</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_old_mode</span> <span class="o">=</span> <span class="n">_AUTO_UNWRAP</span>
+        <span class="n">_AUTO_UNWRAP</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">)</span>
+        <span class="c1"># we do this such that sub-processes see the same lazy op than the main one</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;AUTO_UNWRAP_TRANSFORMED_ENV&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">_AUTO_UNWRAP</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">traceback</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">global</span> <span class="n">_AUTO_UNWRAP</span>
+        <span class="n">_AUTO_UNWRAP</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_old_mode</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;AUTO_UNWRAP_TRANSFORMED_ENV&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">_AUTO_UNWRAP</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="auto_unwrap_transformed_env"><a class="viewcode-back" href="../../reference/generated/torchrl.auto_unwrap_transformed_env.html#torchrl.auto_unwrap_transformed_env">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">auto_unwrap_transformed_env</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the current setting for automatically unwrapping TransformedEnv instances.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        allow_none (bool, optional): If True, returns ``None`` if no setting has been</span>
+<span class="sd">            specified. Otherwise, returns the default setting. Defaults to ``False``.</span>
+
+<span class="sd">    seealso: :func:`~torchrl.set_auto_unwrap_transformed_env`</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        bool or None: The current setting for automatically unwrapping TransformedEnv</span>
+<span class="sd">            instances.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_AUTO_UNWRAP</span>
+    <span class="k">if</span> <span class="n">_AUTO_UNWRAP</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">allow_none</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">elif</span> <span class="n">_AUTO_UNWRAP</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_DEFAULT_AUTO_UNWRAP</span>
+    <span class="k">return</span> <span class="n">strtobool</span><span class="p">(</span><span class="n">_AUTO_UNWRAP</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">_AUTO_UNWRAP</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">_AUTO_UNWRAP</span></div>
 </pre></div>
 
              </article>

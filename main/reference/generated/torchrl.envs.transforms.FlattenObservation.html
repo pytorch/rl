@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fb641de) &#x25BC</span></a>
     </div>
     
 
@@ -451,13 +451,15 @@ Defaults to False, ie. non-negative dimensions are not permitted.</p></li>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.FlattenObservation.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.envs.transforms.FlattenObservation.forward" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">next_tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.envs.transforms.FlattenObservation.forward" title="Permalink to this definition">¶</a></dt>
 <dd><p>Reads the input tensordict, and for the selected keys, applies the transform.</p>
-<p>For any operation that relates exclusively to the parent env (e.g. FrameSkip),
-modify the _step method instead. <code class="xref py py-meth docutils literal notranslate"><span class="pre">_call()</span></code> should only be overwritten
-if a modification of the input tensordict is needed.</p>
-<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">_call()</span></code> will be called by <code class="xref py py-meth docutils literal notranslate"><span class="pre">TransformedEnv.step()</span></code> and
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">TransformedEnv.reset()</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">_call</span></code> can be re-written whenever a modification of the output of env.step needs to be modified independently
+of the data collected in the previous step (including actions and states).</p>
+<p>For any operation that relates exclusively to the parent env (e.g. <code class="docutils literal notranslate"><span class="pre">FrameSkip</span></code>),
+modify the <code class="xref py py-meth docutils literal notranslate"><span class="pre">_step()</span></code> method instead.
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">_call()</span></code> should only be overwritten if a modification of the input tensordict is needed.</p>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">_call()</span></code> will be called by <code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code> and
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code> but not during <code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code>.</p>
 </dd></dl>
 
 <dl class="py method">

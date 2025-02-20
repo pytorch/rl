@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fb641de) &#x25BC</span></a>
     </div>
     
 
@@ -521,6 +521,26 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 <dt class="sig sig-object py" id="torchrl.envs.transforms.ActionDiscretizer.SamplingStrategy">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SamplingStrategy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#ActionDiscretizer.SamplingStrategy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ActionDiscretizer.SamplingStrategy" title="Permalink to this definition">¶</a></dt>
 <dd><p>The sampling strategies for ActionDiscretizer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.ActionDiscretizer.inv">
+<span class="sig-name descname"><span class="pre">inv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#ActionDiscretizer.inv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ActionDiscretizer.inv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reads the input tensordict, and for the selected keys, applies the inverse transform.</p>
+<p>By default, this method:</p>
+<ul class="simple">
+<li><p>calls directly <code class="xref py py-meth docutils literal notranslate"><span class="pre">_inv_apply_transform()</span></code>.</p></li>
+<li><p>does not call <code class="xref py py-meth docutils literal notranslate"><span class="pre">_inv_call()</span></code>.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">inv</span></code> also works with regular keyword arguments using <code class="xref py py-class docutils literal notranslate"><span class="pre">dispatch</span></code> to cast the args
+names to the keys.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">inv</span></code> is called by <a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend" title="torchrl.data.ReplayBuffer.extend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code></a>.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">

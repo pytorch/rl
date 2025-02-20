@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+fb641de) &#x25BC</span></a>
     </div>
     
 
@@ -1244,6 +1244,10 @@ The inverse process is executed with the output tensordict, where the <cite>in_k
 <p><span class="caption-text">Rename transform logic</span><a class="headerlink" href="#id12" title="Permalink to this image">¶</a></p>
 </figcaption>
 </figure>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>During a call to <cite>inv</cite>, the transforms are executed in reversed order (compared to the forward / step mode).</p>
+</div>
 </section>
 <section id="transforming-tensors-and-specs">
 <h4>Transforming Tensors and Specs<a class="headerlink" href="#transforming-tensors-and-specs" title="Permalink to this heading">¶</a></h4>
@@ -1276,6 +1280,72 @@ For example, with <code class="xref py py-class docutils literal notranslate"><s
 tensor that should not be generated when using <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.rand_action" title="torchrl.envs.EnvBase.rand_action"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rand_action()</span></code></a> with the transformed
 environment. Instead, <cite>“action_discrete”</cite> should be generated, and its continuous counterpart obtained from the
 transform. Therefore, the user should see the <cite>“action_discrete”</cite> entry being exposed, but not <cite>“action”</cite>.</p>
+</section>
+</section>
+<section id="designing-your-own-transform">
+<h3>Designing your own Transform<a class="headerlink" href="#designing-your-own-transform" title="Permalink to this heading">¶</a></h3>
+<p>To create a basic, custom transform, you need to subclass the <cite>Transform</cite> class and implement the
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">_apply_transform()</span></code> method. Here’s an example of a simple transform that adds 1 to the observation
+tensor:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">AddOneToObs</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="gp">... </span><span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform that adds 1 to the observation tensor.&quot;&quot;&quot;</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">])</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">obs</span> <span class="o">+</span> <span class="mi">1</span>
+</pre></div>
+</div>
+<section id="tips-for-subclassing-transform">
+<h4>Tips for subclassing <cite>Transform</cite><a class="headerlink" href="#tips-for-subclassing-transform" title="Permalink to this heading">¶</a></h4>
+<p>There are various ways of subclassing a transform. The things to take into considerations are:</p>
+<ul class="simple">
+<li><p>Is the transform identical for each tensor / item being transformed? Use
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">_apply_transform()</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">_inv_apply_transform()</span></code>.</p></li>
+<li><p>The transform needs access to the input data to env.step as well as output? Rewrite
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">_step()</span></code>.
+Otherwise, rewrite <code class="xref py py-meth docutils literal notranslate"><span class="pre">_call()</span></code> (or <code class="xref py py-meth docutils literal notranslate"><span class="pre">_inv_call()</span></code>).</p></li>
+<li><p>Is the transform to be used within a replay buffer? Overwrite <code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code>,
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">inv()</span></code>, <code class="xref py py-meth docutils literal notranslate"><span class="pre">_apply_transform()</span></code> or
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">_inv_apply_transform()</span></code>.</p></li>
+<li><p>Within a transform, you can access (and make calls to) the parent environment using
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">parent</span></code> (the base env + all transforms till this one) or
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">container()</span></code> (The object that encapsulates the transform).</p></li>
+<li><p>Don’t forget to edits the specs if needed: top level: <code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_output_spec()</span></code>,
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_input_spec()</span></code>.
+Leaf level: <code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_observation_spec()</span></code>,
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_action_spec()</span></code>, <code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_state_spec()</span></code>,
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_reward_spec()</span></code> and
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">transform_reward_spec()</span></code>.</p></li>
+</ul>
+<p>For practical examples, see the methods listed above.</p>
+<p>You can use a transform in an environment by passing it to the TransformedEnv constructor:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">),</span> <span class="n">AddOneToObs</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>You can compose multiple transforms together using the Compose class:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">transform</span> <span class="o">=</span> <span class="n">Compose</span><span class="p">(</span><span class="n">AddOneToObs</span><span class="p">(),</span> <span class="n">RewardSum</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">),</span> <span class="n">transform</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="inverse-transforms">
+<h4>Inverse Transforms<a class="headerlink" href="#inverse-transforms" title="Permalink to this heading">¶</a></h4>
+<p>Some transforms have an inverse transform that can be used to undo the transformation. For example, the AddOneToAction
+transform has an inverse transform that subtracts 1 from the action tensor:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">AddOneToAction</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="gp">... </span><span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform that adds 1 to the action tensor.&quot;&quot;&quot;</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[],</span> <span class="n">in_keys_inv</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span> <span class="n">out_keys_inv</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">action</span> <span class="o">+</span> <span class="mi">1</span>
+</pre></div>
+</div>
+</section>
+<section id="using-a-transform-with-a-replay-buffer">
+<h4>Using a Transform with a Replay Buffer<a class="headerlink" href="#using-a-transform-with-a-replay-buffer" title="Permalink to this heading">¶</a></h4>
+<p>You can use a transform with a replay buffer by passing it to the ReplayBuffer constructor:</p>
 </section>
 </section>
 <section id="cloning-transforms">
@@ -1322,7 +1392,7 @@ to be able to create this other composition:</p>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Transform</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
-<td><p>Environment transform parent class.</p></td>
+<td><p>Base class for environment transforms, which modify or create new data in a tensordict.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv" title="torchrl.envs.transforms.TransformedEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformedEnv</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A transformed_in environment.</p></td>
@@ -1742,7 +1812,7 @@ the current gym backend or any of its modules:</p>
 </pre></div>
 </div>
 <p>Another tool that comes in handy with gym and other external dependencies is
-the <a class="reference internal" href="generated/torchrl._utils.implement_for.html#torchrl._utils.implement_for" title="torchrl._utils.implement_for"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl._utils.implement_for</span></code></a> class. Decorating a function
+the <a class="reference internal" href="generated/torchrl.implement_for.html#torchrl.implement_for" title="torchrl._utils.implement_for"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl._utils.implement_for</span></code></a> class. Decorating a function
 with <code class="docutils literal notranslate"><span class="pre">&#64;implement_for</span></code> will tell torchrl that, depending on the version
 indicated, a specific behavior is to be expected. This allows us to easily
 support multiple versions of gym without requiring any effort from the user side.
@@ -1926,6 +1996,12 @@ the following function will return <code class="docutils literal notranslate"><s
 <li><a class="reference internal" href="#understanding-transform-keys">Understanding Transform Keys</a></li>
 <li><a class="reference internal" href="#transforming-tensors-and-specs">Transforming Tensors and Specs</a></li>
 <li><a class="reference internal" href="#exposing-specs-to-the-outside-world">Exposing Specs to the Outside World</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#designing-your-own-transform">Designing your own Transform</a><ul>
+<li><a class="reference internal" href="#tips-for-subclassing-transform">Tips for subclassing <cite>Transform</cite></a></li>
+<li><a class="reference internal" href="#inverse-transforms">Inverse Transforms</a></li>
+<li><a class="reference internal" href="#using-a-transform-with-a-replay-buffer">Using a Transform with a Replay Buffer</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#cloning-transforms">Cloning transforms</a></li>

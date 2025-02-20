@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fb641de) &#x25BC</span></a>
     </div>
     
 
@@ -500,6 +500,33 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;a
 <dt class="sig sig-object py" id="torchrl.envs.transforms.ActionMask.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#ActionMask.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ActionMask.forward" title="Permalink to this definition">¶</a></dt>
 <dd><p>Reads the input tensordict, and for the selected keys, applies the transform.</p>
+<p>By default, this method:</p>
+<ul class="simple">
+<li><p>calls directly <code class="xref py py-meth docutils literal notranslate"><span class="pre">_apply_transform()</span></code>.</p></li>
+<li><p>does not call <code class="xref py py-meth docutils literal notranslate"><span class="pre">_step()</span></code> or <code class="xref py py-meth docutils literal notranslate"><span class="pre">_call()</span></code>.</p></li>
+</ul>
+<p>This method is not called within <cite>env.step</cite> at any point. However, is is called within
+<a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.sample" title="torchrl.data.ReplayBuffer.sample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code></a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">forward</span></code> also works with regular keyword arguments using <code class="xref py py-class docutils literal notranslate"><span class="pre">dispatch</span></code> to cast the args
+names to the keys.</p>
+</div>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">TransformThatMeasuresBytes</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="gp">... </span><span class="w">    </span><span class="sd">&#39;&#39;&#39;Measures the number of bytes in the tensordict, and writes it under `&quot;bytes&quot;`.&#39;&#39;&#39;</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;bytes&quot;</span><span class="p">])</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="n">bytes_in_td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">bytes</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;bytes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bytes</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">tensordict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">t</span> <span class="o">=</span> <span class="n">TransformThatMeasuresBytes</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="c1"># works within envs</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">t</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>  <span class="c1"># Works offline too.</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </dd></dl>

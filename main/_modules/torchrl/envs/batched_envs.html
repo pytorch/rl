@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+fb641de) &#x25BC</span></a>
     </div>
     
 
@@ -476,6 +476,11 @@
     <span class="n">_sort_keys</span><span class="p">,</span>
     <span class="n">_update_during_reset</span><span class="p">,</span>
     <span class="n">clear_mpi_env_vars</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_CONSOLIDATE_ERR_CAPTURE</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;TensorDict.consolidate failed. You can deactivate the tensordict consolidation via the &quot;</span>
+    <span class="s2">&quot;`consolidate` keyword argument of the ParallelEnv constructor.&quot;</span>
 <span class="p">)</span>
 
 
@@ -728,6 +733,7 @@
         <span class="n">non_blocking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">mp_start_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">use_buffers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">consolidate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">serial_for_single</span> <span class="o">=</span> <span class="n">serial_for_single</span>
@@ -736,6 +742,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span> <span class="o">=</span> <span class="n">num_threads</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache_in_keys</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="n">use_buffers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">consolidate</span> <span class="o">=</span> <span class="n">consolidate</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_single_task</span> <span class="o">=</span> <span class="nb">callable</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">):</span>
@@ -1262,9 +1269,12 @@
             <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\t</span><span class="s2">batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">)&quot;</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">raise_if_closed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_closed</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;trying to close a closed environment&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">raise_if_closed</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;trying to close a closed environment&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span><span class="p">:</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;closing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
@@ -1891,6 +1901,12 @@
                             <span class="s2">&quot;_non_tensor_keys&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_non_tensor_keys</span><span class="p">,</span>
                         <span class="p">}</span>
                     <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">kwargs</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;consolidate&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">consolidate</span><span class="p">,</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
                 <span class="n">process</span> <span class="o">=</span> <span class="n">proc_fun</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">func</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
                 <span class="n">process</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="n">process</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
@@ -1947,7 +1963,16 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">workers_range</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)</span>
 
-        <span class="n">td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span><span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">consolidate</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
+                    <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">td</span> <span class="o">=</span> <span class="n">tensordict</span>
+
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">:</span>
             <span class="c1"># We send the same td multiple times as it is in shared mem and we just need to index it</span>
             <span class="c1"># in each process.</span>
@@ -2225,7 +2250,16 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">workers_range</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)</span>
 
-        <span class="n">data</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span><span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">consolidate</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
+                    <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">tensordict</span>
+
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">local_data</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">workers_range</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">parent_channels</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="n">local_data</span><span class="p">))</span>
         <span class="c1"># for i in range(data.shape[0]):</span>
@@ -2447,9 +2481,14 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]:</span>
         <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">tensordict</span><span class="p">):</span>
             <span class="c1"># tensordict = tensordict.consolidate(share_memory=True, num_threads=1)</span>
-            <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
-                <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">consolidate</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
+                        <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+            <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">tensordict</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
         <span class="n">out_tds</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
@@ -2966,6 +3005,7 @@
     <span class="n">has_lazy_inputs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># for fork start method</span>
+    <span class="n">consolidate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">num_threads</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="n">num_threads</span><span class="p">)</span>
@@ -3055,9 +3095,18 @@
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
             <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-            <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
-                <span class="n">cur_td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span><span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">consolidate</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+                        <span class="n">cur_td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
+                            <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">cur_td</span><span class="p">)</span>
+
             <span class="k">del</span> <span class="n">cur_td</span>
 
         <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s2">&quot;step&quot;</span><span class="p">:</span>
@@ -3071,9 +3120,18 @@
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
             <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-            <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
-                <span class="n">next_td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span><span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">consolidate</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+                        <span class="n">next_td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
+                            <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">next_td</span><span class="p">)</span>
+
             <span class="k">del</span> <span class="n">next_td</span>
 
         <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s2">&quot;step_and_maybe_reset&quot;</span><span class="p">:</span>

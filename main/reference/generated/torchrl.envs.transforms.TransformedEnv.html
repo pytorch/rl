@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fb641de) &#x25BC</span></a>
     </div>
     
 
@@ -465,9 +465,18 @@ in which case this value should be set  to <cite>False</cite>. Default is
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>auto_unwrap</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, wrapping a transformed env in  transformed env
+<dd class="field-even"><p><strong>auto_unwrap</strong> (<em>bool</em><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, wrapping a transformed env in  transformed env
 unwraps the transforms of the inner TransformedEnv in the outer one (the new instance).
-Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code></p>
+Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This behavior will switch to <code class="docutils literal notranslate"><span class="pre">False</span></code> in v0.9.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="torchrl.set_auto_unwrap_transformed_env.html#torchrl.set_auto_unwrap_transformed_env" title="torchrl.set_auto_unwrap_transformed_env"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_auto_unwrap_transformed_env</span></code></a></p>
+</div>
+</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>

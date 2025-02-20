@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+76aa9bc) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+fb641de) &#x25BC</span></a>
     </div>
     
 
@@ -532,7 +532,7 @@ through a series of transforms and <code class="docutils literal notranslate"><s
 function of the replay buffer. <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> comes with default values that should
 match user expectations in the majority of cases, such that you should not have
 to worry about it most of the time. Transforms are usually instances of <a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a>
-even though regular functions will work too (in the latter case, the <code class="xref py py-meth docutils literal notranslate"><span class="pre">inv()</span></code>
+even though regular functions will work too (in the latter case, the <a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform.inv" title="torchrl.envs.transforms.Transform.inv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">inv()</span></code></a>
 method will obviously be ignored, whereas in the first case it can be used to
 preprocess the data before it is passed to the buffer).
 Finally, sampling can be achieved using multithreading by passing the number of threads
