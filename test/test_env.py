@@ -2996,18 +2996,19 @@ class TestMultiKeyEnvs:
     ],
 )
 def test_mocking_envs(envclass):
-    env = envclass()
-    with pytest.warns(UserWarning, match="model based") if isinstance(
-        env, DummyModelBasedEnvBase
-    ) else contextlib.nullcontext():
-        env.set_seed(100)
-    reset = env.reset()
-    _ = env.rand_step(reset)
-    r = env.rollout(3)
-    with pytest.warns(UserWarning, match="model based") if isinstance(
-        env, DummyModelBasedEnvBase
-    ) else contextlib.nullcontext():
-        check_env_specs(env, seed=100, return_contiguous=False)
+    with set_capture_non_tensor_stack(False):
+        env = envclass()
+        with pytest.warns(UserWarning, match="model based") if isinstance(
+            env, DummyModelBasedEnvBase
+        ) else contextlib.nullcontext():
+            env.set_seed(100)
+        reset = env.reset()
+        _ = env.rand_step(reset)
+        r = env.rollout(3)
+        with pytest.warns(UserWarning, match="model based") if isinstance(
+            env, DummyModelBasedEnvBase
+        ) else contextlib.nullcontext():
+            check_env_specs(env, seed=100, return_contiguous=False)
 
 
 class TestTerminatedOrTruncated:
