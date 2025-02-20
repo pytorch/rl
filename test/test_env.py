@@ -1051,6 +1051,11 @@ class TestModelBasedEnvBase:
 
 
 class TestParallel:
+    @pytest.fixture(autouse=True, scope="class")
+    def disable_autowrap(self):
+        with set_auto_unwrap_transformed_env(False):
+            yield
+
     def test_create_env_fn(self, maybe_fork_ParallelEnv):
         def make_env():
             return GymEnv(PENDULUM_VERSIONED())
@@ -1266,7 +1271,6 @@ class TestParallel:
     @pytest.mark.parametrize(
         "transformed_in,transformed_out", [[True, True], [False, False]]
     )  # 1226: faster execution
-    @set_auto_unwrap_transformed_env(False)
     def test_parallel_env(
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
@@ -1315,7 +1319,6 @@ class TestParallel:
     @pytest.mark.parametrize(
         "transformed_in,transformed_out", [[True, True], [False, False]]
     )  # 1226: faster execution
-    @set_auto_unwrap_transformed_env(False)
     def test_parallel_env_with_policy(
         self,
         env_name,
@@ -1417,7 +1420,6 @@ class TestParallel:
         "transformed_in,transformed_out", [[True, True], [False, False]]
     )  # 1226: effociency
     @pytest.mark.parametrize("static_seed", [False, True])
-    @set_auto_unwrap_transformed_env(False)
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
