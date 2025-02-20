@@ -1106,8 +1106,8 @@ but got an object of type {type(transform)}."""
     def is_closed(self, value: bool):
         self.base_env.is_closed = value
 
-    def close(self):
-        self.base_env.close()
+    def close(self, *, raise_if_closed: bool = True):
+        self.base_env.close(raise_if_closed=raise_if_closed)
         self.is_closed = True
 
     def empty_cache(self):

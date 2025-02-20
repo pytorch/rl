@@ -13804,7 +13804,7 @@ class TestMultiAction(TransformBase):
                 assert r1["before_count"].max() == 18
                 assert r1["after_count"].max() == 6
         finally:
-            env.close()
+            env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("bwad", [False, True])
     def test_serial_trans_env_check(self, bwad):
