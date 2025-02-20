@@ -3651,7 +3651,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if key.rfind("observation") >= 0:
                 yield key
 
-    def close(self):
+    def close(self, *, raise_if_closed: bool = True):
         self.is_closed = True
 
     def __del__(self):
@@ -3843,7 +3843,7 @@ class _EnvWrapper(EnvBase):
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         raise NotImplementedError
 
-    def close(self) -> None:
+    def close(self, *, raise_if_closed: bool = True) -> None:
         """Closes the contained environment if possible."""
         self.is_closed = True
         try:

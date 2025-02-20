@@ -848,9 +848,12 @@ class BatchedEnvBase(EnvBase):
             f"\n\tbatch_size={self.batch_size})"
         )
 
-    def close(self) -> None:
+    def close(self, *, raise_if_closed: bool = True) -> None:
         if self.is_closed:
-            raise RuntimeError("trying to close a closed environment")
+            if raise_if_closed:
+                raise RuntimeError("trying to close a closed environment")
+            else:
+                return
         if self._verbose:
             torchrl_logger.info(f"closing {self.__class__.__name__}")
 
@@ -1465,7 +1468,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
                         "non_blocking": self.non_blocking,
-                        "consolidate": self.consolidate,
                     }
                 )
                 if self._use_buffers:
@@ -1476,6 +1478,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                             "_selected_reset_keys": self._selected_reset_keys,
                             "_selected_step_keys": self._selected_step_keys,
                             "_non_tensor_keys": self._non_tensor_keys,
+                        }
+                    )
+                else:
+                    kwargs[idx].update(
+                        {
+                            "consolidate": self.consolidate,
                         }
                     )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
