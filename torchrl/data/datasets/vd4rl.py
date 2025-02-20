@@ -418,7 +418,7 @@ class VD4RLExperienceReplay(BaseDatasetExperienceReplay):
 def _from_npz(npz_path):
     npz = np.load(npz_path)
     npz_dict = {file: npz[file] for file in npz.files}
-    return TensorDict.from_dict(npz_dict)
+    return TensorDict.from_dict(npz_dict, auto_batch_size=True)
 
 
 _NAME_MATCH = KeyDependentDefaultDict(lambda x: x)
