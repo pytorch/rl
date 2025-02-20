@@ -322,9 +322,9 @@ class Transform(nn.Module):
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Inverts the input to :meth:`TransformedEnv._reset`, if needed."""
-        if self.enable_inv_on_reset:
+        if self.enable_inv_on_reset and tensordict is not None:
             with _set_missing_tolerance(self, True):
-                tensordict = self.inv(tensordict)
+                tensordict = self._inv_call(tensordict)
         return tensordict
 
     def init(self, tensordict) -> None:
@@ -1166,6 +1166,9 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
+        # We always call _reset_env_preprocess, even if tensordict is None - that way one can augment that
+        # method to do any pre-reset operation.
+        # By default, within _reset_env_preprocess we will skip the inv call when tensordict is None.
         tensordict = self.transform._reset_env_preprocess(tensordict)
         tensordict_reset = self.base_env._reset(tensordict, **kwargs)
         if tensordict is None:
