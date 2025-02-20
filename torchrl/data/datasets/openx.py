@@ -787,4 +787,4 @@ def _make_tensordict_image_conv(data):
         data["observation"]["image"] = tensor
     except KeyError:
         pass
-    return make_tensordict(data)
+    return make_tensordict(data, auto_batch_size=True)
