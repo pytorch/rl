@@ -5,6 +5,7 @@ unset PYTORCH_VERSION
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
 apt-get update && apt-get install -y git wget gcc g++
+apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
 #apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev
 
 set -e
