@@ -12,6 +12,8 @@ apt-get update && apt-get install -y \
     wget \
     gcc \
     g++ \
+    unzip \
+    curl \
     patchelf \
     libosmesa6-dev \
     libgl1-mesa-glx \

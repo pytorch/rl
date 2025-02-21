@@ -6,9 +6,30 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e -v
-
+# Update package index and upgrade existing packages
 apt-get update && apt-get upgrade -y
-apt-get install -y git wget g++ gcc libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libglvnd0 libgl1 libglx0 libegl1 libgles2 curl
+
+# Install necessary packages
+apt-get install -y \
+    git \
+    wget \
+    gcc \
+    g++ \
+    unzip \
+    curl \
+    patchelf \
+    libosmesa6-dev \
+    libgl1-mesa-glx \
+    libglfw3 \
+    swig3.0 \
+    libglew-dev \
+    libglvnd0 \
+    libgl1 \
+    libglx0 \
+    libegl1 \
+    libgles2
+
+# Upgrade specific package
 apt-get upgrade -y libstdc++6
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"

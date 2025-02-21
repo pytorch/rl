@@ -4,11 +4,18 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
-apt-get update && apt-get install -y \
+
+# Update package index and upgrade existing packages
+apt-get update && apt-get upgrade -y
+
+# Install necessary packages
+apt-get install -y \
     git \
     wget \
     gcc \
     g++ \
+    unzip \
+    curl \
     patchelf \
     libosmesa6-dev \
     libgl1-mesa-glx \
@@ -20,6 +27,9 @@ apt-get update && apt-get install -y \
     libglx0 \
     libegl1 \
     libgles2
+
+# Upgrade specific package
+apt-get upgrade -y libstdc++6
 
 set -e
 
