@@ -6,10 +6,13 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e -v
-apt-get update && apt-get upgrade -y && apt-get install -y git
-# Avoid error: "fatal: unsafe repository"
-git config --global --add safe.directory '*'
-apt-get install -y wget \
+# Update package index and upgrade existing packages
+apt-get update && apt-get upgrade -y
+
+# Install necessary packages
+apt-get install -y \
+    git \
+    wget \
     gcc \
     g++ \
     unzip \
