@@ -32,6 +32,10 @@ apt-get install -y wget \
 # Upgrade specific package
 apt-get upgrade -y libstdc++6
 
+cd /usr/lib/x86_64-linux-gnu
+sudo ln -s libglut.so.3.12 libglut.so.3
+cd $this_dir
+
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
@@ -97,9 +101,9 @@ pip3 install pip --upgrade
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
 elif [ "${CU_VERSION:-}" == cpu ]; then
-  PRIVATE_MUJOCO_GL=osmesa
+  PRIVATE_MUJOCO_GL=egl
 else
-  PRIVATE_MUJOCO_GL=osmesa
+  PRIVATE_MUJOCO_GL=egl
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
