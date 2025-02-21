@@ -286,7 +286,9 @@ def _split_and_pad_sequence(
 
     # int16 supports length up to 32767
     dtype = (
-        torch.int16 if tensor.shape[-2] < torch.iinfo(torch.int16).max else torch.int32
+        torch.int16
+        if tensor.size(time_dim) < torch.iinfo(torch.int16).max
+        else torch.int32
     )
     arange = torch.arange(max_seq_len, device=tensor.device, dtype=dtype).unsqueeze(0)
     mask = arange < splits.unsqueeze(1)
