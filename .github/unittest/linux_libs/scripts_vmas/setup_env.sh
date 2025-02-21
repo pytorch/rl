@@ -6,13 +6,10 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
-# Update package index and upgrade existing packages
-apt-get update && apt-get upgrade -y
-
-# Install necessary packages
-apt-get install -y \
-    git \
-    wget \
+apt-get update && apt-get upgrade -y && apt-get install -y git
+# Avoid error: "fatal: unsafe repository"
+git config --global --add safe.directory '*'
+apt-get install -y wget \
     gcc \
     g++ \
     unzip \
@@ -33,8 +30,6 @@ apt-get install -y \
 apt-get upgrade -y libstdc++6
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-# Avoid error: "fatal: unsafe repository"
-git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
