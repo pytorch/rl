@@ -8,15 +8,10 @@
 set -e
 set -v
 
-this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+apt-get update && apt-get upgrade -y && apt-get install -y git
 # Avoid error: "fatal: unsafe repository"
-# Update package index and upgrade existing packages
-apt-get update && apt-get upgrade -y
-
-# Install necessary packages
-apt-get install -y \
-    git \
-    wget \
+git config --global --add safe.directory '*'
+apt-get install -y wget \
     gcc \
     g++ \
     unzip \
@@ -36,7 +31,7 @@ apt-get install -y \
 # Upgrade specific package
 apt-get upgrade -y libstdc++6
 
-git config --global --add safe.directory '*'
+this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
