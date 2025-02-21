@@ -69,7 +69,8 @@ pip install pip --upgrade
 conda env update --file "${this_dir}/environment.yml" --prune
 
 apt update
-apt-get install libgl1-mesa-glx
+conda env config vars set \
+  MUJOCO_GL=egl
 
 conda deactivate
 conda activate "${env_dir}"
