@@ -47,7 +47,8 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
-yum install -y mesa-libGL
+apt update
+apt-get install libgl1-mesa-glx
 
 conda deactivate
 conda activate "${env_dir}"
