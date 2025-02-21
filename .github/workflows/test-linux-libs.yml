@@ -31,7 +31,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -67,7 +67,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.4"
-      docker-image: "pytorch/manylinux-cuda124"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -101,7 +101,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -136,7 +136,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -171,7 +171,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -206,7 +206,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       # gpu-arch-type: "cuda"
       # gpu-arch-version: "11.6"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -242,7 +242,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.4"
-      docker-image: "pytorch/manylinux-cuda124"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -277,7 +277,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.4"
-      docker-image: "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -316,7 +316,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.4"
-      docker-image: "pytorch/manylinux-cuda124"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -354,7 +354,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.4"
-      docker-image: "pytorch/manylinux-cuda124"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -392,7 +392,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.4"
-      docker-image: "pytorch/manylinux-cuda124"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -428,7 +428,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -463,7 +463,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -496,7 +496,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.4"
-      docker-image: "pytorch/manylinux-cuda124"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -533,7 +533,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -567,7 +567,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -603,7 +603,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       # gpu-arch-type: cuda
       # gpu-arch-version: "11.7"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -640,7 +640,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.4"
-      docker-image: "pytorch/manylinux-cuda124"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -677,7 +677,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -714,7 +714,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.4"
-      docker-image: "pytorch/manylinux-cuda124"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
