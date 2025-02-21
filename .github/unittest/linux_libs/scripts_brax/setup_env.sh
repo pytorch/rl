@@ -7,6 +7,9 @@
 
 set -euxo pipefail
 
+apt-get update && apt-get install -y git wget gcc g++
+apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
+
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
