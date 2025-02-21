@@ -33,7 +33,7 @@ apt-get install -y wget \
 apt-get upgrade -y libstdc++6
 
 cd /usr/lib/x86_64-linux-gnu
-sudo ln -s libglut.so.3.12 libglut.so.3
+ln -s libglut.so.3.12 libglut.so.3
 cd $this_dir
 
 root_dir="$(git rev-parse --show-toplevel)"
