@@ -187,9 +187,6 @@ class KLRewardTransform(Transform):
     forward = _call
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
-        output_spec = super().transform_output_spec(output_spec)
-        # todo: here we'll need to use the reward_key once it's implemented
-        # parent = self.parent
         in_key = unravel_key(self.in_keys[0])
         out_key = unravel_key(self.out_keys[0])
 
@@ -205,18 +202,13 @@ class KLRewardTransform(Transform):
             )
         elif in_key == "reward":
             parent = self.parent
-            reward_spec = Unbounded(
-                device=output_spec.device,
-                shape=output_spec["full_reward_spec"][parent.reward_key].shape,
-            )
+            reward_spec = output_spec["full_reward_spec"][parent.reward_key].clone()
             # then we need to populate the output keys
             observation_spec = output_spec["full_observation_spec"]
             observation_spec[out_key] = reward_spec
         else:
             observation_spec = output_spec["full_observation_spec"]
-            reward_spec = Unbounded(
-                device=output_spec.device, shape=observation_spec[in_key].shape
-            )
+            reward_spec = observation_spec[in_key].clone()
             # then we need to populate the output keys
             observation_spec[out_key] = reward_spec
         return output_spec
