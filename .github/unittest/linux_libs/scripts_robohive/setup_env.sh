@@ -82,7 +82,6 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-export MUJOCO_GL=egl
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
   MUJOCO_GL=egl \
