@@ -10837,11 +10837,15 @@ class Timer(Transform):
 
     Attributes:
         out_keys: The keys of the output tensordict for the inverse transform. Defaults to
-            `out_keys = [f"{time_key}_step", f"{time_key}_policy"]`, where the first key represents
+            `out_keys = [f"{time_key}_step", f"{time_key}_policy", f"{time_key}_reset"]`, where the first key represents
             the time it takes to make a step in the environment, and the second key represents the
-            time it takes to execute the policy.
+            time it takes to execute the policy, the third the time for the call to `reset`.
         time_key: A prefix for the keys where the time intervals will be stored in the tensordict.
             Defaults to `"time"`.
+
+    .. note:: During a succession of rollouts, the time marks of the reset are written at the root (the `"time_reset"`
+        entry or equivalent key is always 0 in the `"next"` tensordict). At the root, the `"time_policy"` and `"time_step"`
+        entries will be 0 when there is a reset. they will never be `0` in the `"next"`.
 
     Examples:
         >>> from torchrl.envs import Timer, GymEnv
@@ -10854,20 +10858,23 @@ class Timer(Transform):
         >>> print("time for step", r["time_step"])
         time for step tensor([9.5797e-04, 1.6289e-03, 9.7990e-05, 8.0824e-05, 9.0837e-05, 7.6056e-05,
                 8.2016e-05, 7.6056e-05, 8.1062e-05, 7.7009e-05])
+
+
     """
 
     def __init__(self, out_keys: Sequence[NestedKey] = None, time_key: str = "time"):
         if out_keys is None:
-            out_keys = [f"{time_key}_step", f"{time_key}_policy"]
-        elif len(out_keys) != 2:
-            raise TypeError(f"Expected two out_keys. Got out_keys={out_keys}.")
+            out_keys = [f"{time_key}_step", f"{time_key}_policy", f"{time_key}_reset"]
+        elif len(out_keys) != 3:
+            raise TypeError(f"Expected three out_keys. Got out_keys={out_keys}.")
         super().__init__([], out_keys)
         self.time_key = time_key
         self.last_inv_time = None
         self.last_call_time = None
+        self.last_reset_time = None
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
-        self.last_inv_time = time.time()
+        self.last_reset_time = self.last_inv_time = time.time()
         return tensordict
 
     def _maybe_expand_and_set(self, key, time_elapsed, tensordict):
@@ -10888,11 +10895,14 @@ class Timer(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         current_time = time.time()
-        if self.last_inv_time is not None:
+        if self.last_reset_time is not None:
             time_elapsed = torch.tensor(
-                current_time - self.last_inv_time, device=tensordict.device
+                current_time - self.last_reset_time, device=tensordict.device
             )
-            self._maybe_expand_and_set(self.out_keys[0], time_elapsed, tensordict_reset)
+            self._maybe_expand_and_set(self.out_keys[2], time_elapsed, tensordict_reset)
+            self._maybe_expand_and_set(
+                self.out_keys[0], time_elapsed * 0, tensordict_reset
+            )
         self.last_call_time = current_time
         # Placeholder
         self._maybe_expand_and_set(self.out_keys[1], time_elapsed * 0, tensordict_reset)
@@ -10917,6 +10927,9 @@ class Timer(Transform):
                 current_time - self.last_inv_time, device=tensordict.device
             )
             self._maybe_expand_and_set(self.out_keys[0], time_elapsed, next_tensordict)
+            self._maybe_expand_and_set(
+                self.out_keys[2], time_elapsed * 0, next_tensordict
+            )
         self.last_call_time = current_time
         # presumbly no need to worry about batch size incongruencies here
         next_tensordict.set(self.out_keys[1], tensordict.get(self.out_keys[1]))
@@ -10927,6 +10940,9 @@ class Timer(Transform):
             shape=observation_spec.shape, device=observation_spec.device
         )
         observation_spec[self.out_keys[1]] = Unbounded(
+            shape=observation_spec.shape, device=observation_spec.device
+        )
+        observation_spec[self.out_keys[2]] = Unbounded(
             shape=observation_spec.shape, device=observation_spec.device
         )
         return observation_spec
