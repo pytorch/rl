@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+104b880) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+5a46379) &#x25BC</span></a>
     </div>
     
 
@@ -442,14 +442,20 @@ to the size of the input tensordict.</p>
 <dt class="field-odd">Variables<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>out_keys</strong> – The keys of the output tensordict for the inverse transform. Defaults to
-<cite>out_keys = [f”{time_key}_step”, f”{time_key}_policy”]</cite>, where the first key represents
+<cite>out_keys = [f”{time_key}_step”, f”{time_key}_policy”, f”{time_key}_reset”]</cite>, where the first key represents
 the time it takes to make a step in the environment, and the second key represents the
-time it takes to execute the policy.</p></li>
+time it takes to execute the policy, the third the time for the call to <cite>reset</cite>.</p></li>
 <li><p><strong>time_key</strong> – A prefix for the keys where the time intervals will be stored in the tensordict.
 Defaults to <cite>“time”</cite>.</p></li>
 </ul>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>During a succession of rollouts, the time marks of the reset are written at the root (the <cite>“time_reset”</cite>
+entry or equivalent key is always 0 in the <cite>“next”</cite> tensordict). At the root, the <cite>“time_policy”</cite> and <cite>“time_step”</cite>
+entries will be 0 when there is a reset. they will never be <cite>0</cite> in the <cite>“next”</cite>.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timer</span><span class="p">,</span> <span class="n">GymEnv</span>
 <span class="gp">&gt;&gt;&gt;</span>
