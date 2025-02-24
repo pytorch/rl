@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+d3dca73) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+104b880) &#x25BC</span></a>
     </div>
     
 
@@ -1550,37 +1550,40 @@ to be able to create this other composition:</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.TimeMaxPool.html#torchrl.envs.transforms.TimeMaxPool" title="torchrl.envs.transforms.TimeMaxPool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TimeMaxPool</span></code></a>([in_keys, out_keys, T, reset_key])</p></td>
 <td><p>Take the maximum value in each position over the last T observations.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer" title="torchrl.envs.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>(in_keys, out_keys[, in_keys_inv, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Timer.html#torchrl.envs.transforms.Timer" title="torchrl.envs.transforms.Timer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Timer</span></code></a>([out_keys, time_key])</p></td>
+<td><p>A transform that measures the time intervals between <cite>inv</cite> and <cite>call</cite> operations in an environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer" title="torchrl.envs.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>(in_keys, out_keys[, in_keys_inv, ...])</p></td>
 <td><p>Applies a tokenization operation on the specified inputs.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.ToTensorImage.html#torchrl.envs.transforms.ToTensorImage" title="torchrl.envs.transforms.ToTensorImage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToTensorImage</span></code></a>([from_int, unsqueeze, dtype, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.ToTensorImage.html#torchrl.envs.transforms.ToTensorImage" title="torchrl.envs.transforms.ToTensorImage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToTensorImage</span></code></a>([from_int, unsqueeze, dtype, ...])</p></td>
 <td><p>Transforms a numpy-like image (W x H x C) to a pytorch image (C x W x H).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.TrajCounter.html#torchrl.envs.transforms.TrajCounter" title="torchrl.envs.transforms.TrajCounter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TrajCounter</span></code></a>([out_key])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.TrajCounter.html#torchrl.envs.transforms.TrajCounter" title="torchrl.envs.transforms.TrajCounter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TrajCounter</span></code></a>([out_key])</p></td>
 <td><p>Global trajectory counter transform.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform" title="torchrl.envs.transforms.UnaryTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnaryTransform</span></code></a>(in_keys, out_keys[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform" title="torchrl.envs.transforms.UnaryTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnaryTransform</span></code></a>(in_keys, out_keys[, ...])</p></td>
 <td><p>Applies a unary operation on the specified inputs.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.UnsqueezeTransform.html#torchrl.envs.transforms.UnsqueezeTransform" title="torchrl.envs.transforms.UnsqueezeTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnsqueezeTransform</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.UnsqueezeTransform.html#torchrl.envs.transforms.UnsqueezeTransform" title="torchrl.envs.transforms.UnsqueezeTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnsqueezeTransform</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Inserts a dimension of size one at the specified position.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VC1Transform.html#torchrl.envs.transforms.VC1Transform" title="torchrl.envs.transforms.VC1Transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VC1Transform</span></code></a>(in_keys, out_keys, model_name)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VC1Transform.html#torchrl.envs.transforms.VC1Transform" title="torchrl.envs.transforms.VC1Transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VC1Transform</span></code></a>(in_keys, out_keys, model_name)</p></td>
 <td><p>VC1 Transform class.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VIPRewardTransform.html#torchrl.envs.transforms.VIPRewardTransform" title="torchrl.envs.transforms.VIPRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VIPRewardTransform</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VIPRewardTransform.html#torchrl.envs.transforms.VIPRewardTransform" title="torchrl.envs.transforms.VIPRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VIPRewardTransform</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A VIP transform to compute rewards based on embedded similarity.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VIPTransform.html#torchrl.envs.transforms.VIPTransform" title="torchrl.envs.transforms.VIPTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VIPTransform</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VIPTransform.html#torchrl.envs.transforms.VIPTransform" title="torchrl.envs.transforms.VIPTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VIPTransform</span></code></a>(*args, **kwargs)</p></td>
 <td><p>VIP Transform class.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VecGymEnvTransform.html#torchrl.envs.transforms.VecGymEnvTransform" title="torchrl.envs.transforms.VecGymEnvTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VecGymEnvTransform</span></code></a>([final_name])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VecGymEnvTransform.html#torchrl.envs.transforms.VecGymEnvTransform" title="torchrl.envs.transforms.VecGymEnvTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VecGymEnvTransform</span></code></a>([final_name])</p></td>
 <td><p>A transform for GymWrapper subclasses that handles the auto-reset in a consistent way.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm" title="torchrl.envs.transforms.VecNorm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VecNorm</span></code></a>([in_keys, out_keys, shared_td, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm" title="torchrl.envs.transforms.VecNorm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VecNorm</span></code></a>([in_keys, out_keys, shared_td, ...])</p></td>
 <td><p>Moving average normalization layer for torchrl environments.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.gSDENoise.html#torchrl.envs.transforms.gSDENoise" title="torchrl.envs.transforms.gSDENoise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gSDENoise</span></code></a>([state_dim, action_dim, shape])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.gSDENoise.html#torchrl.envs.transforms.gSDENoise" title="torchrl.envs.transforms.gSDENoise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gSDENoise</span></code></a>([state_dim, action_dim, shape])</p></td>
 <td><p>A gSDE noise initializer.</p></td>
 </tr>
 </tbody>

@@ -1070,6 +1070,7 @@ to be able to create this other composition:
     TargetReturn
     TensorDictPrimer
     TimeMaxPool
+    Timer
     Tokenizer
     ToTensorImage
     TrajCounter

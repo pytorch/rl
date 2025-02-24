@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+d3dca73) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+104b880) &#x25BC</span></a>
     </div>
     
 
@@ -430,6 +430,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mp</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
@@ -11244,6 +11245,115 @@
             <span class="p">)</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">observation_spec</span></div>
+
+
+<div class="viewcode-block" id="Timer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Timer.html#torchrl.envs.transforms.Timer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Timer</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform that measures the time intervals between `inv` and `call` operations in an environment.</span>
+
+<span class="sd">    The `Timer` transform is used to track the time elapsed between the `inv` call and the `call`,</span>
+<span class="sd">    and between the `call` and the `inv` call. This is useful for performance monitoring and debugging</span>
+<span class="sd">    within an environment. The time is measured in seconds and stored as a tensor with the default</span>
+<span class="sd">    dtype from PyTorch. If the tensordict has a batch size (e.g., in batched environments), the time will be expended</span>
+<span class="sd">    to the size of the input tensordict.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        out_keys: The keys of the output tensordict for the inverse transform. Defaults to</span>
+<span class="sd">            `out_keys = [f&quot;{time_key}_step&quot;, f&quot;{time_key}_policy&quot;]`, where the first key represents</span>
+<span class="sd">            the time it takes to make a step in the environment, and the second key represents the</span>
+<span class="sd">            time it takes to execute the policy.</span>
+<span class="sd">        time_key: A prefix for the keys where the time intervals will be stored in the tensordict.</span>
+<span class="sd">            Defaults to `&quot;time&quot;`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import Timer, GymEnv</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;).append_transform(Timer())</span>
+<span class="sd">        &gt;&gt;&gt; r = env.rollout(10)</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;time for policy&quot;, r[&quot;time_policy&quot;])</span>
+<span class="sd">        time for policy tensor([0.0000, 0.0882, 0.0004, 0.0002, 0.0002, 0.0002, 0.0002, 0.0002, 0.0002,</span>
+<span class="sd">                0.0002])</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;time for step&quot;, r[&quot;time_step&quot;])</span>
+<span class="sd">        time for step tensor([9.5797e-04, 1.6289e-03, 9.7990e-05, 8.0824e-05, 9.0837e-05, 7.6056e-05,</span>
+<span class="sd">                8.2016e-05, 7.6056e-05, 8.1062e-05, 7.7009e-05])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">time_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;time&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">time_key</span><span class="si">}</span><span class="s2">_step&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">time_key</span><span class="si">}</span><span class="s2">_policy&quot;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">out_keys</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected two out_keys. Got out_keys=</span><span class="si">{</span><span class="n">out_keys</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">([],</span> <span class="n">out_keys</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time_key</span> <span class="o">=</span> <span class="n">time_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_inv_time</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_call_time</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_env_preprocess</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_inv_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">tensordict</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_expand_and_set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">time_elapsed</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+            <span class="n">parent_td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">key</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">parent_td</span> <span class="o">=</span> <span class="n">tensordict</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">parent_td</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="k">if</span> <span class="n">batch_size</span><span class="p">:</span>
+            <span class="c1"># Get the parent shape</span>
+            <span class="n">time_elapsed_expand</span> <span class="o">=</span> <span class="n">time_elapsed</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">parent_td</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">time_elapsed_expand</span> <span class="o">=</span> <span class="n">time_elapsed</span>
+        <span class="n">parent_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">time_elapsed_expand</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">current_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_inv_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">time_elapsed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                <span class="n">current_time</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_inv_time</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_expand_and_set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">time_elapsed</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_call_time</span> <span class="o">=</span> <span class="n">current_time</span>
+        <span class="c1"># Placeholder</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_expand_and_set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">time_elapsed</span> <span class="o">*</span> <span class="mi">0</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">current_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_call_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">time_elapsed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                <span class="n">current_time</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_call_time</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_expand_and_set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">time_elapsed</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_inv_time</span> <span class="o">=</span> <span class="n">current_time</span>
+        <span class="k">return</span> <span class="n">tensordict</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">current_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_inv_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">time_elapsed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                <span class="n">current_time</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_inv_time</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_expand_and_set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">time_elapsed</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_call_time</span> <span class="o">=</span> <span class="n">current_time</span>
+        <span class="c1"># presumbly no need to worry about batch size incongruencies here</span>
+        <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+<div class="viewcode-block" id="Timer.transform_observation_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Timer.html#torchrl.envs.transforms.Timer.transform_observation_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="n">observation_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+            <span class="n">shape</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="n">observation_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+            <span class="n">shape</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">observation_spec</span></div>
+
+<div class="viewcode-block" id="Timer.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Timer.html#torchrl.envs.transforms.Timer.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="n">FORWARD_NOT_IMPLEMENTED</span><span class="p">)</span></div></div>
 </pre></div>
 
              </article>
