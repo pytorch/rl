@@ -560,6 +560,21 @@ class Transform(nn.Module):
             output_spec["full_done_spec"] = self.transform_done_spec(
                 output_spec["full_done_spec"]
             )
+        output_spec_keys = [
+            unravel_key(k[1:]) for k in output_spec.keys(True) if isinstance(k, tuple)
+        ]
+        out_keys = {unravel_key(k) for k in self.out_keys}
+        in_keys = {unravel_key(k) for k in self.in_keys}
+        for key in out_keys - in_keys:
+            if unravel_key(key) not in output_spec_keys:
+                warnings.warn(
+                    f"The key '{key}' is unaccounted for by the transform (expected keys {output_spec_keys}). "
+                    f"Every new entry in the tensordict resulting from a call to a transform must be "
+                    f"registered in the specs for torchrl rollouts to be consistently built. "
+                    f"Make sure transform_output_spec/transform_observation_spec/... is coded correctly. "
+                    "This warning will trigger a KeyError in v0.9, make sure to adapt your code accordingly.",
+                    category=FutureWarning,
+                )
         return output_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
@@ -1468,33 +1483,57 @@ class Compose(Transform):
         # the action spec from the env, map it using t0 then t1 (going from in to out).
         for t in self.transforms:
             input_spec = t.transform_input_spec(input_spec)
+            if not isinstance(input_spec, Composite):
+                raise TypeError(
+                    f"Expected Compose but got {type(input_spec)} with transform {t}"
+                )
         return input_spec
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         # To understand why we don't invert, look up at transform_input_spec
         for t in self.transforms:
             action_spec = t.transform_action_spec(action_spec)
+            if not isinstance(action_spec, TensorSpec):
+                raise TypeError(
+                    f"Expected TensorSpec but got {type(action_spec)} with transform {t}"
+                )
         return action_spec
 
     def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
         # To understand why we don't invert, look up at transform_input_spec
         for t in self.transforms:
             state_spec = t.transform_state_spec(state_spec)
+            if not isinstance(state_spec, Composite):
+                raise TypeError(
+                    f"Expected Compose but got {type(state_spec)} with transform {t}"
+                )
         return state_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
             observation_spec = t.transform_observation_spec(observation_spec)
+            if not isinstance(observation_spec, TensorSpec):
+                raise TypeError(
+                    f"Expected TensorSpec but got {type(observation_spec)} with transform {t}"
+                )
         return observation_spec
 
     def transform_output_spec(self, output_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
             output_spec = t.transform_output_spec(output_spec)
+            if not isinstance(output_spec, Composite):
+                raise TypeError(
+                    f"Expected Compose but got {type(output_spec)} with transform {t}"
+                )
         return output_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
             reward_spec = t.transform_reward_spec(reward_spec)
+            if not isinstance(reward_spec, TensorSpec):
+                raise TypeError(
+                    f"Expected TensorSpec but got {type(reward_spec)} with transform {t}"
+                )
         return reward_spec
 
     def __getitem__(self, item: Union[int, slice, List]) -> Union:
