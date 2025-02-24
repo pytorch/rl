@@ -117,6 +117,8 @@ conda env config vars set \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
   PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL \
-  TOKENIZERS_PARALLELISM=true
+  TOKENIZERS_PARALLELISM=true \
+  LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
+
 
 conda env update --file "${this_dir}/environment.yml" --prune

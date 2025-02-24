@@ -25,3 +25,4 @@ dependencies:
     - hydra-core
     - patchelf
     - pyopengl==3.1.0
+    - cmake
