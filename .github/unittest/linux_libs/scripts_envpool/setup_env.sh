@@ -70,6 +70,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 apt update
 conda env config vars set \
+  LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6 \
   MUJOCO_GL=egl
 
 conda deactivate
