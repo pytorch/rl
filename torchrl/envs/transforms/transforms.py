@@ -9,6 +9,7 @@ import functools
 import hashlib
 import importlib.util
 import multiprocessing as mp
+import time
 import warnings
 import weakref
 from copy import copy
@@ -99,7 +100,7 @@ from torchrl.envs.utils import (
     step_mdp,
 )
 from torchrl.objectives.value.functional import reward2go
-import time
+
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 IMAGE_KEYS = ["pixels"]
@@ -10824,68 +10825,111 @@ class MultiAction(Transform):
         )
         return observation_spec
 
+
 class Timer(Transform):
-    """A transform that measures the time intervals between `inv` and `call` operations.
+    """A transform that measures the time intervals between `inv` and `call` operations in an environment.
 
     The `Timer` transform is used to track the time elapsed between the `inv` call and the `call`,
-    and between the `call` and the `inv` call. This can be useful for performance monitoring
-    and debugging purposes.
+    and between the `call` and the `inv` call. This is useful for performance monitoring and debugging
+    within an environment. The time is measured in seconds and stored as a tensor with the default
+    dtype from PyTorch. If the tensordict has a batch size (e.g., in batched environments), the time will be expended
+    to the size of the input tensordict.
 
     Attributes:
         out_keys: The keys of the output tensordict for the inverse transform. Defaults to
-            `out_keys = [f"{time_key}_step", f"{time_key}_policy"]`.
+            `out_keys = [f"{time_key}_step", f"{time_key}_policy"]`, where the first key represents
+            the time it takes to make a step in the environment, and the second key represents the
+            time it takes to execute the policy.
         time_key: A prefix for the keys where the time intervals will be stored in the tensordict.
             Defaults to `"time"`.
 
-    Methods:
-        _inv_call: Measures the time since the last `call` and stores it in the tensordict.
-        _call: Measures the time since the last `inv` and stores it in the tensordict.
+    Examples:
+        >>> from torchrl.envs import Timer, GymEnv
+        >>>
+        >>> env = GymEnv("Pendulum-v1").append_transform(Timer())
+        >>> r = env.rollout(10)
+        >>> print("time for policy", r["time_policy"])
+        time for policy tensor([0.0000, 0.0882, 0.0004, 0.0002, 0.0002, 0.0002, 0.0002, 0.0002, 0.0002,
+                0.0002])
+        >>> print("time for step", r["time_step"])
+        time for step tensor([9.5797e-04, 1.6289e-03, 9.7990e-05, 8.0824e-05, 9.0837e-05, 7.6056e-05,
+                8.2016e-05, 7.6056e-05, 8.1062e-05, 7.7009e-05])
     """
 
-    def __init__(
-        self,
-        out_keys: Sequence[NestedKey] = None,
-        time_key: str = "time"
-    ):
+    def __init__(self, out_keys: Sequence[NestedKey] = None, time_key: str = "time"):
         if out_keys is None:
             out_keys = [f"{time_key}_step", f"{time_key}_policy"]
         elif len(out_keys) != 2:
             raise TypeError(f"Expected two out_keys. Got out_keys={out_keys}.")
-        super().__init__(in_keys, out_keys, in_keys_inv, out_keys_inv)
+        super().__init__([], out_keys)
         self.time_key = time_key
         self.last_inv_time = None
         self.last_call_time = None
 
+    def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
+        self.last_inv_time = time.time()
+        return tensordict
+
+    def _maybe_expand_and_set(self, key, time_elapsed, tensordict):
+        if isinstance(key, tuple):
+            parent_td = tensordict.get(key[:-1])
+            key = key[-1]
+        else:
+            parent_td = tensordict
+        batch_size = parent_td.batch_size
+        if batch_size:
+            # Get the parent shape
+            time_elapsed_expand = time_elapsed.expand(parent_td.batch_size)
+        else:
+            time_elapsed_expand = time_elapsed
+        parent_td.set(key, time_elapsed_expand)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        current_time = time.time()
+        if self.last_inv_time is not None:
+            time_elapsed = torch.tensor(
+                current_time - self.last_inv_time, device=tensordict.device
+            )
+            self._maybe_expand_and_set(self.out_keys[0], time_elapsed, tensordict_reset)
+        self.last_call_time = current_time
+        # Placeholder
+        self._maybe_expand_and_set(self.out_keys[1], time_elapsed * 0, tensordict_reset)
+        return tensordict_reset
+
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """
-        Measures the time since the last `call` and stores it in the tensordict.
-
-        Args:
-            tensordict (TensorDictBase): The input tensordict.
-
-        Returns:
-            TensorDictBase: The modified tensordict with the time interval added.
-        """
         current_time = time.time()
         if self.last_call_time is not None:
-            time_elapsed = current_time - self.last_call_time
-            tensordict.set(f"{self.time_key}_call_to_inv", time_elapsed)
+            time_elapsed = torch.tensor(
+                current_time - self.last_call_time, device=tensordict.device
+            )
+            self._maybe_expand_and_set(self.out_keys[1], time_elapsed, tensordict)
         self.last_inv_time = current_time
         return tensordict
 
-    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        """
-        Measures the time since the last `inv` and stores it in the tensordict.
-
-        Args:
-            next_tensordict (TensorDictBase): The input tensordict.
-
-        Returns:
-            TensorDictBase: The modified tensordict with the time interval added.
-        """
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         current_time = time.time()
         if self.last_inv_time is not None:
-            time_elapsed = current_time - self.last_inv_time
-            next_tensordict.set(f"{self.time_key}_inv_to_call", time_elapsed)
+            time_elapsed = torch.tensor(
+                current_time - self.last_inv_time, device=tensordict.device
+            )
+            self._maybe_expand_and_set(self.out_keys[0], time_elapsed, next_tensordict)
         self.last_call_time = current_time
+        # presumbly no need to worry about batch size incongruencies here
+        next_tensordict.set(self.out_keys[1], tensordict.get(self.out_keys[1]))
         return next_tensordict
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec[self.out_keys[0]] = Unbounded(
+            shape=observation_spec.shape, device=observation_spec.device
+        )
+        observation_spec[self.out_keys[1]] = Unbounded(
+            shape=observation_spec.shape, device=observation_spec.device
+        )
+        return observation_spec
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(FORWARD_NOT_IMPLEMENTED)
