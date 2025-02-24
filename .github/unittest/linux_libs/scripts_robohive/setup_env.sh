@@ -20,11 +20,13 @@ apt-get install -y wget \
     libglfw3 \
     swig3.0 \
     libglew-dev \
+    libx11-dev \
     libglvnd0 \
     libgl1 \
     libglx0 \
     libegl1 \
-    libgles2
+    libgles2 \
+    x11proto-dev
 
 # Upgrade specific package
 apt-get upgrade -y libstdc++6
