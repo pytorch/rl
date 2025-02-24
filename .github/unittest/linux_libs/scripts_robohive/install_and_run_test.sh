@@ -1,10 +1,40 @@
 #!/usr/bin/env bash
 
 unset PYTORCH_VERSION
-# For unittest, nightly PyTorch is used as the following section,
-# so no need to set PYTORCH_VERSION.
-# In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
-apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc libosmesa6-dev
+
+this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+apt-get update && apt-get upgrade -y && apt-get install -y git
+# Avoid error: "fatal: unsafe repository"
+git config --global --add safe.directory '*'
+apt-get install -y wget \
+    gcc \
+    g++ \
+    unzip \
+    curl \
+    patchelf \
+    libosmesa6-dev \
+    libgl1-mesa-glx \
+    libglfw3 \
+    swig3.0 \
+    libglew-dev \
+    libglvnd0 \
+    libgl1 \
+    libglx0 \
+    libegl1 \
+    libgles2
+
+# Upgrade specific package
+apt-get upgrade -y libstdc++6
+
+cd /usr/lib/x86_64-linux-gnu
+ln -s libglut.so.3.12 libglut.so.3
+cd $this_dir
+
+root_dir="$(git rev-parse --show-toplevel)"
+conda_dir="${root_dir}/conda"
+env_dir="${root_dir}/env"
+
+cd "${this_dir}"
 
 set -e
 set -v

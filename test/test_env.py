@@ -4178,6 +4178,7 @@ class TestChessEnv:
     def test_all_actions(self, include_fen, include_pgn, stateful, mask_actions):
         if not stateful and not include_fen and not include_pgn:
             pytest.skip("fen or pgn must be included if not stateful")
+            return
 
         env = ChessEnv(
             include_fen=include_fen,
