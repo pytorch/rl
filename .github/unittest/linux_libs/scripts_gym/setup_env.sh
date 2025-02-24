@@ -11,6 +11,7 @@ apt-get update && apt-get upgrade -y && apt-get install -y git
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 apt-get install -y wget \
+    cmake \
     gcc \
     g++ \
     unzip \
