@@ -99,7 +99,7 @@ from torchrl.envs.utils import (
     step_mdp,
 )
 from torchrl.objectives.value.functional import reward2go
-
+import time
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 IMAGE_KEYS = ["pixels"]
@@ -10823,3 +10823,69 @@ class MultiAction(Transform):
             )
         )
         return observation_spec
+
+class Timer(Transform):
+    """A transform that measures the time intervals between `inv` and `call` operations.
+
+    The `Timer` transform is used to track the time elapsed between the `inv` call and the `call`,
+    and between the `call` and the `inv` call. This can be useful for performance monitoring
+    and debugging purposes.
+
+    Attributes:
+        out_keys: The keys of the output tensordict for the inverse transform. Defaults to
+            `out_keys = [f"{time_key}_step", f"{time_key}_policy"]`.
+        time_key: A prefix for the keys where the time intervals will be stored in the tensordict.
+            Defaults to `"time"`.
+
+    Methods:
+        _inv_call: Measures the time since the last `call` and stores it in the tensordict.
+        _call: Measures the time since the last `inv` and stores it in the tensordict.
+    """
+
+    def __init__(
+        self,
+        out_keys: Sequence[NestedKey] = None,
+        time_key: str = "time"
+    ):
+        if out_keys is None:
+            out_keys = [f"{time_key}_step", f"{time_key}_policy"]
+        elif len(out_keys) != 2:
+            raise TypeError(f"Expected two out_keys. Got out_keys={out_keys}.")
+        super().__init__(in_keys, out_keys, in_keys_inv, out_keys_inv)
+        self.time_key = time_key
+        self.last_inv_time = None
+        self.last_call_time = None
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """
+        Measures the time since the last `call` and stores it in the tensordict.
+
+        Args:
+            tensordict (TensorDictBase): The input tensordict.
+
+        Returns:
+            TensorDictBase: The modified tensordict with the time interval added.
+        """
+        current_time = time.time()
+        if self.last_call_time is not None:
+            time_elapsed = current_time - self.last_call_time
+            tensordict.set(f"{self.time_key}_call_to_inv", time_elapsed)
+        self.last_inv_time = current_time
+        return tensordict
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        """
+        Measures the time since the last `inv` and stores it in the tensordict.
+
+        Args:
+            next_tensordict (TensorDictBase): The input tensordict.
+
+        Returns:
+            TensorDictBase: The modified tensordict with the time interval added.
+        """
+        current_time = time.time()
+        if self.last_inv_time is not None:
+            time_elapsed = current_time - self.last_inv_time
+            next_tensordict.set(f"{self.time_key}_inv_to_call", time_elapsed)
+        self.last_call_time = current_time
+        return next_tensordict
