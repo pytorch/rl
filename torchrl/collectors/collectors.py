@@ -826,7 +826,8 @@ class SyncDataCollector(DataCollectorBase):
 
         # If the policy has a valid spec, we use it
         self._policy_output_keys = set()
-        if (make_rollout
+        if (
+            make_rollout
             and hasattr(self.policy, "spec")
             and self.policy.spec is not None
             and all(v is not None for v in self.policy.spec.values(True, True))
@@ -846,7 +847,11 @@ class SyncDataCollector(DataCollectorBase):
                     if key in self._final_rollout.keys(True):
                         continue
                     self._final_rollout.set(key, spec.zero())
-        elif not make_rollout and hasattr(self.policy, "out_keys") and self.policy.out_keys:
+        elif (
+            not make_rollout
+            and hasattr(self.policy, "out_keys")
+            and self.policy.out_keys
+        ):
             self._policy_output_keys = list(self.policy.out_keys)
         else:
             if make_rollout:
