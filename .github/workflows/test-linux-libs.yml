@@ -198,7 +198,7 @@ jobs:
   unittests-gym:
     strategy:
       matrix:
-        python_version: ["3.10"]
+        python_version: ["3.9"]
         cuda_arch_version: ["12.4"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -218,7 +218,7 @@ jobs:
         fi
 
         set -euxo pipefail
-        export PYTHON_VERSION="3.10"
+        export PYTHON_VERSION="3.9"
         # export CU_VERSION="${{ inputs.gpu-arch-version }}"
         export CU_VERSION="11.4"
         export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin"

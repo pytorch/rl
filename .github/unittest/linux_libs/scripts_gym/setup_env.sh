@@ -16,7 +16,7 @@ apt-get install -y wget \
     unzip \
     curl \
     patchelf \
-    libosmesa6-dev \
+    libosmesa6 \
     libgl1-mesa-glx \
     libglfw3 \
     swig3.0 \
@@ -25,6 +25,8 @@ apt-get install -y wget \
     libgl1 \
     libglx0 \
     libegl1 \
+    libsdl2-dev \
+    libsdl2-2.0-0 \
     libgles2
 
 

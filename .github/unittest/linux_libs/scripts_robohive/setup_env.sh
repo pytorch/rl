@@ -15,16 +15,20 @@ apt-get install -y wget \
     unzip \
     curl \
     patchelf \
-    libosmesa6-dev \
+    libosmesa6 \
     libgl1-mesa-glx \
     libglfw3 \
     swig3.0 \
     libglew-dev \
+    libx11-dev \
     libglvnd0 \
     libgl1 \
     libglx0 \
     libegl1 \
-    libgles2
+    libgles2 \
+    libsdl2-dev \
+    libsdl2-2.0-0 \
+    x11proto-dev
 
 # Upgrade specific package
 apt-get upgrade -y libstdc++6
