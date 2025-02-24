@@ -846,7 +846,8 @@ class SyncDataCollector(DataCollectorBase):
                     if key in self._final_rollout.keys(True):
                         continue
                     self._final_rollout.set(key, spec.zero())
-
+        elif not make_rollout and hasattr(self.policy, "out_keys") and self.policy.out_keys:
+            self._policy_output_keys = list(self.policy.out_keys)
         else:
             if make_rollout:
                 # otherwise, we perform a small number of steps with the policy to
