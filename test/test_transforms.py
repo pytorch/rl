@@ -13949,7 +13949,15 @@ class TestTimer(TransformBase):
         # The stack must be contiguous
         assert not isinstance(rollout, LazyStackedTensorDict)
         assert (rollout["time_policy"] >= 0).all()
-        assert (rollout["time_step"] > 0).all()
+        assert (rollout["time_step"] >= 0).all()
+        env.append_transform(StepCounter(max_steps=5))
+        rollout = env.rollout(10, break_when_any_done=False)
+        assert (rollout["time_reset"] > 0).sum() == 2
+        assert (rollout["time_policy"] == 0).sum() == 2
+        assert (rollout["time_step"] == 0).sum() == 2
+        assert (rollout["next", "time_reset"] == 0).all()
+        assert (rollout["next", "time_policy"] > 0).all()
+        assert (rollout["next", "time_step"] > 0).all()
 
     def test_transform_model(self):
         torch.manual_seed(0)
