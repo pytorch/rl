@@ -923,24 +923,25 @@ class SyncDataCollector(DataCollectorBase):
         for spec in ["full_observation_spec", "full_done_spec", "full_reward_spec"]:
             _env_output_keys += list(self.env.output_spec[spec].keys(True, True))
         self._env_output_keys = _env_output_keys
-        self._final_rollout = (
-            self._final_rollout.unsqueeze(-1)
-            .expand(*self.env.batch_size, self.frames_per_batch)
-            .clone()
-            .zero_()
-        )
+        if make_rollout:
+            self._final_rollout = (
+                self._final_rollout.unsqueeze(-1)
+                .expand(*self.env.batch_size, self.frames_per_batch)
+                .clone()
+                .zero_()
+            )
 
-        # in addition to outputs of the policy, we add traj_ids to
-        # _final_rollout which will be collected during rollout
-        self._final_rollout.set(
-            ("collector", "traj_ids"),
-            torch.zeros(
-                *self._final_rollout.batch_size,
-                dtype=torch.int64,
-                device=self.storing_device,
-            ),
-        )
-        self._final_rollout.refine_names(..., "time")
+            # in addition to outputs of the policy, we add traj_ids to
+            # _final_rollout which will be collected during rollout
+            self._final_rollout.set(
+                ("collector", "traj_ids"),
+                torch.zeros(
+                    *self._final_rollout.batch_size,
+                    dtype=torch.int64,
+                    device=self.storing_device,
+                ),
+            )
+            self._final_rollout.refine_names(..., "time")
 
     def _set_truncated_keys(self):
         self._truncated_keys = []
