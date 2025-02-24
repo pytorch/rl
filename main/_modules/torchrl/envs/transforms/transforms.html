@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+e0d3eee) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+d3dca73) &#x25BC</span></a>
     </div>
     
 
@@ -981,6 +981,21 @@
             <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform_done_spec</span><span class="p">(</span>
                 <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span>
             <span class="p">)</span>
+        <span class="n">output_spec_keys</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">unravel_key</span><span class="p">(</span><span class="n">k</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="n">out_keys</span> <span class="o">=</span> <span class="p">{</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">}</span>
+        <span class="n">in_keys</span> <span class="o">=</span> <span class="p">{</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">out_keys</span> <span class="o">-</span> <span class="n">in_keys</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">output_spec_keys</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;The key &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; is unaccounted for by the transform (expected keys </span><span class="si">{</span><span class="n">output_spec_keys</span><span class="si">}</span><span class="s2">). &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Every new entry in the tensordict resulting from a call to a transform must be &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;registered in the specs for torchrl rollouts to be consistently built. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Make sure transform_output_spec/transform_observation_spec/... is coded correctly. &quot;</span>
+                    <span class="s2">&quot;This warning will trigger a KeyError in v0.9, make sure to adapt your code accordingly.&quot;</span><span class="p">,</span>
+                    <span class="n">category</span><span class="o">=</span><span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">output_spec</span></div>
 
 <div class="viewcode-block" id="Transform.transform_input_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform.transform_input_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_input_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
@@ -1889,33 +1904,57 @@
         <span class="c1"># the action spec from the env, map it using t0 then t1 (going from in to out).</span>
         <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">:</span>
             <span class="n">input_spec</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">transform_input_spec</span><span class="p">(</span><span class="n">input_spec</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected Compose but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">input_spec</span><span class="p">)</span><span class="si">}</span><span class="s2"> with transform </span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">input_spec</span></div>
 
 <div class="viewcode-block" id="Compose.transform_action_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.transform_action_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
         <span class="c1"># To understand why we don&#39;t invert, look up at transform_input_spec</span>
         <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">:</span>
             <span class="n">action_spec</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">transform_action_spec</span><span class="p">(</span><span class="n">action_spec</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_spec</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected TensorSpec but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">action_spec</span><span class="p">)</span><span class="si">}</span><span class="s2"> with transform </span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">action_spec</span></div>
 
 <div class="viewcode-block" id="Compose.transform_state_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.transform_state_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_state_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
         <span class="c1"># To understand why we don&#39;t invert, look up at transform_input_spec</span>
         <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">:</span>
             <span class="n">state_spec</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">transform_state_spec</span><span class="p">(</span><span class="n">state_spec</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state_spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected Compose but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">state_spec</span><span class="p">)</span><span class="si">}</span><span class="s2"> with transform </span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">state_spec</span></div>
 
 <div class="viewcode-block" id="Compose.transform_observation_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.transform_observation_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">:</span>
             <span class="n">observation_spec</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">transform_observation_spec</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected TensorSpec but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">)</span><span class="si">}</span><span class="s2"> with transform </span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">observation_spec</span></div>
 
 <div class="viewcode-block" id="Compose.transform_output_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.transform_output_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_output_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">:</span>
             <span class="n">output_spec</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">transform_output_spec</span><span class="p">(</span><span class="n">output_spec</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output_spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected Compose but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">output_spec</span><span class="p">)</span><span class="si">}</span><span class="s2"> with transform </span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">output_spec</span></div>
 
 <div class="viewcode-block" id="Compose.transform_reward_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.transform_reward_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">:</span>
             <span class="n">reward_spec</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">transform_reward_spec</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected TensorSpec but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">reward_spec</span><span class="p">)</span><span class="si">}</span><span class="s2"> with transform </span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">reward_spec</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">slice</span><span class="p">,</span> <span class="n">List</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">:</span>
