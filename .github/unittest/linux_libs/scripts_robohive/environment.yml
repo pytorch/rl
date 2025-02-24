@@ -24,6 +24,6 @@ dependencies:
     - scipy
     - hydra-core
     - patchelf
-    - mujoco==2.3.3
-    - dm_control==1.0.11
+    - mujoco
+    - dm_control
     - numpy<2.0.0
