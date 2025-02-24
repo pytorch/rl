@@ -1967,7 +1967,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             select_and_clone,
             next_tensordict,
             device=next_tensordict.device,
-            batch_size=next_tensordict.batch_size,
             default=None,
             filter_empty=True,
             is_leaf=_is_leaf_nontensor,
