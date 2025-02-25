@@ -17,6 +17,7 @@ apt-get install -y wget \
     curl \
     patchelf \
     libosmesa6 \
+    libosmesa6-dev \
     libgl1-mesa-glx \
     libglfw3 \
     swig3.0 \
@@ -27,7 +28,12 @@ apt-get install -y wget \
     libegl1 \
     libsdl2-dev \
     libsdl2-2.0-0 \
-    libgles2
+    libgles2 \
+    libglvnd-dev \
+    libgl1-mesa-dev \
+    libegl1-mesa-dev \
+    libgles2-mesa-dev
+
 
 
 # Upgrade specific package
