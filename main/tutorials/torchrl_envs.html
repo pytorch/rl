@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+d4f8846) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+0ae1405) &#x25BC</span></a>
     </div>
     
 
@@ -844,7 +844,7 @@ fact that environments are run sequentially. This is mostly useful for
 debugging purposes.</p>
 <p><code class="docutils literal notranslate"><span class="pre">ParallelEnv</span></code> instances are created in lazy mode: the environment will
 start running only when called. This allows us to move <code class="docutils literal notranslate"><span class="pre">ParallelEnv</span></code>
-objects from process to process without worring too much about running
+objects from process to process without worrying too much about running
 processes. A <code class="docutils literal notranslate"><span class="pre">ParallelEnv</span></code> can be started by calling <code class="docutils literal notranslate"><span class="pre">start</span></code>, <code class="docutils literal notranslate"><span class="pre">reset</span></code>
 or simply by calling <code class="docutils literal notranslate"><span class="pre">step</span></code> (if <code class="docutils literal notranslate"><span class="pre">reset</span></code> does not need to be called first).</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">parallel_env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
@@ -887,7 +887,7 @@ instance and we want each of the sub-sub-environments to have a different seed.<
 <section id="accessing-environment-attributes">
 <h3>Accessing environment attributes<a class="headerlink" href="#accessing-environment-attributes" title="Permalink to this heading">¶</a></h3>
 <p>It sometimes occurs that a wrapped environment has an attribute that is of
-interest. First, note that TorchRL environment wrapper constains the toolings
+interest. First, note that TorchRL environment wrapper constrains the toolings
 to access this attribute. Here’s an example:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">time</span><span class="w"> </span><span class="kn">import</span> <span class="n">sleep</span>
 </pre></div>
@@ -1024,7 +1024,7 @@ them into a model. Sometimes, we can get a good approximation of the
 normalizing statistics from data gathered in the environment with, say, a
 random policy (or demonstrations). It might, however, be advisable to
 normalize the data “on-the-fly”, updating the normalizing constants
-progressively to what has been observed so far. This is particularily
+progressively to what has been observed so far. This is particularly
 useful when we expect the normalizing statistics to change following
 changes in performance in the task, or when the environment is evolving
 due to external factors.</p>
@@ -1073,7 +1073,7 @@ once created:</p>
 <p>The count is slightly higher than the number of steps (since we
 did not use any decay). The difference between the two is due to the fact
 that <code class="docutils literal notranslate"><span class="pre">ParallelEnv</span></code> creates a dummy environment to initialize the shared
-<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> that is used to collect data from the dispached environments.
+<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> that is used to collect data from the dispatched environments.
 This small difference will usually be absored throughout training.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span>
     <span class="s2">&quot;update counts: &quot;</span><span class="p">,</span>

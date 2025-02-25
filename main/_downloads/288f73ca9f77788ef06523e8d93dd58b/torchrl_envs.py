@@ -467,7 +467,7 @@ parallel_env = ParallelEnv(
 #
 # ``ParallelEnv`` instances are created in lazy mode: the environment will
 # start running only when called. This allows us to move ``ParallelEnv``
-# objects from process to process without worring too much about running
+# objects from process to process without worrying too much about running
 # processes. A ``ParallelEnv`` can be started by calling ``start``, ``reset``
 # or simply by calling ``step`` (if ``reset`` does not need to be called first).
 
@@ -512,7 +512,7 @@ del parallel_env
 # Accessing environment attributes
 # ---------------------------------
 # It sometimes occurs that a wrapped environment has an attribute that is of
-# interest. First, note that TorchRL environment wrapper constains the toolings
+# interest. First, note that TorchRL environment wrapper constrains the toolings
 # to access this attribute. Here's an example:
 
 from time import sleep
@@ -657,7 +657,7 @@ del parallel_env
 # normalizing statistics from data gathered in the environment with, say, a
 # random policy (or demonstrations). It might, however, be advisable to
 # normalize the data "on-the-fly", updating the normalizing constants
-# progressively to what has been observed so far. This is particularily
+# progressively to what has been observed so far. This is particularly
 # useful when we expect the normalizing statistics to change following
 # changes in performance in the task, or when the environment is evolving
 # due to external factors.
@@ -710,7 +710,7 @@ print("std: :", data.get("observation").view(-1, 3).std(0))  # Approx 1
 # The count is slightly higher than the number of steps (since we
 # did not use any decay). The difference between the two is due to the fact
 # that ``ParallelEnv`` creates a dummy environment to initialize the shared
-# ``TensorDict`` that is used to collect data from the dispached environments.
+# ``TensorDict`` that is used to collect data from the dispatched environments.
 # This small difference will usually be absored throughout training.
 
 print(

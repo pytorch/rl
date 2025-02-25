@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+d4f8846) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+0ae1405) &#x25BC</span></a>
     </div>
     
 
@@ -543,7 +543,7 @@
 <span class="sd">        env (``vmas.simulator.environment.environment.Environment``): the vmas environment to wrap.</span>
 
 <span class="sd">    Keyword Args:</span>
-<span class="sd">        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.</span>
+<span class="sd">        num_envs (int): Number of vectorized simulation environments. VMAS performs vectorized simulations using PyTorch.</span>
 <span class="sd">            This argument indicates the number of vectorized environments that should be simulated in a batch. It will also</span>
 <span class="sd">            determine the batch size of the environment.</span>
 <span class="sd">        device (torch.device, optional): Device for simulation. Defaults to the default device. All the tensors created by VMAS</span>
@@ -573,7 +573,7 @@
 <span class="sd">        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension</span>
 <span class="sd">        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension</span>
 <span class="sd">        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension</span>
-<span class="sd">        het_specs (bool): whether the enviornment has any lazy spec</span>
+<span class="sd">        het_specs (bool): whether the environment has any lazy spec</span>
 <span class="sd">        het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs</span>
 <span class="sd">        available_envs (List[str]): the list of the scenarios available to build.</span>
 
@@ -1095,14 +1095,14 @@
 
 
 <span class="sd">    Keyword Args:</span>
-<span class="sd">        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.</span>
+<span class="sd">        num_envs (int): Number of vectorized simulation environments. VMAS performs vectorized simulations using PyTorch.</span>
 <span class="sd">            This argument indicates the number of vectorized environments that should be simulated in a batch. It will also</span>
 <span class="sd">            determine the batch size of the environment.</span>
 <span class="sd">        device (torch.device, optional): Device for simulation. Defaults to the defaultt device. All the tensors created by VMAS</span>
 <span class="sd">            will be placed on this device.</span>
 <span class="sd">        continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions</span>
 <span class="sd">            will be discrete. The number of actions and their size will depend on the chosen scenario.</span>
-<span class="sd">            See the VMAS repositiory for more info.</span>
+<span class="sd">            See the VMAS repository for more info.</span>
 <span class="sd">        max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can</span>
 <span class="sd">            be terminating or not. If ``max_steps`` is specified,</span>
 <span class="sd">            the scenario is also terminated (and the ``&quot;terminated&quot;`` flag is set) whenever this horizon is reached.</span>
@@ -1126,11 +1126,11 @@
 <span class="sd">        group_map (Dict[str, List[str]]): how to group agents in tensordicts for</span>
 <span class="sd">            input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.</span>
 <span class="sd">        agent_names (list of str): names of the agent in the environment</span>
-<span class="sd">        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the enviornment</span>
+<span class="sd">        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment</span>
 <span class="sd">        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension</span>
 <span class="sd">        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension</span>
 <span class="sd">        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension</span>
-<span class="sd">        het_specs (bool): whether the enviornment has any lazy spec</span>
+<span class="sd">        het_specs (bool): whether the environment has any lazy spec</span>
 <span class="sd">        het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs</span>
 <span class="sd">        available_envs (List[str]): the list of the scenarios available to build.</span>
 

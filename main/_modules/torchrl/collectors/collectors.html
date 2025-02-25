@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+d4f8846) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+0ae1405) &#x25BC</span></a>
     </div>
     
 
@@ -1084,7 +1084,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">reset_when_done</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;reset_when_done is deprectated.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;reset_when_done is deprecated.&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reset_when_done</span> <span class="o">=</span> <span class="n">reset_when_done</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
 
@@ -2962,7 +2962,7 @@
 
 <span class="sd">    Environment types can be identical or different.</span>
 
-<span class="sd">    The collection keeps on occuring on all processes even between the time</span>
+<span class="sd">    The collection keeps on occurring on all processes even between the time</span>
 <span class="sd">    the batch of rollouts is collected and the next call to the iterator.</span>
 <span class="sd">    This class can be safely used with offline RL sota-implementations.</span>
 
@@ -3551,7 +3551,7 @@
                         <span class="s2">&quot;the shared device (aka storing_device) is set to CPU.&quot;</span>
                     <span class="p">)</span>
                     <span class="k">if</span> <span class="n">collected_tensordict</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="c1"># placehoder in case we need different behaviors</span>
+                        <span class="c1"># placeholder in case we need different behaviors</span>
                         <span class="k">if</span> <span class="n">collected_tensordict</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,):</span>
                             <span class="n">collected_tensordict</span><span class="o">.</span><span class="n">share_memory_</span><span class="p">()</span>
                         <span class="k">elif</span> <span class="n">collected_tensordict</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;mps&quot;</span><span class="p">,):</span>

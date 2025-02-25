@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+d4f8846) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+0ae1405) &#x25BC</span></a>
     </div>
     
 
@@ -1291,7 +1291,7 @@
 <span class="sd">        - &quot;full_action_spec&quot;: the spec of the input actions</span>
 <span class="sd">        - &quot;full_state_spec&quot;: the spec of all other environment inputs</span>
 
-<span class="sd">        This attibute is locked and should be read-only.</span>
+<span class="sd">        This attribute is locked and should be read-only.</span>
 <span class="sd">        Instead, to set the specs contained in it, use the respective properties.</span>
 
 <span class="sd">        Examples:</span>
@@ -1343,7 +1343,7 @@
 <span class="sd">        - &quot;full_done_spec&quot;: the spec of done</span>
 <span class="sd">        - &quot;full_observation_spec&quot;: the spec of all other environment outputs</span>
 
-<span class="sd">        This attibute is locked and should be read-only.</span>
+<span class="sd">        This attribute is locked and should be read-only.</span>
 <span class="sd">        Instead, to set the specs contained in it, use the respective properties.</span>
 
 <span class="sd">        Examples:</span>
@@ -1765,7 +1765,7 @@
         <span class="k">for</span> <span class="n">leaf</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">leaf</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="s2">&quot;the reward_spec&#39;s leafs shape cannot be empty (this error&quot;</span>
+                    <span class="s2">&quot;the reward_spec&#39;s leaves shape cannot be empty (this error&quot;</span>
                     <span class="s2">&quot; usually comes from trying to set a reward_spec&quot;</span>
                     <span class="s2">&quot; with a null number of dimensions. Try using a multidimensional&quot;</span>
                     <span class="s2">&quot; spec instead, for instance with a singleton dimension at the tail).&quot;</span>
@@ -2043,7 +2043,7 @@
         <span class="k">for</span> <span class="n">leaf</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">leaf</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="s2">&quot;the done_spec&#39;s leafs shape cannot be empty (this error&quot;</span>
+                    <span class="s2">&quot;the done_spec&#39;s leaves shape cannot be empty (this error&quot;</span>
                     <span class="s2">&quot; usually comes from trying to set a reward_spec&quot;</span>
                     <span class="s2">&quot; with a null number of dimensions. Try using a multidimensional&quot;</span>
                     <span class="s2">&quot; spec instead, for instance with a singleton dimension at the tail).&quot;</span>

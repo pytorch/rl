@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+d4f8846) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+0ae1405) &#x25BC</span></a>
     </div>
     
 
@@ -496,7 +496,7 @@ able to simulate multiple environments on a GPU to speed up computation.</p></li
 <p>Deep Deterministic Policy Gradient (DDPG) is an off-policy actor-critic algorithm
 where a deterministic policy is optimised using the gradients from the critic network.
 For more information, see the <a class="reference external" href="https://arxiv.org/abs/1509.02971">Deep Deterministic Policy Gradients</a> paper.
-This kind of algorithm is typicall trained off-policy. For more info on off-policy learning see
+This kind of algorithm is typically trained off-policy. For more info on off-policy learning see
 <em>Sutton, Richard S., and Andrew G. Barto. Reinforcement learning: An introduction. MIT press, 2018</em>.</p>
 <figure class="align-default" id="id2">
 <img alt="Off-policy learning" src="https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/off-policy-vmas-loop-min.png" />
@@ -814,7 +814,7 @@ and just remove the line <code class="docutils literal notranslate"><span class=
 neural network will output the action to take.
 As the action is continuous, we use a Tanh-Delta distribution to respect the
 action space boundaries. The only thing that this class does is apply a Tanh transformation to make sure the action
-is withing the domain bounds.</p>
+is within the domain bounds.</p>
 <p>Another important decision we need to make is whether we want the agents within a team to <strong>share the policy parameters</strong>.
 On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
 each other’s experiences. This will also result in faster training.

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+d4f8846) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+0ae1405) &#x25BC</span></a>
     </div>
     
 
@@ -433,7 +433,7 @@
 <dt class="sig sig-object py" id="torchrl.trainers.helpers.correct_for_frame_skip">
 <span class="sig-prename descclassname"><span class="pre">torchrl.trainers.helpers.</span></span><span class="sig-name descname"><span class="pre">correct_for_frame_skip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="reference internal" href="../../_modules/torchrl/trainers/helpers/envs.html#correct_for_frame_skip"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.helpers.correct_for_frame_skip" title="Permalink to this definition">¶</a></dt>
 <dd><p>Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.</p>
-<p>This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames
+<p>This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targeting a total number of frames
 of 1M but actually collecting frame_skip * 1M frames.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>

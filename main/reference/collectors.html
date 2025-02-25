@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+d4f8846) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+0ae1405) &#x25BC</span></a>
     </div>
     
 
@@ -590,7 +590,7 @@ will work:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">N</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">memory</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># MultiSyncDataCollector + regular env: behaves like a ParallelEnv iif cat_results=&quot;stack&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># MultiSyncDataCollector + regular env: behaves like a ParallelEnv if cat_results=&quot;stack&quot;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">memory</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">ndim</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
 <span class="gp">... </span>    <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">num_slices</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">trajectory_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">))</span>

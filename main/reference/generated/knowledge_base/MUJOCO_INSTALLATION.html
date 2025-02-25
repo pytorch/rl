@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+d4f8846) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+0ae1405) &#x25BC</span></a>
     </div>
     
 
@@ -607,7 +607,7 @@ conda env config vars set LD_PRELOAD=/path/to/conda/envs/mujoco_env/x86_64-conda
 <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">conda</span><span class="o">/</span><span class="n">envs</span><span class="o">/</span><span class="n">mj_envs</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">python3</span><span class="mf">.8</span><span class="o">/</span><span class="n">site</span><span class="o">-</span><span class="n">packages</span><span class="o">/</span><span class="n">glfw</span><span class="o">/</span><span class="fm">__init__</span><span class="o">.</span><span class="n">py</span><span class="p">:</span><span class="mi">912</span><span class="p">:</span> <span class="n">GLFWError</span><span class="p">:</span> <span class="p">(</span><span class="mi">65537</span><span class="p">)</span> <span class="sa">b</span><span class="s1">&#39;The GLFW library is not initialized&#39;</span>
 </pre></div>
 </div>
-<p><em>Solution</em>: This can usually be sovled by setting EGL as your mujoco_gl backend: <code class="docutils literal notranslate"><span class="pre">MUJOCO_GL=egl</span> <span class="pre">python</span> <span class="pre">myscript.py</span></code></p>
+<p><em>Solution</em>: This can usually be solved by setting EGL as your mujoco_gl backend: <code class="docutils literal notranslate"><span class="pre">MUJOCO_GL=egl</span> <span class="pre">python</span> <span class="pre">myscript.py</span></code></p>
 </li>
 <li><p>RuntimeError with error stack like this when running jobs using schedulers like slurm:</p></li>
 </ol>
@@ -624,7 +624,7 @@ conda env config vars set LD_PRELOAD=/path/to/conda/envs/mujoco_env/x86_64-conda
 <div><p>Mujoco’s EGL code indexes devices globally while CUDA_VISIBLE_DEVICES
 (when used with job schedulers like slurm) returns the local device ids.
 This can be worked around by setting the <code class="docutils literal notranslate"><span class="pre">GPUS</span></code> environment variable to the
-global device id. For slurm, it can be obtained using <code class="docutils literal notranslate"><span class="pre">SLURM_STEP_GPUS</span></code> enviroment variable.</p>
+global device id. For slurm, it can be obtained using <code class="docutils literal notranslate"><span class="pre">SLURM_STEP_GPUS</span></code> environment variable.</p>
 </div></blockquote>
 <ol class="arabic" start="8">
 <li><p>Rendered images are completely black.</p>

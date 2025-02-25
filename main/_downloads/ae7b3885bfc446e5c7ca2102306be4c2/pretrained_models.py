@@ -10,7 +10,7 @@ import tempfile
 # for efficient image representation, and fine-tune them.
 #
 # TorchRL provides pretrained models that are to be used either as transforms or as
-# components of the policy. As the sematic is the same, they can be used interchangeably
+# components of the policy. As the semantic is the same, they can be used interchangeably
 # in one or the other context. In this tutorial, we will be using R3M (https://arxiv.org/abs/2203.12601),
 # but other models (e.g. VIP) will work equally well.
 #
