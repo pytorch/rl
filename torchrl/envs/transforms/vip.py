@@ -176,7 +176,7 @@ class VIPTransform(Compose):
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
         stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
-             argument will be treaded separetely and each will be given a single,
+             argument will be treaded separately and each will be given a single,
              separated entry in the output tensordict. Defaults to ``True``.
         download (bool, torchvision Weights config or corresponding string):
             if ``True``, the weights will be downloaded using the torch.hub download

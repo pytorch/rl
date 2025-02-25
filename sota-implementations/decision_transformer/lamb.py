@@ -85,7 +85,7 @@ class Lamb(Optimizer):
                 grad = p.grad
                 if grad.is_sparse:
                     raise RuntimeError(
-                        "Lamb does not support sparse gradients, consider SparseAdam instad."
+                        "Lamb does not support sparse gradients, consider SparseAdam instead."
                     )
                 global_grad_norm.add_(grad.pow(2).sum())
 

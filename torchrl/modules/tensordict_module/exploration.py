@@ -60,7 +60,7 @@ class EGreedyModule(TensorDictModuleBase):
         It is crucial to incorporate a call to :meth:`step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
-        will be raised if this is ommitted!
+        will be raised if this is omitted!
 
     Examples:
         >>> import torch
@@ -273,7 +273,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         crucial to incorporate a call to :meth:`step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
-        will be raised if this is ommitted!
+        will be raised if this is omitted!
 
 
     """
@@ -427,7 +427,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         crucial to incorporate a call to :meth:`step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
-        will be raised if this is ommitted!
+        will be raised if this is omitted!
 
     Args:
         spec (TensorSpec): the spec used for sampling actions. The sampled

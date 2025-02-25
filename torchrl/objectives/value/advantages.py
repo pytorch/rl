@@ -766,7 +766,7 @@ class TD1Estimator(ValueEstimatorBase):
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
-            markes with the ``"time"`` name if any, and to the last dimension
+            marked with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
@@ -990,7 +990,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
-            markes with the ``"time"`` name if any, and to the last dimension
+            marked with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
@@ -1570,7 +1570,7 @@ class VTrace(ValueEstimatorBase):
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
-            markes with the ``"time"`` name if any, and to the last dimension
+            marked with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
@@ -1669,7 +1669,7 @@ class VTrace(ValueEstimatorBase):
                 target params to be passed to the functional value network module.
             time_dim (int, optional): the dimension corresponding to the time
                 in the input tensordict. If not provided, defaults to the dimension
-                markes with the ``"time"`` name if any, and to the last dimension
+                marked with the ``"time"`` name if any, and to the last dimension
                 otherwise.
                 Negative dimensions are considered with respect to the input
                 tensordict.
