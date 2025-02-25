@@ -97,6 +97,7 @@ from .transforms import (
     TargetReturn,
     TensorDictPrimer,
     TimeMaxPool,
+    Timer,
     Tokenizer,
     ToTensorImage,
     TrajCounter,

@@ -865,6 +865,8 @@ The inverse process is executed with the output tensordict, where the `in_keys` 
 
    Rename transform logic
 
+.. note:: During a call to `inv`, the transforms are executed in reversed order (compared to the forward / step mode).
+
 Transforming Tensors and Specs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -900,6 +902,74 @@ tensor that should not be generated when using :meth:`~torchrl.envs.EnvBase.rand
 environment. Instead, `"action_discrete"` should be generated, and its continuous counterpart obtained from the
 transform. Therefore, the user should see the `"action_discrete"` entry being exposed, but not `"action"`.
 
+Designing your own Transform
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To create a basic, custom transform, you need to subclass the `Transform` class and implement the
+:meth:`~torchrl.envs._apply_transform` method. Here's an example of a simple transform that adds 1 to the observation
+tensor:
+
+    >>> class AddOneToObs(Transform):
+    ...     """A transform that adds 1 to the observation tensor."""
+    ...
+    ...     def __init__(self):
+    ...         super().__init__(in_keys=["observation"], out_keys=["observation"])
+    ...
+    ...     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+    ...         return obs + 1
+
+
+Tips for subclassing `Transform`
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+There are various ways of subclassing a transform. The things to take into considerations are:
+
+- Is the transform identical for each tensor / item being transformed? Use
+  :meth:`~torchrl.envs.Transform._apply_transform` and :meth:`~torchrl.envs.Transform._inv_apply_transform`.
+- The transform needs access to the input data to env.step as well as output? Rewrite
+  :meth:`~torchrl.envs.Transform._step`.
+  Otherwise, rewrite :meth:`~torchrl.envs.Transform._call` (or :meth:`~torchrl.envs.Transform._inv_call`).
+- Is the transform to be used within a replay buffer? Overwrite :meth:`~torchrl.envs.Transform.forward`,
+  :meth:`~torchrl.envs.Transform.inv`, :meth:`~torchrl.envs.Transform._apply_transform` or
+  :meth:`~torchrl.envs.Transform._inv_apply_transform`.
+- Within a transform, you can access (and make calls to) the parent environment using
+  :attr:`~torchrl.envs.Transform.parent` (the base env + all transforms till this one) or
+  :meth:`~torchrl.envs.Transform.container` (The object that encapsulates the transform).
+- Don't forget to edits the specs if needed: top level: :meth:`~torchrl.envs.Transform.transform_output_spec`,
+  :meth:`~torchrl.envs.Transform.transform_input_spec`.
+  Leaf level: :meth:`~torchrl.envs.Transform.transform_observation_spec`,
+  :meth:`~torchrl.envs.Transform.transform_action_spec`, :meth:`~torchrl.envs.Transform.transform_state_spec`,
+  :meth:`~torchrl.envs.Transform.transform_reward_spec` and
+  :meth:`~torchrl.envs.Transform.transform_reward_spec`.
+
+For practical examples, see the methods listed above.
+
+You can use a transform in an environment by passing it to the TransformedEnv constructor:
+
+    >>> env = TransformedEnv(GymEnv("Pendulum-v1"), AddOneToObs())
+
+You can compose multiple transforms together using the Compose class:
+
+    >>> transform = Compose(AddOneToObs(), RewardSum())
+    >>> env = TransformedEnv(GymEnv("Pendulum-v1"), transform)
+
+Inverse Transforms
+^^^^^^^^^^^^^^^^^^
+
+Some transforms have an inverse transform that can be used to undo the transformation. For example, the AddOneToAction
+transform has an inverse transform that subtracts 1 from the action tensor:
+
+    >>> class AddOneToAction(Transform):
+    ...     """A transform that adds 1 to the action tensor."""
+    ...     def __init__(self):
+    ...         super().__init__(in_keys=[], out_keys=[], in_keys_inv=["action"], out_keys_inv=["action"])
+    ...     def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+    ...         return action + 1
+
+Using a Transform with a Replay Buffer
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can use a transform with a replay buffer by passing it to the ReplayBuffer constructor:
 
 Cloning transforms
 ~~~~~~~~~~~~~~~~~~
@@ -1000,6 +1070,7 @@ to be able to create this other composition:
     TargetReturn
     TensorDictPrimer
     TimeMaxPool
+    Timer
     Tokenizer
     ToTensorImage
     TrajCounter

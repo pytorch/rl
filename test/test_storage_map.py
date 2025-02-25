@@ -704,6 +704,19 @@ class TestMCTSForest:
             [(2, 359), (2, 3094), (11, 9045)],
         ]
 
+        default_string_check = "\n".join(
+            [
+                "(0,) {'observation': tensor(123)}",
+                " (0, 0) {'observation': tensor(456)}",
+                " (0, 1) {'observation': tensor(847)}",
+                " (0, 2) {'observation': tensor(948)}",
+                "(1,) {'observation': tensor(3094)}",
+                " (1, 0) {'observation': tensor(68)}",
+                " (1, 1) {'observation': tensor(9045)}",
+                "(2,) {'observation': tensor(75)}",
+            ]
+        )
+
         obs_string_check = "\n".join(
             [
                 "(0,) [123]",
@@ -744,6 +757,9 @@ class TestMCTSForest:
                 )
                 forest.extend(td)
                 td = td["next"].clone()
+
+        default_string = forest.to_string(td_root)
+        assert default_string == default_string_check
 
         obs_string = forest.to_string(
             td_root, lambda tree: tree.rollout["next", "observation"].tolist()
