@@ -80,8 +80,8 @@ class DreamerDecoder(Transform):
         >>> model_based_env_eval = model_based_env.append_transform(DreamerDecoder())
     """
 
-    def _call(self, tensordict):
-        return self.parent.base_env.obs_decoder(tensordict)
+    def _call(self, next_tensordict):
+        return self.parent.base_env.obs_decoder(next_tensordict)
 
     def _reset(self, tensordict, tensordict_reset):
         return self._call(tensordict_reset)

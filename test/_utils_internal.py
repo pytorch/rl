@@ -9,6 +9,7 @@ import logging
 import os
 
 import os.path
+import sys
 import time
 import unittest
 import warnings
@@ -42,12 +43,17 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
+from torchrl.modules import MLP
 from torchrl.objectives.value.advantages import _vmap_func
 
 # Specified for test_utils.py
 __version__ = "0.3"
 
-from torchrl.modules import MLP
+IS_WIN = sys.platform == "win32"
+if IS_WIN:
+    mp_ctx = "spawn"
+else:
+    mp_ctx = "fork"
 
 
 def CARTPOLE_VERSIONED():
@@ -265,6 +271,7 @@ def _make_envs(
     N,
     device="cpu",
     kwargs=None,
+    local_mp_ctx=mp_ctx,
 ):
     torch.manual_seed(0)
     if not transformed_in:
@@ -299,7 +306,9 @@ def _make_envs(
                 )
 
     env0 = create_env_fn()
-    env_parallel = ParallelEnv(N, create_env_fn, create_env_kwargs=kwargs)
+    env_parallel = ParallelEnv(
+        N, create_env_fn, create_env_kwargs=kwargs, mp_start_method=local_mp_ctx
+    )
     env_serial = SerialEnv(N, create_env_fn, create_env_kwargs=kwargs)
 
     for key in env0.observation_spec.keys(True, True):
