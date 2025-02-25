@@ -1060,8 +1060,8 @@ class MCTSForest:
 
         Args:
             rollout (TensorDict): The rollout to add to the forest.
-            return_node (bool, optional): If True, the method returns the added
-                node. Default is ``False``.
+            return_node (bool, optional): If ``True``, the method returns the
+                added node. Default is ``False``.
 
         Returns:
             Tree: The node that was added to the forest. This is only
