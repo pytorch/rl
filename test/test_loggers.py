@@ -187,14 +187,14 @@ class TestCSVLogger:
         sleep(0.01)  # wait until events are registered
 
         # check that the logged videos are the same as the initial video
-        extention = (
+        extension = (
             ".pt"
             if video_format == "pt"
             else ".memmap"
             if video_format == "memmap"
             else ".mp4"
         )
-        video_file_name = "foo_" + ("0" if not steps else str(steps[0])) + extention
+        video_file_name = "foo_" + ("0" if not steps else str(steps[0])) + extension
         path = os.path.join(tmpdir, exp_name, "videos", video_file_name)
         if video_format == "pt":
             logged_video = torch.load(path)

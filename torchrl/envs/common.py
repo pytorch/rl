@@ -870,7 +870,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         - "full_action_spec": the spec of the input actions
         - "full_state_spec": the spec of all other environment inputs
 
-        This attibute is locked and should be read-only.
+        This attribute is locked and should be read-only.
         Instead, to set the specs contained in it, use the respective properties.
 
         Examples:
@@ -922,7 +922,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         - "full_done_spec": the spec of done
         - "full_observation_spec": the spec of all other environment outputs
 
-        This attibute is locked and should be read-only.
+        This attribute is locked and should be read-only.
         Instead, to set the specs contained in it, use the respective properties.
 
         Examples:
@@ -1344,7 +1344,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         for leaf in value.values(True, True):
             if len(leaf.shape) == 0:
                 raise RuntimeError(
-                    "the reward_spec's leafs shape cannot be empty (this error"
+                    "the reward_spec's leaves shape cannot be empty (this error"
                     " usually comes from trying to set a reward_spec"
                     " with a null number of dimensions. Try using a multidimensional"
                     " spec instead, for instance with a singleton dimension at the tail)."
@@ -1622,7 +1622,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         for leaf in value.values(True, True):
             if len(leaf.shape) == 0:
                 raise RuntimeError(
-                    "the done_spec's leafs shape cannot be empty (this error"
+                    "the done_spec's leaves shape cannot be empty (this error"
                     " usually comes from trying to set a reward_spec"
                     " with a null number of dimensions. Try using a multidimensional"
                     " spec instead, for instance with a singleton dimension at the tail)."

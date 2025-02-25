@@ -301,7 +301,7 @@ The ``"_reset"`` key has two distinct functionalities:
    Designing an environment that behaves according to ``"_reset"`` inputs is the
    developer's responsibility, as TorchRL has no control over the inner logic
    of :meth:`~.EnvBase._reset`. Nevertheless, the following point should be
-   kept in mind when desiging that method.
+   kept in mind when designing that method.
 
 2. After a call to :meth:`~.EnvBase._reset`, the output will be masked with the
    ``"_reset"`` entries and the output of the previous :meth:`~.EnvBase.step`
@@ -329,7 +329,7 @@ designing reset functionalities:
   whether the ``"_reset"`` at the root level corresponds to an ``all()``, ``any()``
   or custom call to the nested ``"done"`` entries cannot be known in advance,
   and it is explicitly assumed that the ``"_reset"`` at the root was placed
-  there to superseed the nested values (for an example, have a look at
+  there to supersede the nested values (for an example, have a look at
   :class:`~.PettingZooWrapper` implementation where each group has one or more
   ``"done"`` entries associated which is aggregated at the root level with a
   ``any`` or ``all`` logic depending on the task).
@@ -1126,7 +1126,7 @@ to always know what the latest available actions are. You can do this like so:
         >>> )
 
 .. note::
-  In case you are using a parallel environment it is important to add the transform to the parallel enviornment itself
+  In case you are using a parallel environment it is important to add the transform to the parallel environment itself
   and not to its sub-environments.
 
 

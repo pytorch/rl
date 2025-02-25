@@ -2385,7 +2385,7 @@ def _run_worker_pipe_shared_mem(
             else:
                 raise TimeoutError(
                     f"Worker timed out after {_timeout}s, "
-                    f"increase timeout if needed throught the BATCHED_PIPE_TIMEOUT environment variable."
+                    f"increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable."
                 )
         except EOFError as err:
             raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
@@ -2631,7 +2631,7 @@ def _run_worker_pipe_direct(
             else:
                 raise TimeoutError(
                     f"Worker timed out after {_timeout}s, "
-                    f"increase timeout if needed throught the BATCHED_PIPE_TIMEOUT environment variable."
+                    f"increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable."
                 )
         except EOFError as err:
             raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err

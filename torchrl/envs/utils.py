@@ -891,7 +891,7 @@ def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
                      shape=torch.Size([1]), space=ContinuousBox(low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> assert (spec.zero() == data.zero_()).all()
     """
-    # custom funtion to convert a tensordict in a similar spec structure
+    # custom function to convert a tensordict in a similar spec structure
     # of unbounded values.
     composite = Composite(
         {
