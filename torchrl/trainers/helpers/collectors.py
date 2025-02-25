@@ -400,7 +400,7 @@ class OnPolicyCollectorConfig:
     exploration_type: str = "random"
     # exploration mode of the data collector.
     async_collection: bool = False
-    # whether data collection should be done asynchrously. Asynchrounous data collection means
+    # whether data collection should be done asynchronously. Asynchronous data collection means
     # that the data collector will keep on running the environment with the previous weights
     # configuration while the optimization loop is being done. If the algorithm is trained
     # synchronously, data collection and optimization will occur iteratively, not concurrently.

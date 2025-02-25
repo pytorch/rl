@@ -495,7 +495,7 @@ class MeltingpotEnv(MeltingpotWrapper):
         group_map (Dict[str, List[str]]): how to group agents in tensordicts for
             input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
         agent_names (list of str): names of the agent in the environment
-        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the enviornment
+        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment
         available_envs (List[str]): the list of the scenarios available to build.
 
     .. warning::

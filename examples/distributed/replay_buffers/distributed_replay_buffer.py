@@ -3,7 +3,7 @@ Example use of a distributed replay buffer
 ===========================
 
 This example illustrates how a skeleton reinforcement learning algorithm can be implemented in a distributed fashion with communication between nodes/workers handled using `torch.rpc`.
-It focusses on how to set up a replay buffer worker that accepts remote operation requests efficiently, and so omits any learning component such as parameter updates that may be required for a complete distributed reinforcement learning algorithm implementation.
+It focuses on how to set up a replay buffer worker that accepts remote operation requests efficiently, and so omits any learning component such as parameter updates that may be required for a complete distributed reinforcement learning algorithm implementation.
 In this model, >= 1 data collectors workers are responsible for collecting experiences in an environment, the replay buffer worker receives all of these experiences and exposes them to a trainer that is responsible for making parameter updates to any required models.
 """
 
@@ -150,7 +150,7 @@ class DummyTrainerNode:
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
     """Experience replay buffer node that is capable of accepting remote connections. Being a `RemoteTensorDictReplayBuffer`
-    means all of its public methods are remotely invokable using `torch.rpc`.
+    means all of its public methods are remotely invocable using `torch.rpc`.
     Using a LazyMemmapStorage is highly advised in distributed settings with shared storage due to the lower serialization
     cost of MemoryMappedTensors as well as the ability to specify file storage locations which can improve ability to recover from node failures.
 

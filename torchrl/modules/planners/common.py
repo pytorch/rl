@@ -31,7 +31,7 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
         # Check if env is stateless
         if env.batch_locked:
             raise ValueError(
-                "Environment is batch_locked. MPCPlanners need an environnement that accepts batched inputs with any batch size"
+                "Environment is batch_locked. MPCPlanners need an environment that accepts batched inputs with any batch size"
             )
         out_keys = [action_key]
         in_keys = list(env.observation_spec.keys(True, True))

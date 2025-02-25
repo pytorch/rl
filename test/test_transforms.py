@@ -526,7 +526,9 @@ class TestClipTransform(TransformBase):
                 low=torch.randn(2),
                 high=None,
             )
-        with pytest.raises(ValueError, match="`low` must be stricly lower than `high`"):
+        with pytest.raises(
+            ValueError, match="`low` must be strictly lower than `high`"
+        ):
             ClipTransform(
                 in_keys=["observation", "reward"],
                 in_keys_inv=["observation_orig"],

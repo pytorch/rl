@@ -592,7 +592,7 @@ class LSTMNet(nn.Module):
     TensorDict of size [batch x time_steps].
 
     If a 2D tensor is provided as input, it is assumed that it is a batch of data
-    with only one time step. This means that we explicitely assume that users will
+    with only one time step. This means that we explicitly assume that users will
     unsqueeze inputs of a single batch with multiple time steps.
 
     Args:

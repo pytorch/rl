@@ -902,7 +902,7 @@ class TensorStorage(Storage):
             storage = self._storage
         if not self.initialized:
             raise RuntimeError(
-                "Cannot get an item from an unitialized LazyMemmapStorage"
+                "Cannot get an item from an uninitialized LazyMemmapStorage"
             )
         if is_tc:
             return storage[index]
@@ -1442,7 +1442,7 @@ class StorageEnsemble(Storage):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
             try:

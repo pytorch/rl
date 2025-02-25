@@ -432,7 +432,7 @@ class DistributionalDQNLoss(LossModule):
                 Defaults to ``"done"``.
             terminated (NestedKey): The input tensordict key where the flag if a trajectory is done is expected.
                 Defaults to ``"terminated"``.
-            steps_to_next_obs (NestedKey): The input tensordict key where the steps_to_next_obs is exptected.
+            steps_to_next_obs (NestedKey): The input tensordict key where the steps_to_next_obs is expected.
                 Defaults to ``"steps_to_next_obs"``.
         """
 

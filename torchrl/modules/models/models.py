@@ -60,12 +60,12 @@ class MLP(nn.Sequential):
             class or constructor to be used.
             Defaults to :class:`~torch.nn.Tanh`.
         activation_kwargs (dict or list of dicts, optional): kwargs to be used
-            with the activation class. Aslo accepts a list of kwargs of length
+            with the activation class. Also accepts a list of kwargs of length
             ``depth + int(activate_last_layer)``.
         norm_class (Type or callable, optional): normalization class or
             constructor, if any.
         norm_kwargs (dict or list of dicts, optional): kwargs to be used with
-            the normalization layers. Aslo accepts a list of kwargs of length
+            the normalization layers. Also accepts a list of kwargs of length
             ``depth + int(activate_last_layer)``.
         dropout (:obj:`float`, optional): dropout probability. Defaults to ``None`` (no
             dropout);
@@ -77,7 +77,7 @@ class MLP(nn.Sequential):
         layer_class (Type[nn.Module] or callable, optional): class to be used
             for the linear layers;
         layer_kwargs (dict or list of dicts, optional): kwargs for the linear
-            layers. Aslo accepts a list of kwargs of length ``depth + 1``.
+            layers. Also accepts a list of kwargs of length ``depth + 1``.
         activate_last_layer (bool): whether the MLP output should be activated. This is useful when the MLP output
             is used as the input for another module.
             default: False.
@@ -270,7 +270,7 @@ class MLP(nn.Sequential):
                 except KeyError:
                     raise KeyError(
                         f"The lazy version of {self.layer_class.__name__} is not implemented yet. "
-                        "Consider providing the input feature dimensions explicitely when creating an MLP module"
+                        "Consider providing the input feature dimensions explicitly when creating an MLP module"
                     )
                 layers.append(
                     create_on_device(
@@ -1700,7 +1700,7 @@ def _iter_maybe_over_single(item: dict | List[dict] | None, n):
 
 
 class _ExecutableLayer(nn.Module):
-    """A thin wrapper around a function to be exectued as a module."""
+    """A thin wrapper around a function to be executed as a module."""
 
     def __init__(self, func):
         super(_ExecutableLayer, self).__init__()

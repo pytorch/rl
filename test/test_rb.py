@@ -2871,7 +2871,7 @@ class TestSamplers:
             assert (samples["traj"] != 0).all(), samples["traj"].unique()
         else:
             assert (samples["traj"] == 0).any()
-            # Check that all samples of the first traj contain all elements (since it's too short to fullfill 10 elts)
+            # Check that all samples of the first traj contain all elements (since it's too short to fulfill 10 elts)
             sc = samples[samples["traj"] == 0]["step_count"]
             assert (sc == 1).sum() == (sc == 2).sum()
             assert (sc == 1).sum() == (sc == 4).sum()
@@ -3393,7 +3393,7 @@ class TestEnsemble:
         error_catcher = (
             pytest.raises(
                 ValueError,
-                match="Samplers with drop_last=True must work with a predictible batch-size",
+                match="Samplers with drop_last=True must work with a predictable batch-size",
             )
             if batch_size is None
             and issubclass(sampler_type, SamplerWithoutReplacement)

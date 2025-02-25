@@ -375,7 +375,7 @@ class implement_for:
         elif fn_str[0].startswith("<function "):
             first = fn_str[0][len("<function ") :]
         else:
-            raise RuntimeError(f"Unkown func representation {fn}")
+            raise RuntimeError(f"Unknown func representation {fn}")
         last = fn_str[1:]
         if last:
             first = [first]

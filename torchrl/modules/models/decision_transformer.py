@@ -18,7 +18,7 @@ _has_transformers = importlib.util.find_spec("transformers") is not None
 
 
 class DecisionTransformer(nn.Module):
-    """Online Decion Transformer.
+    """Online Decision Transformer.
 
     Desdescribed in https://arxiv.org/abs/2202.05607 .
 

@@ -99,7 +99,7 @@ class MLFlowLogger(Logger):
 
         if not _has_tv:
             raise ImportError(
-                "Loggin a video with MLFlow requires torchvision to be installed."
+                "Logging a video with MLFlow requires torchvision to be installed."
             )
         mlflow.set_experiment(experiment_id=self.id)
         if video.ndim == 5:

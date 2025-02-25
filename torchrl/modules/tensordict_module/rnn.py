@@ -342,7 +342,7 @@ class LSTMModule(ModuleBase):
       *but* the final hidden values should not be trusted in those cases (ie. they
       should not be re-used for a consecutive trajectory).
       The reason is that LSTM returns only the last hidden value, which for the
-      padded inputs we provide can correspont to a 0-filled input.
+      padded inputs we provide can correspond to a 0-filled input.
 
     Args:
         input_size: The number of expected features in the input `x`

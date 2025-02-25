@@ -378,7 +378,7 @@ class REDQLoss(LossModule):
                 if action_spec is None:
                     raise RuntimeError(
                         "Cannot infer the dimensionality of the action. Consider providing "
-                        "the target entropy explicitely or provide the spec of the "
+                        "the target entropy explicitly or provide the spec of the "
                         "action tensor in the actor network."
                     )
                 if not isinstance(action_spec, Composite):

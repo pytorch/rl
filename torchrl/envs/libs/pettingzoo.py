@@ -163,7 +163,7 @@ class PettingZooWrapper(_EnvWrapper):
         use_mask (bool, optional): whether the environment should output a ``"mask"``. This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
-        categorical_actions (bool, optional): if the enviornments actions are discrete, whether to transform
+        categorical_actions (bool, optional): if the environments actions are discrete, whether to transform
             them to categorical or one-hot.
         seed (int, optional): the seed. Defaults to ``None``.
         done_on_any (bool, optional): whether the environment's done keys are set by aggregating the agent keys
@@ -926,7 +926,7 @@ class PettingZooEnv(PettingZooWrapper):
         use_mask (bool, optional): whether the environment should output an ``"mask"``. This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
-        categorical_actions (bool, optional): if the enviornments actions are discrete, whether to transform
+        categorical_actions (bool, optional): if the environments actions are discrete, whether to transform
             them to categorical or one-hot.
         seed (int, optional): the seed.  Defaults to ``None``.
         done_on_any (bool, optional): whether the environment's done keys are set by aggregating the agent keys

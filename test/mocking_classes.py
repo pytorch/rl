@@ -882,15 +882,15 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
 
 
 class DummyModelBasedEnvBase(ModelBasedEnvBase):
-    """Dummy environnement for Model Based RL sota-implementations.
+    """Dummy environment for Model Based RL sota-implementations.
 
-    This class is meant to be used to test the model based environnement.
+    This class is meant to be used to test the model based environment.
 
     Args:
-        world_model (WorldModel): the world model to use for the environnement.
-        device (str or torch.device, optional): the device to use for the environnement.
-        dtype (torch.dtype, optional): the dtype to use for the environnement.
-        batch_size (sequence of int, optional): the batch size to use for the environnement.
+        world_model (WorldModel): the world model to use for the environment.
+        device (str or torch.device, optional): the device to use for the environment.
+        dtype (torch.dtype, optional): the dtype to use for the environment.
+        batch_size (sequence of int, optional): the batch size to use for the environment.
     """
 
     def __init__(

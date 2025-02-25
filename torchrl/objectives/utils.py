@@ -449,7 +449,7 @@ def next_state_value(
 ) -> torch.Tensor:
     """Computes the next state value (without gradient) to compute a target value.
 
-    The target value is ususally used to compute a distance loss (e.g. MSE):
+    The target value is usually used to compute a distance loss (e.g. MSE):
         L = Sum[ (q_value - target_value)^2 ]
     The target value is computed as
         r + gamma ** n_steps_to_next * value_next_state

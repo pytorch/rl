@@ -220,7 +220,7 @@ def make_dreamer(
 
     Returns:
         nn.TensorDictModel: Dreamer World model.
-        nn.TensorDictModel: Dreamer Model based environnement.
+        nn.TensorDictModel: Dreamer Model based environment.
         nn.TensorDictModel: Dreamer Actor the world model space.
         nn.TensorDictModel: Dreamer Value model.
         nn.TensorDictModel: Dreamer Actor for the real world space.
@@ -572,7 +572,7 @@ class REDQModelConfig:
     ou_sigma: float = 0.2
     # Ornstein-Uhlenbeck sigma
     ou_theta: float = 0.15
-    # Aimed at superseeding --ou_exploration.
+    # Aimed at superseding --ou_exploration.
     distributional: bool = False
     # whether a distributional loss should be used (TODO: not implemented yet).
     atoms: int = 51
@@ -612,7 +612,7 @@ class ContinuousModelConfig:
     ou_sigma: float = 0.2
     # Ornstein-Uhlenbeck sigma
     ou_theta: float = 0.15
-    # Aimed at superseeding --ou_exploration.
+    # Aimed at superseding --ou_exploration.
     distributional: bool = False
     # whether a distributional loss should be used (TODO: not implemented yet).
     atoms: int = 51

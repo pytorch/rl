@@ -44,7 +44,7 @@ class QMixerLoss(LossModule):
     uses DQN updates on the global value.
     This loss is for multi-agent applications.
     Therefore, it expects the 'local_value', 'action_value' and 'action' keys
-    to have an agent dimension (this is visible in the dafault AcceptedKeys).
+    to have an agent dimension (this is visible in the default AcceptedKeys).
     This dimension will be mixed by the mixer which will compute a 'global_value' key, used for a DQN objective.
     The premade mixers of type :class:`torchrl.modules.models.multiagent.Mixer` will expect the multi-agent
     dimension to be the penultimate one.

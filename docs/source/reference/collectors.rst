@@ -155,7 +155,7 @@ will work:
     >>> collector = SyncDataCollector(env, policy, frames_per_batch=N, total_frames=-1)
     >>> for data in collector:
     ...     memory.extend(data)
-    >>> # MultiSyncDataCollector + regular env: behaves like a ParallelEnv iif cat_results="stack"
+    >>> # MultiSyncDataCollector + regular env: behaves like a ParallelEnv if cat_results="stack"
     >>> memory = ReplayBuffer(
     ...     storage=LazyTensorStorage(N, ndim=2),
     ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))

@@ -2127,11 +2127,11 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         if dtype is not None and high.dtype is not dtype:
             high = high.to(dtype)
         err_msg = (
-            "Bounded requires the shape to be explicitely (via "
-            "the shape argument) or implicitely defined (via either the "
+            "Bounded requires the shape to be explicitly (via "
+            "the shape argument) or implicitly defined (via either the "
             "minimum or the maximum or both). If the maximum and/or the "
             "minimum have a non-singleton shape, they must match the "
-            "provided shape if this one is set explicitely."
+            "provided shape if this one is set explicitly."
         )
         if shape is not None and not isinstance(shape, torch.Size):
             if isinstance(shape, int):
@@ -3402,7 +3402,7 @@ class Categorical(TensorSpec):
     """A discrete tensor spec.
 
     An alternative to :class:`OneHot` for categorical variables in TorchRL.
-    Categorical variables perform indexing insted of masking, which can speed-up
+    Categorical variables perform indexing instead of masking, which can speed-up
     computation and reduce memory cost for large categorical variables.
 
     The spec will have the shape defined by the ``shape`` argument: if a singleton dimension is
@@ -3989,7 +3989,7 @@ class Binary(Categorical):
             If not provided, ``shape`` must be passed.
 
             .. warning:: the ``n`` argument from ``Binary`` must not be confused with the ``n`` argument from :class:`Categorical`
-                or :class:`OneHot` which denotes the maximum nmber of elements that can be sampled.
+                or :class:`OneHot` which denotes the maximum number of elements that can be sampled.
                 For clarity, use ``shape`` instead.
 
         shape (torch.Size, optional): total shape of the sampled tensors.

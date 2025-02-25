@@ -1222,7 +1222,7 @@ class KLPENPPOLoss(PPOLoss):
                     raise RuntimeError(
                         "Actors with one and only one distribution are currently supported "
                         f"in {type(self).__name__}. If you need to use more than one "
-                        f"distribtuion over the action space please submit an issue "
+                        f"distributions over the action space please submit an issue "
                         f"on github."
                     )
                 actor_dist_module = module

@@ -862,7 +862,7 @@ class TestCollectorGeneric:
         "collector_cls", ["MultiSyncDataCollector", "MultiaSyncDataCollector"]
     )
     def test_env_that_waits(self, to, collector_cls):
-        # Tests that the collector fails if the MAX_IDLE_COUNT<waiting time, but succeeeds otherwise
+        # Tests that the collector fails if the MAX_IDLE_COUNT<waiting time, but succeeds otherwise
         # We run this in a subprocess to control the env variable.
         script = f"""import os
 

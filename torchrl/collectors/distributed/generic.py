@@ -463,7 +463,7 @@ class DistributedDataCollector(DataCollectorBase):
         self.max_weight_update_interval = max_weight_update_interval
         if self.update_after_each_batch and self.max_weight_update_interval > -1:
             raise RuntimeError(
-                "Got conflicting udpate instructions: `update_after_each_batch` "
+                "Got conflicting update instructions: `update_after_each_batch` "
                 "`max_weight_update_interval` are incompatible."
             )
         self.launcher = launcher

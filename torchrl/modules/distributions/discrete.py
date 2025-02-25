@@ -157,7 +157,7 @@ class OneHotCategorical(D.Categorical):
             return out
         else:
             raise ValueError(
-                f"Unknown reparametrization strategy {self.reparam_strategy}."
+                f"Unknown reparameterization strategy {self.reparam_strategy}."
             )
 
 
@@ -503,7 +503,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
             return out
         else:
             raise ValueError(
-                f"Unknown reparametrization strategy {self.reparam_strategy}."
+                f"Unknown reparameterization strategy {self.reparam_strategy}."
             )
 
 

@@ -445,7 +445,7 @@ def _spec_to_dict(spec):
 
 def _patch_info(info_td):
     # Some info dicts have tensors with one less element than others
-    # We explicitely assume that the missing item is in the first position because
+    # We explicitly assume that the missing item is in the first position because
     # it wasn't given at reset time.
     # An alternative explanation could be that the last element is missing because
     # deemed useless for training...

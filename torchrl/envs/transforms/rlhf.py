@@ -70,7 +70,7 @@ class KLRewardTransform(Transform):
         >>> # check that rewards have been modified
         >>> assert (td.get(("next", "reward")) != td.get(("next", "reward_kl"))).all()
 
-    .. note:: Because the KL formulat is not always available and the parameters of the
+    .. note:: Because the KL formula is not always available and the parameters of the
       original distribution may not have been recorded, we use a stochastic estimate
       of the KL divergence.
 

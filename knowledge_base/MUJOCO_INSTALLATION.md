@@ -189,7 +189,7 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
     /path/to/conda/envs/mj_envs/lib/python3.8/site-packages/glfw/__init__.py:912: GLFWError: (65537) b'The GLFW library is not initialized'
     ```
 
-    _Solution_: This can usually be sovled by setting EGL as your mujoco_gl backend: `MUJOCO_GL=egl python myscript.py`
+    _Solution_: This can usually be solved by setting EGL as your mujoco_gl backend: `MUJOCO_GL=egl python myscript.py`
 
 
 
@@ -208,7 +208,7 @@ RuntimeError: Failed to initialize OpenGL
 > Mujoco's EGL code indexes devices globally while CUDA_VISIBLE_DEVICES 
   (when used with job schedulers like slurm) returns the local device ids. 
   This can be worked around by setting the `GPUS` environment variable to the 
-  global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` enviroment variable.
+  global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` environment variable.
 
 8. Rendered images are completely black.
 

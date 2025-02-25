@@ -122,7 +122,7 @@ class VmasWrapper(_EnvWrapper):
         env (``vmas.simulator.environment.environment.Environment``): the vmas environment to wrap.
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.
+        num_envs (int): Number of vectorized simulation environments. VMAS performs vectorized simulations using PyTorch.
             This argument indicates the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to the default device. All the tensors created by VMAS
@@ -152,7 +152,7 @@ class VmasWrapper(_EnvWrapper):
         unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
-        het_specs (bool): whether the enviornment has any lazy spec
+        het_specs (bool): whether the environment has any lazy spec
         het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
         available_envs (List[str]): the list of the scenarios available to build.
 
@@ -674,14 +674,14 @@ class VmasEnv(VmasWrapper):
 
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.
+        num_envs (int): Number of vectorized simulation environments. VMAS performs vectorized simulations using PyTorch.
             This argument indicates the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to the defaultt device. All the tensors created by VMAS
             will be placed on this device.
         continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
             will be discrete. The number of actions and their size will depend on the chosen scenario.
-            See the VMAS repositiory for more info.
+            See the VMAS repository for more info.
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
             be terminating or not. If ``max_steps`` is specified,
             the scenario is also terminated (and the ``"terminated"`` flag is set) whenever this horizon is reached.
@@ -705,11 +705,11 @@ class VmasEnv(VmasWrapper):
         group_map (Dict[str, List[str]]): how to group agents in tensordicts for
             input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
         agent_names (list of str): names of the agent in the environment
-        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the enviornment
+        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment
         unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
-        het_specs (bool): whether the enviornment has any lazy spec
+        het_specs (bool): whether the environment has any lazy spec
         het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
         available_envs (List[str]): the list of the scenarios available to build.
 
