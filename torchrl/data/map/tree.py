@@ -604,7 +604,7 @@ class Tree(TensorClass["nocast"]):
             f"Unknown plotting backend {backend} with figure {figure}."
         )
 
-    def to_string(self, node_format_fn):
+    def to_string(self, node_format_fn=lambda tree: tree.node_data.to_dict()):
         """Generates a string representation of the tree.
 
         This function can pull out information from each of the nodes in a tree,
@@ -615,10 +615,47 @@ class Tree(TensorClass["nocast"]):
         get to the corresponding node.
 
         Args:
-            node_format_fn (Callable): User-defined function to generate a
-                string for each node of the tree. The signature must be
-                ``(Tree) -> Any``, and the output must be convertible to
-                a string.
+            node_format_fn (Callable, optional): User-defined function to
+                generate a string for each node of the tree. The signature must
+                be ``(Tree) -> Any``, and the output must be convertible to a
+                string. If this argument is not given, the generated string is
+                the node's :attr:`Tree.node_data` attribute converted to a dict.
+
+        Examples:
+            >>> from torchrl.data import MCTSForest
+            >>> from tensordict import TensorDict
+            >>> forest = MCTSForest()
+            >>> td_root = TensorDict({"observation": 0,})
+            >>> rollouts_data = [
+            ...     # [(action, obs), ...]
+            ...     [(3, 123), (1, 456)],
+            ...     [(2, 359), (2, 3094)],
+            ...     [(3, 123), (9, 392), (6, 989), (20, 809), (21, 847)],
+            ...     [(1, 75)],
+            ...     [(3, 123), (0, 948)],
+            ...     [(2, 359), (2, 3094), (10, 68)],
+            ...     [(2, 359), (2, 3094), (11, 9045)],
+            ... ]
+            >>> for rollout_data in rollouts_data:
+            ...     td = td_root.clone().unsqueeze(0)
+            ...     for action, obs in rollout_data:
+            ...         td = td.update(TensorDict({
+            ...             "action": [action],
+            ...             "next": TensorDict({"observation": [obs]}, [1]),
+            ...         }, [1]))
+            ...         forest.extend(td)
+            ...         td = td["next"].clone()
+            ...
+            >>> tree = forest.get_tree(td_root)
+            >>> print(tree.to_string())
+            (0,) {'observation': tensor(123)}
+            (0, 0) {'observation': tensor(456)}
+            (0, 1) {'observation': tensor(847)}
+            (0, 2) {'observation': tensor(948)}
+            (1,) {'observation': tensor(3094)}
+            (1, 0) {'observation': tensor(68)}
+            (1, 1) {'observation': tensor(9045)}
+            (2,) {'observation': tensor(75)}
         """
         queue = [
             # tree, path
@@ -1029,6 +1066,106 @@ class MCTSForest:
         Returns:
             Tree: The node that was added to the forest. This is only
                 returned if ``return_node`` is True.
+
+        Examples:
+            >>> from torchrl.data import MCTSForest
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> forest = MCTSForest()
+            >>> r0 = TensorDict({
+            ...     'action': torch.tensor([1, 2, 3, 4, 5]),
+            ...     'next': {'observation': torch.tensor([123, 392, 989, 809, 847])},
+            ...     'observation': torch.tensor([  0, 123, 392, 989, 809])
+            ... }, [5])
+            >>> r1 = TensorDict({
+            ...     'action': torch.tensor([1, 2, 6, 7]),
+            ...     'next': {'observation': torch.tensor([123, 392, 235,  38])},
+            ...     'observation': torch.tensor([  0, 123, 392, 235])
+            ... }, [4])
+            >>> td_root = r0[0].exclude("next")
+            >>> forest.extend(r0)
+            >>> forest.extend(r1)
+            >>> tree = forest.get_tree(td_root)
+            >>> print(tree)
+            Tree(
+                count=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                index=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False),
+                node_data=TensorDict(
+                    fields={
+                        observation: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                node_id=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
+                rollout=TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False),
+                        next: TensorDict(
+                            fields={
+                                observation: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([2]),
+                            device=cpu,
+                            is_shared=False),
+                        observation: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                subtree=Tree(
+                    _parent=NonTensorStack(
+                        [<weakref at 0x716eeb78fbf0; to 'TensorDict' at 0x...,
+                        batch_size=torch.Size([2]),
+                        device=None),
+                    count=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int32, is_shared=False),
+                    hash=NonTensorStack(
+                        [4341220243998689835, 6745467818783115365],
+                        batch_size=torch.Size([2]),
+                        device=None),
+                    node_data=LazyStackedTensorDict(
+                        fields={
+                            observation: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        exclusive_fields={
+                        },
+                        batch_size=torch.Size([2]),
+                        device=cpu,
+                        is_shared=False,
+                        stack_dim=0),
+                    node_id=NonTensorStack(
+                        [1, 2],
+                        batch_size=torch.Size([2]),
+                        device=None),
+                    rollout=LazyStackedTensorDict(
+                        fields={
+                            action: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.int64, is_shared=False),
+                            next: LazyStackedTensorDict(
+                                fields={
+                                    observation: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.int64, is_shared=False)},
+                                exclusive_fields={
+                                },
+                                batch_size=torch.Size([2, -1]),
+                                device=cpu,
+                                is_shared=False,
+                                stack_dim=0),
+                            observation: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        exclusive_fields={
+                        },
+                        batch_size=torch.Size([2, -1]),
+                        device=cpu,
+                        is_shared=False,
+                        stack_dim=0),
+                    wins=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
+                    index=None,
+                    subtree=None,
+                    specs=None,
+                    batch_size=torch.Size([2]),
+                    device=None,
+                    is_shared=False),
+                wins=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                hash=None,
+                _parent=None,
+                specs=None,
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
         """
         source, dest = (
             rollout.exclude("next").copy(),
@@ -1232,7 +1369,7 @@ class MCTSForest:
             return False
         return root.select(*self.node_map.in_keys) in self.node_map
 
-    def to_string(self, td_root, node_format_fn):
+    def to_string(self, td_root, node_format_fn=lambda tree: tree.node_data.to_dict()):
         """Generates a string representation of a tree in the forest.
 
         This function can pull out information from each of the nodes in a tree,
@@ -1245,10 +1382,46 @@ class MCTSForest:
         Args:
             td_root (TensorDict): Root of the tree.
 
-            node_format_fn (Callable): User-defined function to generate a
-                string for each node of the tree. The signature must be
-                ``(Tree) -> Any``, and the output must be convertible to
-                a string.
+            node_format_fn (Callable, optional): User-defined function to
+                generate a string for each node of the tree. The signature must
+                be ``(Tree) -> Any``, and the output must be convertible to a
+                string. If this argument is not given, the generated string is
+                the node's :attr:`Tree.node_data` attribute converted to a dict.
+
+        Examples:
+            >>> from torchrl.data import MCTSForest
+            >>> from tensordict import TensorDict
+            >>> forest = MCTSForest()
+            >>> td_root = TensorDict({"observation": 0,})
+            >>> rollouts_data = [
+            ...     # [(action, obs), ...]
+            ...     [(3, 123), (1, 456)],
+            ...     [(2, 359), (2, 3094)],
+            ...     [(3, 123), (9, 392), (6, 989), (20, 809), (21, 847)],
+            ...     [(1, 75)],
+            ...     [(3, 123), (0, 948)],
+            ...     [(2, 359), (2, 3094), (10, 68)],
+            ...     [(2, 359), (2, 3094), (11, 9045)],
+            ... ]
+            >>> for rollout_data in rollouts_data:
+            ...     td = td_root.clone().unsqueeze(0)
+            ...     for action, obs in rollout_data:
+            ...         td = td.update(TensorDict({
+            ...             "action": [action],
+            ...             "next": TensorDict({"observation": [obs]}, [1]),
+            ...         }, [1]))
+            ...         forest.extend(td)
+            ...         td = td["next"].clone()
+            ...
+            >>> print(forest.to_string(td_root))
+            (0,) {'observation': tensor(123)}
+            (0, 0) {'observation': tensor(456)}
+            (0, 1) {'observation': tensor(847)}
+            (0, 2) {'observation': tensor(948)}
+            (1,) {'observation': tensor(3094)}
+            (1, 0) {'observation': tensor(68)}
+            (1, 1) {'observation': tensor(9045)}
+            (2,) {'observation': tensor(75)}
         """
         tree = self.get_tree(td_root)
         return tree.to_string(node_format_fn)
