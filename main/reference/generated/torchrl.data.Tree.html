@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+0ae1405) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+a3a1ebe) &#x25BC</span></a>
     </div>
     
 
@@ -1032,6 +1032,64 @@ the value will be simply written at its destination.</p></li>
 <dt class="sig sig-object py" id="torchrl.data.Tree.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flatten</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrl.data.Tree.state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a state_dict dictionary that can be used to save and load data from a tensorclass.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.Tree.to_string">
+<span class="sig-name descname"><span class="pre">to_string</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node_format_fn=&lt;function</span> <span class="pre">Tree.&lt;lambda&gt;&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/map/tree.html#Tree.to_string"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.Tree.to_string" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates a string representation of the tree.</p>
+<p>This function can pull out information from each of the nodes in a tree,
+so it can be useful for debugging. The nodes are listed line-by-line.
+Each line contains the path to the node, followed by the string
+representation of that node generated with <a href="#id1"><span class="problematic" id="id2">:arg:`node_format_fn`</span></a>. Each
+line is indented according to number of steps in the path required to
+get to the corresponding node.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>node_format_fn</strong> (<em>Callable</em><em>, </em><em>optional</em>) – User-defined function to
+generate a string for each node of the tree. The signature must
+be <code class="docutils literal notranslate"><span class="pre">(Tree)</span> <span class="pre">-&gt;</span> <span class="pre">Any</span></code>, and the output must be convertible to a
+string. If this argument is not given, the generated string is
+the node’s <code class="xref py py-attr docutils literal notranslate"><span class="pre">Tree.node_data</span></code> attribute converted to a dict.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCTSForest</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">forest</span> <span class="o">=</span> <span class="n">MCTSForest</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_root</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rollouts_data</span> <span class="o">=</span> <span class="p">[</span>
+<span class="gp">... </span>    <span class="c1"># [(action, obs), ...]</span>
+<span class="gp">... </span>    <span class="p">[(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">123</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">456</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="p">[(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">359</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3094</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="p">[(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">123</span><span class="p">),</span> <span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">392</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">989</span><span class="p">),</span> <span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">809</span><span class="p">),</span> <span class="p">(</span><span class="mi">21</span><span class="p">,</span> <span class="mi">847</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="p">[(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">75</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="p">[(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">123</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">948</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="p">[(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">359</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3094</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">68</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="p">[(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">359</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3094</span><span class="p">),</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="mi">9045</span><span class="p">)],</span>
+<span class="gp">... </span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">rollout_data</span> <span class="ow">in</span> <span class="n">rollouts_data</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">td_root</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">for</span> <span class="n">action</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">rollout_data</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>            <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">action</span><span class="p">],</span>
+<span class="gp">... </span>            <span class="s2">&quot;next&quot;</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">obs</span><span class="p">]},</span> <span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+<span class="gp">... </span>        <span class="p">},</span> <span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<span class="gp">... </span>        <span class="n">forest</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tree</span> <span class="o">=</span> <span class="n">forest</span><span class="o">.</span><span class="n">get_tree</span><span class="p">(</span><span class="n">td_root</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+<span class="go">(0,) {&#39;observation&#39;: tensor(123)}</span>
+<span class="go">(0, 0) {&#39;observation&#39;: tensor(456)}</span>
+<span class="go">(0, 1) {&#39;observation&#39;: tensor(847)}</span>
+<span class="go">(0, 2) {&#39;observation&#39;: tensor(948)}</span>
+<span class="go">(1,) {&#39;observation&#39;: tensor(3094)}</span>
+<span class="go">(1, 0) {&#39;observation&#39;: tensor(68)}</span>
+<span class="go">(1, 1) {&#39;observation&#39;: tensor(9045)}</span>
+<span class="go">(2,) {&#39;observation&#39;: tensor(75)}</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
