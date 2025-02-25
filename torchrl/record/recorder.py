@@ -346,7 +346,7 @@ class TensorDictRecorder(Transform):
 class PixelRenderTransform(Transform):
     """A transform to call render on the parent environment and register the pixel observation in the tensordict.
 
-    This transform offers an alternative to the ``from_pixels`` syntatic sugar when instantiating an environment
+    This transform offers an alternative to the ``from_pixels`` syntactic sugar when instantiating an environment
     that offers rendering is expensive, or when ``from_pixels`` is not implemented.
     It can be used within a single environment or over batched environments alike.
 

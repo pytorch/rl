@@ -1269,7 +1269,7 @@ class TestParallel:
         td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
         env_parallel.reset(tensordict=td_reset)
 
-        # check that interruption occured because of max_steps or done
+        # check that interruption occurred because of max_steps or done
         td = env_parallel.rollout(policy=None, max_steps=T)
         assert td.shape == torch.Size([N, T]) or td.get(("next", "done")).sum(1).any()
         env_parallel.close()

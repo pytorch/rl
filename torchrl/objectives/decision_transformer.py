@@ -139,7 +139,7 @@ class OnlineDTLoss(LossModule):
             if actor_network.spec is None:
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
-                    "the target entropy explicitely or provide the spec of the "
+                    "the target entropy explicitly or provide the spec of the "
                     "action tensor in the actor network."
                 )
             if isinstance(self.tensor_keys.action_pred, tuple):

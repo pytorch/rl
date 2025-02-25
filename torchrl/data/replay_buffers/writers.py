@@ -705,7 +705,7 @@ class WriterEnsemble(Writer):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
             try:

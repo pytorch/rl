@@ -290,7 +290,7 @@ class ReplayBuffer:
             and self._sampler.drop_last
         ):
             raise ValueError(
-                "Samplers with drop_last=True must work with a predictible batch-size. "
+                "Samplers with drop_last=True must work with a predictable batch-size. "
                 "Please pass the batch-size to the ReplayBuffer constructor."
             )
         self._batch_size = batch_size
@@ -1254,7 +1254,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
         # TODO: to be usable directly, the indices should be flipped but the issue
         #  is that just doing this results in indices that are not sorted like the original data
-        #  so the actualy indices will have to be used on the _storage directly (not on the buffer)
+        #  so the actually indices will have to be used on the _storage directly (not on the buffer)
         self._set_index_in_td(tensordicts, index)
         # TODO: in principle this is a good idea but currently it doesn't work + it re-writes a priority that has just been written
         # self.update_tensordict_priority(tensordicts)
@@ -1341,7 +1341,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 except RuntimeError:
                     raise RuntimeError(
                         "Failed to set the metadata (e.g., indices or weights) in the sampled tensordict within TensorDictReplayBuffer.sample. "
-                        "This is probably caused by a shape mismatch (one of the transforms has proably modified "
+                        "This is probably caused by a shape mismatch (one of the transforms has probably modified "
                         "the shape of the output tensordict). "
                         "You can always recover these items from the `sample` method from a regular ReplayBuffer "
                         "instance with the 'return_info' flag set to True."
@@ -1662,17 +1662,17 @@ class ReplayBufferEnsemble(ReplayBuffer):
         p (list of float or Tensor, optional): a list of floating numbers
             indicating the relative weight of each replay buffer. Can also
             be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-            if the buffer is built explicitely.
+            if the buffer is built explicitly.
         sample_from_all (bool, optional): if ``True``, each dataset will be sampled
             from. This is not compatible with the ``p`` argument. Defaults to ``False``.
             Can also be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-            if the buffer is built explicitely.
+            if the buffer is built explicitly.
         num_buffer_sampled (int, optional): the number of buffers to sample.
             if ``sample_from_all=True``, this has no effect, as it defaults to the
             number of buffers. If ``sample_from_all=False``, buffers will be
             sampled according to the probabilities ``p``. Can also
             be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-            if the buffer is built explicitely.
+            if the buffer is built explicitly.
         generator (torch.Generator, optional): a generator to use for sampling.
             Using a dedicated generator for the replay buffer can allow a fine-grained control
             over seeding, for instance keeping the global seed different but the RB seed identical
@@ -1882,7 +1882,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if self._rbs is not None and (
             isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0)

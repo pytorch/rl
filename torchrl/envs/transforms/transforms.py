@@ -1458,7 +1458,7 @@ class ToTensorImage(ObservationTransform):
         in_keys (list of NestedKeys): keys to process.
         out_keys (list of NestedKeys): keys to write.
         shape_tolerant (bool, optional): if ``True``, the shape of the input
-            images will be check. If the last channel is not `3`, the permuation
+            images will be check. If the last channel is not `3`, the permutation
             will be ignored. Defaults to ``False``.
 
     Examples:
@@ -1615,7 +1615,7 @@ class ClipTransform(Transform):
         low, low_eps, low_min = check_val(low)
         high, high_eps, high_max = check_val(high)
         if low is not None and high is not None and low >= high:
-            raise ValueError("`low` must be stricly lower than `high`.")
+            raise ValueError("`low` must be strictly lower than `high`.")
         self.register_buffer("low", low)
         self.low_eps = low_eps
         self.low_min = -low_min
@@ -3041,7 +3041,7 @@ class CatFrames(ObservationTransform):
 
     The :class:`CatFrames` transform can also be used offline to reproduce the
     effect of the online frame concatenation at a different scale (or for the
-    purpose of limiting the memory consumption). The followin example
+    purpose of limiting the memory consumption). The following example
     gives the complete picture, together with the usage of a :class:`torchrl.data.ReplayBuffer`:
 
     Examples:
@@ -8497,7 +8497,7 @@ class BurnInTransform(Transform):
 
     This transform is useful to obtain up-to-date recurrent states when
     they are not available. It burns-in a number of steps along the time dimension
-    from sampled sequential data slices and returs the remaining data sequence with
+    from sampled sequential data slices and returns the remaining data sequence with
     the burnt-in data in its initial time step. This transform is intended to be used as a
     replay buffer transform, not as an environment transform.
 
@@ -9294,7 +9294,7 @@ class AutoResetTransform(Transform):
         replace (bool, optional): if ``False``, values are just placed as they are in the
             ``"next"`` entry even if they are not valid. Defaults to ``True``. A value of
             ``False`` overrides any subsequent filling keyword argument.
-            This argumet can also be passed with the constructor method by passing a
+            This argument can also be passed with the constructor method by passing a
             ``auto_reset_replace`` argument: ``env = FooEnv(..., auto_reset=True, auto_reset_replace=False)``.
         fill_float (:obj:`float` or str, optional): The filling value for floating point tensors
             that terminate an episode. A value of ``None`` means no replacement (values are just

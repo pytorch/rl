@@ -274,7 +274,7 @@ class TestTree:
         gen_id = IDGen()
         gen_hash = lambda: hash(torch.rand(1).item())
 
-        def dummy_node_stack(obervations):
+        def dummy_node_stack(observations):
             return TensorDict.lazy_stack(
                 [
                     Tree(
@@ -282,7 +282,7 @@ class TestTree:
                         hash=gen_hash(),
                         node_id=gen_id(),
                     )
-                    for obs in obervations
+                    for obs in observations
                 ]
             )
 

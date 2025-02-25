@@ -113,7 +113,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
                 If the distribution class is of type
                 :class:`~tensordict.nn.distributions.CompositeDistribution`, the ``out_keys``
                 can be inferred directly form the ``"distribution_map"`` or ``"name_map"``
-                keywork arguments provided through this class' ``distribution_kwargs``
+                keyword arguments provided through this class' ``distribution_kwargs``
                 keyword argument, making the ``out_keys`` optional in such cases.
 
         distribution_kwargs (dict, optional): keyword-only argument.

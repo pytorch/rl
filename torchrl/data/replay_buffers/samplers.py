@@ -801,7 +801,7 @@ class SliceSampler(Sampler):
             Using tuples allows a fine grained control over the span on the left (beginning
             of the stored trajectory) and on the right (end of the stored trajectory).
         use_gpu (bool or torch.device): if ``True`` (or is a device is passed), an accelerator
-            will be used to retrieve the indices of the trajectory starts. This can significanlty
+            will be used to retrieve the indices of the trajectory starts. This can significantly
             accelerate the sampling when the buffer content is large.
             Defaults to ``False``.
 
@@ -1621,7 +1621,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             Keyword arguments can also be passed to torch.compile with this arg.
             Defaults to ``False``.
         use_gpu (bool or torch.device): if ``True`` (or is a device is passed), an accelerator
-            will be used to retrieve the indices of the trajectory starts. This can significanlty
+            will be used to retrieve the indices of the trajectory starts. This can significantly
             accelerate the sampling when the buffer content is large.
             Defaults to ``False``.
 
@@ -2424,7 +2424,7 @@ class SamplerEnsemble(Sampler):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
             try:

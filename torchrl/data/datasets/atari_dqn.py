@@ -415,7 +415,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         if dataset_id not in self.available_datasets:
             raise ValueError(
                 "The dataseet_id is not part of the available datasets. The dataset should be named <game_name>/<run> "
-                "where <game_name> is one of the Atari 2600 games and the run is a number betweeen 1 and 5. "
+                "where <game_name> is one of the Atari 2600 games and the run is a number between 1 and 5. "
                 "The full list of accepted dataset_ids is available under AtariDQNExperienceReplay.available_datasets."
             )
         self.dataset_id = dataset_id
