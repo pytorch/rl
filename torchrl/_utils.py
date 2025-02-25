@@ -984,3 +984,86 @@ def compile_with_warmup(*args, warmup: int = 1, **kwargs):
             return compiled_model(*model_args, **model_kwargs)
 
         return count_and_compile
+
+
+# auto unwrap control
+_DEFAULT_AUTO_UNWRAP = True
+_AUTO_UNWRAP = os.environ.get("AUTO_UNWRAP_TRANSFORMED_ENV")
+
+
+class set_auto_unwrap_transformed_env(_DecoratorContextManager):
+    """A context manager or decorator to control whether TransformedEnv should automatically unwrap nested TransformedEnv instances.
+
+    Args:
+        mode (bool): Whether to automatically unwrap nested :class:`~torchrl.envs.TransformedEnv`
+            instances. If ``False``, :class:`~torchrl.envs.TransformedEnv` will not unwrap nested instances.
+            Defaults to ``True``.
+
+    .. note:: Until v0.9, this will raise a warning if :class:`~torchrl.envs.TransformedEnv` are nested
+        and the value is not set explicitly (`auto_unwrap=True` default behavior).
+        You can set the value of :func:`~torchrl.envs.auto_unwrap_transformed_env`
+        through:
+
+        - The ``AUTO_UNWRAP_TRANSFORMED_ENV`` environment variable;
+        - By setting ``torchrl.set_auto_unwrap_transformed_env(val: bool).set()`` at the
+          beginning of your script;
+        - By using ``torchrl.set_auto_unwrap_transformed_env(val: bool)`` as a context
+          manager or a decorator.
+
+    .. seealso:: :class:`~torchrl.envs.TransformedEnv`
+
+    Examples:
+        >>> with set_auto_unwrap_transformed_env(False):
+        ...     env = TransformedEnv(TransformedEnv(env))
+        ...     assert not isinstance(env.base_env, TransformedEnv)
+        >>> @set_auto_unwrap_transformed_env(False)
+        ... def my_function():
+        ...     env = TransformedEnv(TransformedEnv(env))
+        ...     assert not isinstance(env.base_env, TransformedEnv)
+        ...     return env
+
+    """
+
+    def __init__(self, mode: bool) -> None:
+        super().__init__()
+        self.mode = mode
+
+    def clone(self) -> set_auto_unwrap_transformed_env:
+        # override this method if your children class takes __init__ parameters
+        return type(self)(self.mode)
+
+    def __enter__(self) -> None:
+        self.set()
+
+    def set(self) -> None:
+        global _AUTO_UNWRAP
+        self._old_mode = _AUTO_UNWRAP
+        _AUTO_UNWRAP = bool(self.mode)
+        # we do this such that sub-processes see the same lazy op than the main one
+        os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        global _AUTO_UNWRAP
+        _AUTO_UNWRAP = self._old_mode
+        os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
+
+
+def auto_unwrap_transformed_env(allow_none=False):
+    """Get the current setting for automatically unwrapping TransformedEnv instances.
+
+    Args:
+        allow_none (bool, optional): If True, returns ``None`` if no setting has been
+            specified. Otherwise, returns the default setting. Defaults to ``False``.
+
+    seealso: :func:`~torchrl.set_auto_unwrap_transformed_env`
+
+    Returns:
+        bool or None: The current setting for automatically unwrapping TransformedEnv
+            instances.
+    """
+    global _AUTO_UNWRAP
+    if _AUTO_UNWRAP is None and allow_none:
+        return None
+    elif _AUTO_UNWRAP is None:
+        return _DEFAULT_AUTO_UNWRAP
+    return strtobool(_AUTO_UNWRAP) if isinstance(_AUTO_UNWRAP, str) else _AUTO_UNWRAP

@@ -3093,9 +3093,13 @@ class TestDynamicEnvs:
             assert isinstance(data, LazyStackedTensorDict)
             assert data.names[-1] == "time"
 
-    def test_dynamic_multisync_collector(self):
+    @pytest.mark.parametrize("policy_device", [None, *get_default_devices()])
+    def test_dynamic_multisync_collector(self, policy_device):
         env = EnvWithDynamicSpec
-        policy = RandomPolicy(env().action_spec)
+        spec = env().action_spec
+        if policy_device is not None:
+            spec = spec.to(policy_device)
+        policy = RandomPolicy(spec)
         collector = MultiSyncDataCollector(
             [env],
             policy,
@@ -3103,6 +3107,9 @@ class TestDynamicEnvs:
             total_frames=100,
             use_buffers=False,
             cat_results="stack",
+            policy_device=policy_device,
+            env_device="cpu",
+            storing_device="cpu",
         )
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
@@ -3213,9 +3220,11 @@ class TestCompile:
 @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
 class TestCollectorsNonTensor:
     class AddNontTensorData(Transform):
-        def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-            tensordict["nt"] = f"a string! - {tensordict.get('step_count').item()}"
-            return tensordict
+        def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+            next_tensordict[
+                "nt"
+            ] = f"a string! - {next_tensordict.get('step_count').item()}"
+            return next_tensordict
 
         def _reset(
             self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase

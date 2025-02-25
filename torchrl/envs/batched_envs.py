@@ -57,6 +57,11 @@ from torchrl.envs.utils import (
     clear_mpi_env_vars,
 )
 
+_CONSOLIDATE_ERR_CAPTURE = (
+    "TensorDict.consolidate failed. You can deactivate the tensordict consolidation via the "
+    "`consolidate` keyword argument of the ParallelEnv constructor."
+)
+
 
 def _check_start(fun):
     def decorated_fun(self: BatchedEnvBase, *args, **kwargs):
@@ -307,6 +312,7 @@ class BatchedEnvBase(EnvBase):
         non_blocking: bool = False,
         mp_start_method: str = None,
         use_buffers: bool = None,
+        consolidate: bool = True,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
@@ -315,6 +321,7 @@ class BatchedEnvBase(EnvBase):
         self.num_threads = num_threads
         self._cache_in_keys = None
         self._use_buffers = use_buffers
+        self.consolidate = consolidate
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -841,9 +848,12 @@ class BatchedEnvBase(EnvBase):
             f"\n\tbatch_size={self.batch_size})"
         )
 
-    def close(self) -> None:
+    def close(self, *, raise_if_closed: bool = True) -> None:
         if self.is_closed:
-            raise RuntimeError("trying to close a closed environment")
+            if raise_if_closed:
+                raise RuntimeError("trying to close a closed environment")
+            else:
+                return
         if self._verbose:
             torchrl_logger.info(f"closing {self.__class__.__name__}")
 
@@ -1470,6 +1480,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                             "_non_tensor_keys": self._non_tensor_keys,
                         }
                     )
+                else:
+                    kwargs[idx].update(
+                        {
+                            "consolidate": self.consolidate,
+                        }
+                    )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
                 process.daemon = True
                 process.start()
@@ -1526,7 +1542,16 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         else:
             workers_range = range(self.num_workers)
 
-        td = tensordict.consolidate(share_memory=True, inplace=True, num_threads=1)
+        if self.consolidate:
+            try:
+                td = tensordict.consolidate(
+                    share_memory=True, inplace=True, num_threads=1
+                )
+            except Exception as err:
+                raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+        else:
+            td = tensordict
+
         for i in workers_range:
             # We send the same td multiple times as it is in shared mem and we just need to index it
             # in each process.
@@ -1804,7 +1829,16 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         else:
             workers_range = range(self.num_workers)
 
-        data = tensordict.consolidate(share_memory=True, inplace=True, num_threads=1)
+        if self.consolidate:
+            try:
+                data = tensordict.consolidate(
+                    share_memory=True, inplace=True, num_threads=1
+                )
+            except Exception as err:
+                raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+        else:
+            data = tensordict
+
         for i, local_data in zip(workers_range, data.unbind(0)):
             self.parent_channels[i].send(("step", local_data))
         # for i in range(data.shape[0]):
@@ -2026,9 +2060,14 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         if is_tensor_collection(tensordict):
             # tensordict = tensordict.consolidate(share_memory=True, num_threads=1)
-            tensordict = tensordict.consolidate(
-                share_memory=True, num_threads=1
-            ).unbind(0)
+            if self.consolidate:
+                try:
+                    tensordict = tensordict.consolidate(
+                        share_memory=True, num_threads=1
+                    )
+                except Exception as err:
+                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+            tensordict = tensordict.unbind(0)
         else:
             tensordict = [None] * self.num_workers
         out_tds = [None] * self.num_workers
@@ -2545,6 +2584,7 @@ def _run_worker_pipe_direct(
     has_lazy_inputs: bool = False,
     verbose: bool = False,
     num_threads: int | None = None,  # for fork start method
+    consolidate: bool = True,
 ) -> None:
     if num_threads is not None:
         torch.set_num_threads(num_threads)
@@ -2634,9 +2674,18 @@ def _run_worker_pipe_direct(
                 event.record()
                 event.synchronize()
             mp_event.set()
-            child_pipe.send(
-                cur_td.consolidate(share_memory=True, inplace=True, num_threads=1)
-            )
+            if consolidate:
+                try:
+                    child_pipe.send(
+                        cur_td.consolidate(
+                            share_memory=True, inplace=True, num_threads=1
+                        )
+                    )
+                except Exception as err:
+                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+            else:
+                child_pipe.send(cur_td)
+
             del cur_td
 
         elif cmd == "step":
@@ -2650,9 +2699,18 @@ def _run_worker_pipe_direct(
                 event.record()
                 event.synchronize()
             mp_event.set()
-            child_pipe.send(
-                next_td.consolidate(share_memory=True, inplace=True, num_threads=1)
-            )
+            if consolidate:
+                try:
+                    child_pipe.send(
+                        next_td.consolidate(
+                            share_memory=True, inplace=True, num_threads=1
+                        )
+                    )
+                except Exception as err:
+                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+            else:
+                child_pipe.send(next_td)
+
             del next_td
 
         elif cmd == "step_and_maybe_reset":

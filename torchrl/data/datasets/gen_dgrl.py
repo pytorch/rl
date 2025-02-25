@@ -272,7 +272,7 @@ class GenDGRLExperienceReplay(BaseDatasetExperienceReplay):
                     npybuffer = tar.extractfile(member=member)
                     # npyfile = Path(download_folder) / member.name
                     npfile = np.load(npybuffer, allow_pickle=True)
-                    td = TensorDict.from_dict(npfile.tolist())
+                    td = TensorDict.from_dict(npfile.tolist(), auto_batch_size=True)
                     td.set("observations", td.get("observations").to(torch.uint8))
                     td.set(("next", "observation"), td.get("observations")[1:])
                     td.set("observations", td.get("observations")[:-1])
