@@ -837,7 +837,7 @@ class PettingZooWrapper(_EnvWrapper):
                     if agent not in agents_acting:
                         group_mask[index] = False
 
-    def close(self) -> None:
+    def close(self, *, raise_if_closed: bool = True) -> None:
         self._env.close()
 
 

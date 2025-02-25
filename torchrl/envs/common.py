@@ -1947,31 +1947,34 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         spec = spec.expand(self.batch_size + spec.shape)
         self.state_spec = spec
 
-    def _skip_tensordict(self, tensordict):
+    def _skip_tensordict(self, tensordict: TensorDictBase) -> TensorDictBase:
         # Creates a "skip" tensordict, ie a placeholder for when a step is skipped
         next_tensordict = self.full_done_spec.zero()
         next_tensordict.update(self.full_observation_spec.zero())
         next_tensordict.update(self.full_reward_spec.zero())
 
         # Copy the data from tensordict in `next`
-        def select_and_clone(x, y):
+        keys = set()
+
+        def select_and_clone(name, x, y):
+            keys.add(name)
             if y is not None:
                 if y.device == x.device:
                     return x.clone()
                 return x.to(y.device)
 
-        next_tensordict.update(
-            tensordict._fast_apply(
-                select_and_clone,
-                next_tensordict,
-                device=next_tensordict.device,
-                batch_size=next_tensordict.batch_size,
-                default=None,
-                filter_empty=True,
-                is_leaf=_is_leaf_nontensor,
-            )
+        result = tensordict._fast_apply(
+            select_and_clone,
+            next_tensordict,
+            device=next_tensordict.device,
+            default=None,
+            filter_empty=True,
+            is_leaf=_is_leaf_nontensor,
+            named=True,
+            nested_keys=True,
         )
-        return next_tensordict
+        result.update(next_tensordict.exclude(*keys).filter_empty_())
+        return result
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
@@ -3651,7 +3654,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if key.rfind("observation") >= 0:
                 yield key
 
-    def close(self):
+    def close(self, *, raise_if_closed: bool = True):
         self.is_closed = True
 
     def __del__(self):
@@ -3843,7 +3846,7 @@ class _EnvWrapper(EnvBase):
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         raise NotImplementedError
 
-    def close(self) -> None:
+    def close(self, *, raise_if_closed: bool = True) -> None:
         """Closes the contained environment if possible."""
         self.is_closed = True
         try:

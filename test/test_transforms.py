@@ -24,6 +24,7 @@ import pytest
 import tensordict.tensordict
 import torch
 from tensordict import (
+    LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
     TensorDict,
@@ -33,7 +34,7 @@ from tensordict import (
 from tensordict.nn import TensorDictSequential
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
-from torchrl._utils import _replace_last, prod
+from torchrl._utils import _replace_last, prod, set_auto_unwrap_transformed_env
 
 from torchrl.collectors import MultiSyncDataCollector
 from torchrl.data import (
@@ -102,6 +103,7 @@ from torchrl.envs import (
     TargetReturn,
     TensorDictPrimer,
     TimeMaxPool,
+    Timer,
     Tokenizer,
     ToTensorImage,
     TrajCounter,
@@ -9846,6 +9848,40 @@ def test_added_transforms_are_in_eval_mode():
 
 
 class TestTransformedEnv:
+    @pytest.mark.filterwarnings("error")
+    def test_nested_transformed_env(self):
+        base_env = ContinuousActionVecMockEnv()
+        t1 = RewardScaling(0, 1)
+        t2 = RewardScaling(0, 2)
+
+        def test_unwrap():
+            env = TransformedEnv(TransformedEnv(base_env, t1), t2)
+            assert env.base_env is base_env
+            assert isinstance(env.transform, Compose)
+            children = list(env.transform.transforms.children())
+            assert len(children) == 2
+            assert children[0].scale == 1
+            assert children[1].scale == 2
+
+        def test_wrap(auto_unwrap=None):
+            env = TransformedEnv(
+                TransformedEnv(base_env, t1), t2, auto_unwrap=auto_unwrap
+            )
+            assert env.base_env is not base_env
+            assert isinstance(env.base_env.transform, RewardScaling)
+            assert isinstance(env.transform, RewardScaling)
+
+        with pytest.warns(FutureWarning):
+            test_unwrap()
+
+        test_wrap(False)
+
+        with set_auto_unwrap_transformed_env(True):
+            test_unwrap()
+
+        with set_auto_unwrap_transformed_env(False):
+            test_wrap()
+
     def test_attr_error(self):
         class BuggyTransform(Transform):
             def transform_observation_spec(
@@ -9934,20 +9970,6 @@ class TestTransformedEnv:
             t1._allow_done_after_reset = False
         base_env._allow_done_after_reset = False
         assert not t1._allow_done_after_reset
-
-
-def test_nested_transformed_env():
-    base_env = ContinuousActionVecMockEnv()
-    t1 = RewardScaling(0, 1)
-    t2 = RewardScaling(0, 2)
-    env = TransformedEnv(TransformedEnv(base_env, t1), t2)
-
-    assert env.base_env is base_env
-    assert isinstance(env.transform, Compose)
-    children = list(env.transform.transforms.children())
-    assert len(children) == 2
-    assert children[0].scale == 1
-    assert children[1].scale == 2
 
 
 def test_transform_parent():
@@ -13784,7 +13806,7 @@ class TestMultiAction(TransformBase):
                 assert r1["before_count"].max() == 18
                 assert r1["after_count"].max() == 6
         finally:
-            env.close()
+            env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("bwad", [False, True])
     def test_serial_trans_env_check(self, bwad):
@@ -13857,6 +13879,98 @@ class TestMultiAction(TransformBase):
 
     def test_transform_inverse(self):
         return
+
+
+class TestTimer(TransformBase):
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), Timer())
+        check_env_specs(env)
+        env.close()
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(
+            2, lambda: TransformedEnv(ContinuousActionVecMockEnv(), Timer())
+        )
+        check_env_specs(env)
+        env.close()
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(
+            2, lambda: TransformedEnv(ContinuousActionVecMockEnv(), Timer())
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, lambda: ContinuousActionVecMockEnv()), Timer()
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
+            Timer(),
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_transform_no_env(self):
+        torch.manual_seed(0)
+        t = Timer()
+        with pytest.raises(NotImplementedError):
+            t(TensorDict())
+
+    def test_transform_compose(self):
+        torch.manual_seed(0)
+        t = Compose(Timer())
+        with pytest.raises(NotImplementedError):
+            t(TensorDict())
+
+    def test_transform_env(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), Timer())
+        rollout = env.rollout(3)
+        # The stack must be contiguous
+        assert not isinstance(rollout, LazyStackedTensorDict)
+        assert (rollout["time_policy"] >= 0).all()
+        assert (rollout["time_step"] >= 0).all()
+        env.append_transform(StepCounter(max_steps=5))
+        rollout = env.rollout(10, break_when_any_done=False)
+        assert (rollout["time_reset"] > 0).sum() == 2
+        assert (rollout["time_policy"] == 0).sum() == 2
+        assert (rollout["time_step"] == 0).sum() == 2
+        assert (rollout["next", "time_reset"] == 0).all()
+        assert (rollout["next", "time_policy"] > 0).all()
+        assert (rollout["next", "time_step"] > 0).all()
+
+    def test_transform_model(self):
+        torch.manual_seed(0)
+        t = nn.Sequential(Timer())
+        with pytest.raises(NotImplementedError):
+            t(TensorDict())
+
+    def test_transform_rb(self):
+        # NotImplemented tested elsewhere
+        return
+
+    def test_transform_inverse(self):
+        raise pytest.skip("Tested elsewhere")
 
 
 if __name__ == "__main__":
