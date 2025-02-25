@@ -229,6 +229,19 @@ class EnvMetaData:
             device_map=device_map,
         )
 
+    def __getitem__(self, item):
+        from tensordict.utils import _getitem_batch_size
+
+        return EnvMetaData(
+            tensordict=self.tensordict[item],
+            specs=self.specs[item],
+            batch_size=_getitem_batch_size(self.batch_size, item),
+            env_str=self.env_str,
+            device=self.device,
+            batch_locked=self.batch_locked,
+            device_map=self.device_map,
+        )
+
 
 class _EnvPostInit(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
@@ -1966,7 +1979,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         result = tensordict._fast_apply(
             select_and_clone,
             next_tensordict,
-            device=next_tensordict.device,
+            # device=next_tensordict.device,
             default=None,
             filter_empty=True,
             is_leaf=_is_leaf_nontensor,

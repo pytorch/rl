@@ -1027,10 +1027,13 @@ class SerialEnv(BatchedEnvBase):
                     tensordict_ = None
                 else:
                     env_device = _env.device
-                    if env_device != self.device and env_device is not None:
-                        tensordict_ = tensordict_.to(
-                            env_device, non_blocking=self.non_blocking
-                        )
+                    if env_device != self.device:
+                        if env_device is not None:
+                            tensordict_ = tensordict_.to(
+                                env_device, non_blocking=self.non_blocking
+                            )
+                        else:
+                            tensordict_ = tensordict_.clear_device_()
                     else:
                         tensordict_ = tensordict_.clone(False)
             else:
@@ -1111,7 +1114,7 @@ class SerialEnv(BatchedEnvBase):
             tensordict_in = tensordict
         else:
             workers_range = range(self.num_workers)
-            tensordict_in = tensordict.clone(False)
+            tensordict_in = tensordict.copy()
             # if self._use_buffers:
             #     shared_tensordict_parent = self.shared_tensordict_parent
 
@@ -1120,8 +1123,11 @@ class SerialEnv(BatchedEnvBase):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             env_device = self._envs[i].device
-            if env_device != self.device and env_device is not None:
-                data_in.append(td_.to(env_device, non_blocking=self.non_blocking))
+            if env_device != self.device:
+                if env_device is not None:
+                    data_in.append(td_.to(env_device, non_blocking=self.non_blocking))
+                else:
+                    data_in.append(td_.clear_device_())
             else:
                 data_in.append(td_)
 
@@ -1840,15 +1846,28 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             data = tensordict
 
         for i, local_data in zip(workers_range, data.unbind(0)):
+            env_device = (
+                self.meta_data[i].device
+                if isinstance(self.meta_data, list)
+                else self.meta_data.device
+            )
+            if data.device != env_device:
+                if env_device is None:
+                    local_data.clear_device_()
+                else:
+                    local_data = local_data.to(env_device)
             self.parent_channels[i].send(("step", local_data))
         # for i in range(data.shape[0]):
         #     self.parent_channels[i].send(("step", (data, i)))
+
+        self._wait_for_workers(workers_range)
+
         out_tds = []
         for i in workers_range:
             channel = self.parent_channels[i]
-            self._events[i].wait()
             td = channel.recv()
             out_tds.append(td)
+
         out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
         if self.device is not None and out.device != self.device:
             out = out.to(self.device, non_blocking=self.non_blocking)
@@ -1970,6 +1989,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             next_td_passthrough = None
             data = [{} for _ in range(self.num_workers)]
 
+        assert self._non_tensor_keys
         if self._non_tensor_keys:
             for i, td in zip(
                 workers_range,
@@ -1992,6 +2012,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             for i in workers_range:
                 msg, non_tensor_td = self.parent_channels[i].recv()
                 non_tensor_tds.append(non_tensor_td)
+                print("non_tensor_td", non_tensor_td)
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -2071,6 +2092,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         else:
             tensordict = [None] * self.num_workers
         out_tds = [None] * self.num_workers
+        needs_resetting_int = []
         for i, (local_data, reset_kwargs) in enumerate(
             zip(tensordict, reset_kwargs_list)
         ):
@@ -2080,12 +2102,14 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     localtd = localtd.exclude(*self.reset_keys)
                 out_tds[i] = localtd
                 continue
+            needs_resetting_int.append(i)
             self.parent_channels[i].send(("reset", (local_data, reset_kwargs)))
+
+        self._wait_for_workers(needs_resetting_int)
 
         for i, channel in enumerate(self.parent_channels):
             if not needs_resetting[i]:
                 continue
-            self._events[i].wait()
             td = channel.recv()
             out_tds[i] = td
         result = LazyStackedTensorDict.maybe_dense_stack(out_tds)
@@ -2694,6 +2718,9 @@ def _run_worker_pipe_direct(
             i += 1
             # data, idx = data
             # data = data[idx]
+            print("device received", data["history"].device)
+            print('data["history"]', data["history"])
+            print('data["history"][0]', data["history"][0])
             next_td = env._step(data)
             if event is not None:
                 event.record()
@@ -2701,15 +2728,13 @@ def _run_worker_pipe_direct(
             mp_event.set()
             if consolidate:
                 try:
-                    child_pipe.send(
-                        next_td.consolidate(
-                            share_memory=True, inplace=True, num_threads=1
-                        )
+                    next_td = next_td.consolidate(
+                        share_memory=True, inplace=True, num_threads=1
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            else:
-                child_pipe.send(next_td)
+            print(f"next_td in worker {pid} and consolidate {consolidate}", next_td)
+            child_pipe.send(next_td)
 
             del next_td
 

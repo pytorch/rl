@@ -2525,7 +2525,7 @@ class NonTensor(TensorSpec):
         if isinstance(shape, int):
             shape = _size([shape])
 
-        _, device = _default_dtype_and_device(None, device)
+        # _, device = _default_dtype_and_device(None, device)
         domain = None
         super().__init__(
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs

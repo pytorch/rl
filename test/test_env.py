@@ -15,6 +15,7 @@ import re
 from collections import defaultdict
 from functools import partial
 from sys import platform
+from tokenize import maybe
 from typing import Optional
 
 import numpy as np
@@ -42,6 +43,7 @@ from torchrl.envs import (
     CatFrames,
     CatTensors,
     ChessEnv,
+    ConditionalSkip,
     DoubleToFloat,
     EnvBase,
     EnvCreator,
@@ -72,6 +74,7 @@ from torchrl.envs.utils import (
     check_marl_grouping,
     make_composite_from_td,
     MarlGroupMapType,
+    RandomPolicy,
     step_mdp,
 )
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
@@ -134,6 +137,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
+        HistoryTransform,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
@@ -174,6 +178,7 @@ else:
         EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
+        HistoryTransform,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
@@ -4396,6 +4401,98 @@ class TestPartialSteps:
             assert (td[1].get("next") != 0).any()
             assert_allclose_td(td[2].get("next"), td[2], intersection=True)
             assert (td[3].get("next") != 0).any()
+
+
+class TestEnvWithHistory:
+    @pytest.fixture(autouse=True, scope="class")
+    def set_capture(self):
+        with set_capture_non_tensor_stack(False):
+            yield
+        return
+
+    def _make_env(self, device):
+        return CountingEnv(device=device).append_transform(HistoryTransform())
+
+    def _make_skipping_env(self, device):
+        env = self._make_env(device=device)
+        env = env.append_transform(StepCounter())
+        # skip every 3 steps
+        env = env.append_transform(
+            ConditionalSkip(lambda td: td["step_count"] % 3 == 0)
+        )
+        return env
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_env_history_base(self, device):
+        env = self._make_env(device)
+        env.check_env_specs()
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_skipping_history_env(self, device):
+        env = self._make_skipping_env(device)
+        env.check_env_specs()
+        r = env.rollout(100)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("batch_cls", [SerialEnv, "parallel"])
+    @pytest.mark.parametrize("consolidate", [False, True])
+    def test_env_history_base_batched(
+        self, device, device_env, batch_cls, maybe_fork_ParallelEnv, consolidate
+    ):
+        if batch_cls == "parallel":
+            batch_cls = maybe_fork_ParallelEnv
+        env = batch_cls(
+            2,
+            lambda: self._make_env(device_env),
+            device=device,
+            consolidate=consolidate,
+        )
+        try:
+            assert not env._use_buffers
+            env.check_env_specs(break_when_any_done="both")
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("batch_cls", [SerialEnv, "parallel"])
+    @pytest.mark.parametrize("consolidate", [False, True])
+    def test_skipping_history_env_batched(
+        self, device, device_env, batch_cls, maybe_fork_ParallelEnv, consolidate
+    ):
+        if batch_cls == "parallel":
+            batch_cls = maybe_fork_ParallelEnv
+        env = batch_cls(
+            2,
+            lambda: self._make_skipping_env(device_env),
+            device=device,
+            consolidate=consolidate,
+        )
+        try:
+            env.check_env_specs()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    def test_env_history_base_collector(self, device_env, collector_cls):
+        env = self._make_env(device_env)
+        collector = collector_cls(
+            env, RandomPolicy(env.full_action_spec), total_frames=35, frames_per_batch=5
+        )
+        for d in collector:
+            print(d)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    def test_skipping_history_env_collector(self, device_env, collector_cls):
+        env = self._make_skipping_env(device_env)
+        collector = collector_cls(
+            env, RandomPolicy(env.full_action_spec), total_frames=35, frames_per_batch=5
+        )
+        for d in collector:
+            print(d)
 
 
 if __name__ == "__main__":

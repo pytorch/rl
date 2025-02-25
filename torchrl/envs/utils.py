@@ -685,6 +685,7 @@ def check_env_specs(
     check_dtype=True,
     seed: int | None = None,
     tensordict: TensorDictBase | None = None,
+    break_when_any_done: bool | str = None,
 ):
     """Tests an environment specs against the results of short rollout.
 
@@ -709,12 +710,31 @@ def check_env_specs(
             we leave it to the user to accomplish that.
             Defaults to ``None``.
         tensordict (TensorDict, optional): an optional tensordict instance to use for reset.
+        break_when_any_done (bool or str, optional): value for ``break_when_any_done`` in :meth:`~torchrl.envs.EnvBase.rollout`.
+            If ``"both"``, the test is run on both `True` and `False`.
 
     Caution: this function resets the env seed. It should be used "offline" to
     check that an env is adequately constructed, but it may affect the seeding
     of an experiment and as such should be kept out of training scripts.
 
     """
+    if break_when_any_done == "both":
+        check_env_specs(
+            env,
+            return_contiguous=return_contiguous,
+            check_dtype=check_dtype,
+            seed=seed,
+            tensordict=tensordict,
+            break_when_any_done=True,
+        )
+        return check_env_specs(
+            env,
+            return_contiguous=return_contiguous,
+            check_dtype=check_dtype,
+            seed=seed,
+            tensordict=tensordict,
+            break_when_any_done=False,
+        )
     if seed is not None:
         device = (
             env.device if env.device is not None and env.device.type == "cuda" else None
@@ -735,7 +755,10 @@ def check_env_specs(
         return_contiguous=return_contiguous,
         tensordict=tensordict,
         auto_reset=tensordict is None,
+        break_when_any_done=break_when_any_done,
     )
+    print(real_tensordict)
+    print(fake_tensordict)
 
     if return_contiguous:
         fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
@@ -1393,7 +1416,7 @@ def _update_during_reset(
             # by contract, a reset signal at one level cannot
             # be followed by other resets at nested levels, so it's safe to
             # simply update
-            node.update(node_reset)
+            node.update(node_reset, update_batch_size=True)
         else:
             # there can be two cases: (1) the key is present in both tds,
             # in which case we use the reset mask to update
