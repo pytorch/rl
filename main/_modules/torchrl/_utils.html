@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+a3a1ebe) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+b538c66) &#x25BC</span></a>
     </div>
     
 
@@ -583,14 +583,20 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_check_for_faulty_process</span><span class="p">(</span><span class="n">processes</span><span class="p">):</span>
     <span class="n">terminate</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">processes</span><span class="p">:</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">_closed</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
             <span class="n">terminate</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">for</span> <span class="n">_p</span> <span class="ow">in</span> <span class="n">processes</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">_p</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
-                    <span class="n">_p</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
-                    <span class="n">_p</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">terminate</span><span class="p">:</span>
-            <span class="k">break</span>
+                <span class="n">_p</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Process</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">_p</span><span class="o">.</span><span class="n">_closed</span> <span class="ow">and</span> <span class="n">_p</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">_p</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
+                    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                        <span class="n">_p</span><span class="o">.</span><span class="n">kill</span><span class="p">()</span>
+                    <span class="k">finally</span><span class="p">:</span>
+                        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+                        <span class="n">_p</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">terminate</span><span class="p">:</span>
+                <span class="k">break</span>
     <span class="k">if</span> <span class="n">terminate</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
             <span class="s2">&quot;At least one process failed. Check for more infos in the log.&quot;</span>

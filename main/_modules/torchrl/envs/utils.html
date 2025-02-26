@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+a3a1ebe) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+b538c66) &#x25BC</span></a>
     </div>
     
 
@@ -1106,6 +1106,7 @@
     <span class="n">check_dtype</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">break_when_any_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Tests an environment specs against the results of short rollout.</span>
 
@@ -1130,12 +1131,31 @@
 <span class="sd">            we leave it to the user to accomplish that.</span>
 <span class="sd">            Defaults to ``None``.</span>
 <span class="sd">        tensordict (TensorDict, optional): an optional tensordict instance to use for reset.</span>
+<span class="sd">        break_when_any_done (bool or str, optional): value for ``break_when_any_done`` in :meth:`~torchrl.envs.EnvBase.rollout`.</span>
+<span class="sd">            If ``&quot;both&quot;``, the test is run on both `True` and `False`.</span>
 
 <span class="sd">    Caution: this function resets the env seed. It should be used &quot;offline&quot; to</span>
 <span class="sd">    check that an env is adequately constructed, but it may affect the seeding</span>
 <span class="sd">    of an experiment and as such should be kept out of training scripts.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">break_when_any_done</span> <span class="o">==</span> <span class="s2">&quot;both&quot;</span><span class="p">:</span>
+        <span class="n">check_env_specs</span><span class="p">(</span>
+            <span class="n">env</span><span class="p">,</span>
+            <span class="n">return_contiguous</span><span class="o">=</span><span class="n">return_contiguous</span><span class="p">,</span>
+            <span class="n">check_dtype</span><span class="o">=</span><span class="n">check_dtype</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+            <span class="n">tensordict</span><span class="o">=</span><span class="n">tensordict</span><span class="p">,</span>
+            <span class="n">break_when_any_done</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">check_env_specs</span><span class="p">(</span>
+            <span class="n">env</span><span class="p">,</span>
+            <span class="n">return_contiguous</span><span class="o">=</span><span class="n">return_contiguous</span><span class="p">,</span>
+            <span class="n">check_dtype</span><span class="o">=</span><span class="n">check_dtype</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+            <span class="n">tensordict</span><span class="o">=</span><span class="n">tensordict</span><span class="p">,</span>
+            <span class="n">break_when_any_done</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
     <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">device</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">env</span><span class="o">.</span><span class="n">device</span> <span class="k">if</span> <span class="n">env</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">env</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">else</span> <span class="kc">None</span>
@@ -1156,6 +1176,7 @@
         <span class="n">return_contiguous</span><span class="o">=</span><span class="n">return_contiguous</span><span class="p">,</span>
         <span class="n">tensordict</span><span class="o">=</span><span class="n">tensordict</span><span class="p">,</span>
         <span class="n">auto_reset</span><span class="o">=</span><span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">break_when_any_done</span><span class="o">=</span><span class="n">break_when_any_done</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">return_contiguous</span><span class="p">:</span>
@@ -1814,7 +1835,7 @@
             <span class="c1"># by contract, a reset signal at one level cannot</span>
             <span class="c1"># be followed by other resets at nested levels, so it&#39;s safe to</span>
             <span class="c1"># simply update</span>
-            <span class="n">node</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">node_reset</span><span class="p">)</span>
+            <span class="n">node</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">node_reset</span><span class="p">,</span> <span class="n">update_batch_size</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># there can be two cases: (1) the key is present in both tds,</span>
             <span class="c1"># in which case we use the reset mask to update</span>
