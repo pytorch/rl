@@ -1057,7 +1057,7 @@ class SyncDataCollector(DataCollectorBase):
                 # This may be a bit dangerous as `torch.device("cuda")` may not have a precise
                 # device associated, whereas `tensor.device` always has
                 for spec in self.env.specs.values(True, True):
-                    if spec.device.type == "cuda":
+                    if spec.device is not None and spec.device.type == "cuda":
                         if ":" not in str(spec.device):
                             raise RuntimeError(
                                 "A cuda spec did not have a device associated. Make sure to "

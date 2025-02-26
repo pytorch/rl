@@ -2519,7 +2519,6 @@ class NonTensor(TensorSpec):
         if isinstance(shape, int):
             shape = _size([shape])
 
-        _, device = _default_dtype_and_device(None, device)
         domain = None
         super().__init__(
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
@@ -4808,7 +4807,7 @@ class Composite(TensorSpec):
         if self.locked:
             raise RuntimeError("Cannot modify a locked Composite.")
         if spec is not None and self.device is not None and spec.device != self.device:
-            if isinstance(spec, Composite) and spec.device is None:
+            if spec.device is None:
                 # We make a clone not to mess up the spec that was provided.
                 # in set() we do the same for shape - these two ops should be grouped.
                 # we don't care about the overhead of cloning twice though because in theory
@@ -4816,7 +4815,7 @@ class Composite(TensorSpec):
                 spec = spec.clone().to(self._device)
             else:
                 raise RuntimeError(
-                    f"Setting a new attribute ({name}) on another device ({spec.device} against {self.device}). "
+                    f"Setting a new attribute ({name}) with spec type {type(spec).__name__} on another device ({spec.device} against {self.device}). "
                     f"All devices of Composite must match."
                 )
         if spec is not None:

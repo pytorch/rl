@@ -8,6 +8,8 @@ import random
 import string
 from typing import Dict, List, Optional
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
@@ -26,6 +28,7 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import consolidate_spec
+from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 from torchrl.envs.utils import (
@@ -33,7 +36,6 @@ from torchrl.envs.utils import (
     check_marl_grouping,
     MarlGroupMapType,
 )
-
 
 spec_dict = {
     "bounded": Bounded,
@@ -2268,3 +2270,108 @@ class EnvThatErrorsAfter10Iters(EnvBase):
 
     def _set_seed(self, seed: Optional[int]):
         ...
+
+
+@tensorclass()
+class TC:
+    field0: str
+    field1: torch.Tensor
+
+
+class EnvWithTensorClass(CountingEnv):
+    tc_cls = TC
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.observation_spec["tc"] = Composite(
+            field0=NonTensor(example_data="an observation!", shape=self.batch_size),
+            field1=Unbounded(shape=self.batch_size),
+            shape=self.batch_size,
+            data_cls=TC,
+        )
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        td = super()._reset(tensordict, **kwargs)
+        td["tc"] = TC("0", torch.zeros(self.batch_size))
+        return td
+
+    def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        td = super()._step(tensordict, **kwargs)
+        default = TC("0", 0)
+        f0 = tensordict.get("tc", default).field0
+        if f0 is None:
+            f0 = "0"
+        f1 = tensordict.get("tc", default).field1
+        if f1 is None:
+            f1 = torch.zeros(self.batch_size)
+        td["tc"] = TC(
+            str(int(f0) + 1),
+            f1 + 1,
+        )
+        return td
+
+
+@tensorclass
+class History:
+    role: str
+    content: str
+
+
+class HistoryTransform(Transform):
+    """A mocking class to record history."""
+
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
+        defaults = {
+            "role": NonTensor(
+                example_data="a role!",
+                shape=(-1,),
+            ),
+            "content": NonTensor(
+                example_data="a content!",
+                shape=(-1,),
+            ),
+        }
+        observation_spec["history"] = Composite(
+            defaults,
+            shape=(-1,),
+            data_cls=History,
+        )
+        assert observation_spec.device == self.parent.device
+        assert observation_spec["history"].device == self.parent.device
+        return observation_spec
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        assert tensordict_reset.device == self.parent.device
+        tensordict_reset["history"] = torch.stack(
+            [
+                History(role="system", content="0"),
+                History(role="user", content="1"),
+            ]
+        )
+        assert tensordict_reset["history"].device == self.parent.device
+        return tensordict_reset
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        assert next_tensordict.device == self.parent.device
+        history = tensordict["history"]
+        local_history = History(
+            role=np.random.choice(["user", "system", "assistant"]),
+            content=str(int(history.content[-1]) + 1),
+            device=history.device,
+        )
+        # history = tensordict["history"].append(local_history)
+        try:
+            history = torch.stack(list(history.unbind(0)) + [local_history])
+        except Exception:
+            raise
+        assert isinstance(history, History)
+        next_tensordict["history"] = history
+        assert next_tensordict["history"].device == self.parent.device, (
+            next_tensordict["history"],
+            self.parent.device,
+        )
+        return next_tensordict
