@@ -3912,6 +3912,13 @@ class TestNonTensor:
         nts1 = NonTensor(shape=(3, 4), example_data="example_data 2")
         assert nts0 != nts1
 
+    def test_device_cast(self):
+        comp = Composite(device="cpu")
+        comp["nontensor"] = NonTensor(device=None)
+        assert comp["nontensor"].device == torch.device("cpu")
+        comp["nontensor"] = NonTensor(device="cpu")
+        assert comp["nontensor"].device == torch.device("cpu")
+
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="not cuda device")
 def test_device_ordinal():
