@@ -1142,10 +1142,12 @@ class SerialEnv(BatchedEnvBase):
                 out_td = self._envs[i]._step(_data_in)
                 next_td[i].update_(
                     out_td,
+                    # _env_output_keys exclude non-tensor data
                     keys_to_update=list(self._env_output_keys),
                     non_blocking=self.non_blocking,
                 )
                 if out_tds is not None:
+                    # we store the non-tensor data here
                     out_tds.append(out_td)
 
             # We must pass a clone of the tensordict, as the values of this tensordict
@@ -1989,7 +1991,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             next_td_passthrough = None
             data = [{} for _ in range(self.num_workers)]
 
-        assert self._non_tensor_keys
         if self._non_tensor_keys:
             for i, td in zip(
                 workers_range,
@@ -2012,7 +2013,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             for i in workers_range:
                 msg, non_tensor_td = self.parent_channels[i].recv()
                 non_tensor_tds.append(non_tensor_td)
-                print("non_tensor_td", non_tensor_td)
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -2718,9 +2718,6 @@ def _run_worker_pipe_direct(
             i += 1
             # data, idx = data
             # data = data[idx]
-            print("device received", data["history"].device)
-            print('data["history"]', data["history"])
-            print('data["history"][0]', data["history"][0])
             next_td = env._step(data)
             if event is not None:
                 event.record()
@@ -2733,7 +2730,6 @@ def _run_worker_pipe_direct(
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            print(f"next_td in worker {pid} and consolidate {consolidate}", next_td)
             child_pipe.send(next_td)
 
             del next_td

@@ -15,7 +15,6 @@ import re
 from collections import defaultdict
 from functools import partial
 from sys import platform
-from tokenize import maybe
 from typing import Optional
 
 import numpy as np
@@ -4406,20 +4405,24 @@ class TestPartialSteps:
 class TestEnvWithHistory:
     @pytest.fixture(autouse=True, scope="class")
     def set_capture(self):
-        with set_capture_non_tensor_stack(False):
+        with set_capture_non_tensor_stack(False), set_auto_unwrap_transformed_env(
+            False
+        ):
             yield
         return
 
-    def _make_env(self, device):
-        return CountingEnv(device=device).append_transform(HistoryTransform())
+    def _make_env(self, device, max_steps=10):
+        return CountingEnv(device=device, max_steps=max_steps).append_transform(
+            HistoryTransform()
+        )
 
-    def _make_skipping_env(self, device):
-        env = self._make_env(device=device)
-        env = env.append_transform(StepCounter())
+    def _make_skipping_env(self, device, max_steps=10):
+        env = self._make_env(device=device, max_steps=max_steps)
         # skip every 3 steps
         env = env.append_transform(
-            ConditionalSkip(lambda td: td["step_count"] % 3 == 0)
+            ConditionalSkip(lambda td: ((td["step_count"] % 3) == 2))
         )
+        env = TransformedEnv(env, StepCounter())
         return env
 
     @pytest.mark.parametrize("device", [None, "cpu"])
@@ -4482,17 +4485,39 @@ class TestEnvWithHistory:
             env, RandomPolicy(env.full_action_spec), total_frames=35, frames_per_batch=5
         )
         for d in collector:
-            print(d)
+            for i in range(d.shape[0] - 1):
+                assert (
+                    d[i + 1]["history"].content[0] == d[i]["next", "history"].content[0]
+                )
 
     @pytest.mark.parametrize("device_env", [None, "cpu"])
     @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
     def test_skipping_history_env_collector(self, device_env, collector_cls):
-        env = self._make_skipping_env(device_env)
+        env = self._make_skipping_env(device_env, max_steps=10)
         collector = collector_cls(
-            env, RandomPolicy(env.full_action_spec), total_frames=35, frames_per_batch=5
+            env,
+            lambda td: td.update(env.full_action_spec.one()),
+            total_frames=35,
+            frames_per_batch=5,
         )
+        length = None
+        count = 1
         for d in collector:
-            print(d)
+            for k in range(1, 5):
+                if len(d[k]["history"].content) == 2:
+                    count = 1
+                    continue
+                if count % 3 == 2:
+                    assert (
+                        d[k]["next", "history"].content
+                        == d[k - 1]["next", "history"].content
+                    ), (d["next", "history"].content, k, count)
+                else:
+                    assert d[k]["next", "history"].content[-1] == str(
+                        int(d[k - 1]["next", "history"].content[-1]) + 1
+                    ), (d["next", "history"].content, k, count)
+                count += 1
+            count += 1
 
 
 if __name__ == "__main__":

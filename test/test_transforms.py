@@ -13496,7 +13496,7 @@ class TestConditionalSkip(TransformBase):
 
     class ToString(Transform):
         def _apply_transform(self, obs: torch.Tensor) -> None:
-            return NonTensorData(str(obs), device=obs.device)
+            return NonTensorData(str(obs), device=self.parent.device)
 
         def _reset(
             self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase

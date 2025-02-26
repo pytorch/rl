@@ -2455,9 +2455,6 @@ class HistoryTransform(Transform):
         try:
             history = torch.stack(list(history.unbind(0)) + [local_history])
         except Exception:
-            print(history)
-            print(history.unbind(0))
-            print(local_history)
             raise
         assert isinstance(history, History)
         next_tensordict["history"] = history

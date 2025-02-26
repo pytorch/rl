@@ -1979,7 +1979,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         result = tensordict._fast_apply(
             select_and_clone,
             next_tensordict,
-            # device=next_tensordict.device,
             default=None,
             filter_empty=True,
             is_leaf=_is_leaf_nontensor,

@@ -757,8 +757,6 @@ def check_env_specs(
         auto_reset=tensordict is None,
         break_when_any_done=break_when_any_done,
     )
-    print(real_tensordict)
-    print(fake_tensordict)
 
     if return_contiguous:
         fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
