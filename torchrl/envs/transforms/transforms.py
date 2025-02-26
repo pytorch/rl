@@ -10592,7 +10592,7 @@ class ConditionalSkip(Transform):
         cond = self.cond(tensordict)
         # Write result in step
         tensordict["_step"] = tensordict.get("_step", True) & ~cond
-        if not tensordict["_step"].shape == tensordict.batch_size:
+        if tensordict["_step"].shape != tensordict.batch_size:
             tensordict["_step"] = tensordict["_step"].view(tensordict.batch_size)
         return tensordict
 

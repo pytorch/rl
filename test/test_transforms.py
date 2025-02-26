@@ -13498,12 +13498,13 @@ class TestConditionalSkip(TransformBase):
 
     class ToString(Transform):
         def _apply_transform(self, obs: torch.Tensor) -> None:
-            return NonTensorData(str(obs), device=obs.device)
+            return NonTensorData(str(obs), device=self.parent.device)
 
         def _reset(
             self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
         ) -> TensorDictBase:
-            return self._call(tensordict_reset)
+            reset_data = self._call(tensordict_reset)
+            return reset_data
 
         def transform_observation_spec(
             self, observation_spec: TensorSpec
@@ -13511,7 +13512,7 @@ class TestConditionalSkip(TransformBase):
             observation_spec["obs_str"] = NonTensor(
                 example_data="a string!",
                 shape=observation_spec.shape,
-                device=observation_spec.device,
+                device=self.parent.device,
             )
             return observation_spec
 
@@ -13545,7 +13546,8 @@ class TestConditionalSkip(TransformBase):
         self.check_non_tensor_match(r)
 
     @pytest.mark.parametrize("bwad", [False, True])
-    def test_serial_trans_env_check(self, bwad):
+    @pytest.mark.parametrize("device", [None])
+    def test_serial_trans_env_check(self, bwad, device):
         def make_env(i):
             env = TestConditionalSkip.CountinEnvWithString()
             base_env = TransformedEnv(
@@ -13561,7 +13563,9 @@ class TestConditionalSkip(TransformBase):
                 auto_unwrap=False,
             )
 
-        env = SerialEnv(2, [partial(make_env, i=0), partial(make_env, i=1)])
+        env = SerialEnv(
+            2, [partial(make_env, i=0), partial(make_env, i=1)], device=device
+        )
         env.check_env_specs()
         policy = lambda td: td.set("action", torch.ones((2, 1)))
         r = env.rollout(10, policy, break_when_any_done=bwad)
@@ -13571,7 +13575,8 @@ class TestConditionalSkip(TransformBase):
         self.check_non_tensor_match(r)
 
     @pytest.mark.parametrize("bwad", [False, True])
-    def test_parallel_trans_env_check(self, bwad):
+    @pytest.mark.parametrize("device", [None])
+    def test_parallel_trans_env_check(self, bwad, device):
         def make_env(i):
             env = TestConditionalSkip.CountinEnvWithString()
             base_env = TransformedEnv(
@@ -13588,7 +13593,10 @@ class TestConditionalSkip(TransformBase):
             )
 
         env = ParallelEnv(
-            2, [partial(make_env, i=0), partial(make_env, i=1)], mp_start_method=mp_ctx
+            2,
+            [partial(make_env, i=0), partial(make_env, i=1)],
+            mp_start_method=mp_ctx,
+            device=device,
         )
         try:
             env.check_env_specs()

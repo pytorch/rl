@@ -140,8 +140,14 @@ class EnvMetaData:
         self.has_dynamic_specs = _has_dynamic_specs(specs)
 
     @property
-    def tensordict(self):
-        return self._tensordict.to(self.device)
+    def tensordict(self) -> TensorDictBase:
+        td = self._tensordict.copy()
+        if td.device != self.device:
+            if self.device is None:
+                return td.clear_device_()
+            else:
+                return td.to(self.device)
+        return td
 
     @property
     def specs(self):
@@ -227,6 +233,19 @@ class EnvMetaData:
             device=device,
             batch_locked=self.batch_locked,
             device_map=device_map,
+        )
+
+    def __getitem__(self, item):
+        from tensordict.utils import _getitem_batch_size
+
+        return EnvMetaData(
+            tensordict=self.tensordict[item],
+            specs=self.specs[item],
+            batch_size=_getitem_batch_size(self.batch_size, item),
+            env_str=self.env_str,
+            device=self.device,
+            batch_locked=self.batch_locked,
+            device_map=self.device_map,
         )
 
 
@@ -1966,7 +1985,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         result = tensordict._fast_apply(
             select_and_clone,
             next_tensordict,
-            device=next_tensordict.device,
+            device=self.device,
             default=None,
             filter_empty=True,
             is_leaf=_is_leaf_nontensor,
