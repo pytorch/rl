@@ -12,6 +12,7 @@ import sys
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -43,6 +44,7 @@ from torch import autograd, nn
 from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
+from torchrl.envs import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
@@ -197,6 +199,79 @@ def get_devices():
     for i in range(torch.cuda.device_count()):
         devices += [torch.device(f"cuda:{i}")]
     return devices
+
+
+class MARLEnv(EnvBase):
+    def __init__(self):
+        batch = self.batch = (3,)
+        super().__init__(batch_size=batch)
+        self.n_agents = n_agents = (4,)
+        self.obs_feat = obs_feat = (5,)
+
+        self.full_observation_spec = Composite(
+            agents=Composite(
+                observation=Unbounded(batch + n_agents + obs_feat),
+                shape=batch + n_agents,
+            ),
+            shape=batch,
+        )
+        self.full_done_spec = Composite(
+            done=Unbounded(batch + (1,), dtype=torch.bool),
+            terminated=Unbounded(batch + (1,), dtype=torch.bool),
+            truncated=Unbounded(batch + (1,), dtype=torch.bool),
+            shape=batch,
+        )
+
+        self.act_feat_dirich = act_feat_dirich = (10, 2)
+        self.act_feat_categ = act_feat_categ = (7,)
+        self.full_action_spec = Composite(
+            agents=Composite(
+                dirich=Unbounded(batch + n_agents + act_feat_dirich),
+                categ=Unbounded(batch + n_agents + act_feat_categ),
+                shape=batch + n_agents,
+            ),
+            shape=batch,
+        )
+
+        self.full_reward_spec = Composite(
+            agents=Composite(
+                reward=Unbounded(batch + n_agents + (1,)), shape=batch + n_agents
+            ),
+            shape=batch,
+        )
+
+    @classmethod
+    def make_composite_dist(cls):
+        dist_cstr = functools.partial(
+            CompositeDistribution,
+            distribution_map={
+                (
+                    "agents",
+                    "dirich",
+                ): lambda concentration: torch.distributions.Independent(
+                    torch.distributions.Dirichlet(concentration), 1
+                ),
+                ("agents", "categ"): torch.distributions.Categorical,
+            },
+        )
+        return ProbabilisticTensorDictModule(
+            in_keys=["params"],
+            out_keys=[("agents", "dirich"), ("agents", "categ")],
+            distribution_class=dist_cstr,
+            return_log_prob=True,
+        )
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        ...
+
+    def _reset(self, tensordic):
+        ...
+
+    def _set_seed(self, seed: Optional[int]):
+        ...
 
 
 class LossModuleTestBase:
@@ -4635,7 +4710,7 @@ class TestDiscreteSAC(LossModuleTestBase):
     ):
         # Actor
         action_spec = OneHot(action_dim)
-        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        net = nn.Linear(obs_dim, action_dim)
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
             spec=action_spec,
@@ -9238,6 +9313,47 @@ class TestPPO(LossModuleTestBase):
             loss = ppo(data)
             loss.sum(reduce=True)
 
+    def test_ppo_marl_aggregate(self):
+        env = MARLEnv()
+
+        def primer(td):
+            params = TensorDict(
+                agents=TensorDict(
+                    dirich=TensorDict(
+                        concentration=env.action_spec["agents", "dirich"].one()
+                    ),
+                    categ=TensorDict(logits=env.action_spec["agents", "categ"].one()),
+                    batch_size=env.action_spec["agents"].shape,
+                ),
+                batch_size=td.batch_size,
+            )
+            td.set("params", params)
+            return td
+
+        policy = ProbabilisticTensorDictSequential(
+            primer,
+            env.make_composite_dist(),
+            # return_composite=True,
+        )
+        output = policy(env.fake_tensordict())
+        assert output.shape == env.batch_size
+        assert (
+            output["agents", "dirich_log_prob"].shape == env.batch_size + env.n_agents
+        )
+        assert output["agents", "categ_log_prob"].shape == env.batch_size + env.n_agents
+
+        output["advantage"] = output["next", "agents", "reward"].clone()
+        output["value_target"] = output["next", "agents", "reward"].clone()
+        critic = TensorDictModule(
+            lambda obs: obs.new_zeros((*obs.shape[:-1], 1)),
+            in_keys=list(env.full_observation_spec.keys(True, True)),
+            out_keys=["state_value"],
+        )
+        ppo = ClipPPOLoss(actor_network=policy, critic_network=critic)
+        ppo.set_keys(action=list(env.full_action_spec.keys(True, True)))
+        assert isinstance(ppo.tensor_keys.action, list)
+        ppo(output)
+
 
 class TestA2C(LossModuleTestBase):
     seed = 0
@@ -11272,7 +11388,7 @@ class TestDT(LossModuleTestBase):
         action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        net = nn.Linear(obs_dim, action_dim)
         module = TensorDictModule(net, in_keys=["observation"], out_keys=["param"])
         actor = ProbabilisticActor(
             module=module,
@@ -12516,7 +12632,7 @@ class TestDiscreteIQL(LossModuleTestBase):
     ):
         # Actor
         action_spec = OneHot(action_dim)
-        net = nn.Sequential(nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor())
+        net = nn.Linear(obs_dim, action_dim)
         module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
             spec=action_spec,
@@ -12613,8 +12729,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         common = Mod(common_net, in_keys=["obs"], out_keys=["hidden"])
         actor = ProbSeq(
             common,
-            Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
-            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["logits"]),
+            Mod(actor_net, in_keys=["hidden"], out_keys=["logits"]),
             ProbMod(
                 in_keys=["logits"],
                 out_keys=["action"],

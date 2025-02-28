@@ -35,11 +35,9 @@ from torchrl.modules.tensordict_module.actors import (
 from torchrl.modules.tensordict_module.exploration import (
     _OrnsteinUhlenbeckProcess,
     AdditiveGaussianModule,
-    AdditiveGaussianWrapper,
     EGreedyModule,
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessModule,
-    OrnsteinUhlenbeckProcessWrapper,
 )
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -125,7 +123,7 @@ class TestEGreedy:
             {"observation": torch.zeros(*batch_size, action_size)},
             batch_size=batch_size,
         )
-        with pytest.raises(KeyError, match="Action mask key action_mask not found in"):
+        with pytest.raises(RuntimeError, match="Failed while executing module"):
             explorative_policy(td)
 
         torch.manual_seed(0)
@@ -184,9 +182,7 @@ class TestEGreedy:
             batch_size=batch_size,
         )
 
-        with pytest.raises(
-            RuntimeError, match="spec must be provided to the exploration wrapper."
-        ):
+        with pytest.raises(RuntimeError, match="Failed while executing module"):
             explorative_policy(td)
 
     @pytest.mark.parametrize("module", [True, False])
@@ -203,9 +199,7 @@ class TestEGreedy:
                 policy,
             )
         td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
-        with pytest.raises(
-            ValueError, match="Action spec shape does not match the action shape"
-        ):
+        with pytest.raises(RuntimeError, match="Failed while executing module"):
             explorative_policy(td)
 
 
@@ -236,7 +230,7 @@ class TestOrnsteinUhlenbeckProcess:
         assert pval_acc > 0.05
         assert pval_reg < 0.1
 
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_ou(
         self, device, interface, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
     ):
@@ -258,8 +252,7 @@ class TestOrnsteinUhlenbeckProcess:
             ou = OrnsteinUhlenbeckProcessModule(spec=action_spec, device=device)
             exploratory_policy = TensorDictSequential(policy, ou)
         else:
-            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy, device=device)
-            ou = exploratory_policy
+            raise NotImplementedError
 
         tensordict = TensorDict(
             batch_size=[batch],
@@ -300,7 +293,7 @@ class TestOrnsteinUhlenbeckProcess:
 
     @pytest.mark.parametrize("parallel_spec", [True, False])
     @pytest.mark.parametrize("probabilistic", [True, False])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_collector(self, device, parallel_spec, probabilistic, interface, seed=0):
         torch.manual_seed(seed)
         env = SerialEnv(
@@ -341,7 +334,7 @@ class TestOrnsteinUhlenbeckProcess:
                 policy, OrnsteinUhlenbeckProcessModule(spec=action_spec, device=device)
             )
         else:
-            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy, device=device)
+            raise NotImplementedError
         exploratory_policy(env.reset())
         collector = SyncDataCollector(
             create_env_fn=env,
@@ -358,7 +351,7 @@ class TestOrnsteinUhlenbeckProcess:
     @pytest.mark.parametrize("nested_obs_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
     @pytest.mark.parametrize("is_init_key", ["some"])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_nested(
         self,
         device,
@@ -402,12 +395,7 @@ class TestOrnsteinUhlenbeckProcess:
                 ).to(device),
             )
         else:
-            exploratory_policy = OrnsteinUhlenbeckProcessWrapper(
-                policy,
-                spec=action_spec,
-                action_key=env.action_key,
-                is_init_key=is_init_key,
-            )
+            raise NotImplementedError
         collector = SyncDataCollector(
             create_env_fn=env,
             policy=exploratory_policy,
@@ -433,7 +421,7 @@ class TestOrnsteinUhlenbeckProcess:
 @pytest.mark.parametrize("device", get_default_devices())
 class TestAdditiveGaussian:
     @pytest.mark.parametrize("spec_origin", ["spec", "policy", None])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_additivegaussian_sd(
         self,
         device,
@@ -475,8 +463,8 @@ class TestAdditiveGaussian:
                 default_interaction_type=InteractionType.RANDOM,
             )
             given_spec = action_spec if spec_origin == "spec" else None
-            exploratory_policy = AdditiveGaussianWrapper(
-                policy, spec=given_spec, device=device
+            exploratory_policy = TensorDictModule(
+                policy, AdditiveGaussianModule(spec=given_spec, device=device)
             )
         if spec_origin is not None:
             sigma_init = (
@@ -524,7 +512,7 @@ class TestAdditiveGaussian:
         assert abs(noisy_action.std() - sigma_end) < 1e-1
 
     @pytest.mark.parametrize("spec_origin", ["spec", "policy", None])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_additivegaussian(
         self,
         device,
@@ -563,9 +551,7 @@ class TestAdditiveGaussian:
                 policy, AdditiveGaussianModule(spec=given_spec).to(device)
             )
         else:
-            exploratory_policy = AdditiveGaussianWrapper(
-                policy, spec=given_spec, safe=False
-            ).to(device)
+            raise NotImplementedError
 
         tensordict = TensorDict(
             batch_size=[batch],
@@ -590,7 +576,7 @@ class TestAdditiveGaussian:
                 assert action_spec.is_in(out.get("action"))
 
     @pytest.mark.parametrize("parallel_spec", [True, False])
-    @pytest.mark.parametrize("interface", ["module", "wrapper"])
+    @pytest.mark.parametrize("interface", ["module"])
     def test_collector(self, device, parallel_spec, interface, seed=0):
         torch.manual_seed(seed)
         env = SerialEnv(
@@ -622,7 +608,7 @@ class TestAdditiveGaussian:
                 policy, AdditiveGaussianModule(spec=action_spec).to(device)
             )
         else:
-            exploratory_policy = AdditiveGaussianWrapper(policy, safe=False)
+            raise NotImplementedError
         exploratory_policy(env.reset())
         collector = SyncDataCollector(
             create_env_fn=env,

@@ -50,7 +50,7 @@ class Tree(TensorClass["nocast"]):
         node_id (int): A unique identifier for this node.
         rollout (TensorDict): Rollout data following the observation encoded in this node, in a TED format.
             If there are multiple actions taken at this node, subtrees are stored in the corresponding
-            entry. Rollouts can be reconstructed using the :meth:`~.rollout_from_path` method.
+            entry. Rollouts can be reconstructed using the :meth:`rollout_from_path` method.
         node (TensorDict): Data defining this node (e.g., observations) before the next branching.
             Entries usually matches the ``in_keys`` in ``MCTSForest.node_map``.
         subtree (Tree): A stack of subtrees produced when actions are taken.
@@ -215,7 +215,7 @@ class Tree(TensorClass["nocast"]):
         """Returns the observation associated with this particular node.
 
         This is the observation (or bag of observations) that defines the node before a branching occurs.
-        If the node contains a :attr:`~.rollout` attribute, the node observation is typically identical to the
+        If the node contains a :meth:`rollout` attribute, the node observation is typically identical to the
         observation resulting from the last action undertaken, i.e., ``node.rollout[..., -1]["next", "observation"]``.
 
         If more than one observation key is associated with the tree specs, a :class:`~tensordict.TensorDict` instance
@@ -232,7 +232,7 @@ class Tree(TensorClass["nocast"]):
         """Returns the observations associated with this particular node in a TensorDict format.
 
         This is the observation (or bag of observations) that defines the node before a branching occurs.
-        If the node contains a :attr:`~.rollout` attribute, the node observation is typically identical to the
+        If the node contains a :meth:`rollout` attribute, the node observation is typically identical to the
         observation resulting from the last action undertaken, i.e., ``node.rollout[..., -1]["next", "observation"]``.
 
         If more than one observation key is associated with the tree specs, a :class:`~tensordict.TensorDict` instance
@@ -442,8 +442,11 @@ class Tree(TensorClass["nocast"]):
         """Returns the number of unique vertices in the Tree.
 
         Keyword Args:
-            count_repeat (bool, optional): Determines whether to count repeated vertices.
+            count_repeat (bool, optional): Determines whether to count repeated
+                vertices.
+
                 - If ``False``, counts each unique vertex only once.
+
                 - If ``True``, counts vertices multiple times if they appear in different paths.
                 Defaults to ``False``.
 
@@ -601,6 +604,79 @@ class Tree(TensorClass["nocast"]):
             f"Unknown plotting backend {backend} with figure {figure}."
         )
 
+    def to_string(self, node_format_fn=lambda tree: tree.node_data.to_dict()):
+        """Generates a string representation of the tree.
+
+        This function can pull out information from each of the nodes in a tree,
+        so it can be useful for debugging. The nodes are listed line-by-line.
+        Each line contains the path to the node, followed by the string
+        representation of that node generated with :arg:`node_format_fn`. Each
+        line is indented according to number of steps in the path required to
+        get to the corresponding node.
+
+        Args:
+            node_format_fn (Callable, optional): User-defined function to
+                generate a string for each node of the tree. The signature must
+                be ``(Tree) -> Any``, and the output must be convertible to a
+                string. If this argument is not given, the generated string is
+                the node's :attr:`Tree.node_data` attribute converted to a dict.
+
+        Examples:
+            >>> from torchrl.data import MCTSForest
+            >>> from tensordict import TensorDict
+            >>> forest = MCTSForest()
+            >>> td_root = TensorDict({"observation": 0,})
+            >>> rollouts_data = [
+            ...     # [(action, obs), ...]
+            ...     [(3, 123), (1, 456)],
+            ...     [(2, 359), (2, 3094)],
+            ...     [(3, 123), (9, 392), (6, 989), (20, 809), (21, 847)],
+            ...     [(1, 75)],
+            ...     [(3, 123), (0, 948)],
+            ...     [(2, 359), (2, 3094), (10, 68)],
+            ...     [(2, 359), (2, 3094), (11, 9045)],
+            ... ]
+            >>> for rollout_data in rollouts_data:
+            ...     td = td_root.clone().unsqueeze(0)
+            ...     for action, obs in rollout_data:
+            ...         td = td.update(TensorDict({
+            ...             "action": [action],
+            ...             "next": TensorDict({"observation": [obs]}, [1]),
+            ...         }, [1]))
+            ...         forest.extend(td)
+            ...         td = td["next"].clone()
+            ...
+            >>> tree = forest.get_tree(td_root)
+            >>> print(tree.to_string())
+            (0,) {'observation': tensor(123)}
+            (0, 0) {'observation': tensor(456)}
+            (0, 1) {'observation': tensor(847)}
+            (0, 2) {'observation': tensor(948)}
+            (1,) {'observation': tensor(3094)}
+            (1, 0) {'observation': tensor(68)}
+            (1, 1) {'observation': tensor(9045)}
+            (2,) {'observation': tensor(75)}
+        """
+        queue = [
+            # tree, path
+            (self, ()),
+        ]
+
+        strings = []
+
+        while len(queue) > 0:
+            self, path = queue.pop()
+            if self.subtree is not None:
+                for subtree_idx, subtree in reversed(list(enumerate(self.subtree))):
+                    queue.append((subtree, path + (subtree_idx,)))
+
+            if self.rollout is not None:
+                level = len(path)
+                string = node_format_fn(self)
+                strings.append(f"{' ' * (level - 1)}{path} {string}")
+
+        return "\n".join(strings)
+
 
 class MCTSForest:
     """A collection of MCTS trees.
@@ -629,16 +705,16 @@ class MCTSForest:
             ``node_map.max_size``. If none of these are provided, defaults to `1000`.
         done_keys (list of NestedKey, optional): the done keys of the environment. If not provided,
             defaults to ``("done", "terminated", "truncated")``.
-            The :meth:`~.get_keys_from_env` can be used to automatically determine the keys.
+            The :meth:`get_keys_from_env` can be used to automatically determine the keys.
         action_keys (list of NestedKey, optional): the action keys of the environment. If not provided,
             defaults to ``("action",)``.
-            The :meth:`~.get_keys_from_env` can be used to automatically determine the keys.
+            The :meth:`get_keys_from_env` can be used to automatically determine the keys.
         reward_keys (list of NestedKey, optional): the reward keys of the environment. If not provided,
             defaults to ``("reward",)``.
-            The :meth:`~.get_keys_from_env` can be used to automatically determine the keys.
+            The :meth:`get_keys_from_env` can be used to automatically determine the keys.
         observation_keys (list of NestedKey, optional): the observation keys of the environment. If not provided,
             defaults to ``("observation",)``.
-            The :meth:`~.get_keys_from_env` can be used to automatically determine the keys.
+            The :meth:`get_keys_from_env` can be used to automatically determine the keys.
         excluded_keys (list of NestedKey, optional): a list of keys to exclude from the data storage.
         consolidated (bool, optional): if ``True``, the data_map storage will be consolidated on disk.
             Defaults to ``False``.
@@ -964,6 +1040,133 @@ class MCTSForest:
             self.max_size = self.data_map.max_size
 
     def extend(self, rollout, *, return_node: bool = False):
+        """Add a rollout to the forest.
+
+        Nodes are only added to a tree at points where rollouts diverge from
+        each other and at the endpoints of rollouts.
+
+        If there is no existing tree that matches the first steps of the
+        rollout, a new tree is added. Only one node is created, for the final
+        step.
+
+        If there is an existing tree that matches, the rollout is added to that
+        tree. If the rollout diverges from all other rollouts in the tree at
+        some step, a new node is created before the step where the rollouts
+        diverge, and a leaf node is created for the final step of the rollout.
+        If all of the rollout's steps match with a previously added rollout,
+        nothing changes.  If the rollout matches up to a leaf node of a tree but
+        continues beyond it, that node is extended to the end of the rollout,
+        and no new nodes are created.
+
+        Args:
+            rollout (TensorDict): The rollout to add to the forest.
+            return_node (bool, optional): If ``True``, the method returns the
+                added node. Default is ``False``.
+
+        Returns:
+            Tree: The node that was added to the forest. This is only
+                returned if ``return_node`` is True.
+
+        Examples:
+            >>> from torchrl.data import MCTSForest
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> forest = MCTSForest()
+            >>> r0 = TensorDict({
+            ...     'action': torch.tensor([1, 2, 3, 4, 5]),
+            ...     'next': {'observation': torch.tensor([123, 392, 989, 809, 847])},
+            ...     'observation': torch.tensor([  0, 123, 392, 989, 809])
+            ... }, [5])
+            >>> r1 = TensorDict({
+            ...     'action': torch.tensor([1, 2, 6, 7]),
+            ...     'next': {'observation': torch.tensor([123, 392, 235,  38])},
+            ...     'observation': torch.tensor([  0, 123, 392, 235])
+            ... }, [4])
+            >>> td_root = r0[0].exclude("next")
+            >>> forest.extend(r0)
+            >>> forest.extend(r1)
+            >>> tree = forest.get_tree(td_root)
+            >>> print(tree)
+            Tree(
+                count=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),
+                index=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False),
+                node_data=TensorDict(
+                    fields={
+                        observation: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=cpu,
+                    is_shared=False),
+                node_id=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
+                rollout=TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False),
+                        next: TensorDict(
+                            fields={
+                                observation: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([2]),
+                            device=cpu,
+                            is_shared=False),
+                        observation: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                subtree=Tree(
+                    _parent=NonTensorStack(
+                        [<weakref at 0x716eeb78fbf0; to 'TensorDict' at 0x...,
+                        batch_size=torch.Size([2]),
+                        device=None),
+                    count=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int32, is_shared=False),
+                    hash=NonTensorStack(
+                        [4341220243998689835, 6745467818783115365],
+                        batch_size=torch.Size([2]),
+                        device=None),
+                    node_data=LazyStackedTensorDict(
+                        fields={
+                            observation: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        exclusive_fields={
+                        },
+                        batch_size=torch.Size([2]),
+                        device=cpu,
+                        is_shared=False,
+                        stack_dim=0),
+                    node_id=NonTensorStack(
+                        [1, 2],
+                        batch_size=torch.Size([2]),
+                        device=None),
+                    rollout=LazyStackedTensorDict(
+                        fields={
+                            action: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.int64, is_shared=False),
+                            next: LazyStackedTensorDict(
+                                fields={
+                                    observation: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.int64, is_shared=False)},
+                                exclusive_fields={
+                                },
+                                batch_size=torch.Size([2, -1]),
+                                device=cpu,
+                                is_shared=False,
+                                stack_dim=0),
+                            observation: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        exclusive_fields={
+                        },
+                        batch_size=torch.Size([2, -1]),
+                        device=cpu,
+                        is_shared=False,
+                        stack_dim=0),
+                    wins=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
+                    index=None,
+                    subtree=None,
+                    specs=None,
+                    batch_size=torch.Size([2]),
+                    device=None,
+                    is_shared=False),
+                wins=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                hash=None,
+                _parent=None,
+                specs=None,
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+        """
         source, dest = (
             rollout.exclude("next").copy(),
             rollout.select("next", *self.action_keys).copy(),
@@ -1160,6 +1363,63 @@ class MCTSForest:
 
     def __len__(self):
         return len(self.data_map)
+
+    def to_string(self, td_root, node_format_fn=lambda tree: tree.node_data.to_dict()):
+        """Generates a string representation of a tree in the forest.
+
+        This function can pull out information from each of the nodes in a tree,
+        so it can be useful for debugging. The nodes are listed line-by-line.
+        Each line contains the path to the node, followed by the string
+        representation of that node generated with :arg:`node_format_fn`. Each
+        line is indented according to number of steps in the path required to
+        get to the corresponding node.
+
+        Args:
+            td_root (TensorDict): Root of the tree.
+
+            node_format_fn (Callable, optional): User-defined function to
+                generate a string for each node of the tree. The signature must
+                be ``(Tree) -> Any``, and the output must be convertible to a
+                string. If this argument is not given, the generated string is
+                the node's :attr:`Tree.node_data` attribute converted to a dict.
+
+        Examples:
+            >>> from torchrl.data import MCTSForest
+            >>> from tensordict import TensorDict
+            >>> forest = MCTSForest()
+            >>> td_root = TensorDict({"observation": 0,})
+            >>> rollouts_data = [
+            ...     # [(action, obs), ...]
+            ...     [(3, 123), (1, 456)],
+            ...     [(2, 359), (2, 3094)],
+            ...     [(3, 123), (9, 392), (6, 989), (20, 809), (21, 847)],
+            ...     [(1, 75)],
+            ...     [(3, 123), (0, 948)],
+            ...     [(2, 359), (2, 3094), (10, 68)],
+            ...     [(2, 359), (2, 3094), (11, 9045)],
+            ... ]
+            >>> for rollout_data in rollouts_data:
+            ...     td = td_root.clone().unsqueeze(0)
+            ...     for action, obs in rollout_data:
+            ...         td = td.update(TensorDict({
+            ...             "action": [action],
+            ...             "next": TensorDict({"observation": [obs]}, [1]),
+            ...         }, [1]))
+            ...         forest.extend(td)
+            ...         td = td["next"].clone()
+            ...
+            >>> print(forest.to_string(td_root))
+            (0,) {'observation': tensor(123)}
+            (0, 0) {'observation': tensor(456)}
+            (0, 1) {'observation': tensor(847)}
+            (0, 2) {'observation': tensor(948)}
+            (1,) {'observation': tensor(3094)}
+            (1, 0) {'observation': tensor(68)}
+            (1, 1) {'observation': tensor(9045)}
+            (2,) {'observation': tensor(75)}
+        """
+        tree = self.get_tree(td_root)
+        return tree.to_string(node_format_fn)
 
 
 def _make_list_of_nestedkeys(obj: Any, attr: str) -> List[NestedKey]:

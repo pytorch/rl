@@ -4,10 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import warnings
 import weakref
 from numbers import Number
-from typing import Dict, Optional, Sequence, Tuple, Union
+from typing import Dict, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -27,7 +26,6 @@ from torchrl.modules.distributions.utils import (
     safeatanh_noeps,
     safetanh_noeps,
 )
-from torchrl.modules.utils import mappings
 
 # speeds up distribution construction
 D.Distribution.set_default_validate_args(False)
@@ -126,60 +124,16 @@ class SafeTanhTransform(D.TanhTransform):
         return inv
 
 
-class NormalParamWrapper(nn.Module):
-    """A wrapper for normal distribution parameters.
-
-    Args:
-        operator (nn.Module): operator whose output will be transformed_in in location and scale parameters
-        scale_mapping (str, optional): positive mapping function to be used with the std.
-            default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
-            choices: "softplus", "exp", "relu", "biased_softplus_1";
-        scale_lb (Number, optional): The minimum value that the variance can take. Default is 1e-4.
-
-    Examples:
-        >>> from torch import nn
-        >>> import torch
-        >>> module = nn.Linear(3, 4)
-        >>> module_normal = NormalParamWrapper(module)
-        >>> tensor = torch.randn(3)
-        >>> loc, scale = module_normal(tensor)
-        >>> print(loc.shape, scale.shape)
-        torch.Size([2]) torch.Size([2])
-        >>> assert (scale > 0).all()
-        >>> # with modules that return more than one tensor
-        >>> module = nn.LSTM(3, 4)
-        >>> module_normal = NormalParamWrapper(module)
-        >>> tensor = torch.randn(4, 2, 3)
-        >>> loc, scale, others = module_normal(tensor)
-        >>> print(loc.shape, scale.shape)
-        torch.Size([4, 2, 2]) torch.Size([4, 2, 2])
-        >>> assert (scale > 0).all()
-
-    """
-
+class NormalParamWrapper(nn.Module):  # noqa: D101
     def __init__(
         self,
         operator: nn.Module,
         scale_mapping: str = "biased_softplus_1.0",
         scale_lb: Number = 1e-4,
     ) -> None:
-        warnings.warn(
-            "The NormalParamWrapper class will be deprecated in v0.7 in favor of :class:`~tensordict.nn.NormalParamExtractor`.",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            "NormalParamWrapper has been deprecated in favor of `tensordict.nn.NormalParamExtractor`. Use this class instead."
         )
-        super().__init__()
-        self.operator = operator
-        self.scale_mapping = scale_mapping
-        self.scale_lb = scale_lb
-
-    def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
-        net_output = self.operator(*tensors)
-        others = ()
-        if not isinstance(net_output, torch.Tensor):
-            net_output, *others = net_output
-        loc, scale = net_output.chunk(2, -1)
-        scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
-        return (loc, scale, *others)
 
 
 class TruncatedNormal(D.Independent):

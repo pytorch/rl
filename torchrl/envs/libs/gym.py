@@ -167,7 +167,7 @@ class set_gym_backend(_DecoratorContextManager):
 
     def __enter__(self):
         # we save a complete list of setters as well as whether they should be set.
-        # we want the full list becasue we want to be able to nest the calls to set_gym_backend.
+        # we want the full list because we want to be able to nest the calls to set_gym_backend.
         # we also want to keep track of which ones are set to reproduce what was set before.
         self._setters_saved = copy(implement_for._implementations)
         self._call()
@@ -774,7 +774,7 @@ def _is_from_pixels(env):
     return False
 
 
-class _AsyncMeta(_EnvPostInit):
+class _GymAsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance: GymWrapper = super().__call__(*args, **kwargs)
 
@@ -822,10 +822,10 @@ class _AsyncMeta(_EnvPostInit):
         return instance
 
 
-class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
+class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
     """OpenAI Gym environment wrapper.
 
-    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
+    Works across `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
 
     Args:
         env (gym.Env): the environment to wrap. Batched environments (:class:`~stable_baselines3.common.vec_env.base_vec_env.VecEnv`
@@ -858,7 +858,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             rewards, actions and infos.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
         convert_actions_to_numpy (bool, optional): if ``True``, actions will be
             converted from tensors to numpy arrays and moved to CPU before being passed to the
@@ -908,7 +908,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        :meth:`set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
         For parallel (Vectorized) environments, the info dictionary reader is automatically set and should
         not be set manually.
@@ -917,13 +917,13 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
         and/or within a tensordict:
 
-          - spaces.Box
-          - spaces.Sequence
-          - spaces.Tuple
-          - spaces.Discrete
-          - spaces.MultiBinary
-          - spaces.MultiDiscrete
-          - spaces.Dict
+        - spaces.Box
+        - spaces.Sequence
+        - spaces.Tuple
+        - spaces.Discrete
+        - spaces.MultiBinary
+        - spaces.MultiDiscrete
+        - spaces.Dict
 
         Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
         can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
@@ -1434,7 +1434,16 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         )
 
     def _init_env(self):
-        self.reset()
+        pass
+        # init_reset = self.init_reset
+        # if init_reset is None:
+        #     warnings.warn(f"init_env is None in the {type(self).__name__} constructor. The current "
+        #                   f"default behavior is to reset the gym env as soon as it's wrapped in the "
+        #                   f"class (init_reset=True), but from v0.9 this will be changed to False. "
+        #                   f"To adapt for these changes, pass init_reset to your constructor.", category=FutureWarning)
+        #     init_reset = True
+        # if init_reset:
+        #     self._env.reset()
 
     def __repr__(self) -> str:
         return (
@@ -1477,7 +1486,7 @@ ACCEPTED_TYPE_ERRORS = {
 class GymEnv(GymWrapper):
     """OpenAI Gym environment wrapper constructed by environment ID directly.
 
-    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
+    Works across `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
 
     Args:
         env_name (str): the environment id registered in `gym.registry`.
@@ -1513,7 +1522,7 @@ class GymEnv(GymWrapper):
             rewards, actions and infos.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
@@ -1572,20 +1581,20 @@ class GymEnv(GymWrapper):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        :meth:`set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
     .. note:: Gym spaces are not completely covered.
         The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
         and/or within a tensordict:
 
-          - spaces.Box
-          - spaces.Sequence
-          - spaces.Tuple
-          - spaces.Discrete
-          - spaces.MultiBinary
-          - spaces.MultiDiscrete
-          - spaces.Dict
+        - spaces.Box
+        - spaces.Sequence
+        - spaces.Tuple
+        - spaces.Discrete
+        - spaces.MultiBinary
+        - spaces.MultiDiscrete
+        - spaces.Dict
 
         Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
         can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).

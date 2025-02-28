@@ -38,7 +38,7 @@ from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import _make_ordinal_device, accept_remote_rref_udf_invocation
+from torchrl._utils import accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -92,33 +92,35 @@ class ReplayBuffer:
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading. Defaults to None (no prefetching).
         transform (Transform, optional): Transform to be executed when
-            :meth:`~.sample` is called.
+            :meth:`sample` is called.
             To chain transforms use the :class:`~torchrl.envs.Compose` class.
             Transforms should be used with :class:`tensordict.TensorDict`
             content. A generic callable can also be passed if the replay buffer
             is used with PyTree structures (see example below).
         batch_size (int, optional): the batch size to be used when sample() is
             called.
+
             .. note::
               The batch-size can be specified at construction time via the
               ``batch_size`` argument, or at sampling time. The former should
               be preferred whenever the batch-size is consistent across the
               experiment. If the batch-size is likely to change, it can be
-              passed to the :meth:`~.sample` method. This option is
+              passed to the :meth:`sample` method. This option is
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
+
         dim_extend (int, optional): indicates the dim to consider for
-            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            extension when calling :meth:`extend`. Defaults to ``storage.ndim-1``.
             When using ``dim_extend > 0``, we recommend using the ``ndim``
             argument in the storage instantiation if that argument is
             available, to let storages know that the data is
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
 
-            .. note:: This argument has no effect on :meth:`~.add` and
-                therefore should be used with caution when both :meth:`~.add`
-                and :meth:`~.extend` are used in a codebase. For example:
+            .. note:: This argument has no effect on :meth:`add` and
+                therefore should be used with caution when both :meth:`add`
+                and :meth:`extend` are used in a codebase. For example:
 
                     >>> data = torch.zeros(3, 4)
                     >>> rb = ReplayBuffer(
@@ -128,6 +130,7 @@ class ReplayBuffer:
                     >>> for d in data.unbind(1):
                     ...     rb.add(d)
                     >>> rb.extend(data)
+
         generator (torch.Generator, optional): a generator to use for sampling.
             Using a dedicated generator for the replay buffer can allow a fine-grained control
             over seeding, for instance keeping the global seed different but the RB seed identical
@@ -287,7 +290,7 @@ class ReplayBuffer:
             and self._sampler.drop_last
         ):
             raise ValueError(
-                "Samplers with drop_last=True must work with a predictible batch-size. "
+                "Samplers with drop_last=True must work with a predictable batch-size. "
                 "Please pass the batch-size to the ReplayBuffer constructor."
             )
         self._batch_size = batch_size
@@ -541,12 +544,12 @@ class ReplayBuffer:
     def loads(self, path):
         """Loads a replay buffer state at the given path.
 
-        The buffer should have matching components and be saved using :meth:`~.dumps`.
+        The buffer should have matching components and be saved using :meth:`dumps`.
 
         Args:
             path (Path or str): path where the replay buffer was saved.
 
-        See :meth:`~.dumps` for more info.
+        See :meth:`dumps` for more info.
 
         """
         path = Path(path).absolute()
@@ -566,15 +569,15 @@ class ReplayBuffer:
         self._batch_size = metadata["batch_size"]
 
     def save(self, *args, **kwargs):
-        """Alias for :meth:`~.dumps`."""
+        """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def dump(self, *args, **kwargs):
-        """Alias for :meth:`~.dumps`."""
+        """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def load(self, *args, **kwargs):
-        """Alias for :meth:`~.loads`."""
+        """Alias for :meth:`loads`."""
         return self.loads(*args, **kwargs)
 
     def register_save_hook(self, hook: Callable[[Any], Any]):
@@ -582,6 +585,7 @@ class ReplayBuffer:
 
         .. note:: Hooks are currently not serialized when saving a replay buffer: they must
             be manually re-initialized every time the buffer is created.
+
         """
         self._storage.register_save_hook(hook)
 
@@ -926,26 +930,27 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             construct a tensordict from the non-tensordict content.
         batch_size (int, optional): the batch size to be used when sample() is
             called.
-            .. note::
-              The batch-size can be specified at construction time via the
+
+            .. note:: The batch-size can be specified at construction time via the
               ``batch_size`` argument, or at sampling time. The former should
               be preferred whenever the batch-size is consistent across the
               experiment. If the batch-size is likely to change, it can be
-              passed to the :meth:`~.sample` method. This option is
+              passed to the :meth:`sample` method. This option is
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
+
         dim_extend (int, optional): indicates the dim to consider for
-            extension when calling :meth:`~.extend`. Defaults to ``storage.ndim-1``.
+            extension when calling :meth:`extend`. Defaults to ``storage.ndim-1``.
             When using ``dim_extend > 0``, we recommend using the ``ndim``
             argument in the storage instantiation if that argument is
             available, to let storages know that the data is
             multi-dimensional and keep consistent notions of storage-capacity
             and batch-size during sampling.
 
-            .. note:: This argument has no effect on :meth:`~.add` and
-                therefore should be used with caution when both :meth:`~.add`
-                and :meth:`~.extend` are used in a codebase. For example:
+            .. note:: This argument has no effect on :meth:`add` and
+                therefore should be used with caution when both :meth:`add`
+                and :meth:`extend` are used in a codebase. For example:
 
                     >>> data = torch.zeros(3, 4)
                     >>> rb = ReplayBuffer(
@@ -1051,6 +1056,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             construct a tensordict from the non-tensordict content.
         batch_size (int, optional): the batch size to be used when sample() is
             called.
+
             .. note::
               The batch-size can be specified at construction time via the
               ``batch_size`` argument, or at sampling time. The former should
@@ -1060,6 +1066,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
+
         priority_key (str, optional): the key at which priority is assumed to
             be stored within TensorDicts added to this ReplayBuffer.
             This is to be used when the sampler is of type
@@ -1085,6 +1092,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                     >>> for d in data.unbind(1):
                     ...     rb.add(d)
                     >>> rb.extend(data)
+
         generator (torch.Generator, optional): a generator to use for sampling.
             Using a dedicated generator for the replay buffer can allow a fine-grained control
             over seeding, for instance keeping the global seed different but the RB seed identical
@@ -1246,7 +1254,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
         # TODO: to be usable directly, the indices should be flipped but the issue
         #  is that just doing this results in indices that are not sorted like the original data
-        #  so the actualy indices will have to be used on the _storage directly (not on the buffer)
+        #  so the actually indices will have to be used on the _storage directly (not on the buffer)
         self._set_index_in_td(tensordicts, index)
         # TODO: in principle this is a good idea but currently it doesn't work + it re-writes a priority that has just been written
         # self.update_tensordict_priority(tensordicts)
@@ -1333,7 +1341,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 except RuntimeError:
                     raise RuntimeError(
                         "Failed to set the metadata (e.g., indices or weights) in the sampled tensordict within TensorDictReplayBuffer.sample. "
-                        "This is probably caused by a shape mismatch (one of the transforms has proably modified "
+                        "This is probably caused by a shape mismatch (one of the transforms has probably modified "
                         "the shape of the output tensordict). "
                         "You can always recover these items from the `sample` method from a regular ReplayBuffer "
                         "instance with the 'return_info' flag set to True."
@@ -1394,6 +1402,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             construct a tensordict from the non-tensordict content.
         batch_size (int, optional): the batch size to be used when sample() is
             called.
+
             .. note::
               The batch-size can be specified at construction time via the
               ``batch_size`` argument, or at sampling time. The former should
@@ -1403,6 +1412,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
               incompatible with prefetching (since this requires to know the
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
+
         priority_key (str, optional): the key at which priority is assumed to
             be stored within TensorDicts added to this ReplayBuffer.
             This is to be used when the sampler is of type
@@ -1431,6 +1441,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
                     >>> for d in data.unbind(1):
                     ...     rb.add(d)
                     >>> rb.extend(data)
+
         generator (torch.Generator, optional): a generator to use for sampling.
             Using a dedicated generator for the replay buffer can allow a fine-grained control
             over seeding, for instance keeping the global seed different but the RB seed identical
@@ -1574,33 +1585,12 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
 
 
 class InPlaceSampler:
-    """A sampler to write tennsordicts in-place.
-
-    .. warning:: This class is deprecated and will be removed in v0.7.
-
-    To be used cautiously as this may lead to unexpected behavior (i.e. tensordicts
-    overwritten during execution).
-
-    """
+    """[Deprecated] A sampler to write tennsordicts in-place."""
 
     def __init__(self, device: DEVICE_TYPING | None = None):
-        warnings.warn(
-            "InPlaceSampler has been deprecated and will be removed in v0.7.",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            "This class has been removed without replacement. In-place sampling should be avoided."
         )
-        self.out = None
-        if device is None:
-            device = "cpu"
-        self.device = _make_ordinal_device(torch.device(device))
-
-    def __call__(self, list_of_tds):
-        if self.out is None:
-            self.out = torch.stack(list_of_tds, 0).contiguous()
-            if self.device is not None:
-                self.out = self.out.to(self.device)
-        else:
-            torch.stack(list_of_tds, 0, out=self.out)
-        return self.out
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
@@ -1672,17 +1662,17 @@ class ReplayBufferEnsemble(ReplayBuffer):
         p (list of float or Tensor, optional): a list of floating numbers
             indicating the relative weight of each replay buffer. Can also
             be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-            if the buffer is built explicitely.
+            if the buffer is built explicitly.
         sample_from_all (bool, optional): if ``True``, each dataset will be sampled
             from. This is not compatible with the ``p`` argument. Defaults to ``False``.
             Can also be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-            if the buffer is built explicitely.
+            if the buffer is built explicitly.
         num_buffer_sampled (int, optional): the number of buffers to sample.
             if ``sample_from_all=True``, this has no effect, as it defaults to the
             number of buffers. If ``sample_from_all=False``, buffers will be
             sampled according to the probabilities ``p``. Can also
             be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-            if the buffer is built explicitely.
+            if the buffer is built explicitly.
         generator (torch.Generator, optional): a generator to use for sampling.
             Using a dedicated generator for the replay buffer can allow a fine-grained control
             over seeding, for instance keeping the global seed different but the RB seed identical
@@ -1690,6 +1680,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+
         shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
             Defaults to ``False``.
 
@@ -1891,7 +1882,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if self._rbs is not None and (
             isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0)

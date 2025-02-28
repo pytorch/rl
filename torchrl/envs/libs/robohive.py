@@ -15,8 +15,8 @@ from tensordict import TensorDict
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.envs.common import _maybe_unlock
 from torchrl.envs.libs.gym import (
-    _AsyncMeta,
     _gym_to_torchrl_spec_transform,
+    _GymAsyncMeta,
     gym_backend,
     GymEnv,
 )
@@ -57,7 +57,7 @@ class set_directory(object):
         return new_fun
 
 
-class _RoboHiveBuild(_AsyncMeta):
+class _RoboHiveBuild(_GymAsyncMeta):
     def __call__(self, *args, **kwargs):
         instance: RoboHiveEnv = super().__call__(*args, **kwargs)
         instance._refine_specs()
@@ -110,7 +110,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             ``RoboHiveEnv`` since vectorized environments are not supported within the
             class. To execute more than one environment at a time, see :class:`~torchrl.envs.ParallelEnv`.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:

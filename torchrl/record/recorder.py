@@ -309,14 +309,14 @@ class TensorDictRecorder(Transform):
         self.skip = skip
         self.count = 0
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         self.count += 1
         if self.count % self.skip == 0:
-            _td = tensordict
+            _td = next_tensordict
             if self.in_keys:
-                _td = tensordict.select(*self.in_keys).to_tensordict()
+                _td = next_tensordict.select(*self.in_keys).to_tensordict()
             self.td.append(_td)
-        return tensordict
+        return next_tensordict
 
     def dump(self, suffix: Optional[str] = None) -> None:
         if suffix is None:
@@ -346,7 +346,7 @@ class TensorDictRecorder(Transform):
 class PixelRenderTransform(Transform):
     """A transform to call render on the parent environment and register the pixel observation in the tensordict.
 
-    This transform offers an alternative to the ``from_pixels`` syntatic sugar when instantiating an environment
+    This transform offers an alternative to the ``from_pixels`` syntactic sugar when instantiating an environment
     that offers rendering is expensive, or when ``from_pixels`` is not implemented.
     It can be used within a single environment or over batched environments alike.
 
@@ -462,15 +462,15 @@ class PixelRenderTransform(Transform):
     ) -> TensorDictBase:
         return self._call(tensordict_reset)
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         if not self._enabled:
-            return tensordict
+            return next_tensordict
 
         method = getattr(self.parent, self.render_method)
         if not self.pass_tensordict:
             array = method(**self.kwargs)
         else:
-            array = method(tensordict, **self.kwargs)
+            array = method(next_tensordict, **self.kwargs)
 
         if self.preproc:
             array = self.preproc(array)
@@ -490,18 +490,18 @@ class PixelRenderTransform(Transform):
                 self.as_non_tensor = False
         if not self.as_non_tensor:
             try:
-                tensordict.set(self.out_keys[0], array)
+                next_tensordict.set(self.out_keys[0], array)
             except Exception:
                 raise RuntimeError(
                     f"An exception was raised while writing the rendered array "
-                    f"(shape={getattr(array, 'shape', None)}, dtype={getattr(array, 'dtype', None)}) in the tensordict with shape {tensordict.shape}. "
+                    f"(shape={getattr(array, 'shape', None)}, dtype={getattr(array, 'dtype', None)}) in the tensordict with shape {next_tensordict.shape}. "
                     f"Consider adapting your preproc function in {type(self).__name__}. You can also "
                     f"pass keyword arguments to the render function of the parent environment, or save "
                     f"this observation as a non-tensor data with as_non_tensor=True."
                 )
         else:
-            tensordict.set_non_tensor(self.out_keys[0], array)
-        return tensordict
+            next_tensordict.set_non_tensor(self.out_keys[0], array)
+        return next_tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         # Adds the pixel observation spec by calling render on the parent env

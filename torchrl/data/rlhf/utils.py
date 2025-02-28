@@ -198,6 +198,7 @@ class RolloutFromModel:
             batch_size=torch.Size([4, 50]),
             device=cpu,
             is_shared=False)
+
     """
 
     EOS_TOKEN_ID = 50256
@@ -259,6 +260,7 @@ class RolloutFromModel:
 
         Returns:
             A :class:`~tensordict.TensorDict` with the following keys:
+
             - ``"action"``: the sequence of actions (generated tokens)
             - ``"input_ids"``: the input_ids passed to the generative model at each time
               step.
@@ -280,6 +282,7 @@ class RolloutFromModel:
               training
             - ``("next", "reward_kl")``: The KL term from the reward. This is mainly for
               debugging and logging, it is not used in training.
+
         """
         rollout_generated = self._get_rollout_generated(generated, batch)
         rollout_attention_mask = (rollout_generated != self.EOS_TOKEN_ID).bool()

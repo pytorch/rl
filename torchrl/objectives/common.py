@@ -290,7 +290,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         Args:
             module (TensorDictModule or compatible): a stateful tensordict module.
                 Parameters from this module will be isolated in the `<module_name>_params`
-                attribute and a stateless version of the module will be registed
+                attribute and a stateless version of the module will be registered
                 under the `module_name` attribute.
             module_name (str): name where the module will be found.
                 The parameters of the module will be found under ``loss_module.<module_name>_params``

@@ -163,6 +163,81 @@ provides more information on how to design a custom environment from scratch.
     GymLikeEnv
     EnvMetaData
 
+Partial steps and partial resets
+--------------------------------
+
+TorchRL allows environments to reset some but not all the environments, or run a step in one but not all environments.
+If there is only one environment in the batch, then a partial reset / step is also allowed with the behavior detailed
+below.
+
+Batching environments and locking the batch
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. _ref_batch_locked:
+
+Before detailing what partial resets and partial steps do, we must distinguish cases where an environment has
+a batch size of its own (mostly stateful environments) or when the environment is just a mere module that, given an
+input of arbitrary size, batches the operations over all elements (mostly stateless environments).
+
+This is controlled via the :attr:`~torchrl.envs.batch_locked` attribute: a batch-locked environment requires all input
+tensordicts to have the same batch-size as the env's. Typical examples of these environments are
+:class:`~torchrl.envs.GymEnv` and related. Batch-unlocked envs are by contrast allowed to work with any input size.
+Notable examples are :class:`~torchrl.envs.BraxEnv` or :class:`~torchrl.envs.JumanjiEnv`.
+
+Executing partial steps in a batch-unlocked environment is straightforward: one just needs to mask the part of the
+tensordict that does not need to be executed, pass the other part to `step` and merge the results with the previous
+input.
+
+Batched environments (:class:`~torchrl.envs.ParallelEnv` and :class:`~torchrl.envs.SerialEnv`) can also deal with
+partial steps easily, they just pass the actions to the sub-environments that are required to be executed.
+
+In all other cases, TorchRL assumes that the environment handles the partial steps correctly.
+
+.. warning:: This means that custom environments may silently run the non-required steps as there is no way for torchrl
+    to control what happens within the `_step` method!
+
+Partial Steps
+~~~~~~~~~~~~~
+
+.. _ref_partial_steps:
+
+Partial steps are controlled via the temporary key `"_step"` which points to a boolean mask of the
+size of the tensordict that holds it. The classes armed to deal with this are:
+
+- Batched environments: :class:`~torchrl.envs.ParallelEnv` and :class:`~torchrl.envs.SerialEnv` will dispatch the
+  action to and only to the environments where `"_step"` is `True`;
+- Batch-unlocked environments;
+- Unbatched environments (i.e., environments without batch size). In these environments, the :meth:`~torchrl.envs.EnvBase.step`
+  method will first look for a `"_step"` entry and, if present, act accordingly.
+  If a :class:`~torchrl.envs.Transform` instance passes a `"_step"` entry to the tensordict, it is also captured by
+  :class:`~torchrl.envs.TransformedEnv`'s own `_step` method which will skip the `base_env.step` as well as any further
+  transformation.
+
+When dealing with partial steps, the strategy is always to use the step output and mask missing values with the previous
+content of the input tensordict, if present, or a `0`-valued tensor if the tensor cannot be found. This means that
+if the input tensordict does not contain all the previous observations, then the output tensordict will be 0-valued for
+all the non-stepped elements. Within batched environments, data collectors and rollouts utils, this is an issue that
+is not observed because these classes handle the passing of data properly.
+
+Partial steps are an essential feature of :meth:`~torchrl.envs.EnvBase.rollout` when `break_when_all_done` is `True`,
+as the environments with a `True` done state will need to be skipped during calls to `_step`.
+
+The :class:`~torchrl.envs.ConditionalSkip` transform allows you to programmatically ask for (partial) step skips.
+
+Partial Resets
+~~~~~~~~~~~~~~
+
+.. _ref_partial_resets:
+
+Partial resets work pretty much like partial steps, but with the `"_reset"` entry.
+
+The same restrictions of partial steps apply to partial resets.
+
+Likewise, partial resets are an essential feature of :meth:`~torchrl.envs.EnvBase.rollout` when `break_when_any_done` is `True`,
+as the environments with a `True` done state will need to be reset, but not others.
+
+See te following paragraph for a deep dive in partial resets within batched and vectorized environments.
+
 Vectorized envs
 ---------------
 
@@ -212,6 +287,7 @@ component (sub-environments or agents) should be reset.
 This allows to reset some but not all of the components.
 
 The ``"_reset"`` key has two distinct functionalities:
+
 1. During a call to :meth:`~.EnvBase._reset`, the ``"_reset"`` key may or may
    not be present in the input tensordict. TorchRL's convention is that the
    absence of the ``"_reset"`` key at a given ``"done"`` level indicates
@@ -225,7 +301,7 @@ The ``"_reset"`` key has two distinct functionalities:
    Designing an environment that behaves according to ``"_reset"`` inputs is the
    developer's responsibility, as TorchRL has no control over the inner logic
    of :meth:`~.EnvBase._reset`. Nevertheless, the following point should be
-   kept in mind when desiging that method.
+   kept in mind when designing that method.
 
 2. After a call to :meth:`~.EnvBase._reset`, the output will be masked with the
    ``"_reset"`` entries and the output of the previous :meth:`~.EnvBase.step`
@@ -253,7 +329,7 @@ designing reset functionalities:
   whether the ``"_reset"`` at the root level corresponds to an ``all()``, ``any()``
   or custom call to the nested ``"done"`` entries cannot be known in advance,
   and it is explicitly assumed that the ``"_reset"`` at the root was placed
-  there to superseed the nested values (for an example, have a look at
+  there to supersede the nested values (for an example, have a look at
   :class:`~.PettingZooWrapper` implementation where each group has one or more
   ``"done"`` entries associated which is aggregated at the root level with a
   ``any`` or ``all`` logic depending on the task).
@@ -508,6 +584,8 @@ single agent standards.
 
 Auto-resetting Envs
 -------------------
+
+.. _autoresetting_envs:
 
 Auto-resetting environments are environments where calls to :meth:`~torchrl.envs.EnvBase.reset` are not expected when
 the environment reaches a ``"done"`` state during a rollout, as the reset happens automatically.
@@ -787,6 +865,8 @@ The inverse process is executed with the output tensordict, where the `in_keys` 
 
    Rename transform logic
 
+.. note:: During a call to `inv`, the transforms are executed in reversed order (compared to the forward / step mode).
+
 Transforming Tensors and Specs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -822,6 +902,74 @@ tensor that should not be generated when using :meth:`~torchrl.envs.EnvBase.rand
 environment. Instead, `"action_discrete"` should be generated, and its continuous counterpart obtained from the
 transform. Therefore, the user should see the `"action_discrete"` entry being exposed, but not `"action"`.
 
+Designing your own Transform
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To create a basic, custom transform, you need to subclass the `Transform` class and implement the
+:meth:`~torchrl.envs._apply_transform` method. Here's an example of a simple transform that adds 1 to the observation
+tensor:
+
+    >>> class AddOneToObs(Transform):
+    ...     """A transform that adds 1 to the observation tensor."""
+    ...
+    ...     def __init__(self):
+    ...         super().__init__(in_keys=["observation"], out_keys=["observation"])
+    ...
+    ...     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+    ...         return obs + 1
+
+
+Tips for subclassing `Transform`
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+There are various ways of subclassing a transform. The things to take into considerations are:
+
+- Is the transform identical for each tensor / item being transformed? Use
+  :meth:`~torchrl.envs.Transform._apply_transform` and :meth:`~torchrl.envs.Transform._inv_apply_transform`.
+- The transform needs access to the input data to env.step as well as output? Rewrite
+  :meth:`~torchrl.envs.Transform._step`.
+  Otherwise, rewrite :meth:`~torchrl.envs.Transform._call` (or :meth:`~torchrl.envs.Transform._inv_call`).
+- Is the transform to be used within a replay buffer? Overwrite :meth:`~torchrl.envs.Transform.forward`,
+  :meth:`~torchrl.envs.Transform.inv`, :meth:`~torchrl.envs.Transform._apply_transform` or
+  :meth:`~torchrl.envs.Transform._inv_apply_transform`.
+- Within a transform, you can access (and make calls to) the parent environment using
+  :attr:`~torchrl.envs.Transform.parent` (the base env + all transforms till this one) or
+  :meth:`~torchrl.envs.Transform.container` (The object that encapsulates the transform).
+- Don't forget to edits the specs if needed: top level: :meth:`~torchrl.envs.Transform.transform_output_spec`,
+  :meth:`~torchrl.envs.Transform.transform_input_spec`.
+  Leaf level: :meth:`~torchrl.envs.Transform.transform_observation_spec`,
+  :meth:`~torchrl.envs.Transform.transform_action_spec`, :meth:`~torchrl.envs.Transform.transform_state_spec`,
+  :meth:`~torchrl.envs.Transform.transform_reward_spec` and
+  :meth:`~torchrl.envs.Transform.transform_reward_spec`.
+
+For practical examples, see the methods listed above.
+
+You can use a transform in an environment by passing it to the TransformedEnv constructor:
+
+    >>> env = TransformedEnv(GymEnv("Pendulum-v1"), AddOneToObs())
+
+You can compose multiple transforms together using the Compose class:
+
+    >>> transform = Compose(AddOneToObs(), RewardSum())
+    >>> env = TransformedEnv(GymEnv("Pendulum-v1"), transform)
+
+Inverse Transforms
+^^^^^^^^^^^^^^^^^^
+
+Some transforms have an inverse transform that can be used to undo the transformation. For example, the AddOneToAction
+transform has an inverse transform that subtracts 1 from the action tensor:
+
+    >>> class AddOneToAction(Transform):
+    ...     """A transform that adds 1 to the action tensor."""
+    ...     def __init__(self):
+    ...         super().__init__(in_keys=[], out_keys=[], in_keys_inv=["action"], out_keys_inv=["action"])
+    ...     def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+    ...         return action + 1
+
+Using a Transform with a Replay Buffer
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can use a transform with a replay buffer by passing it to the ReplayBuffer constructor:
 
 Cloning transforms
 ~~~~~~~~~~~~~~~~~~
@@ -883,6 +1031,7 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    ConditionalSkip
     Crop
     DTypeCastTransform
     DeviceCastTransform
@@ -897,7 +1046,8 @@ to be able to create this other composition:
     Hash
     InitTracker
     KLRewardTransform
-    LineariseReward
+    LineariseRewards
+    MultiAction
     NoopResetEnv
     ObservationNorm
     ObservationTransform
@@ -920,6 +1070,8 @@ to be able to create this other composition:
     TargetReturn
     TensorDictPrimer
     TimeMaxPool
+    Timer
+    Tokenizer
     ToTensorImage
     TrajCounter
     UnaryTransform
@@ -974,7 +1126,7 @@ to always know what the latest available actions are. You can do this like so:
         >>> )
 
 .. note::
-  In case you are using a parallel environment it is important to add the transform to the parallel enviornment itself
+  In case you are using a parallel environment it is important to add the transform to the parallel environment itself
   and not to its sub-environments.
 
 

@@ -251,7 +251,7 @@ class gSDEModule(nn.Module):
     The noise input should be reset through a :obj:`torchrl.envs.transforms.gSDENoise`
     instance: each time the environment is reset, the input noise will be set to
     zero by the environment transform, indicating to gSDEModule that it has to be resampled.
-    This scheme allows us to have the environemt tell the module to resample a
+    This scheme allows us to have the environment tell the module to resample a
     noise only the latter knows the shape of.
 
     A variable transform function can also be provided to map the noicy action
@@ -617,13 +617,13 @@ class ConsistentDropoutModule(TensorDictModuleBase):
 
     Keyword Args:
         input_shape (tuple, optional): the shape of the input (non-batchted), used to generate the
-            tensordict primers with :meth:`~.make_tensordict_primer`.
-        input_dtype (torch.dtype, optional): the dtype of the input for the primer. If none is pased,
+            tensordict primers with :meth:`make_tensordict_primer`.
+        input_dtype (torch.dtype, optional): the dtype of the input for the primer. If none is passed,
             ``torch.get_default_dtype`` is assumed.
 
     .. note:: To use this class within a policy, one needs the mask to be reset at reset time.
       This can be achieved through a :class:`~torchrl.envs.TensorDictPrimer` transform that can be obtained
-      with :meth:`~.make_tensordict_primer`. See this method for more information.
+      with :meth:`make_tensordict_primer`. See this method for more information.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -719,7 +719,7 @@ class ConsistentDropoutModule(TensorDictModuleBase):
         if shape is None:
             raise RuntimeError(
                 "Cannot infer the shape of the input automatically. "
-                "Please pass the shape of the tensor to `ConstistentDropoutModule` during construction "
+                "Please pass the shape of the tensor to `ConsistentDropoutModule` during construction "
                 "with the `input_shape` kwarg."
             )
         return TensorDictPrimer(

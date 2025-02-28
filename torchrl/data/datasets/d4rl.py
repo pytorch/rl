@@ -106,7 +106,7 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The D4RL dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/d4rl`.
+            `~/.cache/torchrl/atari`.d4rl`.
         download (bool, optional): Whether the dataset should be downloaded if
             not found. Defaults to ``True``.
         **env_kwargs (key-value pairs): additional kwargs for
@@ -291,7 +291,8 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
                     k: torch.from_numpy(item)
                     for k, item in dataset.items()
                     if isinstance(item, np.ndarray)
-                }
+                },
+                auto_batch_size=True,
             )
         dataset = dataset.unflatten_keys("/")
         if "metadata" in dataset.keys():
@@ -299,7 +300,9 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
             dataset = dataset.exclude("metadata")
             self.metadata = metadata
             # find batch size
-            dataset = make_tensordict(dataset.flatten_keys("/").to_dict())
+            dataset = make_tensordict(
+                dataset.flatten_keys("/").to_dict(), auto_batch_size=True
+            )
             dataset = dataset.unflatten_keys("/")
         else:
             self.metadata = {}
@@ -361,7 +364,8 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
                     k: torch.from_numpy(item)
                     for k, item in env.get_dataset().items()
                     if isinstance(item, np.ndarray)
-                }
+                },
+                auto_batch_size=True,
             )
         dataset = dataset.unflatten_keys("/")
         dataset = self._process_data_from_env(dataset, env)
@@ -373,7 +377,9 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
             dataset = dataset.exclude("metadata")
             self.metadata = metadata
             # find batch size
-            dataset = make_tensordict(dataset.flatten_keys("/").to_dict())
+            dataset = make_tensordict(
+                dataset.flatten_keys("/").to_dict(), auto_batch_size=True
+            )
             dataset = dataset.unflatten_keys("/")
         else:
             self.metadata = {}

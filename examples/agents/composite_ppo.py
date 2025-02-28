@@ -6,6 +6,7 @@
 """
 Multi-head Agent and PPO Loss
 =============================
+
 This example demonstrates how to use TorchRL to create a multi-head agent with three separate distributions
 (Gamma, Kumaraswamy, and Mixture) and train it using Proximal Policy Optimization (PPO) losses.
 

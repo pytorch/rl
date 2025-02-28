@@ -119,7 +119,7 @@ class RandomSampler(Sampler):
 
     Args:
         batch_size (int, optional): if provided, the batch size to be used by
-            the replay buffer when calling :meth:`~.ReplayBuffer.sample`.
+            the replay buffer when calling :meth:`ReplayBuffer.sample`.
 
     """
 
@@ -801,7 +801,7 @@ class SliceSampler(Sampler):
             Using tuples allows a fine grained control over the span on the left (beginning
             of the stored trajectory) and on the right (end of the stored trajectory).
         use_gpu (bool or torch.device): if ``True`` (or is a device is passed), an accelerator
-            will be used to retrieve the indices of the trajectory starts. This can significanlty
+            will be used to retrieve the indices of the trajectory starts. This can significantly
             accelerate the sampling when the buffer content is large.
             Defaults to ``False``.
 
@@ -1621,7 +1621,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             Keyword arguments can also be passed to torch.compile with this arg.
             Defaults to ``False``.
         use_gpu (bool or torch.device): if ``True`` (or is a device is passed), an accelerator
-            will be used to retrieve the indices of the trajectory starts. This can significanlty
+            will be used to retrieve the indices of the trajectory starts. This can significantly
             accelerate the sampling when the buffer content is large.
             Defaults to ``False``.
 
@@ -1848,7 +1848,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         samples if they follow another of higher priority, and transitions with a high priority but closer to the
         end of a trajectory may never be sampled if they cannot be used as start points.
         Currently, it is the user responsibility to aggregate priorities across items of a trajectory using
-        :meth:`~.update_priority`.
+        :meth:`update_priority`.
 
     Args:
         alpha (:obj:`float`): exponent α determines how much prioritization is used,
@@ -2424,7 +2424,7 @@ class SamplerEnsemble(Sampler):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
             try:

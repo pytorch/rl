@@ -140,8 +140,14 @@ class EnvMetaData:
         self.has_dynamic_specs = _has_dynamic_specs(specs)
 
     @property
-    def tensordict(self):
-        return self._tensordict.to(self.device)
+    def tensordict(self) -> TensorDictBase:
+        td = self._tensordict.copy()
+        if td.device != self.device:
+            if self.device is None:
+                return td.clear_device_()
+            else:
+                return td.to(self.device)
+        return td
 
     @property
     def specs(self):
@@ -229,6 +235,19 @@ class EnvMetaData:
             device_map=device_map,
         )
 
+    def __getitem__(self, item):
+        from tensordict.utils import _getitem_batch_size
+
+        return EnvMetaData(
+            tensordict=self.tensordict[item],
+            specs=self.specs[item],
+            batch_size=_getitem_batch_size(self.batch_size, item),
+            env_str=self.env_str,
+            device=self.device,
+            batch_locked=self.batch_locked,
+            device_map=self.device_map,
+        )
+
 
 class _EnvPostInit(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
@@ -301,7 +320,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         run_type_checks (bool, optional): If ``True``, type-checks will occur
             at every reset and every step. Defaults to ``False``.
         allow_done_after_reset (bool, optional): if ``True``, an environment can
-            be done after a call to :meth:`~.reset` is made. Defaults to ``False``.
+            be done after a call to :meth:`reset` is made. Defaults to ``False``.
         spec_locked (bool, optional): if ``True``, the specs are locked and can only be
             modified if :meth:`~torchrl.envs.EnvBase.set_spec_lock_` is called.
 
@@ -316,6 +335,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
             .. note:: The auto-resetting is achieved by the `EnvBase` metaclass. It does not appear in the
                 `__init__` method and is included in the keyword arguments strictly for type-hinting purpose.
+
+            .. seealso:: The :ref:`auto-resetting environments API <autoresetting_envs>` section in the API
+                documentation.
 
     Attributes:
         done_spec (Composite): equivalent to ``full_done_spec`` as all
@@ -699,7 +721,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         - The action cardinality may depend on the action mask;
         - The shape can be dynamic, as in ``Unbound(shape=(-1))``.
 
-        In these cases, the :meth:`~.cardinality` should be overwritten,
+        In these cases, the :meth:`cardinality` should be overwritten,
 
         Args:
             tensordict (TensorDictBase, optional): a tensordict containing the data required to compute the cardinality.
@@ -867,7 +889,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         - "full_action_spec": the spec of the input actions
         - "full_state_spec": the spec of all other environment inputs
 
-        This attibute is locked and should be read-only.
+        This attribute is locked and should be read-only.
         Instead, to set the specs contained in it, use the respective properties.
 
         Examples:
@@ -919,7 +941,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         - "full_done_spec": the spec of done
         - "full_observation_spec": the spec of all other environment outputs
 
-        This attibute is locked and should be read-only.
+        This attribute is locked and should be read-only.
         Instead, to set the specs contained in it, use the respective properties.
 
         Examples:
@@ -1194,6 +1216,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return reward_keys
 
     @property
+    @_cache_value
+    def observation_keys(self) -> List[NestedKey]:
+        """The observation keys of an environment.
+
+        By default, there will only be one key named "observation".
+
+        Keys are sorted by depth in the data tree.
+        """
+        observation_keys = sorted(
+            self.full_observation_spec.keys(True, True), key=_repr_by_depth
+        )
+        return observation_keys
+
+    @property
     def reward_key(self):
         """The reward key of an environment.
 
@@ -1327,7 +1363,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         for leaf in value.values(True, True):
             if len(leaf.shape) == 0:
                 raise RuntimeError(
-                    "the reward_spec's leafs shape cannot be empty (this error"
+                    "the reward_spec's leaves shape cannot be empty (this error"
                     " usually comes from trying to set a reward_spec"
                     " with a null number of dimensions. Try using a multidimensional"
                     " spec instead, for instance with a singleton dimension at the tail)."
@@ -1605,7 +1641,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         for leaf in value.values(True, True):
             if len(leaf.shape) == 0:
                 raise RuntimeError(
-                    "the done_spec's leafs shape cannot be empty (this error"
+                    "the done_spec's leaves shape cannot be empty (this error"
                     " usually comes from trying to set a reward_spec"
                     " with a null number of dimensions. Try using a multidimensional"
                     " spec instead, for instance with a singleton dimension at the tail)."
@@ -1930,6 +1966,35 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         spec = spec.expand(self.batch_size + spec.shape)
         self.state_spec = spec
 
+    def _skip_tensordict(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Creates a "skip" tensordict, ie a placeholder for when a step is skipped
+        next_tensordict = self.full_done_spec.zero()
+        next_tensordict.update(self.full_observation_spec.zero())
+        next_tensordict.update(self.full_reward_spec.zero())
+
+        # Copy the data from tensordict in `next`
+        keys = set()
+
+        def select_and_clone(name, x, y):
+            keys.add(name)
+            if y is not None:
+                if y.device == x.device:
+                    return x.clone()
+                return x.to(y.device)
+
+        result = tensordict._fast_apply(
+            select_and_clone,
+            next_tensordict,
+            device=self.device,
+            default=None,
+            filter_empty=True,
+            is_leaf=_is_leaf_nontensor,
+            named=True,
+            nested_keys=True,
+        )
+        result.update(next_tensordict.exclude(*keys).filter_empty_())
+        return result
+
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -1950,25 +2015,33 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         # sanity check
         self._assert_tensordict_shape(tensordict)
-        partial_steps = None
+        partial_steps = tensordict.pop("_step", None)
 
-        if not self.batch_locked:
-            # Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here
-            partial_steps = tensordict.get("_step", None)
-            if partial_steps is not None:
+        next_tensordict = None
+
+        if partial_steps is not None:
+            if not self.batch_locked:
+                # Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here
                 if partial_steps.all():
                     partial_steps = None
                 else:
                     tensordict_batch_size = tensordict.batch_size
                     partial_steps = partial_steps.view(tensordict_batch_size)
                     tensordict = tensordict[partial_steps]
-        else:
+            else:
+                if not partial_steps.any():
+                    next_tensordict = self._skip_tensordic(tensordict)
+                else:
+                    # trust that the _step can handle this!
+                    tensordict.set("_step", partial_steps)
+
             tensordict_batch_size = self.batch_size
 
         next_preset = tensordict.get("next", None)
 
-        next_tensordict = self._step(tensordict)
-        next_tensordict = self._step_proc_data(next_tensordict)
+        if next_tensordict is None:
+            next_tensordict = self._step(tensordict)
+            next_tensordict = self._step_proc_data(next_tensordict)
         if next_preset is not None:
             # tensordict could already have a "next" key
             # this could be done more efficiently by not excluding but just passing
@@ -1977,9 +2050,28 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 next_preset.exclude(*next_tensordict.keys(True, True))
             )
         tensordict.set("next", next_tensordict)
-        if partial_steps is not None:
+        if partial_steps is not None and tensordict_batch_size != self.batch_size:
             result = tensordict.new_zeros(tensordict_batch_size)
-            result[partial_steps] = tensordict
+
+            def select_and_clone(x, y):
+                if y is not None:
+                    if x.device == y.device:
+                        return x.clone()
+                    return x.to(y.device)
+
+            result.update(
+                tensordict._fast_apply(
+                    select_and_clone,
+                    result,
+                    device=result.device,
+                    filter_empty=True,
+                    default=None,
+                    batch_size=result.batch_size,
+                    is_leaf=_is_leaf_nontensor,
+                )
+            )
+            if partial_steps.any():
+                result[partial_steps] = tensordict
             return result
         return tensordict
 
@@ -2127,9 +2219,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         This method is designed with the following scopes in mind:
 
-          - Incorporate a TorchRL-first environment in a framework that uses Gym;
-          - Incorporate another environment (eg, DeepMind Control, Brax, Jumanji, ...)
-            in a framework that uses Gym.
+        - Incorporate a TorchRL-first environment in a framework that uses Gym;
+        - Incorporate another environment (eg, DeepMind Control, Brax, Jumanji, ...)
+          in a framework that uses Gym.
 
         Args:
             id (str): the name of the environment. Should follow the
@@ -2761,6 +2853,27 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 f"got {tensordict.batch_size} and {self.batch_size}"
             )
 
+    def all_actions(
+        self, tensordict: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
+        """Generates all possible actions from the action spec.
+
+        This only works in environments with fully discrete actions.
+
+        Args:
+            tensordict (TensorDictBase, optional): If given, :meth:`~.reset`
+                is called with this tensordict.
+
+        Returns:
+            a tensordict object with the "action" entry updated with a batch of
+            all possible actions. The actions are stacked together in the
+            leading dimension.
+        """
+        if tensordict is not None:
+            self.reset(tensordict)
+
+        return self.full_action_spec.enumerate(use_mask=True)
+
     def rand_action(self, tensordict: Optional[TensorDictBase] = None):
         """Performs a random action given the action_spec attribute.
 
@@ -2870,9 +2983,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 policy device before the policy is used. Default is ``False``.
             break_when_any_done (bool): if ``True``, break when any of the contained environments reaches any of the
                 done states. If ``False``, then the done environments are reset automatically. Default is ``True``.
+
+                .. seealso:: The :ref:`Partial resets <ref_partial_resets>` of the documentation gives more
+                    information about partial resets.
+
             break_when_all_done (bool, optional): if ``True``, break if all of the contained environments reach any
                 of the done states. If ``False``, break if at least one environment reaches any of the done states.
                 Default is ``False``.
+
+                .. seealso:: The :ref:`Partial steps <ref_partial_steps>` of the documentation gives more
+                    information about partial resets.
+
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is `True` if
                 the env does not have dynamic specs, otherwise `False`.
             tensordict (TensorDict, optional): if ``auto_reset`` is False, an initial
@@ -3362,7 +3483,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """Runs a step in the environment and (partially) resets it if needed.
 
         Args:
-            tensordict (TensorDictBase): an input data structure for the :meth:`~.step`
+            tensordict (TensorDictBase): an input data structure for the :meth:`step`
                 method.
 
         This method allows to easily code non-stopping rollout functions.
@@ -3408,27 +3529,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return tensordict, tensordict_
 
     @property
+    @_cache_value
     def _simple_done(self):
-        _simple_done = self.__dict__.get("_simple_done_value")
-        if _simple_done is None:
-            key_set = set(self.full_done_spec.keys())
-            _simple_done = key_set == {
-                "done",
-                "truncated",
-                "terminated",
-            } or key_set == {"done", "terminated"}
-            self.__dict__["_simple_done_value"] = _simple_done
+        key_set = set(self.full_done_spec.keys())
+        _simple_done = key_set == {
+            "done",
+            "truncated",
+            "terminated",
+        } or key_set == {"done", "terminated"}
         return _simple_done
 
-    def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
+    def any_done(self, tensordict: TensorDictBase) -> bool:
+        """Checks if the tensordict is in a "done" state (or if an element of the batch is).
 
-        Args:
-            tensordict (TensorDictBase): a tensordict coming from the output of :func:`~torchrl.envs.utils.step_mdp`.
+        Writes the result under the `"_reset"` entry.
 
-        Returns:
-            A tensordict that is identical to the input where the environment was
-            not reset and contains the new reset data where the environment was reset.
+        Returns: a bool indicating whether there is an element in the tensordict that is marked
+            as done.
+
+        .. note:: The tensordict passed should be a `"next"` tensordict or equivalent -- i.e., it should not
+            contain a `"next"` value.
 
         """
         if self._simple_done:
@@ -3438,7 +3558,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             else:
                 any_done = False
             if any_done:
-                tensordict = tensordict._set_str(
+                tensordict._set_str(
                     "_reset",
                     done.clone(),
                     validated=True,
@@ -3451,6 +3571,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 full_done_spec=self.output_spec["full_done_spec"],
                 key="_reset",
             )
+        return any_done
+
+    def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
+
+        Args:
+            tensordict (TensorDictBase): a tensordict coming from the output of :func:`~torchrl.envs.utils.step_mdp`.
+
+        Returns:
+            A tensordict that is identical to the input where the environment was
+            not reset and contains the new reset data where the environment was reset.
+
+        """
+        any_done = self.any_done(tensordict)
         if any_done:
             return self.reset(tensordict, select_reset_only=True)
         return tensordict
@@ -3539,7 +3673,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if key.rfind("observation") >= 0:
                 yield key
 
-    def close(self):
+    def close(self, *, raise_if_closed: bool = True):
         self.is_closed = True
 
     def __del__(self):
@@ -3571,7 +3705,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         observation_spec = self.observation_spec
         action_spec = self.input_spec["full_action_spec"]
         # instantiates reward_spec if needed
-        _ = self.reward_spec
+        _ = self.full_reward_spec
         reward_spec = self.output_spec["full_reward_spec"]
         full_done_spec = self.output_spec["full_done_spec"]
 
@@ -3731,7 +3865,7 @@ class _EnvWrapper(EnvBase):
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         raise NotImplementedError
 
-    def close(self) -> None:
+    def close(self, *, raise_if_closed: bool = True) -> None:
         """Closes the contained environment if possible."""
         self.is_closed = True
         try:

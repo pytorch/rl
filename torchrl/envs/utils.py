@@ -216,12 +216,12 @@ class _StepMDP:
             val = data_in._get_str(key, NO_DEFAULT)
             if subdict is not None:
                 val_out = data_out._get_str(key, None)
-                if val_out is None:
-                    val_out = val.empty()
+                if val_out is None or val_out.batch_size != val.batch_size:
+                    val_out = val.empty(batch_size=val.batch_size)
                 if isinstance(val, LazyStackedTensorDict):
 
-                    val = LazyStackedTensorDict(
-                        *(
+                    val = LazyStackedTensorDict.lazy_stack(
+                        [
                             cls._grab_and_place(
                                 subdict,
                                 _val,
@@ -232,8 +232,8 @@ class _StepMDP:
                                 val.unbind(val.stack_dim),
                                 val_out.unbind(val_out.stack_dim),
                             )
-                        ),
-                        stack_dim=val.stack_dim,
+                        ],
+                        dim=val.stack_dim,
                     )
                 else:
                     val = cls._grab_and_place(
@@ -302,8 +302,8 @@ class _StepMDP:
             )
         if isinstance(next_td, LazyStackedTensorDict):
             if not isinstance(out, LazyStackedTensorDict):
-                out = LazyStackedTensorDict(
-                    *out.unbind(next_td.stack_dim), stack_dim=next_td.stack_dim
+                out = LazyStackedTensorDict.lazy_stack(
+                    list(out.unbind(next_td.stack_dim)), dim=next_td.stack_dim
                 )
             for _next_td, _out in zip(next_td.tensordicts, out.tensordicts):
                 self._grab_and_place(
@@ -685,6 +685,7 @@ def check_env_specs(
     check_dtype=True,
     seed: int | None = None,
     tensordict: TensorDictBase | None = None,
+    break_when_any_done: bool | str = None,
 ):
     """Tests an environment specs against the results of short rollout.
 
@@ -709,12 +710,31 @@ def check_env_specs(
             we leave it to the user to accomplish that.
             Defaults to ``None``.
         tensordict (TensorDict, optional): an optional tensordict instance to use for reset.
+        break_when_any_done (bool or str, optional): value for ``break_when_any_done`` in :meth:`~torchrl.envs.EnvBase.rollout`.
+            If ``"both"``, the test is run on both `True` and `False`.
 
     Caution: this function resets the env seed. It should be used "offline" to
     check that an env is adequately constructed, but it may affect the seeding
     of an experiment and as such should be kept out of training scripts.
 
     """
+    if break_when_any_done == "both":
+        check_env_specs(
+            env,
+            return_contiguous=return_contiguous,
+            check_dtype=check_dtype,
+            seed=seed,
+            tensordict=tensordict,
+            break_when_any_done=True,
+        )
+        return check_env_specs(
+            env,
+            return_contiguous=return_contiguous,
+            check_dtype=check_dtype,
+            seed=seed,
+            tensordict=tensordict,
+            break_when_any_done=False,
+        )
     if seed is not None:
         device = (
             env.device if env.device is not None and env.device.type == "cuda" else None
@@ -735,6 +755,7 @@ def check_env_specs(
         return_contiguous=return_contiguous,
         tensordict=tensordict,
         auto_reset=tensordict is None,
+        break_when_any_done=break_when_any_done,
     )
 
     if return_contiguous:
@@ -891,7 +912,7 @@ def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
                      shape=torch.Size([1]), space=ContinuousBox(low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> assert (spec.zero() == data.zero_()).all()
     """
-    # custom funtion to convert a tensordict in a similar spec structure
+    # custom function to convert a tensordict in a similar spec structure
     # of unbounded values.
     composite = Composite(
         {
@@ -1393,7 +1414,7 @@ def _update_during_reset(
             # by contract, a reset signal at one level cannot
             # be followed by other resets at nested levels, so it's safe to
             # simply update
-            node.update(node_reset)
+            node.update(node_reset, update_batch_size=True)
         else:
             # there can be two cases: (1) the key is present in both tds,
             # in which case we use the reset mask to update

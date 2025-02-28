@@ -27,6 +27,7 @@ from tensordict import (
     assert_allclose_td,
     dense_stack_tds,
     LazyStackedTensorDict,
+    set_capture_non_tensor_stack,
     TensorDict,
     TensorDictBase,
 )
@@ -34,12 +35,14 @@ from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
+from torchrl import set_auto_unwrap_transformed_env
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
 from torchrl.envs import (
     CatFrames,
     CatTensors,
     ChessEnv,
+    ConditionalSkip,
     DoubleToFloat,
     EnvBase,
     EnvCreator,
@@ -53,12 +56,14 @@ from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
-from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
-from torchrl.envs.transforms.transforms import (
+from torchrl.envs.transforms import (
     AutoResetEnv,
     AutoResetTransform,
+    Compose,
+    StepCounter,
     Tokenizer,
     Transform,
+    TransformedEnv,
     UnsqueezeTransform,
 )
 from torchrl.envs.utils import (
@@ -68,10 +73,18 @@ from torchrl.envs.utils import (
     check_marl_grouping,
     make_composite_from_td,
     MarlGroupMapType,
+    RandomPolicy,
     step_mdp,
 )
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
+
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings(
+        "ignore:Got multiple backends for torchrl.data.replay_buffers.storages"
+    ),
+]
 
 gym_version = None
 if _has_gym:
@@ -120,8 +133,10 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
+        EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
+        HistoryTransform,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
@@ -159,8 +174,10 @@ else:
         EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
+        EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
+        HistoryTransform,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
@@ -228,11 +245,12 @@ _has_transformers = importlib.util.find_spec("transformers") is not None
 class TestEnvBase:
     def test_run_type_checks(self):
         env = ContinuousActionVecMockEnv()
+        env.adapt_dtype = False
         env._run_type_checks = False
         check_env_specs(env)
         env._run_type_checks = True
         check_env_specs(env)
-        env.output_spec.unlock_()
+        env.output_spec.unlock_(recurse=True)
         # check type check on done
         env.output_spec["full_done_spec", "done"].dtype = torch.int
         with pytest.raises(TypeError, match="expected done.dtype to"):
@@ -292,8 +310,8 @@ class TestEnvBase:
         assert not env.output_spec_unbatched.shape
         assert not env.full_reward_spec_unbatched.shape
 
-        assert env.action_spec_unbatched.shape
-        assert env.reward_spec_unbatched.shape
+        assert env.full_action_spec_unbatched[env.action_key].shape
+        assert env.full_reward_spec_unbatched[env.reward_key].shape
 
         assert env.output_spec.is_in(env.output_spec_unbatched.zeros(env.shape))
         assert env.input_spec.is_in(env.input_spec_unbatched.zeros(env.shape))
@@ -307,7 +325,10 @@ class TestEnvBase:
                 return values.argmax(-1)
 
         policy = nn.Sequential(
-            nn.Linear(env.observation_spec["observation"].shape[-1], env.action_spec.n),
+            nn.Linear(
+                env.observation_spec["observation"].shape[-1],
+                env.full_action_spec[env.action_key].n,
+            ),
             ArgMaxModule(),
         )
         env.rollout(10, policy)
@@ -507,7 +528,7 @@ class TestEnvBase:
         policy = Actor(
             nn.Linear(
                 env.observation_spec["observation"].shape[-1],
-                env.action_spec.shape[-1],
+                env.full_action_spec[env.action_key].shape[-1],
                 device="cuda:0",
             ),
             in_keys=["observation"],
@@ -538,7 +559,7 @@ class TestEnvBase:
     def test_env_seed(self, env_name, frame_skip, seed=0):
         env_name = env_name()
         env = GymEnv(env_name, frame_skip=frame_skip)
-        action = env.action_spec.rand()
+        action = env.full_action_spec[env.action_key].rand()
 
         env.set_seed(seed)
         td0a = env.reset()
@@ -624,7 +645,7 @@ class TestEnvBase:
         env = CountingEnv(max_steps=max_steps, batch_size=batch_size)
         env.set_seed(1)
 
-        action = env.action_spec.rand()
+        action = env.full_action_spec[env.action_key].rand()
         action[:] = 1
 
         for i in range(max_steps):
@@ -695,7 +716,7 @@ class TestEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             env.batch_locked = False
         td = env.reset()
-        td["action"] = env.action_spec.rand()
+        td["action"] = env.full_action_spec[env.action_key].rand()
         td_expanded = td.expand(2).clone()
         _ = env.step(td)
 
@@ -712,7 +733,7 @@ class TestEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             env.batch_locked = False
         td = env.reset()
-        td["action"] = env.action_spec.rand()
+        td["action"] = env.full_action_spec[env.action_key].rand()
         td_expanded = td.expand(2).clone()
         td = env.step(td)
 
@@ -727,7 +748,7 @@ class TestEnvBase:
             env.batch_locked = False
 
         td = env.reset()
-        td["action"] = env.action_spec.rand()
+        td["action"] = env.full_action_spec[env.action_key].rand()
         td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
         td = env.step(td)
 
@@ -803,7 +824,7 @@ class TestRollout:
         # CountingEnv is done at max_steps + 1, so to emulate it being done at max_steps, we feed max_steps=max_steps - 1
         env = CountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
         policy = CountingEnvCountPolicy(
-            action_spec=env.action_spec, action_key=env.action_key
+            action_spec=env.full_action_spec[env.action_key], action_key=env.action_key
         )
 
         input_td = env.reset()
@@ -1010,7 +1031,7 @@ class TestModelBasedEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             mb_env.batch_locked = False
         td = mb_env.reset()
-        td["action"] = mb_env.action_spec.rand()
+        td["action"] = mb_env.full_action_spec[mb_env.action_key].rand()
         td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
         mb_env.step(td)
 
@@ -1028,7 +1049,7 @@ class TestModelBasedEnvBase:
         with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             mb_env.batch_locked = False
         td = mb_env.reset()
-        td["action"] = mb_env.action_spec.rand()
+        td["action"] = mb_env.full_action_spec[mb_env.action_key].rand()
         td_expanded = td.expand(2)
         mb_env.step(td)
         # we should be able to do a step with a tensordict that has been expended
@@ -1036,6 +1057,11 @@ class TestModelBasedEnvBase:
 
 
 class TestParallel:
+    @pytest.fixture(autouse=True, scope="class")
+    def disable_autowrap(self):
+        with set_auto_unwrap_transformed_env(False):
+            yield
+
     def test_create_env_fn(self, maybe_fork_ParallelEnv):
         def make_env():
             return GymEnv(PENDULUM_VERSIONED())
@@ -1079,56 +1105,70 @@ class TestParallel:
             env1 = lambda: ContinuousActionVecMockEnv(device=edevice)
             env2 = lambda: TransformedEnv(ContinuousActionVecMockEnv(device=edevice))
             env = cls(2, [env1, env2], device=pdevice)
-
-        r = env.rollout(2, break_when_any_done=bwad)
-        if pdevice is not None:
-            assert env.device.type == torch.device(pdevice).type
-            assert r.device.type == torch.device(pdevice).type
-            assert all(
-                item.device.type == torch.device(pdevice).type
-                for item in r.values(True, True)
-            )
-        else:
-            assert env.device.type == torch.device(edevice).type
-            assert r.device.type == torch.device(edevice).type
-            assert all(
-                item.device.type == torch.device(edevice).type
-                for item in r.values(True, True)
-            )
-        if parallel:
-            assert (
-                env.shared_tensordict_parent.device.type == torch.device(edevice).type
-            )
+        try:
+            r = env.rollout(2, break_when_any_done=bwad)
+            if pdevice is not None:
+                assert env.device.type == torch.device(pdevice).type
+                assert r.device.type == torch.device(pdevice).type
+                assert all(
+                    item.device.type == torch.device(pdevice).type
+                    for item in r.values(True, True)
+                )
+            else:
+                assert env.device.type == torch.device(edevice).type
+                assert r.device.type == torch.device(edevice).type
+                assert all(
+                    item.device.type == torch.device(edevice).type
+                    for item in r.values(True, True)
+                )
+            if parallel:
+                assert (
+                    env.shared_tensordict_parent.device.type
+                    == torch.device(edevice).type
+                )
+        finally:
+            env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("start_method", [None, mp_ctx])
     def test_serial_for_single(self, maybe_fork_ParallelEnv, start_method):
         gc.collect()
-        env = ParallelEnv(
-            1,
-            ContinuousActionVecMockEnv,
-            serial_for_single=True,
-            mp_start_method=start_method,
-        )
-        assert isinstance(env, SerialEnv)
-        env = ParallelEnv(1, ContinuousActionVecMockEnv, mp_start_method=start_method)
-        assert isinstance(env, ParallelEnv)
-        env = ParallelEnv(
-            2,
-            ContinuousActionVecMockEnv,
-            serial_for_single=True,
-            mp_start_method=start_method,
-        )
-        assert isinstance(env, ParallelEnv)
+        try:
+            env = ParallelEnv(
+                1,
+                ContinuousActionVecMockEnv,
+                serial_for_single=True,
+                mp_start_method=start_method,
+            )
+            assert isinstance(env, SerialEnv)
+            env = ParallelEnv(
+                1, ContinuousActionVecMockEnv, mp_start_method=start_method
+            )
+            assert isinstance(env, ParallelEnv)
+            env = ParallelEnv(
+                2,
+                ContinuousActionVecMockEnv,
+                serial_for_single=True,
+                mp_start_method=start_method,
+            )
+            assert isinstance(env, ParallelEnv)
+        finally:
+            env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
     @pytest.mark.parametrize("env_batch_size", [[], (32,), (32, 1)])
     def test_env_with_batch_size(
         self, num_parallel_env, env_batch_size, maybe_fork_ParallelEnv
     ):
-        env = MockBatchedLockedEnv(device="cpu", batch_size=torch.Size(env_batch_size))
-        env.set_seed(1)
-        parallel_env = maybe_fork_ParallelEnv(num_parallel_env, lambda: env)
-        assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
+        try:
+            env = MockBatchedLockedEnv(
+                device="cpu", batch_size=torch.Size(env_batch_size)
+            )
+            env.set_seed(1)
+            parallel_env = maybe_fork_ParallelEnv(num_parallel_env, lambda: env)
+            assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
+        finally:
+            env.close(raise_if_closed=False)
+            parallel_env.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
@@ -1136,40 +1176,44 @@ class TestParallel:
     def test_multi_task_serial_parallel(
         self, env_task, share_individual_td, maybe_fork_ParallelEnv
     ):
-        tasks = env_task.split(",")
-        if len(tasks) == 1:
-            single_task = True
+        try:
+            tasks = env_task.split(",")
+            if len(tasks) == 1:
+                single_task = True
 
-            def env_make():
-                return DMControlEnv("humanoid", tasks[0])
+                def env_make():
+                    return DMControlEnv("humanoid", tasks[0])
 
-        elif len(set(tasks)) == 1 and len(tasks) == 3:
-            single_task = True
-            env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
-        else:
-            single_task = False
-            env_make = [
-                lambda task=task: DMControlEnv("humanoid", task) for task in tasks
-            ]
+            elif len(set(tasks)) == 1 and len(tasks) == 3:
+                single_task = True
+                env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
+            else:
+                single_task = False
+                env_make = [
+                    lambda task=task: DMControlEnv("humanoid", task) for task in tasks
+                ]
 
-        env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
-        env_serial.start()
-        assert env_serial._single_task is single_task
-        env_parallel = maybe_fork_ParallelEnv(
-            3, env_make, share_individual_td=share_individual_td
-        )
-        env_parallel.start()
-        assert env_parallel._single_task is single_task
+            env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
+            env_serial.start()
+            assert env_serial._single_task is single_task
+            env_parallel = maybe_fork_ParallelEnv(
+                3, env_make, share_individual_td=share_individual_td
+            )
+            env_parallel.start()
+            assert env_parallel._single_task is single_task
 
-        env_serial.set_seed(0)
-        torch.manual_seed(0)
-        td_serial = env_serial.rollout(max_steps=50)
+            env_serial.set_seed(0)
+            torch.manual_seed(0)
+            td_serial = env_serial.rollout(max_steps=50)
 
-        env_parallel.set_seed(0)
-        torch.manual_seed(0)
-        td_parallel = env_parallel.rollout(max_steps=50)
+            env_parallel.set_seed(0)
+            torch.manual_seed(0)
+            td_parallel = env_parallel.rollout(max_steps=50)
 
-        assert_allclose_td(td_serial, td_parallel)
+            assert_allclose_td(td_serial, td_parallel)
+        finally:
+            env_parallel.close(raise_if_closed=False)
+            env_serial.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     def test_multitask(self, maybe_fork_ParallelEnv):
@@ -1207,20 +1251,23 @@ class TestParallel:
                 ),
             )
 
-        env = maybe_fork_ParallelEnv(2, [env1_maker, env2_maker])
-        # env = SerialEnv(2, [env1_maker, env2_maker])
-        assert not env._single_task
+        try:
+            env = maybe_fork_ParallelEnv(2, [env1_maker, env2_maker])
+            # env = SerialEnv(2, [env1_maker, env2_maker])
+            assert not env._single_task
 
-        td = env.rollout(10, return_contiguous=False)
-        assert "observation_walk" not in td.keys()
-        assert "observation_walk" in td[1].keys()
-        assert "observation_walk" not in td[0].keys()
-        assert "observation_stand" in td[0].keys()
-        assert "observation_stand" not in td[1].keys()
-        assert "observation_walk" in td[:, 0][1].keys()
-        assert "observation_walk" not in td[:, 0][0].keys()
-        assert "observation_stand" in td[:, 0][0].keys()
-        assert "observation_stand" not in td[:, 0][1].keys()
+            td = env.rollout(10, return_contiguous=False)
+            assert "observation_walk" not in td.keys()
+            assert "observation_walk" in td[1].keys()
+            assert "observation_walk" not in td[0].keys()
+            assert "observation_stand" in td[0].keys()
+            assert "observation_stand" not in td[1].keys()
+            assert "observation_walk" in td[:, 0][1].keys()
+            assert "observation_walk" not in td[:, 0][0].keys()
+            assert "observation_stand" in td[:, 0][0].keys()
+            assert "observation_stand" not in td[:, 0][1].keys()
+        finally:
+            env.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize(
@@ -1241,29 +1288,36 @@ class TestParallel:
             transformed_out=transformed_out,
             N=N,
         )
-        td = TensorDict(source={"action": env0.action_spec.rand((N,))}, batch_size=[N])
-        td1 = env_parallel.step(td)
-        assert not td1.is_shared()
-        assert ("next", "done") in td1.keys(True)
-        assert ("next", "reward") in td1.keys(True)
-
-        with pytest.raises(RuntimeError):
-            # number of actions does not match number of workers
+        try:
             td = TensorDict(
-                source={"action": env0.action_spec.rand((N - 1,))},
-                batch_size=[N - 1],
+                source={"action": env0.action_spec.rand((N,))}, batch_size=[N]
             )
-            _ = env_parallel.step(td)
+            env_parallel.reset()
+            td1 = env_parallel.step(td)
+            assert not td1.is_shared()
+            assert ("next", "done") in td1.keys(True)
+            assert ("next", "reward") in td1.keys(True)
 
-        td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
-        env_parallel.reset(tensordict=td_reset)
+            with pytest.raises(RuntimeError):
+                # number of actions does not match number of workers
+                td = TensorDict(
+                    source={"action": env0.action_spec.rand((N - 1,))},
+                    batch_size=[N - 1],
+                )
+                _ = env_parallel.step(td)
 
-        # check that interruption occured because of max_steps or done
-        td = env_parallel.rollout(policy=None, max_steps=T)
-        assert td.shape == torch.Size([N, T]) or td.get(("next", "done")).sum(1).any()
-        env_parallel.close()
-        # env_serial.close()  # never opened
-        env0.close()
+            td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
+            env_parallel.reset(tensordict=td_reset)
+
+            # check that interruption occurred because of max_steps or done
+            td = env_parallel.rollout(policy=None, max_steps=T)
+            assert (
+                td.shape == torch.Size([N, T]) or td.get(("next", "done")).sum(1).any()
+            )
+        finally:
+            env_parallel.close(raise_if_closed=False)
+            # env_serial.close()  # never opened
+            env0.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
@@ -1288,50 +1342,54 @@ class TestParallel:
             transformed_out=transformed_out,
             N=N,
         )
-
-        policy = ActorCriticOperator(
-            SafeModule(
-                spec=None,
-                module=nn.LazyLinear(12),
-                in_keys=["observation"],
-                out_keys=["hidden"],
-            ),
-            SafeModule(
-                spec=None,
-                module=nn.LazyLinear(env0.action_spec.shape[-1]),
-                in_keys=["hidden"],
-                out_keys=["action"],
-            ),
-            ValueOperator(
-                module=MLP(out_features=1, num_cells=[]), in_keys=["hidden", "action"]
-            ),
-        )
-
-        td = TensorDict(source={"action": env0.action_spec.rand((N,))}, batch_size=[N])
-        td1 = env_parallel.step(td)
-        assert not td1.is_shared()
-        assert ("next", "done") in td1.keys(True)
-        assert ("next", "reward") in td1.keys(True)
-
-        with pytest.raises(RuntimeError):
-            # number of actions does not match number of workers
-            td = TensorDict(
-                source={"action": env0.action_spec.rand((N - 1,))},
-                batch_size=[N - 1],
+        try:
+            policy = ActorCriticOperator(
+                SafeModule(
+                    spec=None,
+                    module=nn.LazyLinear(12),
+                    in_keys=["observation"],
+                    out_keys=["hidden"],
+                ),
+                SafeModule(
+                    spec=None,
+                    module=nn.LazyLinear(env0.action_spec.shape[-1]),
+                    in_keys=["hidden"],
+                    out_keys=["action"],
+                ),
+                ValueOperator(
+                    module=MLP(out_features=1, num_cells=[]),
+                    in_keys=["hidden", "action"],
+                ),
             )
-            _ = env_parallel.step(td)
 
-        td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
-        env_parallel.reset(tensordict=td_reset)
+            td = TensorDict(
+                source={"action": env0.action_spec.rand((N,))}, batch_size=[N]
+            )
+            env_parallel.reset()
+            td1 = env_parallel.step(td)
+            assert not td1.is_shared()
+            assert ("next", "done") in td1.keys(True)
+            assert ("next", "reward") in td1.keys(True)
 
-        td = env_parallel.rollout(policy=policy, max_steps=T)
-        assert (
-            td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
-        ), f"{td.shape}, {td.get('done').sum(1)}"
-        env_parallel.close()
+            with pytest.raises(RuntimeError):
+                # number of actions does not match number of workers
+                td = TensorDict(
+                    source={"action": env0.action_spec.rand((N - 1,))},
+                    batch_size=[N - 1],
+                )
+                _ = env_parallel.step(td)
 
-        # env_serial.close()
-        env0.close()
+            td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
+            env_parallel.reset(tensordict=td_reset)
+
+            td = env_parallel.rollout(policy=policy, max_steps=T)
+            assert (
+                td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
+            ), f"{td.shape}, {td.get('done').sum(1)}"
+        finally:
+            env_parallel.close(raise_if_closed=False)
+            # env_serial.close()
+            env0.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
     @pytest.mark.parametrize("heterogeneous", [False, True])
@@ -1356,7 +1414,7 @@ class TestParallel:
             r = env.rollout(6, break_when_any_done=False)
             assert r.shape == (2, 6)
         finally:
-            penv.close()
+            penv.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize(
@@ -1375,53 +1433,58 @@ class TestParallel:
         env_parallel, env_serial, _, _ = _make_envs(
             env_name, frame_skip, transformed_in, transformed_out, 5
         )
-        out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
-        if static_seed:
-            assert out_seed_serial == 0
-        td0_serial = env_serial.reset()
-        torch.manual_seed(0)
+        try:
+            out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
+            if static_seed:
+                assert out_seed_serial == 0
+            td0_serial = env_serial.reset()
+            torch.manual_seed(0)
 
-        td_serial = env_serial.rollout(
-            max_steps=10, auto_reset=False, tensordict=td0_serial
-        ).contiguous()
-        key = "pixels" if "pixels" in td_serial.keys() else "observation"
-        torch.testing.assert_close(
-            td_serial[:, 0].get(("next", key)), td_serial[:, 1].get(key)
-        )
+            td_serial = env_serial.rollout(
+                max_steps=10, auto_reset=False, tensordict=td0_serial
+            ).contiguous()
+            key = "pixels" if "pixels" in td_serial.keys() else "observation"
+            torch.testing.assert_close(
+                td_serial[:, 0].get(("next", key)), td_serial[:, 1].get(key)
+            )
 
-        out_seed_parallel = env_parallel.set_seed(0, static_seed=static_seed)
-        if static_seed:
-            assert out_seed_serial == 0
-        td0_parallel = env_parallel.reset()
+            out_seed_parallel = env_parallel.set_seed(0, static_seed=static_seed)
+            if static_seed:
+                assert out_seed_serial == 0
+            td0_parallel = env_parallel.reset()
 
-        torch.manual_seed(0)
-        assert out_seed_parallel == out_seed_serial
-        td_parallel = env_parallel.rollout(
-            max_steps=10, auto_reset=False, tensordict=td0_parallel
-        ).contiguous()
-        torch.testing.assert_close(
-            td_parallel[:, :-1].get(("next", key)), td_parallel[:, 1:].get(key)
-        )
-        assert_allclose_td(td0_serial, td0_parallel)
-        assert_allclose_td(td_serial[:, 0], td_parallel[:, 0])  # first step
-        assert_allclose_td(td_serial[:, 1], td_parallel[:, 1])  # second step
-        assert_allclose_td(td_serial, td_parallel)
-        env_parallel.close()
-        env_serial.close()
+            torch.manual_seed(0)
+            assert out_seed_parallel == out_seed_serial
+            td_parallel = env_parallel.rollout(
+                max_steps=10, auto_reset=False, tensordict=td0_parallel
+            ).contiguous()
+            torch.testing.assert_close(
+                td_parallel[:, :-1].get(("next", key)), td_parallel[:, 1:].get(key)
+            )
+            assert_allclose_td(td0_serial, td0_parallel)
+            assert_allclose_td(td_serial[:, 0], td_parallel[:, 0])  # first step
+            assert_allclose_td(td_serial[:, 1], td_parallel[:, 1])  # second step
+            assert_allclose_td(td_serial, td_parallel)
+        finally:
+            env_parallel.close(raise_if_closed=False)
+            env_serial.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_parallel_env_shutdown(self, maybe_fork_ParallelEnv):
         env_make = EnvCreator(lambda: GymEnv(PENDULUM_VERSIONED()))
         env = maybe_fork_ParallelEnv(4, env_make)
-        env.reset()
-        assert not env.is_closed
-        env.rand_step()
-        assert not env.is_closed
-        env.close()
-        assert env.is_closed
-        env.reset()
-        assert not env.is_closed
-        env.close()
+        try:
+            env.reset()
+            assert not env.is_closed
+            env.rand_step()
+            assert not env.is_closed
+            env.close()
+            assert env.is_closed
+            env.reset()
+            assert not env.is_closed
+            env.close()
+        finally:
+            env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("parallel", [True, False])
     def test_parallel_env_custom_method(self, parallel, maybe_fork_ParallelEnv):
@@ -1431,13 +1494,14 @@ class TestParallel:
             env = maybe_fork_ParallelEnv(2, lambda: DiscreteActionVecMockEnv())
         else:
             env = SerialEnv(2, lambda: DiscreteActionVecMockEnv())
-
-        # we must start the environment first
-        env.reset()
-        assert all(result == 0 for result in env.custom_fun())
-        assert all(result == 1 for result in env.custom_attr)
-        assert all(result == 2 for result in env.custom_prop)  # to be fixed
-        env.close()
+        try:
+            # we must start the environment first
+            env.reset()
+            assert all(result == 0 for result in env.custom_fun())
+            assert all(result == 1 for result in env.custom_attr)
+            assert all(result == 2 for result in env.custom_prop)  # to be fixed
+        finally:
+            env.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda to test on")
     @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -1473,74 +1537,75 @@ class TestParallel:
             transformed_out=transformed_out,
             N=N,
         )
-        if open_before:
-            td_cpu = env0.rollout(max_steps=10)
-            assert td_cpu.device == torch.device("cpu")
-        env0 = env0.to(device)
-        assert env0.observation_spec.device == torch.device(device)
-        assert env0.action_spec.device == torch.device(device)
-        assert env0.reward_spec.device == torch.device(device)
-        assert env0.device == torch.device(device)
-        td_device = env0.reset()
-        assert td_device.device == torch.device(device), env0
-        td_device = env0.rand_step()
-        assert td_device.device == torch.device(device), env0
-        td_device = env0.rollout(max_steps=10)
-        assert td_device.device == torch.device(device), env0
+        try:
+            if open_before:
+                td_cpu = env0.rollout(max_steps=10)
+                assert td_cpu.device == torch.device("cpu")
+            env0 = env0.to(device)
+            assert env0.observation_spec.device == torch.device(device)
+            assert env0.action_spec.device == torch.device(device)
+            assert env0.reward_spec.device == torch.device(device)
+            assert env0.device == torch.device(device)
+            td_device = env0.reset()
+            assert td_device.device == torch.device(device), env0
+            td_device = env0.rand_step()
+            assert td_device.device == torch.device(device), env0
+            td_device = env0.rollout(max_steps=10)
+            assert td_device.device == torch.device(device), env0
 
-        if open_before:
-            td_cpu = env_serial.rollout(max_steps=10)
-            assert td_cpu.device == torch.device("cpu")
-        observation_spec = env_serial.observation_spec.clone()
-        done_spec = env_serial.done_spec.clone()
-        reward_spec = env_serial.reward_spec.clone()
-        action_spec = env_serial.action_spec.clone()
-        state_spec = env_serial.state_spec.clone()
-        env_serial = env_serial.to(device)
-        assert env_serial.observation_spec.device == torch.device(device)
-        assert env_serial.action_spec.device == torch.device(device)
-        assert env_serial.reward_spec.device == torch.device(device)
-        assert env_serial.device == torch.device(device)
-        assert env_serial.observation_spec == observation_spec.to(device)
-        assert env_serial.action_spec == action_spec.to(device)
-        assert env_serial.reward_spec == reward_spec.to(device)
-        assert env_serial.done_spec == done_spec.to(device)
-        assert env_serial.state_spec == state_spec.to(device)
-        td_device = env_serial.reset()
-        assert td_device.device == torch.device(device), env_serial
-        td_device = env_serial.rand_step()
-        assert td_device.device == torch.device(device), env_serial
-        td_device = env_serial.rollout(max_steps=10)
-        assert td_device.device == torch.device(device), env_serial
+            if open_before:
+                td_cpu = env_serial.rollout(max_steps=10)
+                assert td_cpu.device == torch.device("cpu")
+            observation_spec = env_serial.observation_spec.clone()
+            done_spec = env_serial.done_spec.clone()
+            reward_spec = env_serial.reward_spec.clone()
+            action_spec = env_serial.action_spec.clone()
+            state_spec = env_serial.state_spec.clone()
+            env_serial = env_serial.to(device)
+            assert env_serial.observation_spec.device == torch.device(device)
+            assert env_serial.action_spec.device == torch.device(device)
+            assert env_serial.reward_spec.device == torch.device(device)
+            assert env_serial.device == torch.device(device)
+            assert env_serial.observation_spec == observation_spec.to(device)
+            assert env_serial.action_spec == action_spec.to(device)
+            assert env_serial.reward_spec == reward_spec.to(device)
+            assert env_serial.done_spec == done_spec.to(device)
+            assert env_serial.state_spec == state_spec.to(device)
+            td_device = env_serial.reset()
+            assert td_device.device == torch.device(device), env_serial
+            td_device = env_serial.rand_step()
+            assert td_device.device == torch.device(device), env_serial
+            td_device = env_serial.rollout(max_steps=10)
+            assert td_device.device == torch.device(device), env_serial
 
-        if open_before:
-            td_cpu = env_parallel.rollout(max_steps=10)
-            assert td_cpu.device == torch.device("cpu")
-        observation_spec = env_parallel.observation_spec.clone()
-        done_spec = env_parallel.done_spec.clone()
-        reward_spec = env_parallel.reward_spec.clone()
-        action_spec = env_parallel.action_spec.clone()
-        state_spec = env_parallel.state_spec.clone()
-        env_parallel = env_parallel.to(device)
-        assert env_parallel.observation_spec.device == torch.device(device)
-        assert env_parallel.action_spec.device == torch.device(device)
-        assert env_parallel.reward_spec.device == torch.device(device)
-        assert env_parallel.device == torch.device(device)
-        assert env_parallel.observation_spec == observation_spec.to(device)
-        assert env_parallel.action_spec == action_spec.to(device)
-        assert env_parallel.reward_spec == reward_spec.to(device)
-        assert env_parallel.done_spec == done_spec.to(device)
-        assert env_parallel.state_spec == state_spec.to(device)
-        td_device = env_parallel.reset()
-        assert td_device.device == torch.device(device), env_parallel
-        td_device = env_parallel.rand_step()
-        assert td_device.device == torch.device(device), env_parallel
-        td_device = env_parallel.rollout(max_steps=10)
-        assert td_device.device == torch.device(device), env_parallel
-
-        env_parallel.close()
-        env_serial.close()
-        env0.close()
+            if open_before:
+                td_cpu = env_parallel.rollout(max_steps=10)
+                assert td_cpu.device == torch.device("cpu")
+            observation_spec = env_parallel.observation_spec.clone()
+            done_spec = env_parallel.done_spec.clone()
+            reward_spec = env_parallel.reward_spec.clone()
+            action_spec = env_parallel.action_spec.clone()
+            state_spec = env_parallel.state_spec.clone()
+            env_parallel = env_parallel.to(device)
+            assert env_parallel.observation_spec.device == torch.device(device)
+            assert env_parallel.action_spec.device == torch.device(device)
+            assert env_parallel.reward_spec.device == torch.device(device)
+            assert env_parallel.device == torch.device(device)
+            assert env_parallel.observation_spec == observation_spec.to(device)
+            assert env_parallel.action_spec == action_spec.to(device)
+            assert env_parallel.reward_spec == reward_spec.to(device)
+            assert env_parallel.done_spec == done_spec.to(device)
+            assert env_parallel.state_spec == state_spec.to(device)
+            td_device = env_parallel.reset()
+            assert td_device.device == torch.device(device), env_parallel
+            td_device = env_parallel.rand_step()
+            assert td_device.device == torch.device(device), env_parallel
+            td_device = env_parallel.rollout(max_steps=10)
+            assert td_device.device == torch.device(device), env_parallel
+        finally:
+            env_parallel.close(raise_if_closed=False)
+            env_serial.close(raise_if_closed=False)
+            env0.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
@@ -1569,23 +1634,25 @@ class TestParallel:
             transformed_out=transformed_out,
             device=device,
             N=N,
+            local_mp_ctx="spawn",
         )
 
-        assert env0.device == torch.device(device)
-        out = env0.rollout(max_steps=20)
-        assert out.device == torch.device(device)
+        try:
+            assert env0.device == torch.device(device)
+            out = env0.rollout(max_steps=20)
+            assert out.device == torch.device(device)
 
-        assert env_serial.device == torch.device(device)
-        out = env_serial.rollout(max_steps=20)
-        assert out.device == torch.device(device)
+            assert env_serial.device == torch.device(device)
+            out = env_serial.rollout(max_steps=20)
+            assert out.device == torch.device(device)
 
-        assert env_parallel.device == torch.device(device)
-        out = env_parallel.rollout(max_steps=20)
-        assert out.device == torch.device(device)
-
-        env_parallel.close()
-        env_serial.close()
-        env0.close()
+            assert env_parallel.device == torch.device(device)
+            out = env_parallel.rollout(max_steps=20)
+            assert out.device == torch.device(device)
+        finally:
+            env_parallel.close(raise_if_closed=False)
+            env_serial.close(raise_if_closed=False)
+            env0.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.flaky(reruns=3, reruns_delay=1)
@@ -1606,6 +1673,7 @@ class TestParallel:
             transformed_out=False,
             device=device,
             N=3,
+            local_mp_ctx="spawn" if torch.cuda.device_count() else mp_ctx,
         )
         env_parallel_out, env_serial_out, _, env0_out = _make_envs(
             env_name,
@@ -1614,36 +1682,39 @@ class TestParallel:
             transformed_out=True,
             device=device,
             N=3,
+            local_mp_ctx="spawn" if torch.cuda.device_count() else mp_ctx,
         )
-        torch.manual_seed(0)
-        env_parallel_in.set_seed(0)
-        r_in = env_parallel_in.rollout(max_steps=20)
-        torch.manual_seed(0)
-        env_parallel_out.set_seed(0)
-        r_out = env_parallel_out.rollout(max_steps=20)
-        assert_allclose_td(r_in, r_out)
-        env_parallel_in.close()
-        env_parallel_out.close()
+        try:
+            torch.manual_seed(0)
+            env_parallel_in.set_seed(0)
+            r_in = env_parallel_in.rollout(max_steps=20)
+            torch.manual_seed(0)
+            env_parallel_out.set_seed(0)
+            r_out = env_parallel_out.rollout(max_steps=20)
+            assert_allclose_td(r_in, r_out)
+            env_parallel_in.close()
+            env_parallel_out.close()
 
-        torch.manual_seed(0)
-        env_serial_in.set_seed(0)
-        r_in = env_serial_in.rollout(max_steps=20)
-        torch.manual_seed(0)
-        env_serial_out.set_seed(0)
-        r_out = env_serial_out.rollout(max_steps=20)
-        assert_allclose_td(r_in, r_out)
-        env_serial_in.close()
-        env_serial_out.close()
+            torch.manual_seed(0)
+            env_serial_in.set_seed(0)
+            r_in = env_serial_in.rollout(max_steps=20)
+            torch.manual_seed(0)
+            env_serial_out.set_seed(0)
+            r_out = env_serial_out.rollout(max_steps=20)
+            assert_allclose_td(r_in, r_out)
+            env_serial_in.close()
+            env_serial_out.close()
 
-        torch.manual_seed(0)
-        env0_in.set_seed(0)
-        r_in = env0_in.rollout(max_steps=20)
-        torch.manual_seed(0)
-        env0_out.set_seed(0)
-        r_out = env0_out.rollout(max_steps=20)
-        assert_allclose_td(r_in, r_out)
-        env0_in.close()
-        env0_in.close()
+            torch.manual_seed(0)
+            env0_in.set_seed(0)
+            r_in = env0_in.rollout(max_steps=20)
+            torch.manual_seed(0)
+            env0_out.set_seed(0)
+            r_out = env0_out.rollout(max_steps=20)
+            assert_allclose_td(r_in, r_out)
+        finally:
+            env0_in.close(raise_if_closed=False)
+            env0_in.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("parallel", [True, False])
     def test_parallel_env_kwargs_set(self, parallel, maybe_fork_ParallelEnv):
@@ -1678,13 +1749,14 @@ class TestParallel:
 
         env1 = env_fn1(100)
         env2 = env_fn2(100)
-        env1.start()
-        env2.start()
-        for c1, c2 in zip(env1.counter, env2.counter):
-            assert c1 == c2
-
-        env1.close()
-        env2.close()
+        try:
+            env1.start()
+            env2.start()
+            for c1, c2 in zip(env1.counter, env2.counter):
+                assert c1 == c2
+        finally:
+            env1.close(raise_if_closed=False)
+            env2.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("parallel", [True, False])
     def test_parallel_env_update_kwargs(self, parallel, maybe_fork_ParallelEnv):
@@ -1714,36 +1786,40 @@ class TestParallel:
         env = maybe_fork_ParallelEnv(
             n_workers, lambda: CountingEnv(max_steps=max_steps, batch_size=batch_size)
         )
-        env.set_seed(1)
-        action = env.action_spec.rand()
-        action[:] = 1
-        for i in range(max_steps):
+        try:
+            env.set_seed(1)
+            action = env.full_action_spec[env.action_key].rand()
+            action[:] = 1
+            for i in range(max_steps):
+                td = env.step(
+                    TensorDict(
+                        {"action": action}, batch_size=env.batch_size, device=env.device
+                    )
+                )
+                assert (td["next", "done"] == 0).all()
+                assert (td["next"]["observation"] == i + 1).all()
+
             td = env.step(
                 TensorDict(
                     {"action": action}, batch_size=env.batch_size, device=env.device
                 )
             )
-            assert (td["next", "done"] == 0).all()
-            assert (td["next"]["observation"] == i + 1).all()
+            assert (td["next", "done"] == 1).all()
+            assert (td["next"]["observation"] == max_steps + 1).all()
 
-        td = env.step(
-            TensorDict({"action": action}, batch_size=env.batch_size, device=env.device)
-        )
-        assert (td["next", "done"] == 1).all()
-        assert (td["next"]["observation"] == max_steps + 1).all()
+            td_reset = TensorDict(
+                rand_reset(env), batch_size=env.batch_size, device=env.device
+            )
+            td_reset.update(td.get("next").exclude("reward"))
+            reset = td_reset["_reset"]
+            td_reset = env.reset(td_reset)
 
-        td_reset = TensorDict(
-            rand_reset(env), batch_size=env.batch_size, device=env.device
-        )
-        td_reset.update(td.get("next").exclude("reward"))
-        reset = td_reset["_reset"]
-        td_reset = env.reset(td_reset)
-        env.close()
-
-        assert (td_reset["done"][reset] == 0).all()
-        assert (td_reset["observation"][reset] == 0).all()
-        assert (td_reset["done"][~reset] == 1).all()
-        assert (td_reset["observation"][~reset] == max_steps + 1).all()
+            assert (td_reset["done"][reset] == 0).all()
+            assert (td_reset["observation"][reset] == 0).all()
+            assert (td_reset["done"][~reset] == 1).all()
+            assert (td_reset["observation"][~reset] == max_steps + 1).all()
+        finally:
+            env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("nested_obs_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
@@ -1787,7 +1863,9 @@ class TestParallel:
             if not nested_done and not nested_reward and not nested_obs_action:
                 assert "data" not in td.keys()
 
-            policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+            policy = CountingEnvCountPolicy(
+                env.full_action_spec[env.action_key], env.action_key
+            )
             td = env.rollout(rollout_length, policy)
             assert td.batch_size == (*batch_size, rollout_length)
             if nested_done or nested_obs_action:
@@ -1813,11 +1891,7 @@ class TestParallel:
                 assert ("data", "states") not in td.keys(True, True)
                 assert (td[..., -1]["observation"] == 2).all()
         finally:
-            try:
-                env.close()
-                del env
-            except Exception:
-                pass
+            env.close(raise_if_closed=False)
 
 
 @pytest.mark.filterwarnings("error")
@@ -2558,6 +2632,7 @@ class TestConcurrentEnvs:
             total_frames=N * n_workers * 100,
             storing_device=device,
             device=device,
+            trust_policy=True,
             cat_results=-1,
         )
         single_collectors = [
@@ -2567,6 +2642,7 @@ class TestConcurrentEnvs:
                 frames_per_batch=n_workers * 100,
                 total_frames=N * n_workers * 100,
                 storing_device=device,
+                trust_policy=True,
                 device=device,
             )
             for i in range(n_workers)
@@ -2662,18 +2738,24 @@ class TestNestedSpecs:
         else:
             raise NotImplementedError
         reset = env.reset()
-        assert not isinstance(env.reward_spec, Composite)
+        with pytest.warns(
+            DeprecationWarning, match="non-trivial"
+        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+            assert not isinstance(env.reward_spec, Composite)
         for done_key in env.done_keys:
             assert (
                 env.full_done_spec[done_key]
                 == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(done_key))]
             )
-        assert (
-            env.reward_spec
-            == env.output_spec[
-                ("full_reward_spec", *_unravel_key_to_tuple(env.reward_key))
-            ]
-        )
+        with pytest.warns(
+            DeprecationWarning, match="non-trivial"
+        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+            assert (
+                env.reward_spec
+                == env.output_spec[
+                    ("full_reward_spec", *_unravel_key_to_tuple(env.reward_key))
+                ]
+            )
         if envclass == "NestedCountingEnv":
             for done_key in env.done_keys:
                 assert done_key in (("data", "done"), ("data", "terminated"))
@@ -2734,7 +2816,9 @@ class TestNestedSpecs:
             nested_dim,
         )
 
-        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], env.action_key
+        )
         td = env.rollout(rollout_length, policy)
         assert td.batch_size == (*batch_size, rollout_length)
         assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
@@ -2858,7 +2942,7 @@ class TestMultiKeyEnvs:
     @pytest.mark.parametrize("max_steps", [2, 5])
     def test_rollout(self, batch_size, rollout_steps, max_steps, seed):
         env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
-        policy = MultiKeyCountingEnvPolicy(full_action_spec=env.action_spec)
+        policy = MultiKeyCountingEnvPolicy(full_action_spec=env.full_action_spec)
         td = env.rollout(rollout_steps, policy=policy)
         torch.manual_seed(seed)
         check_rollout_consistency_multikey_env(td, max_steps=max_steps)
@@ -2923,12 +3007,19 @@ class TestMultiKeyEnvs:
     ],
 )
 def test_mocking_envs(envclass):
-    env = envclass()
-    env.set_seed(100)
-    reset = env.reset()
-    _ = env.rand_step(reset)
-    r = env.rollout(3)
-    check_env_specs(env, seed=100, return_contiguous=False)
+    with set_capture_non_tensor_stack(False):
+        env = envclass()
+        with pytest.warns(UserWarning, match="model based") if isinstance(
+            env, DummyModelBasedEnvBase
+        ) else contextlib.nullcontext():
+            env.set_seed(100)
+        reset = env.reset()
+        _ = env.rand_step(reset)
+        r = env.rollout(3)
+        with pytest.warns(UserWarning, match="model based") if isinstance(
+            env, DummyModelBasedEnvBase
+        ) else contextlib.nullcontext():
+            check_env_specs(env, seed=100, return_contiguous=False)
 
 
 class TestTerminatedOrTruncated:
@@ -3522,6 +3613,12 @@ class TestEnvWithDynamicSpec:
 
 
 class TestNonTensorEnv:
+    @pytest.fixture(scope="class", autouse=True)
+    def set_capture(self):
+        with set_capture_non_tensor_stack(False):
+            yield None
+        return
+
     @pytest.mark.parametrize("bwad", [True, False])
     def test_single(self, bwad):
         env = EnvWithMetadata()
@@ -3541,8 +3638,11 @@ class TestNonTensorEnv:
     def test_parallel(self, bwad, use_buffers):
         N = 50
         env = ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
-        r = env.rollout(N, break_when_any_done=bwad)
-        assert r.get("non_tensor").tolist() == [list(range(N))] * 2
+        try:
+            r = env.rollout(N, break_when_any_done=bwad)
+            assert r.get("non_tensor").tolist() == [list(range(N))] * 2
+        finally:
+            env.close(raise_if_closed=False)
 
     class AddString(Transform):
         def __init__(self):
@@ -3566,26 +3666,30 @@ class TestNonTensorEnv:
             return observation_spec
 
     @pytest.mark.parametrize("batched", ["serial", "parallel"])
-    def test_partial_rest(self, batched):
-        env0 = lambda: CountingEnv(5).append_transform(self.AddString())
-        env1 = lambda: CountingEnv(6).append_transform(self.AddString())
-        if batched == "parallel":
-            env = ParallelEnv(2, [env0, env1], mp_start_method=mp_ctx)
-        else:
-            env = SerialEnv(2, [env0, env1])
-        s = env.reset()
-        i = 0
-        for i in range(10):  # noqa: B007
-            s, s_ = env.step_and_maybe_reset(
-                s.set("action", torch.ones(2, 1, dtype=torch.int))
-            )
-            if s.get(("next", "done")).any():
-                break
-            s = s_
-        assert i == 5
-        assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
-        assert s_["string"] == ["0", "6"]
-        assert s["next", "string"] == ["6", "6"]
+    def test_partial_reset(self, batched):
+        with set_capture_non_tensor_stack(False):
+            env0 = lambda: CountingEnv(5).append_transform(self.AddString())
+            env1 = lambda: CountingEnv(6).append_transform(self.AddString())
+            if batched == "parallel":
+                env = ParallelEnv(2, [env0, env1], mp_start_method=mp_ctx)
+            else:
+                env = SerialEnv(2, [env0, env1])
+            try:
+                s = env.reset()
+                i = 0
+                for i in range(10):  # noqa: B007
+                    s, s_ = env.step_and_maybe_reset(
+                        s.set("action", torch.ones(2, 1, dtype=torch.int))
+                    )
+                    if s.get(("next", "done")).any():
+                        break
+                    s = s_
+                assert i == 5
+                assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
+                assert s_["string"] == ["0", "6"]
+                assert s["next", "string"] == ["6", "6"]
+            finally:
+                env.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
     def test_str2str_env_tokenizer(self):
@@ -3610,6 +3714,7 @@ class TestNonTensorEnv:
         assert isinstance(r["action_tokens"], torch.Tensor)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
+    @set_auto_unwrap_transformed_env(False)
     def test_str2str_env_tokenizer_catframes(self):
         """Tests that we can use Unsqueeze + CatFrames with tokenized strings of variable lengths."""
         env = Str2StrEnv()
@@ -3677,6 +3782,51 @@ class TestNonTensorEnv:
         else:
             raise RuntimeError("Failed to sample both trajs")
 
+    def test_env_with_str_append(self):
+        class StrAppender(Transform):
+            def transform_observation_spec(self, observation_spec):
+                return observation_spec.set("str", NonTensor(example_data="a string"))
+
+            def _step(self, td, next_td):
+                s = td["str"]
+
+                s += "-" + str(int(s.split("-")[-1]) + 1)
+                next_td["str"] = s
+                return next_td
+
+            def _reset(self, td, reset_td):
+                return reset_td.set("str", "0")
+
+        env = TransformedEnv(CountingEnv(), StrAppender())
+        r = env.rollout(10)
+        r_unbind = r.unbind(0)
+        for ep_prev, ep_next in zip(r_unbind[:-1], r_unbind[1:]):
+            assert ep_prev["next", "str"].startswith(ep_prev["str"])
+            assert ep_next["str"] == ep_prev["next", "str"]
+
+    def test_env_with_tensorclass(self):
+        env = EnvWithTensorClass()
+        env.check_env_specs()
+        r = env.reset()
+        for _ in range(3):
+            assert isinstance(r["tc"], env.tc_cls)
+            a = env.rand_action(r)
+            s = env.step(a)
+            assert isinstance(s["tc"], env.tc_cls)
+            r = env.step_mdp(s)
+
+    @pytest.mark.parametrize("cls", [SerialEnv, ParallelEnv])
+    def test_env_with_tensorclass_batched(self, cls):
+        env = cls(2, EnvWithTensorClass)
+        env.check_env_specs()
+        r = env.reset()
+        for _ in range(3):
+            assert isinstance(r["tc"], EnvWithTensorClass.tc_cls)
+            a = env.rand_action(r)
+            s = env.step(a)
+            assert isinstance(s["tc"], EnvWithTensorClass.tc_cls)
+            r = env.step_mdp(s)
+
 
 # fen strings for board positions generated with:
 # https://lichess.org/editor
@@ -3708,6 +3858,74 @@ class TestChessEnv:
                     assert "pgn_hash" in env.observation_spec.keys()
                 if include_san:
                     assert "san_hash" in env.observation_spec.keys()
+
+    # Test that `include_hash_inv=True` allows us to specify the board state
+    # with just the "fen_hash" or "pgn_hash", not "fen" or "pgn", when taking a
+    # step in the env.
+    @pytest.mark.parametrize(
+        "include_fen,include_pgn",
+        [[True, False], [False, True]],
+    )
+    @pytest.mark.parametrize("stateful", [True, False])
+    def test_env_hash_inv(self, include_fen, include_pgn, stateful):
+        env = ChessEnv(
+            include_fen=include_fen,
+            include_pgn=include_pgn,
+            include_hash=True,
+            include_hash_inv=True,
+            stateful=stateful,
+        )
+        env.check_env_specs()
+
+        def exclude_fen_and_pgn(td):
+            td = td.exclude("fen")
+            td = td.exclude("pgn")
+            return td
+
+        td0 = env.reset()
+
+        if include_fen:
+            env_check_fen = ChessEnv(
+                include_fen=True,
+                stateful=stateful,
+            )
+
+        if include_pgn:
+            env_check_pgn = ChessEnv(
+                include_pgn=True,
+                stateful=stateful,
+            )
+
+        for _ in range(8):
+            td1 = env.rand_step(exclude_fen_and_pgn(td0.clone()))
+
+            # Confirm that fen/pgn was not used to determine the board state
+            assert "fen" not in td1.keys()
+            assert "pgn" not in td1.keys()
+
+            if include_fen:
+                assert (td1["fen_hash"] == td0["fen_hash"]).all()
+                assert "fen" in td1["next"]
+
+                # Check that if we start in the same board state and perform the
+                # same action in an env that does not use hashes, we obtain the
+                # same next board state. This confirms that we really can
+                # successfully specify the board state with a hash.
+                td0_check = td1.clone().exclude("next").update({"fen": td0["fen"]})
+                assert (
+                    env_check_fen.step(td0_check)["next", "fen"] == td1["next", "fen"]
+                )
+
+            if include_pgn:
+                assert (td1["pgn_hash"] == td0["pgn_hash"]).all()
+                assert "pgn" in td1["next"]
+
+                td0_check = td1.clone().exclude("next").update({"pgn": td0["pgn"]})
+                assert (
+                    env_check_pgn.step(td0_check)["next", "pgn"] == td1["next", "pgn"]
+                )
+
+            td0 = td1["next"]
 
     @pytest.mark.skipif(not _has_tv, reason="torchvision not found.")
     @pytest.mark.skipif(not _has_cairosvg, reason="cairosvg not found.")
@@ -3934,6 +4152,92 @@ class TestChessEnv:
         assert "fen" in ftd["next"]
         env.check_env_specs()
 
+    @pytest.mark.parametrize("stateful", [False, True])
+    @pytest.mark.parametrize("include_san", [False, True])
+    def test_env_reset_with_hash(self, stateful, include_san):
+        env = ChessEnv(
+            include_fen=True,
+            include_hash=True,
+            include_hash_inv=True,
+            stateful=stateful,
+            include_san=include_san,
+        )
+        cases = [
+            # (fen, num_legal_moves)
+            ("5R1k/8/8/8/6R1/8/8/5K2 b - - 0 1", 1),
+            ("8/8/2kq4/4K3/1R3Q2/8/8/8 w - - 0 1", 2),
+            ("6R1/8/8/4rq2/3pPk2/5n2/8/2B1R2K b - e3 0 1", 2),
+        ]
+        for fen, num_legal_moves in cases:
+            # Load the state by fen.
+            td = env.reset(TensorDict({"fen": fen}))
+            assert td["fen"] == fen
+            assert td["action_mask"].sum() == num_legal_moves
+            # Reset to initial state just to make sure that the next reset
+            # actually changes the state.
+            assert env.reset()["action_mask"].sum() == 20
+            # Load the state by fen hash and make sure it gives the same output
+            # as before.
+            td_check = env.reset(td.select("fen_hash"))
+            assert (td_check == td).all()
+
+    @pytest.mark.parametrize("include_fen", [False, True])
+    @pytest.mark.parametrize("include_pgn", [False, True])
+    @pytest.mark.parametrize("stateful", [False, True])
+    @pytest.mark.parametrize("mask_actions", [False, True])
+    def test_all_actions(self, include_fen, include_pgn, stateful, mask_actions):
+        if not stateful and not include_fen and not include_pgn:
+            pytest.skip("fen or pgn must be included if not stateful")
+
+        env = ChessEnv(
+            include_fen=include_fen,
+            include_pgn=include_pgn,
+            stateful=stateful,
+            mask_actions=mask_actions,
+        )
+        td = env.reset()
+
+        if not mask_actions:
+            with pytest.raises(RuntimeError, match="Cannot generate legal actions"):
+                env.all_actions()
+            return
+
+        # Choose random actions from the output of `all_actions`
+        for _ in range(100):
+            if stateful:
+                all_actions = env.all_actions()
+            else:
+                # Reset the the initial state first, just to make sure
+                # `all_actions` knows how to get the board state from the input.
+                env.reset()
+                all_actions = env.all_actions(td.clone())
+
+            # Choose some random actions and make sure they match exactly one of
+            # the actions from `all_actions`. This part is not tested when
+            # `mask_actions == False`, because `rand_action` can pick illegal
+            # actions in that case.
+            if mask_actions:
+                # TODO: Something is wrong in `ChessEnv.rand_action` which makes
+                # it fail to work properly for stateless mode. It doesn't know
+                # how to correctly reset the board state to what is given in the
+                # tensordict before picking an action. When this is fixed, we
+                # can get rid of the two `reset`s below
+                if not stateful:
+                    env.reset(td.clone())
+                td_act = td.clone()
+                for _ in range(10):
+                    rand_action = env.rand_action(td_act)
+                    assert (rand_action["action"] == all_actions["action"]).sum() == 1
+                if not stateful:
+                    env.reset()
+
+            action_idx = torch.randint(0, all_actions.shape[0], ()).item()
+            chosen_action = all_actions[action_idx]
+            td = env.step(td.update(chosen_action))["next"]
+
+            if td["done"]:
+                td = env.reset()
+
 
 class TestCustomEnvs:
     def test_tictactoe_env(self):
@@ -4014,17 +4318,21 @@ class TestPartialSteps:
                 use_buffers=use_buffers,
                 device=device,
             )
-            td = penv.reset()
-            psteps = torch.zeros(4, dtype=torch.bool)
-            psteps[[1, 3]] = True
-            td.set("_step", psteps)
+            try:
+                td = penv.reset()
+                psteps = torch.zeros(4, dtype=torch.bool)
+                psteps[[1, 3]] = True
+                td.set("_step", psteps)
 
-            td.set("action", penv.action_spec.one())
-            td = penv.step(td)
-            assert (td[0].get("next") == 0).all()
-            assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
-            assert (td[3].get("next") != 0).any()
+                td.set("action", penv.full_action_spec[penv.action_key].one())
+                td = penv.step(td)
+                assert_allclose_td(td[0].get("next"), td[0], intersection=True)
+                assert (td[1].get("next") != 0).any()
+                assert_allclose_td(td[2].get("next"), td[2], intersection=True)
+                assert (td[3].get("next") != 0).any()
+            finally:
+                penv.close()
+                del penv
 
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_parallel_partial_step_and_maybe_reset(
@@ -4037,17 +4345,21 @@ class TestPartialSteps:
                 use_buffers=use_buffers,
                 device=device,
             )
-            td = penv.reset()
-            psteps = torch.zeros(4, dtype=torch.bool)
-            psteps[[1, 3]] = True
-            td.set("_step", psteps)
+            try:
+                td = penv.reset()
+                psteps = torch.zeros(4, dtype=torch.bool, device=td.get("done").device)
+                psteps[[1, 3]] = True
+                td.set("_step", psteps)
 
-            td.set("action", penv.action_spec.one())
-            td, tdreset = penv.step_and_maybe_reset(td)
-            assert (td[0].get("next") == 0).all()
-            assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
-            assert (td[3].get("next") != 0).any()
+                td.set("action", penv.full_action_spec[penv.action_key].one())
+                td, tdreset = penv.step_and_maybe_reset(td)
+                assert_allclose_td(td[0].get("next"), td[0], intersection=True)
+                assert (td[1].get("next") != 0).any()
+                assert_allclose_td(td[2].get("next"), td[2], intersection=True)
+                assert (td[3].get("next") != 0).any()
+            finally:
+                penv.close()
+                del penv
 
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_serial_partial_steps(self, use_buffers, device, env_device):
@@ -4058,17 +4370,21 @@ class TestPartialSteps:
                 use_buffers=use_buffers,
                 device=device,
             )
-            td = penv.reset()
-            psteps = torch.zeros(4, dtype=torch.bool)
-            psteps[[1, 3]] = True
-            td.set("_step", psteps)
+            try:
+                td = penv.reset()
+                psteps = torch.zeros(4, dtype=torch.bool)
+                psteps[[1, 3]] = True
+                td.set("_step", psteps)
 
-            td.set("action", penv.action_spec.one())
-            td = penv.step(td)
-            assert (td[0].get("next") == 0).all()
-            assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
-            assert (td[3].get("next") != 0).any()
+                td.set("action", penv.full_action_spec[penv.action_key].one())
+                td = penv.step(td)
+                assert_allclose_td(td[0].get("next"), td[0], intersection=True)
+                assert (td[1].get("next") != 0).any()
+                assert_allclose_td(td[2].get("next"), td[2], intersection=True)
+                assert (td[3].get("next") != 0).any()
+            finally:
+                penv.close()
+                del penv
 
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_serial_partial_step_and_maybe_reset(self, use_buffers, device, env_device):
@@ -4084,12 +4400,130 @@ class TestPartialSteps:
             psteps[[1, 3]] = True
             td.set("_step", psteps)
 
-            td.set("action", penv.action_spec.one())
+            td.set("action", penv.full_action_spec[penv.action_key].one())
             td = penv.step(td)
-            assert (td[0].get("next") == 0).all()
+            assert_allclose_td(td[0].get("next"), td[0], intersection=True)
             assert (td[1].get("next") != 0).any()
-            assert (td[2].get("next") == 0).all()
+            assert_allclose_td(td[2].get("next"), td[2], intersection=True)
             assert (td[3].get("next") != 0).any()
+
+
+class TestEnvWithHistory:
+    @pytest.fixture(autouse=True, scope="class")
+    def set_capture(self):
+        with set_capture_non_tensor_stack(False), set_auto_unwrap_transformed_env(
+            False
+        ):
+            yield
+        return
+
+    def _make_env(self, device, max_steps=10):
+        return CountingEnv(device=device, max_steps=max_steps).append_transform(
+            HistoryTransform()
+        )
+
+    def _make_skipping_env(self, device, max_steps=10):
+        env = self._make_env(device=device, max_steps=max_steps)
+        # skip every 3 steps
+        env = env.append_transform(
+            ConditionalSkip(lambda td: ((td["step_count"] % 3) == 2))
+        )
+        env = TransformedEnv(env, StepCounter())
+        return env
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_env_history_base(self, device):
+        env = self._make_env(device)
+        env.check_env_specs()
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_skipping_history_env(self, device):
+        env = self._make_skipping_env(device)
+        env.check_env_specs()
+        r = env.rollout(100)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("batch_cls", [SerialEnv, "parallel"])
+    @pytest.mark.parametrize("consolidate", [False, True])
+    def test_env_history_base_batched(
+        self, device, device_env, batch_cls, maybe_fork_ParallelEnv, consolidate
+    ):
+        if batch_cls == "parallel":
+            batch_cls = maybe_fork_ParallelEnv
+        env = batch_cls(
+            2,
+            lambda: self._make_env(device_env),
+            device=device,
+            consolidate=consolidate,
+        )
+        try:
+            assert not env._use_buffers
+            env.check_env_specs(break_when_any_done="both")
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("batch_cls", [SerialEnv, "parallel"])
+    @pytest.mark.parametrize("consolidate", [False, True])
+    def test_skipping_history_env_batched(
+        self, device, device_env, batch_cls, maybe_fork_ParallelEnv, consolidate
+    ):
+        if batch_cls == "parallel":
+            batch_cls = maybe_fork_ParallelEnv
+        env = batch_cls(
+            2,
+            lambda: self._make_skipping_env(device_env),
+            device=device,
+            consolidate=consolidate,
+        )
+        try:
+            env.check_env_specs()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    def test_env_history_base_collector(self, device_env, collector_cls):
+        env = self._make_env(device_env)
+        collector = collector_cls(
+            env, RandomPolicy(env.full_action_spec), total_frames=35, frames_per_batch=5
+        )
+        for d in collector:
+            for i in range(d.shape[0] - 1):
+                assert (
+                    d[i + 1]["history"].content[0] == d[i]["next", "history"].content[0]
+                )
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    def test_skipping_history_env_collector(self, device_env, collector_cls):
+        env = self._make_skipping_env(device_env, max_steps=10)
+        collector = collector_cls(
+            env,
+            lambda td: td.update(env.full_action_spec.one()),
+            total_frames=35,
+            frames_per_batch=5,
+        )
+        length = None
+        count = 1
+        for d in collector:
+            for k in range(1, 5):
+                if len(d[k]["history"].content) == 2:
+                    count = 1
+                    continue
+                if count % 3 == 2:
+                    assert (
+                        d[k]["next", "history"].content
+                        == d[k - 1]["next", "history"].content
+                    ), (d["next", "history"].content, k, count)
+                else:
+                    assert d[k]["next", "history"].content[-1] == str(
+                        int(d[k - 1]["next", "history"].content[-1]) + 1
+                    ), (d["next", "history"].content, k, count)
+                count += 1
+            count += 1
 
 
 if __name__ == "__main__":
