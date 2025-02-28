@@ -266,3 +266,11 @@ RuntimeError: Failed to initialize OpenGL
     - Ubuntu: `sudo apt-get install libosmesa6-dev`
     - CentOS: `sudo yum install mesa-libOSMesa-devel`
     - Conda: `conda install -c menpo osmesa`
+
+16. ```
+    AttributeError: 'NoneType' object has no attribute 'glGetError'
+    ```
+
+    _Solution_: :
+
+    - Ubuntu: `this_dir=$(pwd) && cd /usr/lib/x86_64-linux-gnu && sudo ln -s libglut.so.3.12 libglut.so.3 && cd $this_dir`

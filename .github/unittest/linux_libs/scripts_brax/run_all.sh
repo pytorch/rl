@@ -2,8 +2,8 @@
 
 set -euxo pipefail
 
-yum makecache
-yum install -y glfw glew mesa-libGL mesa-libGL-devel mesa-libOSMesa-devel egl-utils freeglut
+apt update
+apt install -y libglfw3 libglfw3-dev libglew-dev libgl1-mesa-glx libgl1-mesa-dev mesa-common-dev libegl1-mesa-dev freeglut3 freeglut3-dev
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 bash ${this_dir}/setup_env.sh
