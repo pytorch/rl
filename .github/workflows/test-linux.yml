@@ -95,7 +95,7 @@ jobs:
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
@@ -164,7 +164,7 @@ jobs:
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
@@ -199,7 +199,7 @@ jobs:
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90

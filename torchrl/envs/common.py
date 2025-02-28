@@ -3272,9 +3272,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict = self.step(tensordict)
             td_append = tensordict.copy()
             if break_when_all_done:
-                if partial_steps is not True:
-                    # At least one partial step has been done
-                    del td_append["_step"]
+                if partial_steps is not True and not partial_steps.all():
+                    # At least one step is partial
+                    td_append.pop("_step", None)
                     td_append = torch.where(
                         partial_steps.view(td_append.shape), td_append, tensordicts[-1]
                     )
@@ -3297,19 +3297,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 if any_done:
                     break
             else:
+                # Write the '_step' entry, indicating which step is to be undertaken
                 _terminated_or_truncated(
                     tensordict,
                     full_done_spec=self.output_spec["full_done_spec"],
-                    key="_step",
+                    key="_neg_step",
                     write_full_false=False,
                 )
-                partial_step_curr = tensordict.get("_step", None)
+                # This is what differentiates _step and _reset: we need to flip _step False -> True
+                partial_step_curr = tensordict.pop("_neg_step", None)
                 if partial_step_curr is not None:
                     partial_step_curr = ~partial_step_curr
                     partial_steps = partial_steps & partial_step_curr
                 if partial_steps is not True:
                     if not partial_steps.any():
                         break
+                    # Write the final _step entry
                     tensordict.set("_step", partial_steps)
 
             if callback is not None:
