@@ -396,7 +396,6 @@ class DataLoadingPrimer(TensorDictPrimer):
         # Some heuristic here:
         # if data is a map, assume its keys match the keys in spec
         # TODO: one could rename the keys too
-        out = TensorDict()
         if isinstance(data, Mapping):
             out = TensorDict(data)
         elif len(self.data_keys) > 1 and isinstance(data, (list, tuple)):
