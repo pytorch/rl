@@ -382,7 +382,7 @@ class LazyStackStorage(ListStorage):
     Keyword Args:
         compilable (bool, optional): if ``True``, the storage will be made compatible with :func:`~torch.compile` at
             the cost of being executable in multiprocessed settings.
-        stack_dim (int, optional): the stack dimension in terms of TensorDict batch sizes. Defaults to `-1`.
+        stack_dim (int, optional): the stack dimension in terms of TensorDict batch sizes. Defaults to `0`.
 
     Examples:
         >>> import torch
