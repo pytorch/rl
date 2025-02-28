@@ -4,21 +4,250 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Callable, List, Union
+from typing import Any, Callable, Literal
 
 import torch
-from tensordict import NestedKey, TensorDict, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-
+from tensordict.utils import _zip_strict
+from torch.utils.data import DataLoader
 from torchrl.data import (
+    Bounded,
     Categorical as CategoricalSpec,
     Composite,
     NonTensor,
     SipHash,
+    TensorSpec,
     Unbounded,
 )
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import _StepMDP
+
+
+class LLMEnv(EnvBase):
+    """A text generation environment.
+
+    This environment is designed to work with language models, where the observation is a string or a tensor of
+    integers representing a sequence of tokens.
+    The action is also a string or a tensor of integers, which is concatenated to the previous observation to form the
+    new observation.
+
+    Args:
+        observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults to
+            ``"observation"``.
+        action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to ``"action"``.
+        str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.
+        device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.
+        vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an
+            unbounded vocabulary. Defaults to ``None``.
+
+    .. seealso:: :class:`~torchrl.envs.DataLoadingPrimer` for examples.
+
+    Methods:
+        from_dataloader: Creates an LLMEnv instance from a dataloader.
+
+    """
+
+    def __init__(
+        self,
+        *,
+        observation_key: NestedKey = "observation",
+        action_key: NestedKey = "action",
+        str2str: bool = False,
+        device: torch.device | None = None,
+        vocab_size: int | None = None,
+    ) -> None:
+        super().__init__(device=device)
+        self._batch_locked = False
+        self.str2str = str2str
+        self.vocab_size = vocab_size
+        self.observation_key = unravel_key(observation_key)
+        # self.action_key = unravel_key(action_key)
+        if str2str:
+            self.observation_spec = Composite(
+                {
+                    observation_key: NonTensor(
+                        example_data="a string", batched=True, shape=()
+                    )
+                }
+            )
+            self.action_spec = Composite(
+                {action_key: NonTensor(example_data="a string", batched=True, shape=())}
+            )
+        else:
+            if vocab_size is None:
+                self.observation_spec = Composite(
+                    {
+                        observation_key: Unbounded(
+                            shape=(-1,), dtype=torch.int64, device=device
+                        )
+                    }
+                )
+                self.action_spec = Composite(
+                    {
+                        action_key: Unbounded(
+                            shape=(-1,), dtype=torch.int64, device=device
+                        )
+                    }
+                )
+            else:
+                self.observation_spec = Composite(
+                    {
+                        observation_key: Bounded(
+                            shape=(-1,),
+                            dtype=torch.int64,
+                            low=0,
+                            high=vocab_size,
+                            device=device,
+                        )
+                    }
+                )
+                self.action_spec = Composite(
+                    {
+                        action_key: Bounded(
+                            shape=(-1,),
+                            dtype=torch.int64,
+                            low=0,
+                            high=vocab_size,
+                            device=device,
+                        )
+                    }
+                )
+        self.full_done_spec = Composite(
+            done=Unbounded(shape=(1,), dtype=torch.bool),
+            truncated=Unbounded(shape=(1,), dtype=torch.bool),
+            terminated=Unbounded(shape=(1,), dtype=torch.bool),
+        )
+
+    @classmethod
+    def from_dataloader(
+        cls,
+        dataloader: DataLoader,
+        *,
+        observation_key: NestedKey = "observation",
+        action_key: NestedKey = "action",
+        str2str: bool = False,
+        device: torch.device | None = None,
+        vocab_size: int | None = None,
+        primers: Composite | None = None,
+        data_keys: list[NestedKey] | None = None,
+        data_specs: list[TensorSpec] | None = None,
+        example_data: Any = None,
+        stack_method: Callable[[Any], Any]
+        | Literal["as_nested_tensor", "as_padded_tensor"] = None,
+    ) -> LLMEnv:
+        """Creates an LLMEnv instance from a dataloader.
+
+        This method creates an LLMEnv instance and appends a DataLoadingPrimer to it, which loads data from the provided dataloader.
+
+        Args:
+            dataloader (DataLoader): The dataloader to load data from.
+            observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults
+                to ``"observation"``.
+            action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to ``"action"``.
+            str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.
+            device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.
+            vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an
+                unbounded vocabulary. Defaults to ``None``.
+            primers (Composite | None, optional): The primers to use for each key in the dataloader.
+                Defaults to ``None``.
+            data_keys (list[NestedKey] | None, optional): The keys to use for each item in the dataloader.
+                Defaults to ``None``.
+            data_specs (list[TensorSpec] | None, optional): The specs to use for each item in the dataloader.
+                Defaults to ``None``.
+            example_data (Any, optional): Example data to use for initializing the primer. Defaults to ``None``.
+            stack_method (Callable[[Any], Any] | Literal["as_nested_tensor", "as_padded_tensor"], optional): The
+                method to use for stacking the data. Defaults to ``None``.
+
+        Returns:
+            LLMEnv: The created LLMEnv instance.
+        """
+        from torchrl.envs import DataLoadingPrimer
+
+        primer = DataLoadingPrimer(
+            dataloader=dataloader,
+            primers=primers,
+            data_keys=data_keys if data_keys is not None else [observation_key],
+            data_specs=data_specs,
+            example_data=example_data,
+            stack_method=stack_method,
+        )
+        env = LLMEnv(
+            str2str=str2str,
+            device=device,
+            observation_key=observation_key,
+            action_key=action_key,
+            vocab_size=vocab_size,
+        )
+        return env.append_transform(primer)
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        # Cat action entry with prev obs
+        if self.str2str:
+            obs = tensordict[self.observation_key]
+            action = tensordict[self.action_key]
+            if not tensordict.batch_size:
+                if not isinstance(obs, str) or not isinstance(action, str):
+                    raise TypeError(
+                        "The tensordict is batchless, yet the action and/or observations are not "
+                        f"strings but {type(action)} and {type(obs)}, respectivly."
+                    )
+                observation = obs + action
+            else:
+                observation = [
+                    _obs + _action for (_obs, _action) in _zip_strict(obs, action)
+                ]
+        else:
+            try:
+                obs: torch.Tensor = tensordict.get(self.observation_key)
+                action = tensordict.get(self.action_key)
+                if getattr(obs, "is_nested", False):
+                    observation = torch.nested.as_nested_tensor(
+                        [
+                            torch.cat(
+                                [
+                                    _obs,
+                                    _action,
+                                ],
+                                -1,
+                            )
+                            for _obs, _action in _zip_strict(
+                                obs.unbind(0), action.unbind(0)
+                            )
+                        ],
+                        layout=obs.layout,
+                    )
+                else:
+                    observation = torch.cat(
+                        [
+                            obs,
+                            action,
+                        ],
+                        -1,
+                    )
+            except TypeError:
+                raise TypeError(
+                    "Failed to cat action and observation tensors. Check that str2str argument is correctly "
+                    f"set in {type(self).__name__}."
+                )
+        return tensordict.empty().set(self.observation_key, observation)
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        # We should have an observation by this time, if not raise an exception
+        if tensordict is None or self.observation_key not in tensordict.keys(
+            isinstance(self.observation_key, tuple)
+        ):
+            raise KeyError(
+                f"Observation key {self.observation_key} is not defined. Make sure a TensorDictPrimer (eg, "
+                f"torchrl.envs.DataLoadingPrimer) is appended to the env transforms."
+            )
+        return tensordict.copy()
+
+    def _set_seed(self, seed: int | None):
+        return seed
 
 
 class LLMHashingEnv(EnvBase):
@@ -84,7 +313,7 @@ class LLMHashingEnv(EnvBase):
         hashing_module: Callable[[torch.Tensor], torch.Tensor] = None,
         observation_key: NestedKey = "observation",
         text_output: bool = True,
-        tokenizer: Callable[[Union[str, List[str]]], torch.Tensor] | None = None,
+        tokenizer: Callable[[str | list[str]], torch.Tensor] | None = None,
         text_key: NestedKey | None = "text",
     ):
         super().__init__()
@@ -117,7 +346,7 @@ class LLMHashingEnv(EnvBase):
         self.action_spec = Composite(action=CategoricalSpec(vocab_size, shape=(1,)))
         _StepMDP(self)
 
-    def make_tensordict(self, input: str | List[str]) -> TensorDict:
+    def make_tensordict(self, input: str | list[str]) -> TensorDict:
         """Converts a string or list of strings in a TensorDict with appropriate shape and device."""
         list_len = len(input) if isinstance(input, list) else 0
         tensordict = TensorDict(
