@@ -24,14 +24,14 @@ jobs:
   unittests-atari-dqn:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -43,8 +43,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -59,15 +59,15 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.11"]
-        cuda_arch_version: ["12.4"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
-      docker-image: "pytorch/manylinux-cuda124"
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -79,9 +79,8 @@ jobs:
         fi
 
         set -euo pipefail
-
         export PYTHON_VERSION="3.11"
-        export CU_VERSION="12.1"
+        export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -95,14 +94,14 @@ jobs:
   unittests-d4rl:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -114,8 +113,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -130,14 +129,14 @@ jobs:
   unittests-envpool:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -149,8 +148,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -165,14 +164,14 @@ jobs:
   unittests-gendgrl:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -184,8 +183,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -200,7 +199,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        cuda_arch_version: ["12.8"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -234,16 +233,16 @@ jobs:
   unittests-jumanji:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
-      docker-image: "pytorch/manylinux-cuda124"
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -255,8 +254,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.4"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -277,8 +276,8 @@ jobs:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "12.4"
-      docker-image: "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -291,7 +290,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.11"
-        export CU_VERSION="12.4"
+        export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -308,16 +307,16 @@ jobs:
   unittests-open_spiel:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
-      docker-image: "pytorch/manylinux-cuda124"
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -329,8 +328,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.4"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -346,16 +345,16 @@ jobs:
   unittests-chess:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
-      docker-image: "pytorch/manylinux-cuda124"
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -367,8 +366,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.4"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -385,15 +384,15 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10.12"]
-        cuda_arch_version: ["12.4"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
-      docker-image: "pytorch/manylinux-cuda124"
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -406,7 +405,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.10.12"
-        export CU_VERSION="12.4"
+        export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -422,14 +421,14 @@ jobs:
   unittests-minari:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -441,8 +440,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -457,14 +456,14 @@ jobs:
   unittests-openx:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -476,8 +475,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -496,8 +495,8 @@ jobs:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
-      docker-image: "pytorch/manylinux-cuda124"
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -510,7 +509,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.4"
+        export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -528,7 +527,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -561,14 +560,14 @@ jobs:
   unittests-roboset:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -580,8 +579,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -596,15 +595,15 @@ jobs:
   unittests-sklearn:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       # gpu-arch-type: cuda
       # gpu-arch-version: "11.7"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -616,8 +615,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -632,16 +631,16 @@ jobs:
   unittests-smacv2:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
-      docker-image: "pytorch/manylinux-cuda124"
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -653,8 +652,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.4"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -671,14 +670,14 @@ jobs:
   unittests-vd4rl:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Data') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -690,8 +689,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
@@ -706,16 +705,16 @@ jobs:
   unittests-vmas:
     strategy:
       matrix:
-        python_version: ["3.9"]
-        cuda_arch_version: ["12.4"]
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
-      gpu-arch-version: "11.7"
-      docker-image: "pytorch/manylinux-cuda124"
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -727,8 +726,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.9"
-        export CU_VERSION="12.4"
+        export PYTHON_VERSION="3.10"
+        export CU_VERSION="12.8"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
