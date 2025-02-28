@@ -8,18 +8,24 @@ from __future__ import annotations
 import abc
 import pathlib
 import warnings
-from collections import OrderedDict, defaultdict
+from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from textwrap import indent
 from typing import Any, Callable, Sequence, Tuple
 
 import numpy as np
 import torch.nn
-from tensordict import TensorDictBase, pad
+from tensordict import pad, TensorDictBase
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
-from torchrl._utils import (KeyDependentDefaultDict, VERBOSE, _CKPT_BACKEND, logger as torchrl_logger)
+
+from torchrl._utils import (
+    _CKPT_BACKEND,
+    KeyDependentDefaultDict,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (

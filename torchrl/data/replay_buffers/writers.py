@@ -15,7 +15,7 @@ from typing import Any, Sequence
 
 import numpy as np
 import torch
-from tensordict import MemoryMappedTensor, TensorDictBase, is_tensor_collection
+from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDictBase
 from tensordict.utils import _STRDTYPE2DTYPE, expand_as_right, is_tensorclass
 from torch import multiprocessing as mp
 

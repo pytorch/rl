@@ -13,11 +13,12 @@ from dataclasses import dataclass
 from typing import Iterator
 
 import torch
-from tensordict import TensorDict, TensorDictBase, is_tensor_collection
+from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from tensordict.utils import Buffer
 from torch import nn
 from torch.nn import Parameter
+
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import set_recurrent_mode
@@ -123,8 +124,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
         """
-
-        pass
 
     tensor_keys: _AcceptedKeys
     _vmap_randomness = None

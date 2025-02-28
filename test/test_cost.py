@@ -5859,7 +5859,6 @@ class TestCrossQ(LossModuleTestBase):
 
         actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
-        value = None
 
         loss_fn = CrossQLoss(
             actor_network=actor,

@@ -11,7 +11,8 @@ from typing import Any, Dict
 
 import numpy as np
 import torch
-from torchrl._utils import VERBOSE, logger as torchrl_logger
+
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.data.tensor_specs import (
     Bounded,
     Categorical,

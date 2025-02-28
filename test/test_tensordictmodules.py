@@ -1639,8 +1639,6 @@ class TestBatchedActor:
         with pytest.raises(ValueError, match="Only a single init_key can be passed"):
             MultiStepActorWrapper(actor_base, n_steps=time_steps, init_key=["init_key"])
 
-        n_obs = 1
-        n_action = 1
         batch = 2
 
         # The second env has frequent resets, the first none

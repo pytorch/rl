@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import warnings
-from typing import Dict, List
 
 import torch
 from tensordict import TensorDictBase, unravel_key_list

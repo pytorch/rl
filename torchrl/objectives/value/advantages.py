@@ -10,25 +10,31 @@ import warnings
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Callable, Union
+from typing import Callable
 
 import torch
-from tensordict import TensorDictBase, is_tensor_collection
+from tensordict import is_tensor_collection, TensorDictBase
 from tensordict.nn import (
-    ProbabilisticTensorDictModule,
-    TensorDictModule,
-    TensorDictModuleBase,
     composite_lp_aggregate,
     dispatch,
+    ProbabilisticTensorDictModule,
     set_composite_lp_aggregate,
     set_skip_existing,
+    TensorDictModule,
+    TensorDictModuleBase,
 )
 from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
+
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
-from torchrl.objectives.utils import (RANDOM_MODULE_LIST, _maybe_get_or_select, _vmap_func, hold_out_net)
+from torchrl.objectives.utils import (
+    _maybe_get_or_select,
+    _vmap_func,
+    hold_out_net,
+    RANDOM_MODULE_LIST,
+)
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -283,7 +289,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
         except AttributeError:
             # value network does not have an `in_keys` attribute
             in_keys = []
-            pass
         return in_keys
 
     @property

@@ -17,12 +17,18 @@ from typing import Any, Sequence
 import numpy as np
 import tensordict
 import torch
-from tensordict import (LazyStackedTensorDict, TensorDict, TensorDictBase, is_tensor_collection)
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
+
 from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
     ListStorageCheckpointer,
@@ -30,7 +36,12 @@ from torchrl.data.replay_buffers.checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
-from torchrl.data.replay_buffers.utils import (INT_CLASSES, _init_pytree, _is_int, tree_iter)
+from torchrl.data.replay_buffers.utils import (
+    _init_pytree,
+    _is_int,
+    INT_CLASSES,
+    tree_iter,
+)
 
 
 class Storage:

@@ -15,7 +15,7 @@ import sys
 import time
 import typing
 import warnings
-from collections import OrderedDict, defaultdict
+from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
@@ -38,31 +38,32 @@ from tensordict.utils import Buffer
 from torch import multiprocessing as mp
 from torch.nn import Parameter
 from torch.utils.data import IterableDataset
+
 from torchrl._utils import (
-    RL_WARNINGS,
-    VERBOSE,
-    _ProcessNoWarn,
     _check_for_faulty_process,
     _ends_with,
     _make_ordinal_device,
+    _ProcessNoWarn,
     _replace_last,
     accept_remote_rref_udf_invocation,
     compile_with_warmup,
     logger as torchrl_logger,
     prod,
+    RL_WARNINGS,
+    VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
-from torchrl.envs.common import EnvBase, _do_nothing
+from torchrl.envs.common import _do_nothing, EnvBase
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
-    ExplorationType,
-    RandomPolicy,
     _aggregate_end_of_traj,
     _make_compatible_policy,
+    ExplorationType,
+    RandomPolicy,
     set_exploration_type,
 )
 
@@ -119,8 +120,6 @@ class _InterruptorManager(SyncManager):
     This class extends the SyncManager class and allows to share an Interruptor object
     between processes.
     """
-
-    pass
 
 
 _InterruptorManager.register("_Interruptor", _Interruptor)

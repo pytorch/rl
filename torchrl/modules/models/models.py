@@ -7,20 +7,21 @@ from __future__ import annotations
 import dataclasses
 from copy import deepcopy
 from numbers import Number
-from typing import Callable, Dict, Sequence, Type
+from typing import Callable, Sequence
 
 import torch
 from torch import nn
+
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models.decision_transformer import DecisionTransformer
 from torchrl.modules.models.utils import (
+    _find_depth,
+    create_on_device,
     LazyMapping,
     SquashDims,
     Squeeze2dLayer,
     SqueezeLayer,
-    _find_depth,
-    create_on_device,
 )
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet  # noqa
 

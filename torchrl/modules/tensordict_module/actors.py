@@ -4,21 +4,22 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Sequence
 
 import torch
 from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import (
     CompositeDistribution,
+    dispatch,
     TensorDictModule,
     TensorDictModuleBase,
     TensorDictModuleWrapper,
     TensorDictSequential,
-    dispatch,
 )
-from tensordict.utils import NestedKey, expand_as_right
+from tensordict.utils import expand_as_right, NestedKey
 from torch import nn
 from torch.distributions import Categorical
+
 from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _process_action_space_spec

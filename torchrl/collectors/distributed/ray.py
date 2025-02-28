@@ -6,16 +6,17 @@
 from __future__ import annotations
 
 import warnings
-from typing import Callable, Iterator, List, OrderedDict
+from typing import Callable, Iterator, OrderedDict
 
 import torch
 import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
+
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
-    DEFAULT_EXPLORATION_TYPE,
     DataCollectorBase,
+    DEFAULT_EXPLORATION_TYPE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )

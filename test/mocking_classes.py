@@ -10,9 +10,10 @@ import string
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import TensorDict, TensorDictBase, tensorclass
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from tensordict.utils import NestedKey, expand_right
+from tensordict.utils import expand_right, NestedKey
+
 from torchrl.data import (
     Binary,
     Bounded,
@@ -28,7 +29,11 @@ from torchrl.data.utils import consolidate_spec
 from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
-from torchrl.envs.utils import (MarlGroupMapType, _terminated_or_truncated, check_marl_grouping)
+from torchrl.envs.utils import (
+    _terminated_or_truncated,
+    check_marl_grouping,
+    MarlGroupMapType,
+)
 
 spec_dict = {
     "bounded": Bounded,

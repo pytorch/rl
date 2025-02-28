@@ -19,21 +19,29 @@ from typing import Any, Callable, Sequence
 from warnings import warn
 
 import torch
-from tensordict import (LazyStackedTensorDict, TensorDict, TensorDictBase, is_tensor_collection, unravel_key)
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
+
 from torchrl._utils import (
-    VERBOSE,
-    _ProcessNoWarn,
     _check_for_faulty_process,
     _make_ordinal_device,
+    _ProcessNoWarn,
     logger as torchrl_logger,
+    VERBOSE,
 )
 from torchrl.data.tensor_specs import Composite, NonTensor
-from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING, contains_lazy_spec
-from torchrl.envs.common import EnvBase, EnvMetaData, _EnvPostInit, _do_nothing
+from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
+from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 from torchrl.envs.env_creator import get_env_metadata
+
 # legacy
 from torchrl.envs.libs.envpool import (  # noqa: F401
     MultiThreadedEnv,
@@ -864,7 +872,6 @@ class BatchedEnvBase(EnvBase):
 
     def _set_seed(self, seed: int | None):
         """This method is not used in batched envs."""
-        pass
 
     @lazy
     def start(self) -> None:

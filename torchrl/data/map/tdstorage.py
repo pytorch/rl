@@ -7,14 +7,19 @@ from __future__ import annotations
 import abc
 import functools
 from abc import abstractmethod
-from typing import Any, Callable, Dict, Generic, List, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 import torch
-from tensordict import NestedKey, TensorDictBase, is_tensor_collection
+from tensordict import is_tensor_collection, NestedKey, TensorDictBase
 from tensordict.nn.common import TensorDictModuleBase
+
 from torchrl.data.map.hash import RandomProjectionHash, SipHash
 from torchrl.data.map.query import QueryModule
-from torchrl.data.replay_buffers.storages import (LazyTensorStorage, TensorStorage, _get_default_collate)
+from torchrl.data.replay_buffers.storages import (
+    _get_default_collate,
+    LazyTensorStorage,
+    TensorStorage,
+)
 
 K = TypeVar("K")
 V = TypeVar("V")

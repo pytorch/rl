@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import inspect
 import warnings
-from typing import Callable, Sequence, Type
+from typing import Callable, Sequence
 
 import torch
 from torch import nn

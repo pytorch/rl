@@ -10,6 +10,7 @@ import warnings
 import numpy as np
 import pytest
 import torch
+
 import torchrl.data.tensor_specs
 from scipy.stats import chisquare
 from tensordict import (
@@ -22,6 +23,7 @@ from tensordict import (
 from tensordict.utils import _unravel_key_to_tuple, set_capture_non_tensor_stack
 from torchrl._utils import _make_ordinal_device
 from torchrl.data.tensor_specs import (
+    _keys_to_empty_composite_spec,
     Binary,
     BinaryDiscreteTensorSpec,
     Bounded,
@@ -47,7 +49,6 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscrete,
     UnboundedDiscreteTensorSpec,
-    _keys_to_empty_composite_spec,
 )
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
 

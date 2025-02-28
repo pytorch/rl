@@ -10,16 +10,17 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
+
 from torchrl._utils import timeit
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    ValueEstimators,
     _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
     hold_out_net,
+    ValueEstimators,
 )  # distance_loss,
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 

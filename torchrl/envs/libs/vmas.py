@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import importlib.util
 import warnings
-from typing import Dict, List
 
 import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+
 from torchrl.data.tensor_specs import (
     Bounded,
     Categorical,
@@ -23,9 +23,14 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
-from torchrl.envs.common import EnvBase, _EnvWrapper
+from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
-from torchrl.envs.utils import (MarlGroupMapType, _classproperty, _selective_unsqueeze, check_marl_grouping)
+from torchrl.envs.utils import (
+    _classproperty,
+    _selective_unsqueeze,
+    check_marl_grouping,
+    MarlGroupMapType,
+)
 
 _has_vmas = importlib.util.find_spec("vmas") is not None
 

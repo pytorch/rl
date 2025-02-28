@@ -318,7 +318,6 @@ class Transform(nn.Module):
 
     def init(self, tensordict) -> None:
         """Runs init steps for the transform."""
-        pass
 
     def _apply_transform(self, obs: torch.Tensor) -> None:
         """Applies the transform to a tensor or a leaf.
@@ -1161,7 +1160,6 @@ but got an object of type {type(transform)}."""
 
     def _set_seed(self, seed: int | None):
         """This method is not used in transformed envs."""
-        pass
 
     def _reset(self, tensordict: TensorDictBase | None = None, **kwargs):
         if tensordict is not None:

@@ -21,14 +21,14 @@ from copy import copy
 from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
-from typing import Any, Callable, Tuple, TypeVar, cast
+from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
 import torch
 from packaging.version import parse
 from tensordict import unravel_key
 from tensordict.utils import NestedKey
-from torch import Tensor, multiprocessing as mp
+from torch import multiprocessing as mp, Tensor
 
 try:
     from torch.compiler import is_compiling

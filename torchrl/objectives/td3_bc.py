@@ -8,18 +8,19 @@ from dataclasses import dataclass
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import TensorDictModule, dispatch
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
+
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    ValueEstimators,
     _cache_values,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
+    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 

@@ -6,8 +6,9 @@ import importlib.util
 from typing import List, Optional, Union
 
 import torch
-from tensordict import TensorDict, TensorDictBase, set_lazy_legacy
+from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
 from torch.hub import load_state_dict_from_url
+
 from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms.transforms import (

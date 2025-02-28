@@ -108,7 +108,6 @@ except RuntimeError:
     # If we can't set the method globally we can still run the parallel env with "fork"
     # This will fail on windows! Use "spawn" and put the script within `if __name__ == "__main__"`
     mp_context = "fork"
-    pass
 
 # sphinx_gallery_end_ignore
 import os

@@ -12,7 +12,7 @@ import socket
 import time
 import warnings
 from copy import copy, deepcopy
-from typing import Callable, List, OrderedDict
+from typing import Callable, OrderedDict
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.distributed import DEFAULT_SLURM_CONF

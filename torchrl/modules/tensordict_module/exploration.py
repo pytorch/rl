@@ -14,10 +14,11 @@ from tensordict.nn import (
     TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
-from tensordict.utils import NestedKey, expand_as_right, expand_right
+from tensordict.utils import expand_as_right, expand_right, NestedKey
 from torch import nn
+
 from torchrl.data.tensor_specs import Composite, TensorSpec
-from torchrl.envs.utils import ExplorationType, exploration_type
+from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
 __all__ = [

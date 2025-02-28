@@ -11,8 +11,9 @@ import importlib
 import numpy as np
 import torch
 from tensordict import TensorDict
-from torch import Tensor, nn
+from torch import nn, Tensor
 from torch.nn import functional as F
+
 from torchrl.data.rlhf.prompt import PromptData
 
 _has_transformers = importlib.util.find_spec("transformers") is not None

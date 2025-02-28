@@ -13,10 +13,11 @@ from typing import Iterable
 
 import torch
 from tensordict import TensorDictBase, unravel_key_list
-from tensordict.nn import TensorDictModule, TensorDictModuleBase, dispatch
+from tensordict.nn import dispatch, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey
 from torch import nn
 from torch.nn import functional as F
+
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import DEVICE_TYPING
 

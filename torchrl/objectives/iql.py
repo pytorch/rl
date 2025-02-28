@@ -9,20 +9,21 @@ from dataclasses import dataclass
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import TensorDictModule, dispatch
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
+
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    ValueEstimators,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
+    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 

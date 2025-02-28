@@ -3,24 +3,15 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from tensordict.nn import NormalParamExtractor
 from torch import distributions as torch_dist
 
-from .continuous import (
-    Delta,
-    IndependentNormal,
-    NormalParamWrapper,
-    TanhDelta,
-    TanhNormal,
-    TruncatedNormal,
-)
+from .continuous import Delta, IndependentNormal, TanhDelta, TanhNormal, TruncatedNormal
 from .discrete import (
     MaskedCategorical,
     MaskedOneHotCategorical,
     OneHotCategorical,
     OneHotOrdinal,
     Ordinal,
-    ReparamGradientStrategy,
 )
 
 distributions_maps = {

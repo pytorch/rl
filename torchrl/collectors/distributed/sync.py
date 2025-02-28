@@ -11,16 +11,17 @@ import socket
 import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
-from typing import Callable, List, OrderedDict
+from typing import Callable, OrderedDict
 
 import torch.cuda
 from tensordict import TensorDict
 from torch import nn
-from torchrl._utils import VERBOSE, _ProcessNoWarn, logger as torchrl_logger
+
+from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
-    DEFAULT_EXPLORATION_TYPE,
     DataCollectorBase,
+    DEFAULT_EXPLORATION_TYPE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )

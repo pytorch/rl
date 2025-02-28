@@ -14,12 +14,13 @@ from packaging import version
 from torch import distributions as D, nn
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
+
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
 from torchrl.modules.distributions.utils import (
-    FasterTransformedDistribution,
     _cast_device,
+    FasterTransformedDistribution,
     safeatanh_noeps,
     safetanh_noeps,
 )

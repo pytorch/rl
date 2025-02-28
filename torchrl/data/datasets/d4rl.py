@@ -15,7 +15,8 @@ from typing import Callable
 
 import numpy as np
 import torch
-from tensordict import PersistentTensorDict, TensorDict, make_tensordict
+from tensordict import make_tensordict, PersistentTensorDict, TensorDict
+
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay

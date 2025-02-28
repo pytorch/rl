@@ -11,6 +11,7 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
+
 from dreamer_utils import (
     _default_device,
     dump_video,
@@ -20,6 +21,7 @@ from dreamer_utils import (
     make_environments,
     make_replay_buffer,
 )
+
 # mixed precision training
 from torch.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_

@@ -10,7 +10,7 @@ import importlib
 import warnings
 from copy import copy
 from types import ModuleType
-from typing import Dict, List
+from typing import Dict
 from warnings import warn
 
 import numpy as np
@@ -18,8 +18,10 @@ import torch
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
 from torch.utils._pytree import tree_map
+
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
+    _minmax_dtype,
     Binary,
     Bounded,
     Categorical,
@@ -30,12 +32,11 @@ from torchrl.data.tensor_specs import (
     OneHot,
     TensorSpec,
     Unbounded,
-    _minmax_dtype,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
-from torchrl.envs.gym_like import GymLikeEnv, default_info_dict_reader
+from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
 from torchrl.envs.utils import _classproperty
 
 try:

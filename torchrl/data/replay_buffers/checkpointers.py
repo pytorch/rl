@@ -11,17 +11,23 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from tensordict import (NonTensorData, PersistentTensorDict, TensorDict, is_tensor_collection)
+from tensordict import (
+    is_tensor_collection,
+    NonTensorData,
+    PersistentTensorDict,
+    TensorDict,
+)
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
+
 from torchrl.data.replay_buffers.utils import (
+    _save_pytree,
     Flat2TED,
     H5Combine,
     H5Split,
     Nested2TED,
     TED2Flat,
     TED2Nested,
-    _save_pytree,
 )
 
 

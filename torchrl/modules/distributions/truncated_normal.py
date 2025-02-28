@@ -10,7 +10,7 @@ import math
 from numbers import Number
 
 import torch
-from torch.distributions import Distribution, constraints
+from torch.distributions import constraints, Distribution
 from torch.distributions.utils import broadcast_all
 
 CONST_SQRT_2 = math.sqrt(2)

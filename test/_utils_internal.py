@@ -17,15 +17,21 @@ from functools import wraps
 import pytest
 import torch
 import torch.cuda
-from tensordict import NestedKey, TensorDict, TensorDictBase, tensorclass
+from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn, vmap
-from torchrl._utils import (RL_WARNINGS, implement_for, logger as torchrl_logger, seed_generator)
+
+from torchrl._utils import (
+    implement_for,
+    logger as torchrl_logger,
+    RL_WARNINGS,
+    seed_generator,
+)
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.envpool import _has_envpool
-from torchrl.envs.libs.gym import GymEnv, _has_gym, gym_backend
+from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv
 from torchrl.envs.transforms import (
     Compose,
     RewardClipping,

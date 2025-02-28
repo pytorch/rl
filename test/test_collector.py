@@ -17,7 +17,13 @@ import numpy as np
 import pytest
 import torch
 from packaging import version
-from tensordict import (LazyStackedTensorDict, NonTensorData, TensorDict, TensorDictBase, assert_allclose_td)
+from tensordict import (
+    assert_allclose_td,
+    LazyStackedTensorDict,
+    NonTensorData,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.nn import (
     CudaGraphModule,
     TensorDictModule,
@@ -25,6 +31,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
+
 from torchrl._utils import (
     _make_ordinal_device,
     _replace_last,
@@ -32,8 +39,12 @@ from torchrl._utils import (
     prod,
     seed_generator,
 )
-from torchrl.collectors import SyncDataCollector, aSyncDataCollector
-from torchrl.collectors.collectors import (MultiSyncDataCollector, MultiaSyncDataCollector, _Interruptor)
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors.collectors import (
+    _Interruptor,
+    MultiaSyncDataCollector,
+    MultiSyncDataCollector,
+)
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
@@ -54,9 +65,14 @@ from torchrl.envs import (
     StepCounter,
     Transform,
 )
-from torchrl.envs.libs.gym import GymEnv, _has_gym, gym_backend, set_gym_backend
+from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.envs.utils import (PARTIAL_MISSING_ERR, RandomPolicy, _aggregate_end_of_traj, check_env_specs)
+from torchrl.envs.utils import (
+    _aggregate_end_of_traj,
+    check_env_specs,
+    PARTIAL_MISSING_ERR,
+    RandomPolicy,
+)
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
 
 if os.getenv("PYTORCH_TEST_FBCODE"):

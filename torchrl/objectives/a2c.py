@@ -9,28 +9,34 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
-from tensordict import (TensorDict, TensorDictBase, TensorDictParams, is_tensor_collection)
+from tensordict import (
+    is_tensor_collection,
+    TensorDict,
+    TensorDictBase,
+    TensorDictParams,
+)
 from tensordict.nn import (
-    CompositeDistribution,
-    ProbabilisticTensorDictSequential,
-    TensorDictModule,
     composite_lp_aggregate,
+    CompositeDistribution,
     dispatch,
+    ProbabilisticTensorDictSequential,
     set_composite_lp_aggregate,
+    TensorDictModule,
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
+
 from torchrl.modules.distributions import HAS_ENTROPY
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    ValueEstimators,
-    _GAMMA_LMBDA_DEPREC_ERROR,
     _cache_values,
     _clip_value_loss,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
     _reduce,
     default_value_kwargs,
     distance_loss,
+    ValueEstimators,
 )
 from torchrl.objectives.value import (
     GAE,

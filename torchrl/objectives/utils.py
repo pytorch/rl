@@ -13,7 +13,7 @@ from typing import Iterable
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import TensorDictModule
-from torch import Tensor, nn
+from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.nn.modules import dropout
 
@@ -321,7 +321,7 @@ class SoftUpdate(TargetNetUpdater):
     def __init__(
         self,
         loss_module: (
-            DQNLoss
+            DQNLoss  # noqa: F821
             | DDPGLoss  # noqa: F821
             | SACLoss  # noqa: F821
             | REDQLoss  # noqa: F821

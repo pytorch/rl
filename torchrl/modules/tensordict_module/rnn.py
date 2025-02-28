@@ -12,10 +12,11 @@ import torch
 import torch.nn.functional as F
 from tensordict import TensorDictBase, unravel_key_list
 from tensordict.base import NO_DEFAULT
-from tensordict.nn import TensorDictModuleBase as ModuleBase, dispatch
+from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, prod, set_lazy_legacy
-from torch import Tensor, nn
+from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
+
 from torchrl._utils import _ContextManager, _DecoratorContextManager
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.objectives.value.functional import (

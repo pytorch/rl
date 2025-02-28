@@ -17,10 +17,11 @@ from torch.nn import functional as F
 from torch.nn.modules.dropout import _DropoutNd
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
+
 from torchrl._utils import prod
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
-from torchrl.envs.utils import ExplorationType, exploration_type
+from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.distributions.utils import _cast_transform_device
 from torchrl.modules.utils import inv_softplus
 

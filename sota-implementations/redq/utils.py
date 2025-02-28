@@ -17,7 +17,8 @@ from tensordict.nn import (
 )
 from torch import distributions as d, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchrl._utils import VERBOSE, logger as torchrl_logger
+
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import (
     LazyMemmapStorage,
@@ -35,10 +36,12 @@ from torchrl.envs import (
     Compose,
     DMControlEnv,
     DoubleToFloat,
+    env_creator,
     EnvBase,
     EnvCreator,
     FlattenObservation,
     GrayScale,
+    gSDENoise,
     GymEnv,
     InitTracker,
     NoopResetEnv,
@@ -50,8 +53,6 @@ from torchrl.envs import (
     ToTensorImage,
     TransformedEnv,
     VecNorm,
-    env_creator,
-    gSDENoise,
 )
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (

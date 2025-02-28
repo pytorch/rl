@@ -14,14 +14,15 @@ import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import (
-    CompositeDistribution,
-    TensorDictModule,
     composite_lp_aggregate,
+    CompositeDistribution,
     dispatch,
     set_composite_lp_aggregate,
+    TensorDictModule,
 )
-from tensordict.utils import NestedKey, expand_right
+from tensordict.utils import expand_right, NestedKey
 from torch import Tensor
+
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -29,13 +30,13 @@ from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    ValueEstimators,
-    _GAMMA_LMBDA_DEPREC_ERROR,
     _cache_values,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
+    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 

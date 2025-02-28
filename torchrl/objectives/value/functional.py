@@ -7,7 +7,6 @@ from __future__ import annotations
 import math
 import warnings
 from functools import wraps
-from typing import Union
 
 import torch
 

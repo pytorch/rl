@@ -11,9 +11,15 @@ from pathlib import Path
 import numpy as np
 import torch
 from tensordict import TensorDict
+
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.envs.common import _maybe_unlock
-from torchrl.envs.libs.gym import (GymEnv, _GymAsyncMeta, _gym_to_torchrl_spec_transform, gym_backend)
+from torchrl.envs.libs.gym import (
+    _gym_to_torchrl_spec_transform,
+    _GymAsyncMeta,
+    gym_backend,
+    GymEnv,
+)
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
 _has_gym = (

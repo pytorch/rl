@@ -1626,7 +1626,6 @@ class TestBuffers:
             rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
-            found_similar = False
             for b in rb._storage:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
@@ -1657,7 +1656,6 @@ class TestBuffers:
             new_data = new_data[0]
 
         for d in new_data:
-            found_similar = False
             for b in data:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
@@ -2930,7 +2928,6 @@ class TestSamplers:
             index = rb.extend(data)
         rb.update_priority(index, data["priority"])
         found_traj_0 = False
-        found_traj_4_truncated_left = False
         found_traj_4_truncated_right = False
         for i, s in enumerate(rb):
             t = s["traj"].unique().tolist()
@@ -2942,7 +2939,7 @@ class TestSamplers:
                 if s["step_count"][0] > 10:
                     found_traj_4_truncated_right = True
                 if s["step_count"][0] == 0:
-                    found_traj_4_truncated_left = True
+                    pass
             if i == 1000:
                 break
         assert not rb._sampler.span[0]

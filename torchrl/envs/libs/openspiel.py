@@ -9,6 +9,7 @@ import importlib.util
 
 import torch
 from tensordict import TensorDict, TensorDictBase
+
 from torchrl.data.tensor_specs import (
     Categorical,
     Composite,
@@ -17,7 +18,7 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.utils import MarlGroupMapType, _classproperty, check_marl_grouping
+from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
 
 _has_pyspiel = importlib.util.find_spec("pyspiel") is not None
 

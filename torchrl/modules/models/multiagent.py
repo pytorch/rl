@@ -7,7 +7,7 @@ from __future__ import annotations
 import abc
 from copy import deepcopy
 from textwrap import indent
-from typing import Sequence, Type
+from typing import Sequence
 
 import numpy as np
 import torch

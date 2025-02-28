@@ -14,11 +14,12 @@ from time import sleep
 import pytest
 import torch
 from tensordict import MemoryMappedTensor
-from torchrl.envs import GymEnv, ParallelEnv, check_env_specs
+
+from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
 from torchrl.record.loggers.csv import CSVLogger
-from torchrl.record.loggers.mlflow import MLFlowLogger, _has_mlflow, _has_tv
-from torchrl.record.loggers.tensorboard import TensorboardLogger, _has_tb
-from torchrl.record.loggers.wandb import WandbLogger, _has_wandb
+from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
+from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
+from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
 if _has_tv:

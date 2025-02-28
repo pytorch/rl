@@ -9,9 +9,10 @@ from dataclasses import dataclass
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import TensorDictModule, dispatch
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import nn
+
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import step_mdp
@@ -22,11 +23,11 @@ from torchrl.modules.tensordict_module.actors import (
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    ValueEstimators,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     default_value_kwargs,
     distance_loss,
+    ValueEstimators,
 )
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator

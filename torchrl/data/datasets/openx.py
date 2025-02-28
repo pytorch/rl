@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 import torch
-from tensordict import NonTensorData, TensorDict, make_tensordict, pad
+from tensordict import make_tensordict, NonTensorData, pad, TensorDict
 from tensordict.utils import _is_non_tensor
+
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
@@ -24,7 +25,7 @@ from torchrl.data.replay_buffers.samplers import (
     SliceSampler,
     SliceSamplerWithoutReplacement,
 )
-from torchrl.data.replay_buffers.storages import Storage, TensorStorage, _collate_id
+from torchrl.data.replay_buffers.storages import _collate_id, Storage, TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 
 _has_datasets = importlib.util.find_spec("datasets", None) is not None

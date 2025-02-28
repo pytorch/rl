@@ -13,10 +13,11 @@ import numpy as np
 import packaging
 import torch
 from tensordict import TensorDictBase
+
 from torchrl.data.tensor_specs import Categorical, Composite, OneHot, Unbounded
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
-from torchrl.envs.utils import MarlGroupMapType, _classproperty, check_marl_grouping
+from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
 
 _has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
 
@@ -206,8 +207,8 @@ class PettingZooWrapper(_EnvWrapper):
     def __init__(
         self,
         env: (
-            pettingzoo.utils.env.ParallelEnv
-            | pettingzoo.utils.env.AECEnv  # noqa: F821  # noqa: F821
+            pettingzoo.utils.env.ParallelEnv  # noqa: F821
+            | pettingzoo.utils.env.AECEnv  # noqa: F821
         ) = None,
         return_state: bool = False,
         group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
@@ -271,8 +272,8 @@ class PettingZooWrapper(_EnvWrapper):
     def _build_env(
         self,
         env: (
-            pettingzoo.utils.env.ParallelEnv
-            | pettingzoo.utils.env.AECEnv  # noqa: F821  # noqa: F821
+            pettingzoo.utils.env.ParallelEnv  # noqa: F821
+            | pettingzoo.utils.env.AECEnv  # noqa: F821
         ),
     ):
         import pettingzoo
@@ -298,8 +299,8 @@ class PettingZooWrapper(_EnvWrapper):
     def _make_specs(
         self,
         env: (
-            pettingzoo.utils.env.ParallelEnv
-            | pettingzoo.utils.env.AECEnv  # noqa: F821  # noqa: F821
+            pettingzoo.utils.env.ParallelEnv  # noqa: F821
+            | pettingzoo.utils.env.AECEnv  # noqa: F821
         ),
     ) -> None:
         # Set default for done on any or all
@@ -998,8 +999,8 @@ class PettingZooEnv(PettingZooWrapper):
         parallel: bool,
         **kwargs,
     ) -> (
-        pettingzoo.utils.env.ParallelEnv
-        | pettingzoo.utils.env.AECEnv  # noqa: F821  # noqa: F821
+        pettingzoo.utils.env.ParallelEnv  # noqa: F821
+        | pettingzoo.utils.env.AECEnv  # noqa: F821
     ):
         self.task_name = task
 

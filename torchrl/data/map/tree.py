@@ -6,10 +6,18 @@ from __future__ import annotations
 
 import weakref
 from collections import deque
-from typing import Any, Callable, Dict, Literal, Tuple
+from typing import Any, Callable, Literal
 
 import torch
-from tensordict import (NestedKey, TensorClass, TensorDict, TensorDictBase, merge_tensordicts, unravel_key)
+from tensordict import (
+    merge_tensordicts,
+    NestedKey,
+    TensorClass,
+    TensorDict,
+    TensorDictBase,
+    unravel_key,
+)
+
 from torchrl.data.map.tdstorage import TensorDictMap
 from torchrl.data.map.utils import _plot_plotly_box, _plot_plotly_tree
 from torchrl.data.replay_buffers.storages import ListStorage

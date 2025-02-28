@@ -381,7 +381,7 @@ class TestOrnsteinUhlenbeckProcess:
         action_spec = env.action_spec
         d_act = action_spec.shape[-1]
 
-        net = nn.LazyLinear(d_act).to(device)
+        nn.LazyLinear(d_act).to(device)
         policy = TensorDictModule(
             CountingEnvCountModule(action_spec=action_spec),
             in_keys=[("data", "states") if nested_obs_action else "observation"],

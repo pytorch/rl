@@ -41,3 +41,11 @@ repos:
     hooks:
       - id: pyupgrade
         args: [--py38-plus]
+
+  - repo: local
+    hooks:
+    - id: autoflake
+      name: autoflake
+      entry: autoflake --in-place --remove-unused-variables --remove-all-unused-imports
+      language: system
+      types: [python]

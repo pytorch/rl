@@ -13,9 +13,10 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import torch
 from tensordict import NonTensorData, TensorDict, TensorDictBase
+
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
-from torchrl.envs.common import EnvBase, _EnvWrapper, _maybe_unlock
+from torchrl.envs.common import _EnvWrapper, _maybe_unlock, EnvBase
 
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
