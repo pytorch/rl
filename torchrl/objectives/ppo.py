@@ -494,7 +494,9 @@ class PPOLoss(LossModule):
     def reset(self) -> None:
         pass
 
-    def _get_entropy(self, dist: d.Distribution) -> torch.Tensor | TensorDict:
+    def _get_entropy(
+        self, dist: d.Distribution, adv_shape: torch.Size
+    ) -> torch.Tensor | TensorDict:
         try:
             entropy = dist.entropy()
         except NotImplementedError:
@@ -513,22 +515,21 @@ class PPOLoss(LossModule):
                         log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
 
             entropy = -log_prob.mean(0)
+            if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:
+                entropy.batch_size = adv_shape
         return entropy.unsqueeze(-1)
 
     def _log_weight(
-        self, tensordict: TensorDictBase
+        self, tensordict: TensorDictBase, adv_shape: torch.Size
     ) -> Tuple[torch.Tensor, d.Distribution, torch.Tensor]:
 
         with self.actor_network_params.to_module(
             self.actor_network
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict)
-        if isinstance(dist, CompositeDistribution):
-            is_composite = True
-        else:
-            is_composite = False
 
-        # current log_prob of actions
+        is_composite = isinstance(dist, CompositeDistribution)
+
         if is_composite:
             action = tensordict.select(
                 *(
@@ -541,7 +542,9 @@ class PPOLoss(LossModule):
             action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
 
         prev_log_prob = _maybe_get_or_select(
-            tensordict, self.tensor_keys.sample_log_prob
+            tensordict,
+            self.tensor_keys.sample_log_prob,
+            adv_shape,
         )
 
         if prev_log_prob.requires_grad:
@@ -556,23 +559,26 @@ class PPOLoss(LossModule):
         log_prob = dist.log_prob(action)
         if is_composite:
             with set_composite_lp_aggregate(False):
+                if log_prob.batch_size != adv_shape:
+                    log_prob.batch_size = adv_shape
                 if not is_tensor_collection(prev_log_prob):
-                    # this isn't great, in general multihead actions should have a composite log-prob too
+                    # this isn't great: in general, multi-head actions should have a composite log-prob too
                     warnings.warn(
                         "You are using a composite distribution, yet your log-probability is a tensor. "
                         "Make sure you have called tensordict.nn.set_composite_lp_aggregate(False).set() at "
                         "the beginning of your script to get a proper composite log-prob.",
                         category=UserWarning,
                     )
-                if (
-                    is_composite
-                    and not is_tensor_collection(prev_log_prob)
-                    and is_tensor_collection(log_prob)
-                ):
-                    log_prob = _sum_td_features(log_prob)
-                    log_prob.view_as(prev_log_prob)
+
+                    if is_tensor_collection(log_prob):
+                        log_prob = _sum_td_features(log_prob)
+                        log_prob.view_as(prev_log_prob)
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
+        if is_tensor_collection(log_weight):
+            log_weight = _sum_td_features(log_weight)
+            log_weight = log_weight.view(adv_shape).unsqueeze(-1)
+
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
         if is_tensor_collection(kl_approx):
             kl_approx = _sum_td_features(kl_approx)
@@ -680,15 +686,14 @@ class PPOLoss(LossModule):
                 )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
-        log_weight, dist, kl_approx = self._log_weight(tensordict)
-        if is_tensor_collection(log_weight):
-            log_weight = _sum_td_features(log_weight)
-            log_weight = log_weight.view(advantage.shape)
+        log_weight, dist, kl_approx = self._log_weight(
+            tensordict, adv_shape=advantage.shape[:-1]
+        )
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss})
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
         if self.entropy_bonus:
-            entropy = self._get_entropy(dist)
+            entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
@@ -968,15 +973,15 @@ class ClipPPOLoss(PPOLoss):
                 )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
-        log_weight, dist, kl_approx = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(
+            tensordict, adv_shape=advantage.shape[:-1]
+        )
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
             # to different, unrelated trajectories, which is not standard. Still, it can give an idea of the weights'
             # dispersion.
             lw = log_weight.squeeze()
-            if not isinstance(lw, torch.Tensor):
-                lw = _sum_td_features(lw)
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
@@ -988,14 +993,12 @@ class ClipPPOLoss(PPOLoss):
         gain2 = ratio * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
-        if is_tensor_collection(gain):
-            gain = _sum_td_features(gain)
         td_out = TensorDict({"loss_objective": -gain})
         td_out.set("clip_fraction", clip_fraction)
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
 
         if self.entropy_bonus:
-            entropy = self._get_entropy(dist)
+            entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
@@ -1219,7 +1222,7 @@ class KLPENPPOLoss(PPOLoss):
                     raise RuntimeError(
                         "Actors with one and only one distribution are currently supported "
                         f"in {type(self).__name__}. If you need to use more than one "
-                        f"distribtuion over the action space please submit an issue "
+                        f"distributions over the action space please submit an issue "
                         f"on github."
                     )
                 actor_dist_module = module
@@ -1275,10 +1278,10 @@ class KLPENPPOLoss(PPOLoss):
                 )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
-        log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
+        log_weight, dist, kl_approx = self._log_weight(
+            tensordict_copy, adv_shape=advantage.shape[:-1]
+        )
         neg_loss = log_weight.exp() * advantage
-        if is_tensor_collection(neg_loss):
-            neg_loss = _sum_td_features(neg_loss)
 
         with self.actor_network_params.to_module(
             self.actor_network
@@ -1295,6 +1298,13 @@ class KLPENPPOLoss(PPOLoss):
                 previous_log_prob = previous_dist.log_prob(x)
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
+                if previous_log_prob.batch_size != advantage.shape[:-1]:
+                    previous_log_prob.batch_size = (
+                        self.samples_mc_kl,
+                    ) + advantage.shape[:-1]
+                    current_log_prob.batch_size = (
+                        self.samples_mc_kl,
+                    ) + advantage.shape[:-1]
                 previous_log_prob = _sum_td_features(previous_log_prob)
                 # Both dists have presumably the same params
                 current_log_prob = _sum_td_features(current_log_prob)
@@ -1314,7 +1324,7 @@ class KLPENPPOLoss(PPOLoss):
         )
 
         if self.entropy_bonus:
-            entropy = self._get_entropy(dist)
+            entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())

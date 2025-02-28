@@ -54,13 +54,14 @@ class CSVExperiment:
         """Writes a video on a file on disk.
 
         The video format can be one of
-          - `"pt"`: uses :func:`~torch.save` to save the video tensor);
-          - `"memmap"`: saved the file as memory-mapped array (reading this file will require
-            the dtype and shape to be known at read time);
-          - `"mp4"`: saves the file as an `.mp4` file using torchvision :func:`~torchvision.io.write_video`
-            API. Any ``kwargs`` passed to ``add_video`` will be transmitted to ``write_video``.
-            These include ``preset``, ``crf`` and others.
-            See ffmpeg's doc (https://trac.ffmpeg.org/wiki/Encode/H.264) for some more information of the video format options.
+
+        - `"pt"`: uses :func:`~torch.save` to save the video tensor);
+        - `"memmap"`: saved the file as memory-mapped array (reading this file will require
+          the dtype and shape to be known at read time);
+        - `"mp4"`: saves the file as an `.mp4` file using torchvision :func:`~torchvision.io.write_video`
+          API. Any ``kwargs`` passed to ``add_video`` will be transmitted to ``write_video``.
+          These include ``preset``, ``crf`` and others.
+          See ffmpeg's doc (https://trac.ffmpeg.org/wiki/Encode/H.264) for some more information of the video format options.
 
         """
         if global_step is None:
@@ -129,7 +130,7 @@ class CSVExperiment:
 
 
 class CSVLogger(Logger):
-    """A minimal-dependecy CSV logger.
+    """A minimal-dependency CSV logger.
 
     Args:
         exp_name (str): The name of the experiment.

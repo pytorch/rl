@@ -725,7 +725,7 @@ class DistributionalQValueModule(QValueModule):
         >>> value[0, 0] = 0
         >>> # the second bin (0) of the second action is high: there's a high chance that it has an intermediate value
         >>> value[1, 1] = 0
-        >>> # the third bin (0) of the thid action is high: there's a high chance that it has an high value
+        >>> # the third bin (0) of the this action is high: there's a high chance that it has an high value
         >>> value[2, 2] = 0
         >>> actor(my_action_value=value)
         (tensor(2), tensor([[   0, -100, -100, -100],
@@ -1766,7 +1766,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
     **not** modify the tensordict in-place.
 
     .. note:: If the action, observation or reward-to-go key is not standard,
-        the method :meth:`~.set_tensor_keys` should be used, e.g.
+        the method :meth:`set_tensor_keys` should be used, e.g.
 
             >>> dt_inference_wrapper.set_tensor_keys(action="foo", observation="bar", return_to_go="baz")
 
@@ -1992,10 +1992,10 @@ class TanhModule(TensorDictModuleBase):
             If a Composite is provided, its key(s) must match the key(s)
             in out_keys. Otherwise, the key(s) of out_keys are assumed and the
             same spec is used for all outputs.
-        low (float, np.ndarray or torch.Tensor): the lower bound of the space.
+        low (:obj:`float`, np.ndarray or torch.Tensor): the lower bound of the space.
             If none is provided and no spec is provided, -1 is assumed. If a
             spec is provided, the minimum value of the spec will be retrieved.
-        high (float, np.ndarray or torch.Tensor): the higher bound of the space.
+        high (:obj:`float`, np.ndarray or torch.Tensor): the higher bound of the space.
             If none is provided and no spec is provided, 1 is assumed. If a
             spec is provided, the maximum value of the spec will be retrieved.
         clamp (bool, optional): if ``True``, the outputs will be clamped to be
@@ -2149,11 +2149,12 @@ class LMHeadActorValueOperator(ActorValueOperator):
     """Builds an Actor-Value operator from an huggingface-like *LMHeadModel.
 
     This method:
-        - takes as input an huggingface-like *LMHeadModel
-        - extracts the final linear layer uses it as a base layer of the actor_head and
-            adds the sampling layer
-        - uses the common transformer as common model
-        - adds a linear critic
+
+    - takes as input an huggingface-like *LMHeadModel
+    - extracts the final linear layer uses it as a base layer of the actor_head and
+      adds the sampling layer
+    - uses the common transformer as common model
+    - adds a linear critic
 
     Args:
         base_model (nn.Module): a torch model composed by a `.transformer` model and `.lm_head` linear layer
@@ -2279,6 +2280,10 @@ class MultiStepActorWrapper(TensorDictModuleBase):
             batch_size=torch.Size([5, 100]),
             device=cpu,
             is_shared=False)
+
+    .. seealso:: :class:`torchrl.envs.MultiStepEnvWrapper` is the EnvBase alter-ego of this wrapper:
+        It wraps an environment and unbinds the action, executing it one element at a time.
+
     """
 
     def __init__(

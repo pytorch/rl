@@ -110,10 +110,12 @@ class RPCDataCollector(DataCollectorBase):
             instances) it will be wrapped in a `nn.Module` first.
             Then, the collector will try to assess if these
             modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+
             - If the policy forward signature matches any of ``forward(self, tensordict)``,
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:
@@ -190,7 +192,7 @@ class RPCDataCollector(DataCollectorBase):
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
             Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
-        collector_class (type or str, optional): a collector class for the remote node. Can be
+        collector_class (Type or str, optional): a collector class for the remote node. Can be
             :class:`~torchrl.collectors.SyncDataCollector`,
             :class:`~torchrl.collectors.MultiSyncDataCollector`,
             :class:`~torchrl.collectors.MultiaSyncDataCollector`
@@ -318,7 +320,7 @@ class RPCDataCollector(DataCollectorBase):
         self.max_weight_update_interval = max_weight_update_interval
         if self.update_after_each_batch and self.max_weight_update_interval > -1:
             raise RuntimeError(
-                "Got conflicting udpate instructions: `update_after_each_batch` "
+                "Got conflicting update instructions: `update_after_each_batch` "
                 "`max_weight_update_interval` are incompatible."
             )
         self.launcher = launcher
@@ -449,7 +451,7 @@ class RPCDataCollector(DataCollectorBase):
     ):
         """Init RPC on main node."""
         options = rpc.TensorPipeRpcBackendOptions(**self.tensorpipe_options)
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             if self.visible_devices:
                 for i in range(self.num_workers):
                     rank = i + 1

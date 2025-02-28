@@ -26,10 +26,11 @@ jobs:
   build-docs:
     strategy:
       matrix:
-        python_version: ["3.10"]
-        cuda_arch_version: ["12.4"]
+        python_version: [ "3.9" ]
+        cuda_arch_version: [ "12.4" ]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
+      runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
       upload-artifact: docs
       timeout: 120
@@ -38,7 +39,6 @@ jobs:
         set -v
         # apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
         yum makecache
-        # yum install -y glfw glew mesa-libGL mesa-libGL-devel mesa-libOSMesa-devel egl-utils freeglut
         # Install Mesa and OpenGL Libraries:
         yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL
         # Install DRI Drivers:
@@ -60,7 +60,7 @@ jobs:
         bash ./miniconda.sh -b -f -p "${conda_dir}"
         eval "$(${conda_dir}/bin/conda shell.bash hook)"
         printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python=3.10
+        conda create --prefix "${env_dir}" -y python=3.9
         printf "* Activating\n"
         conda activate "${env_dir}"
 
@@ -76,10 +76,13 @@ jobs:
         git version
         
         # 5. Install PyTorch
-        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
-        
-        # 6. Install tensordict
-        python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+          python3 -m pip install torch torchvision
+          python3 -m pip install tensordict
+        else
+          python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+          python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+        fi
         
         # 7. Install TorchRL
         python3 setup.py develop
@@ -104,10 +107,12 @@ jobs:
         cd ..
         
         # 11. Build doc
+        export MAX_IDLE_COUNT=180 # Max 180 secs before killing an unresponsive collector
+        export BATCHED_PIPE_TIMEOUT=180
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build -v -j 4
         cd ..
 
         cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
@@ -118,8 +123,8 @@ jobs:
 
   upload:
     needs: build-docs
-    if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
-        ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
+    if: github.repository == 'pytorch/rl' && github.event_name == 'push' &&
+      ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main

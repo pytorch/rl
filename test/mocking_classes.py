@@ -8,13 +8,15 @@ import random
 import string
 from typing import Dict, List, Optional
 
+import numpy as np
+
 import torch
 import torch.nn as nn
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right, NestedKey
 
-from torchrl.data.tensor_specs import (
+from torchrl.data import (
     Binary,
     Bounded,
     Categorical,
@@ -26,6 +28,7 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import consolidate_spec
+from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 from torchrl.envs.utils import (
@@ -33,7 +36,6 @@ from torchrl.envs.utils import (
     check_marl_grouping,
     MarlGroupMapType,
 )
-
 
 spec_dict = {
     "bounded": Bounded,
@@ -358,13 +360,11 @@ class MockBatchedLockedEnv(EnvBase):
             leading_batch_size = tensordict.shape if tensordict is not None else []
         self.counter += 1
         # We use tensordict.batch_size instead of self.batch_size since this method will also be used by MockBatchedUnLockedEnv
-        n = (
-            torch.full(
-                [*leading_batch_size, *self.observation_spec["observation"].shape],
-                self.counter,
-            )
-            .to(self.device)
-            .to(torch.get_default_dtype())
+        n = torch.full(
+            [*leading_batch_size, *self.observation_spec["observation"].shape],
+            self.counter,
+            device=self.device,
+            dtype=torch.get_default_dtype(),
         )
         done = self.counter >= self.max_val
         done = torch.full(
@@ -391,13 +391,11 @@ class MockBatchedLockedEnv(EnvBase):
         else:
             leading_batch_size = tensordict.shape if tensordict is not None else []
 
-        n = (
-            torch.full(
-                [*leading_batch_size, *self.observation_spec["observation"].shape],
-                self.counter,
-            )
-            .to(self.device)
-            .to(torch.get_default_dtype())
+        n = torch.full(
+            [*leading_batch_size, *self.observation_spec["observation"].shape],
+            self.counter,
+            device=self.device,
+            dtype=torch.get_default_dtype(),
         )
         done = self.counter >= self.max_val
         done = torch.full(
@@ -417,7 +415,7 @@ class MockBatchedLockedEnv(EnvBase):
 
 
 class MockBatchedUnLockedEnv(MockBatchedLockedEnv):
-    """Mocks an env whose batch_size does not define the size of the output tensordict.
+    """Mocks an env which batch_size does not define the size of the output tensordict.
 
     The size of the output tensordict is defined by the input tensordict itself.
 
@@ -431,6 +429,89 @@ class MockBatchedUnLockedEnv(MockBatchedLockedEnv):
     @classmethod
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls, *args, _batch_locked=False, **kwargs)
+
+
+class StateLessCountingEnv(EnvBase):
+    def __init__(self):
+        self.observation_spec = Composite(
+            count=Unbounded((1,), dtype=torch.int32),
+            max_count=Unbounded((1,), dtype=torch.int32),
+        )
+        self.full_action_spec = Composite(
+            action=Unbounded((1,), dtype=torch.int32),
+        )
+        self.full_done_spec = Composite(
+            done=Unbounded((1,), dtype=torch.bool),
+            termindated=Unbounded((1,), dtype=torch.bool),
+            truncated=Unbounded((1,), dtype=torch.bool),
+        )
+        self.reward_spec = Composite(reward=Unbounded((1,), dtype=torch.float))
+        super().__init__()
+        self._batch_locked = False
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+
+        max_count = None
+        count = None
+        if tensordict is not None:
+            max_count = tensordict.get("max_count")
+            count = tensordict.get("count")
+            tensordict = TensorDict(
+                batch_size=tensordict.batch_size, device=tensordict.device
+            )
+            shape = tensordict.batch_size
+        else:
+            shape = ()
+            tensordict = TensorDict(device=self.device)
+        tensordict.update(
+            TensorDict(
+                count=torch.zeros(
+                    (
+                        *shape,
+                        1,
+                    ),
+                    dtype=torch.int32,
+                )
+                if count is None
+                else count,
+                max_count=torch.randint(
+                    10,
+                    20,
+                    (
+                        *shape,
+                        1,
+                    ),
+                    dtype=torch.int32,
+                )
+                if max_count is None
+                else max_count,
+                **self.done_spec.zero(shape),
+                **self.full_reward_spec.zero(shape),
+            )
+        )
+        return tensordict
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        action = tensordict["action"]
+        count = tensordict["count"] + action
+        terminated = done = count >= tensordict["max_count"]
+        truncated = torch.zeros_like(done)
+        return TensorDict(
+            count=count,
+            max_count=tensordict["max_count"],
+            done=done,
+            terminated=terminated,
+            truncated=truncated,
+            reward=self.reward_spec.zero(tensordict.shape),
+            batch_size=tensordict.batch_size,
+            device=tensordict.device,
+        )
+
+    def _set_seed(self, seed: Optional[int]):
+        ...
 
 
 class DiscreteActionVecMockEnv(_MockEnv):
@@ -538,6 +619,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
 
 class ContinuousActionVecMockEnv(_MockEnv):
+    adapt_dtype: bool = True
+
     @classmethod
     def __new__(
         cls,
@@ -635,7 +718,14 @@ class ContinuousActionVecMockEnv(_MockEnv):
         while done.shape != tensordict.shape:
             done = done.any(-1)
         done = reward = done.unsqueeze(-1)
-        tensordict.set("reward", reward.to(torch.get_default_dtype()))
+        tensordict.set(
+            "reward",
+            reward.to(
+                self.reward_spec.dtype
+                if self.adapt_dtype
+                else torch.get_default_dtype()
+            ).expand(self.reward_spec.shape),
+        )
         tensordict.set("done", done)
         tensordict.set("terminated", done)
         return tensordict
@@ -882,15 +972,15 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
 
 
 class DummyModelBasedEnvBase(ModelBasedEnvBase):
-    """Dummy environnement for Model Based RL sota-implementations.
+    """Dummy environment for Model Based RL sota-implementations.
 
-    This class is meant to be used to test the model based environnement.
+    This class is meant to be used to test the model based environment.
 
     Args:
-        world_model (WorldModel): the world model to use for the environnement.
-        device (str or torch.device, optional): the device to use for the environnement.
-        dtype (torch.dtype, optional): the dtype to use for the environnement.
-        batch_size (sequence of int, optional): the batch size to use for the environnement.
+        world_model (WorldModel): the world model to use for the environment.
+        device (str or torch.device, optional): the device to use for the environment.
+        dtype (torch.dtype, optional): the dtype to use for the environment.
+        batch_size (sequence of int, optional): the batch size to use for the environment.
     """
 
     def __init__(
@@ -2242,3 +2332,134 @@ class Str2StrEnv(EnvBase):
         random.seed(seed)
         torch.manual_seed(0)
         return seed
+
+
+class EnvThatErrorsAfter10Iters(EnvBase):
+    def __init__(self):
+        self.action_spec = Composite(action=Unbounded((1,)))
+        self.reward_spec = Composite(reward=Unbounded((1,)))
+        self.done_spec = Composite(done=Unbounded((1,)))
+        self.observation_spec = Composite(observation=Unbounded((1,)))
+        self.counter = 0
+        super().__init__()
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDict:
+        return self.full_observation_spec.zero().update(self.full_done_spec.zero())
+
+    def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDict:
+        if self.counter >= 10:
+            raise RuntimeError("max steps!")
+        self.counter += 1
+        return (
+            self.full_observation_spec.zero()
+            .update(self.full_done_spec.zero())
+            .update(self.full_reward_spec.zero())
+        )
+
+    def _set_seed(self, seed: Optional[int]):
+        ...
+
+
+@tensorclass()
+class TC:
+    field0: str
+    field1: torch.Tensor
+
+
+class EnvWithTensorClass(CountingEnv):
+    tc_cls = TC
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.observation_spec["tc"] = Composite(
+            field0=NonTensor(example_data="an observation!", shape=self.batch_size),
+            field1=Unbounded(shape=self.batch_size),
+            shape=self.batch_size,
+            data_cls=TC,
+        )
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        td = super()._reset(tensordict, **kwargs)
+        td["tc"] = TC("0", torch.zeros(self.batch_size))
+        return td
+
+    def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        td = super()._step(tensordict, **kwargs)
+        default = TC("0", 0)
+        f0 = tensordict.get("tc", default).field0
+        if f0 is None:
+            f0 = "0"
+        f1 = tensordict.get("tc", default).field1
+        if f1 is None:
+            f1 = torch.zeros(self.batch_size)
+        td["tc"] = TC(
+            str(int(f0) + 1),
+            f1 + 1,
+        )
+        return td
+
+
+@tensorclass
+class History:
+    role: str
+    content: str
+
+
+class HistoryTransform(Transform):
+    """A mocking class to record history."""
+
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
+        defaults = {
+            "role": NonTensor(
+                example_data="a role!",
+                shape=(-1,),
+            ),
+            "content": NonTensor(
+                example_data="a content!",
+                shape=(-1,),
+            ),
+        }
+        observation_spec["history"] = Composite(
+            defaults,
+            shape=(-1,),
+            data_cls=History,
+        )
+        assert observation_spec.device == self.parent.device
+        assert observation_spec["history"].device == self.parent.device
+        return observation_spec
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        assert tensordict_reset.device == self.parent.device
+        tensordict_reset["history"] = torch.stack(
+            [
+                History(role="system", content="0"),
+                History(role="user", content="1"),
+            ]
+        )
+        assert tensordict_reset["history"].device == self.parent.device
+        return tensordict_reset
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        assert next_tensordict.device == self.parent.device
+        history = tensordict["history"]
+        local_history = History(
+            role=np.random.choice(["user", "system", "assistant"]),
+            content=str(int(history.content[-1]) + 1),
+            device=history.device,
+        )
+        # history = tensordict["history"].append(local_history)
+        try:
+            history = torch.stack(list(history.unbind(0)) + [local_history])
+        except Exception:
+            raise
+        assert isinstance(history, History)
+        next_tensordict["history"] = history
+        assert next_tensordict["history"].device == self.parent.device, (
+            next_tensordict["history"],
+            self.parent.device,
+        )
+        return next_tensordict

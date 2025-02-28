@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import dataclasses
-import warnings
 
 from copy import deepcopy
 from numbers import Number
@@ -51,6 +50,7 @@ class MLP(nn.Sequential):
             argument (see below). If ``num_cells`` is an iterable and depth is
             indicated, both should match: ``len(num_cells)`` must be equal to
             ``depth``.
+            Defaults to ``0`` (no depth - the network contains a single linear layer).
         num_cells (int or sequence of int, optional): number of cells of every
             layer in between the input and output. If an integer is provided,
             every layer will have the same number of cells. If an iterable is provided,
@@ -60,12 +60,12 @@ class MLP(nn.Sequential):
             class or constructor to be used.
             Defaults to :class:`~torch.nn.Tanh`.
         activation_kwargs (dict or list of dicts, optional): kwargs to be used
-            with the activation class. Aslo accepts a list of kwargs of length
+            with the activation class. Also accepts a list of kwargs of length
             ``depth + int(activate_last_layer)``.
         norm_class (Type or callable, optional): normalization class or
             constructor, if any.
         norm_kwargs (dict or list of dicts, optional): kwargs to be used with
-            the normalization layers. Aslo accepts a list of kwargs of length
+            the normalization layers. Also accepts a list of kwargs of length
             ``depth + int(activate_last_layer)``.
         dropout (:obj:`float`, optional): dropout probability. Defaults to ``None`` (no
             dropout);
@@ -77,7 +77,7 @@ class MLP(nn.Sequential):
         layer_class (Type[nn.Module] or callable, optional): class to be used
             for the linear layers;
         layer_kwargs (dict or list of dicts, optional): kwargs for the linear
-            layers. Aslo accepts a list of kwargs of length ``depth + 1``.
+            layers. Also accepts a list of kwargs of length ``depth + 1``.
         activate_last_layer (bool): whether the MLP output should be activated. This is useful when the MLP output
             is used as the input for another module.
             default: False.
@@ -181,17 +181,10 @@ class MLP(nn.Sequential):
             raise ValueError("out_features must be specified for MLP.")
 
         if num_cells is None:
-            warnings.warn(
-                "The current behavior of MLP when not providing `num_cells` is that the number of cells is "
-                "set to [default_num_cells] * depth, where `depth=3` by default and `default_num_cells=0`. "
-                "From v0.7, this behavior will switch and `depth=0` will be used. "
-                "To silence tis message, indicate what number of cells you desire.",
-                category=DeprecationWarning,
-            )
             default_num_cells = 32
             if depth is None:
-                num_cells = [default_num_cells] * 3
-                depth = 3
+                num_cells = []
+                depth = 0
             else:
                 num_cells = [default_num_cells] * depth
 
@@ -277,7 +270,7 @@ class MLP(nn.Sequential):
                 except KeyError:
                     raise KeyError(
                         f"The lazy version of {self.layer_class.__name__} is not implemented yet. "
-                        "Consider providing the input feature dimensions explicitely when creating an MLP module"
+                        "Consider providing the input feature dimensions explicitly when creating an MLP module"
                     )
                 layers.append(
                     create_on_device(
@@ -1526,7 +1519,7 @@ class OnlineDTActor(nn.Module):
         action_dim (int): action dimension.
         transformer_config (Dict or :class:`DecisionTransformer.DTConfig`):
             config for the GPT2 transformer.
-            Defaults to :meth:`~.default_config`.
+            Defaults to :meth:`default_config`.
         device (torch.device, optional): device to use. Defaults to None.
 
     Examples:
@@ -1707,7 +1700,7 @@ def _iter_maybe_over_single(item: dict | List[dict] | None, n):
 
 
 class _ExecutableLayer(nn.Module):
-    """A thin wrapper around a function to be exectued as a module."""
+    """A thin wrapper around a function to be executed as a module."""
 
     def __init__(self, func):
         super(_ExecutableLayer, self).__init__()

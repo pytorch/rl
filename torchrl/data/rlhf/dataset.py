@@ -57,7 +57,7 @@ class TokenizedDatasetLoader:
         num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`
             which is called during tokenization.
             Defaults to ``max(os.cpu_count() // 2, 1)``.
-        tokenizer_class (type, optional): A tokenizer class, such as
+        tokenizer_class (Type, optional): A tokenizer class, such as
             :class:`~transformers.AutoTokenizer` (default).
         tokenizer_model_name (str, optional): The model from which the vocabulary
             should be gathered. Defaults to ``"gpt2"``.
@@ -148,9 +148,10 @@ class TokenizedDatasetLoader:
         dataset = self._load_dataset()
         dataset = self._tokenize(dataset)
         prefix = (split, str(max_length))
-        return self.dataset_to_tensordict(
+        result = self.dataset_to_tensordict(
             dataset, data_dir=data_dir, prefix=prefix, valid_mask_key="valid_sample"
-        )[prefix]
+        )
+        return result[prefix]
 
     def _load_dataset(self):
         """Loads a text dataset from ``datasets``.
@@ -182,7 +183,7 @@ class TokenizedDatasetLoader:
         """Preprocesses a text dataset from ``datasets``.
 
         Args:
-            dataset (datasets.Dataset): a dataset loaded using :meth:`~.load_dataset`.
+            dataset (datasets.Dataset): a dataset loaded using :meth:`load_dataset`.
             excluded_features (sequence of str, optional): the features to exclude
                 once tokenization is complete. Defaults to ``{"text", "prompt", "label", "valid_sample"}``.
 
@@ -213,7 +214,9 @@ class TokenizedDatasetLoader:
                     for key, value in dataset_dict.items()
                     if key not in excluded_features
                 }
-            dataset = TensorDict.from_dict(dataset_dict)
+            dataset = TensorDict.from_dict(
+                dataset_dict, auto_batch_size=True, batch_dims=1
+            )
         elif excluded_features:
             dataset = dataset.exclude(*excluded_features)
         # keep non empty rows (i.e. where at least one token is not eos)
@@ -231,13 +234,13 @@ class TokenizedDatasetLoader:
         batch_dims=1,
         valid_mask_key=None,
     ):
-        """Convers a dataset to a memory-mapped TensorDict.
+        """Converts a dataset to a memory-mapped TensorDict.
 
         If the dataset is already a :class:`TensorDict` instance, it is simply converted
         to a memory-mapped TensorDict.
         Otherwise, the dataset is expected to have a ``features`` attribute
         which is a sequence of strings indicating the features that can be found
-        in the dataset. If it does not, the ``features`` must be passed explicitely
+        in the dataset. If it does not, the ``features`` must be passed explicitly
         to this function.
 
         Args:
@@ -294,14 +297,16 @@ class TokenizedDatasetLoader:
             if prefix is None:
                 prefix = ()
             data_dict = {key: torch.as_tensor(dataset[key]) for key in features}
-            out = TensorDict.from_dict(data_dict, batch_dims=batch_dims)
+            out = TensorDict.from_dict(
+                data_dict, batch_dims=batch_dims, auto_batch_size=True
+            )
         else:
             out = dataset
         if valid_mask_key is not None and valid_mask_key in out.keys(
             include_nested=True
         ):
             out = out[out.get(valid_mask_key)]
-        out = TensorDict({prefix: out}, [])
+        out = TensorDict({prefix: out})
         out.memmap_(prefix=data_dir)
         return out
 
@@ -414,7 +419,7 @@ class TensorDictTokenizer:
         padding (str, optional): type of padding. Defaults to ``"max_length"``.
         truncation (bool, optional): whether the sequences should be truncated to max_length.
         return_tensordict (bool, optional): if ``True``, a TensoDict is returned.
-            Otherwise, a the orignal data will be returned.
+            Otherwise, a the original data will be returned.
         device (torch.device, optional): the device where to store the data.
             This option is ignored if ``return_tensordict=False``.
 
@@ -481,6 +486,9 @@ class TensorDictTokenizer:
         batch_size = [] if isinstance(input, str) else [len(input)]
         if self.return_tensordict:
             return TensorDict.from_dict(
-                dict(tokenized_sample), batch_size=batch_size, device=self.device
+                dict(tokenized_sample),
+                batch_size=batch_size,
+                device=self.device,
+                auto_batch_size=True,
             )
         return tokenized_sample

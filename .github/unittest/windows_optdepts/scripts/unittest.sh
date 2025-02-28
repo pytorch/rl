@@ -1,16 +1,38 @@
 #!/usr/bin/env bash
 
-unset PYTORCH_VERSION
-# For unittest, nightly PyTorch is used as the following section,
-# so no need to set PYTORCH_VERSION.
-# In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+# This script is for setting up environment in which unit test is ran.
+# To speed up the CI time, the resulting environment is cached.
+#
+# Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -ex
+# =================================== Setup =================================================
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+root_dir="$(git rev-parse --show-toplevel)"
+env_dir="${root_dir}/env"
 
-eval "$(./conda/Scripts/conda.exe 'shell.bash' 'hook')"
-conda activate ./env
+cd "${root_dir}"
+
+eval "$($(which conda) shell.bash hook)" && set -x
+
+# Create test environment at ./env
+printf "* Creating a test environment\n"
+conda create --name ci -y python="$PYTHON_VERSION"
+
+printf "* Activating the environment"
+conda activate ci
+
+printf "Python version"
+echo $(which python)
+echo $(python --version)
+echo $(conda info -e)
+
+
+python -m pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures expecttest pyyaml scipy coverage
+
+# =================================== Install =================================================
+
 
 # TODO, refactor the below logic to make it easy to understand how to get correct cuda_version.
 if [ "${CU_VERSION:-}" == cpu ] ; then
@@ -98,3 +120,16 @@ python -c """
 from torchrl.data import ReplayBuffer
 print('successfully imported torchrl')
 """
+
+# =================================== Run =================================================
+
+source "$this_dir/set_cuda_envs.sh"
+
+# we don't use torchsnapshot
+export CKPT_BACKEND=torch
+export MAX_IDLE_COUNT=60
+export BATCHED_PIPE_TIMEOUT=60
+export LAZY_LEGACY_OP=False
+
+python -m torch.utils.collect_env
+pytest --junitxml=test-results/junit.xml -v --durations 200  --ignore test/test_distributed.py --ignore test/test_rlhf.py

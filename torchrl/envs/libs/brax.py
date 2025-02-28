@@ -67,11 +67,11 @@ class BraxWrapper(_EnvWrapper):
             In ``brax``, this indicates the number of vectorized environments.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> import brax.envs
@@ -451,11 +451,11 @@ class BraxEnv(BraxWrapper):
             In ``brax``, this indicates the number of vectorized environments.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> from torchrl.envs import BraxEnv

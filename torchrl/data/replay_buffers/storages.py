@@ -194,15 +194,15 @@ class Storage:
         )
 
     def save(self, *args, **kwargs):
-        """Alias for :meth:`~.dumps`."""
+        """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def dump(self, *args, **kwargs):
-        """Alias for :meth:`~.dumps`."""
+        """Alias for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def load(self, *args, **kwargs):
-        """Alias for :meth:`~.loads`."""
+        """Alias for :meth:`loads`."""
         return self.loads(*args, **kwargs)
 
     def __getstate__(self):
@@ -902,7 +902,7 @@ class TensorStorage(Storage):
             storage = self._storage
         if not self.initialized:
             raise RuntimeError(
-                "Cannot get an item from an unitialized LazyMemmapStorage"
+                "Cannot get an item from an uninitialized LazyMemmapStorage"
             )
         if is_tc:
             return storage[index]
@@ -1342,7 +1342,7 @@ class StorageEnsemble(Storage):
             transforms of the same length as storages.
 
     .. warning::
-      This class signatures for :meth:`~.get` does not match other storages, as
+      This class signatures for :meth:`get` does not match other storages, as
       it will return a tuple ``(buffer_id, samples)`` rather than just the samples.
 
     .. warning::
@@ -1442,7 +1442,7 @@ class StorageEnsemble(Storage):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
             try:

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import _pickle
 import abc
+import collections
 
 import contextlib
 
@@ -20,6 +21,7 @@ from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
+from queue import Empty
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -81,7 +83,7 @@ _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 # MAX_IDLE_COUNT is the maximum number of times a Dataloader worker can timeout with his queue.
-_MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
+_MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", torch.iinfo(torch.int64).max))
 
 DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
 
@@ -258,7 +260,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             self.policy_weights.data.update_(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
-        yield from self.iterator()
+        try:
+            yield from self.iterator()
+        except Exception:
+            self.shutdown()
+            raise
 
     def next(self):
         try:
@@ -333,10 +339,12 @@ class SyncDataCollector(DataCollectorBase):
             instances) it will be wrapped in a `nn.Module` first.
             Then, the collector will try to assess if these
             modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+
             - If the policy forward signature matches any of ``forward(self, tensordict)``,
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:
@@ -655,7 +663,7 @@ class SyncDataCollector(DataCollectorBase):
         self.closed = False
 
         if not reset_when_done:
-            raise ValueError("reset_when_done is deprectated.")
+            raise ValueError("reset_when_done is deprecated.")
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
@@ -760,8 +768,7 @@ class SyncDataCollector(DataCollectorBase):
         self.set_truncated = set_truncated
 
         self._make_shuttle()
-        if self._use_buffers:
-            self._make_final_rollout()
+        self._maybe_make_final_rollout(make_rollout=self._use_buffers)
         self._set_truncated_keys()
 
         if split_trajs is None:
@@ -798,28 +805,30 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids,
         )
 
-    def _make_final_rollout(self):
-        with torch.no_grad():
-            self._final_rollout = self.env.fake_tensordict()
+    def _maybe_make_final_rollout(self, make_rollout: bool):
+        if make_rollout:
+            with torch.no_grad():
+                self._final_rollout = self.env.fake_tensordict()
 
-        # If storing device is not None, we use this to cast the storage.
-        # If it is None and the env and policy are on the same device,
-        # the storing device is already the same as those, so we don't need
-        # to consider this use case.
-        # In all other cases, we can't really put a device on the storage,
-        # since at least one data source has a device that is not clear.
-        if self.storing_device:
-            self._final_rollout = self._final_rollout.to(
-                self.storing_device, non_blocking=True
-            )
-        else:
-            # erase all devices
-            self._final_rollout.clear_device_()
+            # If storing device is not None, we use this to cast the storage.
+            # If it is None and the env and policy are on the same device,
+            # the storing device is already the same as those, so we don't need
+            # to consider this use case.
+            # In all other cases, we can't really put a device on the storage,
+            # since at least one data source has a device that is not clear.
+            if self.storing_device:
+                self._final_rollout = self._final_rollout.to(
+                    self.storing_device, non_blocking=True
+                )
+            else:
+                # erase all devices
+                self._final_rollout.clear_device_()
 
         # If the policy has a valid spec, we use it
         self._policy_output_keys = set()
         if (
-            hasattr(self.policy, "spec")
+            make_rollout
+            and hasattr(self.policy, "spec")
             and self.policy.spec is not None
             and all(v is not None for v in self.policy.spec.values(True, True))
         ):
@@ -838,14 +847,20 @@ class SyncDataCollector(DataCollectorBase):
                     if key in self._final_rollout.keys(True):
                         continue
                     self._final_rollout.set(key, spec.zero())
-
+        elif (
+            not make_rollout
+            and hasattr(self.policy, "out_keys")
+            and self.policy.out_keys
+        ):
+            self._policy_output_keys = list(self.policy.out_keys)
         else:
-            # otherwise, we perform a small number of steps with the policy to
-            # determine the relevant keys with which to pre-populate _final_rollout.
-            # This is the safest thing to do if the spec has None fields or if there is
-            # no spec at all.
-            # See #505 for additional context.
-            self._final_rollout.update(self._shuttle.copy())
+            if make_rollout:
+                # otherwise, we perform a small number of steps with the policy to
+                # determine the relevant keys with which to pre-populate _final_rollout.
+                # This is the safest thing to do if the spec has None fields or if there is
+                # no spec at all.
+                # See #505 for additional context.
+                self._final_rollout.update(self._shuttle.copy())
             with torch.no_grad():
                 policy_input = self._shuttle.copy()
                 if self.policy_device:
@@ -903,33 +918,35 @@ class SyncDataCollector(DataCollectorBase):
                         set(filtered_policy_output.keys(True, True))
                     )
                 )
-                self._final_rollout.update(
-                    policy_output.select(*self._policy_output_keys)
-                )
+                if make_rollout:
+                    self._final_rollout.update(
+                        policy_output.select(*self._policy_output_keys)
+                    )
                 del filtered_policy_output, policy_output, policy_input
 
         _env_output_keys = []
         for spec in ["full_observation_spec", "full_done_spec", "full_reward_spec"]:
             _env_output_keys += list(self.env.output_spec[spec].keys(True, True))
         self._env_output_keys = _env_output_keys
-        self._final_rollout = (
-            self._final_rollout.unsqueeze(-1)
-            .expand(*self.env.batch_size, self.frames_per_batch)
-            .clone()
-            .zero_()
-        )
+        if make_rollout:
+            self._final_rollout = (
+                self._final_rollout.unsqueeze(-1)
+                .expand(*self.env.batch_size, self.frames_per_batch)
+                .clone()
+                .zero_()
+            )
 
-        # in addition to outputs of the policy, we add traj_ids to
-        # _final_rollout which will be collected during rollout
-        self._final_rollout.set(
-            ("collector", "traj_ids"),
-            torch.zeros(
-                *self._final_rollout.batch_size,
-                dtype=torch.int64,
-                device=self.storing_device,
-            ),
-        )
-        self._final_rollout.refine_names(..., "time")
+            # in addition to outputs of the policy, we add traj_ids to
+            # _final_rollout which will be collected during rollout
+            self._final_rollout.set(
+                ("collector", "traj_ids"),
+                torch.zeros(
+                    *self._final_rollout.batch_size,
+                    dtype=torch.int64,
+                    device=self.storing_device,
+                ),
+            )
+            self._final_rollout.refine_names(..., "time")
 
     def _set_truncated_keys(self):
         self._truncated_keys = []
@@ -1040,7 +1057,7 @@ class SyncDataCollector(DataCollectorBase):
                 # This may be a bit dangerous as `torch.device("cuda")` may not have a precise
                 # device associated, whereas `tensor.device` always has
                 for spec in self.env.specs.values(True, True):
-                    if spec.device.type == "cuda":
+                    if spec.device is not None and spec.device.type == "cuda":
                         if ":" not in str(spec.device):
                             raise RuntimeError(
                                 "A cuda spec did not have a device associated. Make sure to "
@@ -1456,6 +1473,7 @@ class _MultiDataCollector(DataCollectorBase):
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+
             - In all other cases an attempt to wrap it will be undergone as such:
               ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
@@ -1542,7 +1560,7 @@ class _MultiDataCollector(DataCollectorBase):
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
-        update_at_each_batch (boolm optional): if ``True``, :meth:`~.update_policy_weight_()`
+        update_at_each_batch (boolm optional): if ``True``, :meth:`update_policy_weight_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
@@ -2325,8 +2343,28 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 while self.queue_out.qsize() < int(self.num_workers):
                     continue
 
+            recv = collections.deque()
+            t0 = time.time()
+            while len(recv) < self.num_workers and (
+                (time.time() - t0) < (_TIMEOUT * _MAX_IDLE_COUNT)
+            ):
+                for _ in range(self.num_workers):
+                    try:
+                        new_data, j = self.queue_out.get(timeout=_TIMEOUT)
+                        recv.append((new_data, j))
+                    except (TimeoutError, Empty):
+                        _check_for_faulty_process(self.procs)
+            if (time.time() - t0) > (_TIMEOUT * _MAX_IDLE_COUNT):
+                try:
+                    self.shutdown()
+                finally:
+                    raise RuntimeError(
+                        f"Failed to gather all collector output within {_TIMEOUT * _MAX_IDLE_COUNT} seconds. "
+                        f"Increase the MAX_IDLE_COUNT environment variable to bypass this error."
+                    )
+
             for _ in range(self.num_workers):
-                new_data, j = self.queue_out.get()
+                new_data, j = recv.popleft()
                 use_buffers = self._use_buffers
                 if self.replay_buffer is not None:
                     idx = new_data
@@ -2503,7 +2541,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     Environment types can be identical or different.
 
-    The collection keeps on occuring on all processes even between the time
+    The collection keeps on occurring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL sota-implementations.
 
@@ -2659,12 +2697,19 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         workers_frames = [0 for _ in range(self.num_workers)]
         while self._frames < self.total_frames:
             self._iter += 1
+            counter = 0
             while True:
                 try:
-                    idx, j, out = self._get_from_queue(timeout=10.0)
+                    idx, j, out = self._get_from_queue(timeout=_TIMEOUT)
                     break
-                except TimeoutError:
+                except (TimeoutError, Empty):
+                    counter += _TIMEOUT
                     _check_for_faulty_process(self.procs)
+                if counter > (_TIMEOUT * _MAX_IDLE_COUNT):
+                    raise RuntimeError(
+                        f"Failed to gather all collector output within {_TIMEOUT * _MAX_IDLE_COUNT} seconds. "
+                        f"Increase the MAX_IDLE_COUNT environment variable to bypass this error."
+                    )
             if self.replay_buffer is None:
                 worker_frames = out.numel()
                 if self.split_trajs:
@@ -2741,10 +2786,12 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             instances) it will be wrapped in a `nn.Module` first.
             Then, the collector will try to assess if these
             modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+
             - If the policy forward signature matches any of ``forward(self, tensordict)``,
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
     Keyword Args:
@@ -2830,7 +2877,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
-        update_at_each_batch (boolm optional): if ``True``, :meth:`~.update_policy_weight_()`
+        update_at_each_batch (boolm optional): if ``True``, :meth:`update_policy_weight_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
@@ -3083,7 +3130,7 @@ def _main_async_collector(
                         "the shared device (aka storing_device) is set to CPU."
                     )
                     if collected_tensordict.device is not None:
-                        # placehoder in case we need different behaviors
+                        # placeholder in case we need different behaviors
                         if collected_tensordict.device.type in ("cpu",):
                             collected_tensordict.share_memory_()
                         elif collected_tensordict.device.type in ("mps",):

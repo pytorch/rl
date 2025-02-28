@@ -60,7 +60,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The AtariDQN dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/atari`.
+            `~/.cache/torchrl/atari`.atari`.
         num_procs (int, optional): number of processes to launch for preprocessing.
             Has no effect whenever the data is already downloaded. Defaults to 0
             (no multiprocessing used).
@@ -415,7 +415,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         if dataset_id not in self.available_datasets:
             raise ValueError(
                 "The dataseet_id is not part of the available datasets. The dataset should be named <game_name>/<run> "
-                "where <game_name> is one of the Atari 2600 games and the run is a number betweeen 1 and 5. "
+                "where <game_name> is one of the Atari 2600 games and the run is a number between 1 and 5. "
                 "The full list of accepted dataset_ids is available under AtariDQNExperienceReplay.available_datasets."
             )
         self.dataset_id = dataset_id
