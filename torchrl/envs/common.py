@@ -2018,6 +2018,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         next_tensordict = None
 
         if partial_steps is not None:
+            tensordict_batch_size = None
             if not self.batch_locked:
                 # Batched envs have their own way of dealing with this - batched envs that are not batched-locked may fail here
                 if partial_steps.all():
@@ -2032,8 +2033,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     # trust that the _step can handle this!
                     tensordict.set("_step", partial_steps)
-
-            tensordict_batch_size = self.batch_size
+            if tensordict_batch_size is None:
+                tensordict_batch_size = self.batch_size
 
         next_preset = tensordict.get("next", None)
 
@@ -2051,23 +2052,25 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if partial_steps is not None and tensordict_batch_size != self.batch_size:
             result = tensordict.new_zeros(tensordict_batch_size)
 
-            def select_and_clone(x, y):
-                if y is not None:
-                    if x.device == y.device:
-                        return x.clone()
-                    return x.to(y.device)
+            if tensordict_batch_size == tensordict.batch_size:
 
-            result.update(
-                tensordict._fast_apply(
-                    select_and_clone,
-                    result,
-                    device=result.device,
-                    filter_empty=True,
-                    default=None,
-                    batch_size=result.batch_size,
-                    is_leaf=_is_leaf_nontensor,
+                def select_and_clone(x, y):
+                    if y is not None:
+                        if x.device == y.device:
+                            return x.clone()
+                        return x.to(y.device)
+
+                result.update(
+                    tensordict._fast_apply(
+                        select_and_clone,
+                        result,
+                        device=result.device,
+                        filter_empty=True,
+                        default=None,
+                        batch_size=result.batch_size,
+                        is_leaf=_is_leaf_nontensor,
+                    )
                 )
-            )
             if partial_steps.any():
                 result[partial_steps] = tensordict
             return result
@@ -3386,9 +3389,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict = self.step(tensordict)
             td_append = tensordict.copy()
             if break_when_all_done:
-                if partial_steps is not True:
-                    # At least one partial step has been done
-                    del td_append["_step"]
+                if partial_steps is not True and not partial_steps.all():
+                    # At least one step is partial
+                    td_append.pop("_step", None)
                     td_append = torch.where(
                         partial_steps.view(td_append.shape), td_append, tensordicts[-1]
                     )
@@ -3411,19 +3414,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 if any_done:
                     break
             else:
+                # Write the '_step' entry, indicating which step is to be undertaken
                 _terminated_or_truncated(
                     tensordict,
                     full_done_spec=self.output_spec["full_done_spec"],
-                    key="_step",
+                    key="_neg_step",
                     write_full_false=False,
                 )
-                partial_step_curr = tensordict.get("_step", None)
+                # This is what differentiates _step and _reset: we need to flip _step False -> True
+                partial_step_curr = tensordict.pop("_neg_step", None)
                 if partial_step_curr is not None:
                     partial_step_curr = ~partial_step_curr
                     partial_steps = partial_steps & partial_step_curr
                 if partial_steps is not True:
                     if not partial_steps.any():
                         break
+                    # Write the final _step entry
                     tensordict.set("_step", partial_steps)
 
             if callback is not None:
