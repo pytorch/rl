@@ -120,7 +120,7 @@ jobs:
           source ./py310/bin/activate
           export PYTHON_INCLUDE_DIR=/usr/include/python3.10
 
-          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu124 -U
+          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
           python3.10 -m pip install cmake ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
           python3.10 setup.py develop
