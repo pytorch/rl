@@ -206,7 +206,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       # gpu-arch-type: "cuda"
       # gpu-arch-version: "11.6"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -526,14 +526,14 @@ jobs:
   unittests-robohive:
     strategy:
       matrix:
-        python_version: ["3.10"]
+        python_version: ["3.9"]
         cuda_arch_version: ["12.4"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -545,8 +545,8 @@ jobs:
         fi
 
         set -euo pipefail
-        export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu124"
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu117"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0

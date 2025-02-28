@@ -5,49 +5,17 @@
 #
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
+set -e
+
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-apt-get update && apt-get upgrade -y && apt-get install -y git
 # Avoid error: "fatal: unsafe repository"
+apt-get update && apt-get install -y git wget gcc g++
+
 git config --global --add safe.directory '*'
-apt-get install -y wget \
-    gcc \
-    g++ \
-    unzip \
-    curl \
-    patchelf \
-    libosmesa6 \
-    libosmesa6-dev \
-    libgl1-mesa-glx \
-    libglfw3 \
-    swig3.0 \
-    libglew-dev \
-    libx11-dev \
-    libglvnd0 \
-    libgl1 \
-    libglx0 \
-    libegl1 \
-    libgles2 \
-    libsdl2-dev \
-    libsdl2-2.0-0 \
-    x11proto-dev \
-    libglvnd-dev \
-    libgl1-mesa-dev \
-    libegl1-mesa-dev \
-    libgles2-mesa-dev
-
-# Upgrade specific package
-apt-get upgrade -y libstdc++6
-
-cd /usr/lib/x86_64-linux-gnu
-ln -s libglut.so.3.12 libglut.so.3
-cd $this_dir
-
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
-
-set -e
 
 cd "${root_dir}"
 
@@ -91,6 +59,7 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
+export MUJOCO_GL=egl
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
   MUJOCO_GL=egl \
