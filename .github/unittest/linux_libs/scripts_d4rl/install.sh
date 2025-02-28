@@ -4,8 +4,6 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
-apt-get update && apt-get install -y git wget gcc g++
-#apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev
 
 set -e
 
@@ -28,18 +26,18 @@ fi
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with cu124"
+printf "Installing PyTorch with cu128"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu124 -U
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install torch --index-url https://download.pytorch.org/whl/cpu
   else
-      pip3 install torch --index-url https://download.pytorch.org/whl/cu124
+      pip3 install torch --index-url https://download.pytorch.org/whl/cu128
   fi
 else
   printf "Failed to install pytorch"
