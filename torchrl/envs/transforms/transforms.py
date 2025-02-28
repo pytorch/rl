@@ -16,19 +16,7 @@ from copy import copy
 from enum import IntEnum
 from functools import wraps
 from textwrap import indent
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Mapping,
-    Optional,
-    OrderedDict,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Any, Callable, Mapping, OrderedDict, Sequence, TypeVar, Union
 
 import numpy as np
 

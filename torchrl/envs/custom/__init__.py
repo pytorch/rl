@@ -4,6 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from .chess import ChessEnv
-from .llm import LLMHashingEnv
+from .llm import LLMEnv, LLMHashingEnv
 from .pendulum import PendulumEnv
 from .tictactoeenv import TicTacToeEnv
