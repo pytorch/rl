@@ -1565,15 +1565,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         results = [None] * len(workers_range)
 
-        consumed_indices = []
-        events = set(workers_range)
-        while len(consumed_indices) < len(workers_range):
-            for i in list(events):
-                if self._events[i].is_set():
-                    results[i] = self.parent_channels[i].recv()
-                    self._events[i].clear()
-                    consumed_indices.append(i)
-                    events.discard(i)
+        self._wait_for_workers(workers_range)
+
+        for i, w in enumerate(workers_range):
+            results[i] = self.parent_channels[w].recv()
 
         out_next, out_root = zip(*(future for future in results))
         out = TensorDict.maybe_dense_stack(out_next), TensorDict.maybe_dense_stack(
