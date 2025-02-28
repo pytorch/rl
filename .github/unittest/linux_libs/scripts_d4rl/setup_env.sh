@@ -9,10 +9,33 @@ set -e
 set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+apt-get update && apt-get upgrade -y && apt-get install -y git
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++ unzip
-
 git config --global --add safe.directory '*'
+apt-get install -y wget \
+    gcc \
+    g++ \
+    unzip \
+    curl \
+    patchelf \
+    libosmesa6-dev \
+    libgl1-mesa-glx \
+    libglfw3 \
+    swig3.0 \
+    libglew-dev \
+    libglvnd0 \
+    libgl1 \
+    libglx0 \
+    libegl1 \
+    libgles2
+
+# Upgrade specific package
+apt-get upgrade -y libstdc++6
+
+cd /usr/lib/x86_64-linux-gnu
+ln -s libglut.so.3.12 libglut.so.3
+cd $this_dir
+
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
@@ -78,9 +101,9 @@ pip3 install pip --upgrade
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
 elif [ "${CU_VERSION:-}" == cpu ]; then
-  PRIVATE_MUJOCO_GL=osmesa
+  PRIVATE_MUJOCO_GL=egl
 else
-  PRIVATE_MUJOCO_GL=osmesa
+  PRIVATE_MUJOCO_GL=egl
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
@@ -94,6 +117,8 @@ conda env config vars set \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
   PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL \
-  TOKENIZERS_PARALLELISM=true
+  TOKENIZERS_PARALLELISM=true \
+  LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
+
 
 conda env update --file "${this_dir}/environment.yml" --prune
