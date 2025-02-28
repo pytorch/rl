@@ -15,7 +15,7 @@ def _get_image_num_channels(img: Tensor) -> int:
     elif img.ndim > 2:
         return img.shape[-3]
 
-    raise TypeError("Input ndim should be 2 or more. Got {}".format(img.ndim))
+    raise TypeError(f"Input ndim should be 2 or more. Got {img.ndim}")
 
 
 def _assert_channels(img: Tensor, permitted: List[int]) -> None:

@@ -8,12 +8,11 @@ import os
 import platform
 import subprocess
 from pathlib import Path
-from subprocess import CalledProcessError, check_output, STDOUT
+from subprocess import CalledProcessError, STDOUT, check_output
 
 import torch
 from setuptools import Extension
 from setuptools.command.build_ext import build_ext
-
 
 _THIS_DIR = Path(__file__).parent.resolve()
 _ROOT_DIR = _THIS_DIR.parent.parent.resolve()
@@ -130,7 +129,7 @@ class CMakeBuild(build_ext):
             # using -j in the build_ext call, not supported by pip or PyPA-build.
             if hasattr(self, "parallel") and self.parallel:
                 # CMake 3.12+ only.
-                build_args += ["-j{}".format(self.parallel)]
+                build_args += [f"-j{self.parallel}"]
 
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)

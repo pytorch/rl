@@ -6,44 +6,35 @@ from __future__ import annotations
 
 import contextlib
 import warnings
-
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import torch
-from tensordict import (
-    is_tensor_collection,
-    TensorDict,
-    TensorDictBase,
-    TensorDictParams,
-)
+from tensordict import (TensorDict, TensorDictBase, TensorDictParams, is_tensor_collection)
 from tensordict.nn import (
-    composite_lp_aggregate,
     CompositeDistribution,
-    dispatch,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
-    set_composite_lp_aggregate,
     TensorDictModule,
+    composite_lp_aggregate,
+    dispatch,
+    set_composite_lp_aggregate,
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
-
 from torchrl._utils import _standardize
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
+    ValueEstimators,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _cache_values,
     _clip_value_loss,
-    _GAMMA_LMBDA_DEPREC_ERROR,
     _maybe_add_or_extend_key,
     _maybe_get_or_select,
     _reduce,
     _sum_td_features,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import (
     GAE,
@@ -298,11 +289,11 @@ class PPOLoss(LossModule):
         advantage: NestedKey = "advantage"
         value_target: NestedKey = "value_target"
         value: NestedKey = "state_value"
-        sample_log_prob: NestedKey | List[NestedKey] | None = None
-        action: NestedKey | List[NestedKey] = "action"
-        reward: NestedKey | List[NestedKey] = "reward"
-        done: NestedKey | List[NestedKey] = "done"
-        terminated: NestedKey | List[NestedKey] = "terminated"
+        sample_log_prob: NestedKey | list[NestedKey] | None = None
+        action: NestedKey | list[NestedKey] = "action"
+        reward: NestedKey | list[NestedKey] = "reward"
+        done: NestedKey | list[NestedKey] = "done"
+        terminated: NestedKey | list[NestedKey] = "terminated"
 
         def __post_init__(self):
             if self.sample_log_prob is None:
@@ -333,7 +324,7 @@ class PPOLoss(LossModule):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
-        normalize_advantage_exclude_dims: Tuple[int] = (),
+        normalize_advantage_exclude_dims: tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         advantage_key: str = None,
@@ -521,7 +512,7 @@ class PPOLoss(LossModule):
 
     def _log_weight(
         self, tensordict: TensorDictBase, adv_shape: torch.Size
-    ) -> Tuple[torch.Tensor, d.Distribution, torch.Tensor]:
+    ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
 
         with self.actor_network_params.to_module(
             self.actor_network
@@ -891,7 +882,7 @@ class ClipPPOLoss(PPOLoss):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
-        normalize_advantage_exclude_dims: Tuple[int] = (),
+        normalize_advantage_exclude_dims: tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -902,7 +893,7 @@ class ClipPPOLoss(PPOLoss):
         if isinstance(clip_value, bool):
             clip_value = clip_epsilon if clip_value else None
 
-        super(ClipPPOLoss, self).__init__(
+        super().__init__(
             actor_network,
             critic_network,
             entropy_bonus=entropy_bonus,
@@ -1162,14 +1153,14 @@ class KLPENPPOLoss(PPOLoss):
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
-        normalize_advantage_exclude_dims: Tuple[int] = (),
+        normalize_advantage_exclude_dims: tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
         clip_value: float | None = None,
         **kwargs,
     ):
-        super(KLPENPPOLoss, self).__init__(
+        super().__init__(
             actor_network,
             critic_network,
             entropy_bonus=entropy_bonus,

@@ -10,7 +10,6 @@ from typing import List, Optional
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
-
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 
@@ -119,7 +118,7 @@ class ModelBasedEnvBase(EnvBase):
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
     ):
-        super(ModelBasedEnvBase, self).__init__(
+        super().__init__(
             device=device,
             batch_size=batch_size,
             run_type_checks=run_type_checks,

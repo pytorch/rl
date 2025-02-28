@@ -6,11 +6,9 @@
 from __future__ import annotations
 
 import importlib.util
-from typing import Dict, List
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-
 from torchrl.data.tensor_specs import (
     Categorical,
     Composite,
@@ -19,7 +17,7 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
+from torchrl.envs.utils import MarlGroupMapType, _classproperty, check_marl_grouping
 
 _has_pyspiel = importlib.util.find_spec("pyspiel") is not None
 
@@ -159,7 +157,7 @@ class OpenSpielWrapper(_EnvWrapper):
         env=None,
         *,
         group_map: MarlGroupMapType
-        | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
         categorical_actions: bool = False,
         return_state: bool = False,
         **kwargs,
@@ -176,7 +174,7 @@ class OpenSpielWrapper(_EnvWrapper):
         # `reset` allows resetting to any state, including a terminal state
         self._allow_done_after_reset = True
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         pyspiel = self.lib
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
@@ -283,7 +281,7 @@ class OpenSpielWrapper(_EnvWrapper):
             group_reward_spec,
         )
 
-    def _make_specs(self, env: "pyspiel.State") -> None:  # noqa: F821
+    def _make_specs(self, env: pyspiel.State) -> None:  # noqa: F821
         self.agent_names = [f"player_{index}" for index in range(env.num_players())]
         self.agent_names_to_indices_map = {
             agent_name: i for i, agent_name in enumerate(self.agent_names)
@@ -604,7 +602,7 @@ class OpenSpielEnv(OpenSpielWrapper):
         game_string,
         *,
         group_map: MarlGroupMapType
-        | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
         categorical_actions=False,
         return_state: bool = False,
         **kwargs,
@@ -621,7 +619,7 @@ class OpenSpielEnv(OpenSpielWrapper):
         self,
         game_string: str,
         **kwargs,
-    ) -> "pyspiel.State":  # noqa: F821
+    ) -> pyspiel.State:  # noqa: F821
         if not _has_pyspiel:
             raise ImportError(
                 f"open_spiel not found, unable to create {game_string}. Consider "
@@ -647,7 +645,7 @@ class OpenSpielEnv(OpenSpielWrapper):
     def game_string(self):
         return self._constructor_kwargs["game_string"]
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "game_string" not in kwargs:
             raise TypeError("Expected 'game_string' to be part of kwargs")
 

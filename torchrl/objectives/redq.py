@@ -7,27 +7,23 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from numbers import Number
-from typing import List, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-
-from tensordict.nn import composite_lp_aggregate, dispatch, TensorDictModule
+from tensordict.nn import TensorDictModule, composite_lp_aggregate, dispatch
 from tensordict.utils import NestedKey
 from torch import Tensor
-
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
-    _cache_values,
+    ValueEstimators,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _cache_values,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
@@ -266,7 +262,7 @@ class REDQLoss(LossModule):
     def __init__(
         self,
         actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
@@ -276,7 +272,7 @@ class REDQLoss(LossModule):
         max_alpha: float = 10.0,
         action_spec=None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, Number] = "auto",
+        target_entropy: str | Number = "auto",
         delay_qvalue: bool = True,
         gSDE: bool = False,
         gamma: float = None,

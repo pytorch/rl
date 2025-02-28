@@ -5,26 +5,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import torch
-
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import TensorDictModule, dispatch
 from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
-
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
-    _cache_values,
+    ValueEstimators,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _cache_values,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
@@ -226,10 +222,10 @@ class TD3Loss(LossModule):
     def __init__(
         self,
         actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         action_spec: TensorSpec = None,
-        bounds: Optional[Tuple[float]] = None,
+        bounds: tuple[float] | None = None,
         num_qvalue_nets: int = 2,
         policy_noise: float = 0.2,
         noise_clip: float = 0.5,
@@ -373,7 +369,7 @@ class TD3Loss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    def actor_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
+    def actor_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
@@ -406,7 +402,7 @@ class TD3Loss(LossModule):
         )
         return loss_actor, metadata
 
-    def value_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
+    def value_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         tensordict = tensordict.clone(False)
 
         act = tensordict.get(self.tensor_keys.action)

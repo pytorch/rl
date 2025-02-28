@@ -8,15 +8,14 @@ from __future__ import annotations
 import abc
 import re
 import warnings
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 import torch
 from tensordict import NonTensorData, TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
-from torchrl.envs.common import _EnvWrapper, _maybe_unlock, EnvBase
+from torchrl.envs.common import EnvBase, _EnvWrapper, _maybe_unlock
 
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
@@ -24,13 +23,13 @@ class BaseInfoDictReader(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def __call__(
-        self, info_dict: Dict[str, Any], tensordict: TensorDictBase
+        self, info_dict: dict[str, Any], tensordict: TensorDictBase
     ) -> TensorDictBase:
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def info_spec(self) -> Dict[str, TensorSpec]:
+    def info_spec(self) -> dict[str, TensorSpec]:
         raise NotImplementedError
 
 
@@ -67,8 +66,8 @@ class default_info_dict_reader(BaseInfoDictReader):
 
     def __init__(
         self,
-        keys: List[str] | None = None,
-        spec: Sequence[TensorSpec] | Dict[str, TensorSpec] | Composite | None = None,
+        keys: list[str] | None = None,
+        spec: Sequence[TensorSpec] | dict[str, TensorSpec] | Composite | None = None,
         ignore_private: bool = True,
     ):
         self.ignore_private = ignore_private
@@ -98,7 +97,7 @@ class default_info_dict_reader(BaseInfoDictReader):
         self._info_spec = _info_spec
 
     def __call__(
-        self, info_dict: Dict[str, Any], tensordict: TensorDictBase
+        self, info_dict: dict[str, Any], tensordict: TensorDictBase
     ) -> TensorDictBase:
         if not isinstance(info_dict, (dict, TensorDictBase)) and len(self.keys):
             warnings.warn(
@@ -142,7 +141,7 @@ class default_info_dict_reader(BaseInfoDictReader):
         self._info_spec = None
 
     @property
-    def info_spec(self) -> Dict[str, TensorSpec]:
+    def info_spec(self) -> dict[str, TensorSpec]:
         return self._info_spec
 
 
@@ -166,7 +165,7 @@ class GymLikeEnv(_EnvWrapper):
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """
 
-    _info_dict_reader: List[BaseInfoDictReader]
+    _info_dict_reader: list[BaseInfoDictReader]
 
     @classmethod
     def __new__(cls, *args, **kwargs):
@@ -191,7 +190,7 @@ class GymLikeEnv(_EnvWrapper):
         terminated: bool | None = None,
         truncated: bool | None = None,
         done: bool | None = None,
-    ) -> Tuple[bool | np.ndarray, bool | np.ndarray, bool | np.ndarray, bool]:
+    ) -> tuple[bool | np.ndarray, bool | np.ndarray, bool | np.ndarray, bool]:
         """Done state reader.
 
         In torchrl, a `"done"` signal means that a trajectory has reach its end,
@@ -257,8 +256,8 @@ class GymLikeEnv(_EnvWrapper):
         return reward
 
     def read_obs(
-        self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
-    ) -> Dict[str, Any]:
+        self, observations: dict[str, Any] | torch.Tensor | np.ndarray
+    ) -> dict[str, Any]:
         """Reads an observation from the environment and returns an observation compatible with the output TensorDict.
 
         Args:
@@ -371,7 +370,7 @@ class GymLikeEnv(_EnvWrapper):
         self.__dict__["_validated"] = value
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
         obs, info = self._reset_output_transform(self._env.reset(**kwargs))
 
@@ -398,8 +397,8 @@ class GymLikeEnv(_EnvWrapper):
 
     @abc.abstractmethod
     def _output_transform(
-        self, step_outputs_tuple: Tuple
-    ) -> Tuple[
+        self, step_outputs_tuple: tuple
+    ) -> tuple[
         Any,
         float | np.ndarray,
         bool | np.ndarray | None,
@@ -434,7 +433,7 @@ class GymLikeEnv(_EnvWrapper):
         ...
 
     @abc.abstractmethod
-    def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
+    def _reset_output_transform(self, reset_outputs_tuple: tuple) -> tuple:
         ...
 
     @_maybe_unlock

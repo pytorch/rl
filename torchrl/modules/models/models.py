@@ -5,24 +5,22 @@
 from __future__ import annotations
 
 import dataclasses
-
 from copy import deepcopy
 from numbers import Number
-from typing import Callable, Dict, List, Sequence, Tuple, Type, Union
+from typing import Callable, Dict, Sequence, Type
 
 import torch
 from torch import nn
-
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models.decision_transformer import DecisionTransformer
 from torchrl.modules.models.utils import (
-    _find_depth,
-    create_on_device,
     LazyMapping,
     SquashDims,
     Squeeze2dLayer,
     SqueezeLayer,
+    _find_depth,
+    create_on_device,
 )
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet  # noqa
 
@@ -165,14 +163,14 @@ class MLP(nn.Sequential):
         out_features: int | torch.Size = None,
         depth: int | None = None,
         num_cells: Sequence[int] | int | None = None,
-        activation_class: Type[nn.Module] | Callable = nn.Tanh,
-        activation_kwargs: dict | List[dict] | None = None,
-        norm_class: Type[nn.Module] | Callable | None = None,
-        norm_kwargs: dict | List[dict] | None = None,
+        activation_class: type[nn.Module] | Callable = nn.Tanh,
+        activation_kwargs: dict | list[dict] | None = None,
+        norm_class: type[nn.Module] | Callable | None = None,
+        norm_kwargs: dict | list[dict] | None = None,
         dropout: float | None = None,
         bias_last_layer: bool = True,
         single_bias_last_layer: bool = False,
-        layer_class: Type[nn.Module] | Callable = nn.Linear,
+        layer_class: type[nn.Module] | Callable = nn.Linear,
         layer_kwargs: dict | None = None,
         activate_last_layer: bool = False,
         device: DEVICE_TYPING | None = None,
@@ -244,7 +242,7 @@ class MLP(nn.Sequential):
         ]
         super().__init__(*layers)
 
-    def _make_net(self, device: DEVICE_TYPING | None) -> List[nn.Module]:
+    def _make_net(self, device: DEVICE_TYPING | None) -> list[nn.Module]:
         layers = []
         in_features = [self.in_features] + self.num_cells
         out_features = self.num_cells + [self._out_features_num]
@@ -293,7 +291,7 @@ class MLP(nn.Sequential):
 
         return layers
 
-    def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
+    def forward(self, *inputs: tuple[torch.Tensor]) -> torch.Tensor:
         if len(inputs) > 1:
             inputs = (torch.cat([*inputs], -1),)
 
@@ -408,15 +406,15 @@ class ConvNet(nn.Sequential):
         in_features: int | None = None,
         depth: int | None = None,
         num_cells: Sequence[int] | int = None,
-        kernel_sizes: Union[Sequence[int], int] = 3,
+        kernel_sizes: Sequence[int] | int = 3,
         strides: Sequence[int] | int = 1,
         paddings: Sequence[int] | int = 0,
-        activation_class: Type[nn.Module] | Callable = nn.ELU,
-        activation_kwargs: dict | List[dict] | None = None,
-        norm_class: Type[nn.Module] | Callable | None = None,
-        norm_kwargs: dict | List[dict] | None = None,
+        activation_class: type[nn.Module] | Callable = nn.ELU,
+        activation_kwargs: dict | list[dict] | None = None,
+        norm_class: type[nn.Module] | Callable | None = None,
+        norm_kwargs: dict | list[dict] | None = None,
         bias_last_layer: bool = True,
-        aggregator_class: Type[nn.Module] | Callable | None = SquashDims,
+        aggregator_class: type[nn.Module] | Callable | None = SquashDims,
         aggregator_kwargs: dict | None = None,
         squeeze_output: bool = False,
         device: DEVICE_TYPING | None = None,
@@ -540,7 +538,7 @@ class ConvNet(nn.Sequential):
         *batch, C, L, W = inputs.shape
         if len(batch) > 1:
             inputs = inputs.flatten(0, len(batch) - 1)
-        out = super(ConvNet, self).forward(inputs)
+        out = super().forward(inputs)
         if len(batch) > 1:
             out = out.unflatten(0, batch)
         return out
@@ -678,12 +676,12 @@ class Conv3dNet(nn.Sequential):
         kernel_sizes: Sequence[int] | int = 3,
         strides: Sequence[int] | int = 1,
         paddings: Sequence[int] | int = 0,
-        activation_class: Type[nn.Module] | Callable = nn.ELU,
-        activation_kwargs: dict | List[dict] | None = None,
-        norm_class: Type[nn.Module] | Callable | None = None,
-        norm_kwargs: dict | List[dict] | None = None,
+        activation_class: type[nn.Module] | Callable = nn.ELU,
+        activation_kwargs: dict | list[dict] | None = None,
+        norm_class: type[nn.Module] | Callable | None = None,
+        norm_kwargs: dict | list[dict] | None = None,
         bias_last_layer: bool = True,
-        aggregator_class: Type[nn.Module] | Callable | None = SquashDims,
+        aggregator_class: type[nn.Module] | Callable | None = SquashDims,
         aggregator_kwargs: dict | None = None,
         squeeze_output: bool = False,
         device: DEVICE_TYPING | None = None,
@@ -1199,7 +1197,7 @@ class DdpgCnnActor(nn.Module):
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
         ddpg_init_last_layer(self.mlp, 6e-4, device=device)
 
-    def forward(self, observation: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, observation: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         hidden = self.convnet(observation)
         action = self.mlp(hidden)
         return action, hidden
@@ -1478,7 +1476,7 @@ class DdpgMlpQNet(nn.Module):
             "bias_last_layer": True,
             "activate_last_layer": True,
         }
-        mlp_net_kwargs_net1: Dict = (
+        mlp_net_kwargs_net1: dict = (
             mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else {}
         )
         mlp1_net_default_kwargs.update(mlp_net_kwargs_net1)
@@ -1539,7 +1537,7 @@ class OnlineDTActor(nn.Module):
         self,
         state_dim: int,
         action_dim: int,
-        transformer_config: Dict | DecisionTransformer.DTConfig = None,
+        transformer_config: dict | DecisionTransformer.DTConfig = None,
         device: DEVICE_TYPING | None = None,
     ):
         super().__init__()
@@ -1577,7 +1575,7 @@ class OnlineDTActor(nn.Module):
         observation: torch.Tensor,
         action: torch.Tensor,
         return_to_go: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         hidden_state = self.transformer(observation, action, return_to_go)
         mu = self.action_layer_mean(hidden_state)
         log_std = self.action_layer_logstd(hidden_state)
@@ -1638,7 +1636,7 @@ class DTActor(nn.Module):
         self,
         state_dim: int,
         action_dim: int,
-        transformer_config: Dict | DecisionTransformer.DTConfig = None,
+        transformer_config: dict | DecisionTransformer.DTConfig = None,
         device: DEVICE_TYPING | None = None,
     ):
         super().__init__()
@@ -1690,7 +1688,7 @@ class DTActor(nn.Module):
         )
 
 
-def _iter_maybe_over_single(item: dict | List[dict] | None, n):
+def _iter_maybe_over_single(item: dict | list[dict] | None, n):
     if item is None:
         return iter([{} for _ in range(n)])
     elif isinstance(item, dict):
@@ -1703,7 +1701,7 @@ class _ExecutableLayer(nn.Module):
     """A thin wrapper around a function to be executed as a module."""
 
     def __init__(self, func):
-        super(_ExecutableLayer, self).__init__()
+        super().__init__()
         self.func = func
 
     def forward(self, *args, **kwargs):

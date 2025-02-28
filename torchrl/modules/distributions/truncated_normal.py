@@ -10,7 +10,7 @@ import math
 from numbers import Number
 
 import torch
-from torch.distributions import constraints, Distribution
+from torch.distributions import Distribution, constraints
 from torch.distributions.utils import broadcast_all
 
 CONST_SQRT_2 = math.sqrt(2)
@@ -41,9 +41,7 @@ class TruncatedStandardNormal(Distribution):
             batch_shape = torch.Size()
         else:
             batch_shape = self.a.size()
-        super(TruncatedStandardNormal, self).__init__(
-            batch_shape, validate_args=validate_args
-        )
+        super().__init__(batch_shape, validate_args=validate_args)
         if self.a.dtype != self.b.dtype:
             raise ValueError("Truncation bounds types are different")
         if any(
@@ -154,7 +152,7 @@ class TruncatedNormal(TruncatedStandardNormal):
         self._non_std_b = b
         a = (a - self.loc) / self.scale
         b = (b - self.loc) / self.scale
-        super(TruncatedNormal, self).__init__(a, b, validate_args=validate_args)
+        super().__init__(a, b, validate_args=validate_args)
         self._log_scale = self.scale.log()
         self._mean = self._mean * self.scale + self.loc
         self._variance = self._variance * self.scale**2
@@ -167,7 +165,7 @@ class TruncatedNormal(TruncatedStandardNormal):
         return value * self.scale + self.loc
 
     def cdf(self, value):
-        return super(TruncatedNormal, self).cdf(self._to_std_rv(value))
+        return super().cdf(self._to_std_rv(value))
 
     def icdf(self, value):
         sample = self._from_std_rv(super().icdf(value))
@@ -184,4 +182,4 @@ class TruncatedNormal(TruncatedStandardNormal):
 
     def log_prob(self, value):
         value = self._to_std_rv(value)
-        return super(TruncatedNormal, self).log_prob(value) - self._log_scale
+        return super().log_prob(value) - self._log_scale

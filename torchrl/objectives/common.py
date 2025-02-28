@@ -10,11 +10,10 @@ import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator
 
 import torch
-from tensordict import is_tensor_collection, TensorDict, TensorDictBase
-
+from tensordict import TensorDict, TensorDictBase, is_tensor_collection
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from tensordict.utils import Buffer
 from torch import nn
@@ -22,8 +21,7 @@ from torch.nn import Parameter
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import set_recurrent_mode
-
-from torchrl.objectives.utils import RANDOM_MODULE_LIST, ValueEstimators
+from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 try:
@@ -280,9 +278,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         self,
         module: TensorDictModule,
         module_name: str,
-        expand_dim: Optional[int] = None,
+        expand_dim: int | None = None,
         create_target_params: bool = False,
-        compare_against: Optional[List[Parameter]] = None,
+        compare_against: list[Parameter] | None = None,
         **kwargs,
     ) -> None:
         """Converts a module to functional to be used in the loss.
@@ -486,7 +484,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, Parameter]]:
+    ) -> Iterator[tuple[str, Parameter]]:
         for name, param in super().named_parameters(prefix=prefix, recurse=recurse):
             if not name.startswith("_target"):
                 yield name, param

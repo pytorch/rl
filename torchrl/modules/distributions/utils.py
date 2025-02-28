@@ -55,7 +55,7 @@ class FasterTransformedDistribution(TransformedDistribution):
             raise ValueError("Make a ComposeTransform first.")
         else:
             raise ValueError(
-                "transforms must be a Transform or list, but was {}".format(transforms)
+                f"transforms must be a Transform or list, but was {transforms}"
             )
         transform = self.transforms[0]
         # Reshape base_distribution according to transforms.

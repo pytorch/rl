@@ -6,9 +6,8 @@ import importlib.util
 from typing import List, Optional, Union
 
 import torch
-from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, set_lazy_legacy
 from torch.hub import load_state_dict_from_url
-
 from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms.transforms import (
@@ -364,7 +363,7 @@ class VIPRewardTransform(VIPTransform):
         tensordict_in = tensordict.select("goal_image").rename_key_(
             "goal_image", self.in_keys[0]
         )
-        tensordict_in = super(VIPRewardTransform, self).forward(tensordict_in)
+        tensordict_in = super().forward(tensordict_in)
         tensordict = tensordict.update(
             tensordict_in.rename_key_(self.out_keys[0], "goal_embedding")
         )

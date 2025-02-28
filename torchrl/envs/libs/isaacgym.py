@@ -5,14 +5,12 @@
 from __future__ import annotations
 
 import importlib.util
-
 import itertools
 import warnings
-from typing import Any, Dict, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
-
 from tensordict import TensorDictBase
 from torchrl.data import Composite
 from torchrl.envs.libs.gym import GymWrapper
@@ -45,7 +43,7 @@ class IsaacGymWrapper(GymWrapper):
         return isaacgym
 
     def __init__(
-        self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs  # noqa: F821
+        self, env: isaacgymenvs.tasks.base.vec_task.Env, **kwargs  # noqa: F821
     ):
         warnings.warn(
             "IsaacGym environment support is an experimental feature that may change in the future."
@@ -57,7 +55,7 @@ class IsaacGymWrapper(GymWrapper):
             # by convention in IsaacGymEnvs
             self.task = env.__name__
 
-    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
+    def _make_specs(self, env: gym.Env) -> None:  # noqa: F821
         super()._make_specs(env, batch_size=self.batch_size)
         self.full_done_spec = Composite(
             {
@@ -133,7 +131,7 @@ class IsaacGymWrapper(GymWrapper):
         terminated: bool = None,
         truncated: bool | None = None,
         done: bool | None = None,
-    ) -> Tuple[bool, bool, bool]:
+    ) -> tuple[bool, bool, bool]:
         if terminated is not None:
             terminated = terminated.bool()
         if truncated is not None:
@@ -146,8 +144,8 @@ class IsaacGymWrapper(GymWrapper):
         return total_reward
 
     def read_obs(
-        self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
-    ) -> Dict[str, Any]:
+        self, observations: dict[str, Any] | torch.Tensor | np.ndarray
+    ) -> dict[str, Any]:
         """Reads an observation from the environment and returns an observation compatible with the output TensorDict.
 
         Args:

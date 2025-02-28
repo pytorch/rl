@@ -5,16 +5,13 @@
 from __future__ import annotations
 
 import collections
-
 import importlib
 import os
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict
 
 import numpy as np
 import torch
-
-from torchrl._utils import logger as torchrl_logger, VERBOSE
-
+from torchrl._utils import VERBOSE, logger as torchrl_logger
 from torchrl.data.tensor_specs import (
     Bounded,
     Categorical,
@@ -23,7 +20,6 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     Unbounded,
 )
-
 from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
 from torchrl.envs.gym_like import GymLikeEnv
 from torchrl.envs.utils import _classproperty
@@ -41,7 +37,7 @@ __all__ = ["DMControlEnv", "DMControlWrapper"]
 
 def _dmcontrol_to_torchrl_spec_transform(
     spec,
-    dtype: Optional[torch.dtype] = None,
+    dtype: torch.dtype | None = None,
     device: DEVICE_TYPING = None,
     categorical_discrete_encoding: bool = False,
 ) -> TensorSpec:
@@ -94,7 +90,7 @@ def _dmcontrol_to_torchrl_spec_transform(
         raise NotImplementedError(type(spec))
 
 
-def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
+def _get_envs(to_dict: bool = True) -> dict[str, Any]:
     if not _has_dm_control:
         raise ImportError("Cannot find dm_control in virtual environment.")
     from dm_control import suite
@@ -111,7 +107,7 @@ def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
     return d.items()
 
 
-def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
+def _robust_to_tensor(array: float | np.ndarray) -> torch.Tensor:
     if isinstance(array, np.ndarray):
         return torch.as_tensor(array.copy())
     else:
@@ -211,11 +207,11 @@ class DMControlWrapper(GymLikeEnv):
     def _build_env(
         self,
         env,
-        _seed: Optional[int] = None,
+        _seed: int | None = None,
         from_pixels: bool = False,
-        render_kwargs: Optional[dict] = None,
+        render_kwargs: dict | None = None,
         pixels_only: bool = False,
-        camera_id: Union[int, str] = 0,
+        camera_id: int | str = 0,
         **kwargs,
     ):
         self.from_pixels = from_pixels
@@ -235,7 +231,7 @@ class DMControlWrapper(GymLikeEnv):
             )
         return env
 
-    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
+    def _make_specs(self, env: gym.Env) -> None:  # noqa: F821
         # specs are defined when first called
         self.observation_spec = _dmcontrol_to_torchrl_spec_transform(
             self._env.observation_spec(), device=self.device
@@ -260,7 +256,7 @@ class DMControlWrapper(GymLikeEnv):
             self._env.action_spec(), device=self.device
         )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         dm_control = self.lib
         from dm_control.suite.wrappers import pixels
 
@@ -286,11 +282,11 @@ class DMControlWrapper(GymLikeEnv):
         self._set_egl_device(self.device)
         return self
 
-    def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
+    def _init_env(self, seed: int | None = None) -> int | None:
         seed = self.set_seed(seed)
         return seed
 
-    def _set_seed(self, _seed: Optional[int]) -> Optional[int]:
+    def _set_seed(self, _seed: int | None) -> int | None:
         from dm_control.suite.wrappers import pixels
 
         if _seed is None:
@@ -308,8 +304,8 @@ class DMControlWrapper(GymLikeEnv):
         return _seed
 
     def _output_transform(
-        self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
-    ) -> Tuple[np.ndarray, float, bool, bool, dict]:
+        self, timestep_tuple: tuple[TimeStep]  # noqa: F821
+    ) -> tuple[np.ndarray, float, bool, bool, dict]:
         from dm_env import StepType
 
         if type(timestep_tuple) is not tuple:
@@ -427,7 +423,7 @@ class DMControlEnv(DMControlWrapper):
         self,
         env_name: str,
         task_name: str,
-        _seed: Optional[int] = None,
+        _seed: int | None = None,
         **kwargs,
     ):
         from dm_control import suite
@@ -467,7 +463,7 @@ class DMControlEnv(DMControlWrapper):
         self._env = self._build_env()
         self._make_specs(self._env)
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "env_name" in kwargs:
             env_name = kwargs["env_name"]
             if "task_name" in kwargs:

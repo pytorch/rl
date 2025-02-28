@@ -7,15 +7,12 @@ from __future__ import annotations
 import abc
 import collections
 import importlib
-from typing import List, Tuple
 
 import numpy as np
 import torch
-
 from tensordict import TensorDict
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.nn import functional as F
-
 from torchrl.data.rlhf.prompt import PromptData
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -30,7 +27,7 @@ class KLControllerBase(abc.ABC):
     """
 
     @abc.abstractmethod
-    def update(self, kl_values: List[float]) -> float:
+    def update(self, kl_values: list[float]) -> float:
         ...
 
 
@@ -63,7 +60,7 @@ class ConstantKLController(KLControllerBase):
         if model is not None:
             self.model.kl_coef = self.coef
 
-    def update(self, kl_values: List[float] = None) -> float:
+    def update(self, kl_values: list[float] = None) -> float:
         if self.model is not None:
             self.model.kl_coef = self.coef
         return self.coef
@@ -104,7 +101,7 @@ class AdaptiveKLController(KLControllerBase):
         if model is not None:
             self.model.kl_coef = self.coef
 
-    def update(self, kl_values: List[float]):
+    def update(self, kl_values: list[float]):
         """Update ``self.coef`` adaptively.
 
         Arguments:
@@ -422,7 +419,7 @@ class RolloutFromModel:
         )
 
     def _get_scores(
-        self, scores: Tuple, generated_tokens: Tensor = None, use_max=False, pad_to=None
+        self, scores: tuple, generated_tokens: Tensor = None, use_max=False, pad_to=None
     ):
         scores = torch.stack(scores, 1)
         if scores.shape[1] != self.max_new_tokens:

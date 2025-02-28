@@ -10,22 +10,16 @@ import shutil
 import tempfile
 import urllib
 import warnings
-
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
-
 import torch
-
-from tensordict import make_tensordict, PersistentTensorDict, TensorDict
-
+from tensordict import PersistentTensorDict, TensorDict, make_tensordict
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
-
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
@@ -145,7 +139,7 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
+        transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
         from_env: bool = False,
         use_truncated_as_done: bool = True,
@@ -459,7 +453,7 @@ def _download_dataset_from_url(dataset_url, dataset_path):
         torchrl_logger.info(f"Downloading dataset: {dataset_url} to {dataset_filepath}")
         urllib.request.urlretrieve(dataset_url, dataset_filepath)
     if not os.path.exists(dataset_filepath):
-        raise IOError("Failed to download dataset from %s" % dataset_url)
+        raise OSError("Failed to download dataset from %s" % dataset_url)
     return dataset_filepath
 
 

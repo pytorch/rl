@@ -7,15 +7,12 @@ from __future__ import annotations
 import importlib.util
 import io
 import pathlib
-from typing import Dict, Optional
 
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data import Binary, Bounded, Categorical, Composite, NonTensor, Unbounded
-
 from torchrl.envs import EnvBase
 from torchrl.envs.common import _EnvPostInit
-
 from torchrl.envs.utils import _classproperty
 
 
@@ -49,10 +46,8 @@ class _ChessMeta(_EnvPostInit):
             )
         elif include_hash_inv:
             raise ValueError(
-                (
-                    "'include_hash_inv=True' can only be set if"
-                    f"'include_hash=True', but got 'include_hash={include_hash}'."
-                )
+                "'include_hash_inv=True' can only be set if"
+                f"'include_hash=True', but got 'include_hash={include_hash}'."
             )
         if kwargs.get("mask_actions", True):
             from torchrl.envs import ActionMask
@@ -197,7 +192,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
 
     """
 
-    _hash_table: Dict[int, str] = {}
+    _hash_table: dict[int, str] = {}
     _PGN_RESTART = """[Event "?"]
 [Site "?"]
 [Date "????.??.??"]
@@ -231,7 +226,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
     def _legal_moves_to_index(
         self,
         tensordict: TensorDictBase | None = None,
-        board: "chess.Board" | None = None,  # noqa: F821
+        board: chess.Board | None = None,  # noqa: F821
         return_mask: bool = False,
         pad: bool = False,
     ) -> torch.Tensor:
@@ -357,16 +352,12 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
     def _is_done(self, board):
         return board.is_game_over() | board.is_fifty_moves()
 
-    def all_actions(
-        self, tensordict: Optional[TensorDictBase] = None
-    ) -> TensorDictBase:
+    def all_actions(self, tensordict: TensorDictBase | None = None) -> TensorDictBase:
         if not self.mask_actions:
             raise RuntimeError(
-                (
-                    "Cannot generate legal actions since 'mask_actions=False' was "
-                    "set. If you really want to generate all actions, not just "
-                    "legal ones, call 'env.full_action_spec.enumerate()'."
-                )
+                "Cannot generate legal actions since 'mask_actions=False' was "
+                "set. If you really want to generate all actions, not just "
+                "legal ones, call 'env.full_action_spec.enumerate()'."
             )
         return super().all_actions(tensordict)
 
@@ -480,8 +471,8 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
 
     @classmethod
     def _pgn_to_board(
-        cls, pgn_string: str, board: "chess.Board" | None = None  # noqa: F821
-    ) -> "chess.Board":  # noqa: F821
+        cls, pgn_string: str, board: chess.Board | None = None  # noqa: F821
+    ) -> chess.Board:  # noqa: F821
         pgn_io = io.StringIO(pgn_string)
         game = cls.lib.pgn.read_game(pgn_io)
         if board is None:
@@ -493,7 +484,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         return board
 
     @classmethod
-    def _add_move_to_pgn(cls, pgn_string: str, move: "chess.Move") -> str:  # noqa: F821
+    def _add_move_to_pgn(cls, pgn_string: str, move: chess.Move) -> str:  # noqa: F821
         pgn_io = io.StringIO(pgn_string)
         game = cls.lib.pgn.read_game(pgn_io)
         if game is None:
@@ -502,7 +493,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         return str(game)
 
     @classmethod
-    def _board_to_pgn(cls, board: "chess.Board") -> str:  # noqa: F821
+    def _board_to_pgn(cls, board: chess.Board) -> str:  # noqa: F821
         game = cls.lib.pgn.Game.from_board(board)
         pgn_string = str(game)
         return pgn_string

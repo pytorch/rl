@@ -6,16 +6,13 @@ from __future__ import annotations
 
 import random
 import string
-from typing import Dict, List, Optional
 
 import numpy as np
-
 import torch
 import torch.nn as nn
-from tensordict import tensorclass, TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase, tensorclass
 from tensordict.nn import TensorDictModuleBase
-from tensordict.utils import expand_right, NestedKey
-
+from tensordict.utils import NestedKey, expand_right
 from torchrl.data import (
     Binary,
     Bounded,
@@ -31,11 +28,7 @@ from torchrl.data.utils import consolidate_spec
 from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
-from torchrl.envs.utils import (
-    _terminated_or_truncated,
-    check_marl_grouping,
-    MarlGroupMapType,
-)
+from torchrl.envs.utils import (MarlGroupMapType, _terminated_or_truncated, check_marl_grouping)
 
 spec_dict = {
     "bounded": Bounded,
@@ -133,7 +126,7 @@ class _MockEnv(EnvBase):
     def maxstep(self):
         return 100
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
 
@@ -218,10 +211,10 @@ class MockSerialEnv(EnvBase):
         return super().__new__(*args, **kwargs)
 
     def __init__(self, device="cpu"):
-        super(MockSerialEnv, self).__init__(device=device)
+        super().__init__(device=device)
         self.is_closed = False
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         assert seed >= 1
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
@@ -259,7 +252,7 @@ class MockSerialEnv(EnvBase):
             device=self.device,
         )
 
-    def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
+    def rand_step(self, tensordict: TensorDictBase | None = None) -> TensorDictBase:
         return self.step(tensordict)
 
 
@@ -338,12 +331,12 @@ class MockBatchedLockedEnv(EnvBase):
         return super().__new__(cls, *args, **kwargs)
 
     def __init__(self, device="cpu", batch_size=None):
-        super(MockBatchedLockedEnv, self).__init__(device=device, batch_size=batch_size)
+        super().__init__(device=device, batch_size=batch_size)
         self.counter = 0
 
     rand_step = MockSerialEnv.rand_step
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         assert seed >= 1
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
@@ -422,9 +415,7 @@ class MockBatchedUnLockedEnv(MockBatchedLockedEnv):
     """
 
     def __init__(self, device="cpu", batch_size=None):
-        super(MockBatchedUnLockedEnv, self).__init__(
-            batch_size=batch_size, device=device
-        )
+        super().__init__(batch_size=batch_size, device=device)
 
     @classmethod
     def __new__(cls, *args, **kwargs):
@@ -510,7 +501,7 @@ class StateLessCountingEnv(EnvBase):
             device=tensordict.device,
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         ...
 
 
@@ -1113,7 +1104,7 @@ class CountingEnv(EnvBase):
             torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         torch.manual_seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1206,7 +1197,7 @@ class MultiAgentCountingEnv(EnvBase):
         self,
         n_agents: int,
         group_map: MarlGroupMapType
-        | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
         max_steps: int = 5,
         start_val: int = 0,
         **kwargs,
@@ -1287,7 +1278,7 @@ class MultiAgentCountingEnv(EnvBase):
             torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         torch.manual_seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1600,7 +1591,7 @@ class CountingBatchedEnv(EnvBase):
         elif start_val.numel() <= 1:
             self.start_val = start_val.expand_as(self.count)
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         torch.manual_seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1816,7 +1807,7 @@ class HeterogeneousCountingEnv(EnvBase):
 
         return td
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         torch.manual_seed(seed)
 
 
@@ -2047,7 +2038,7 @@ class MultiKeyCountingEnv(EnvBase):
         assert td.batch_size == self.batch_size
         return td
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         torch.manual_seed(seed)
 
 
@@ -2084,7 +2075,7 @@ class EnvWithMetadata(EnvBase):
         data.update(self._saved_full_reward_spec.zero())
         return data
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         return seed
 
 
@@ -2210,7 +2201,7 @@ class EnvWithDynamicSpec(EnvBase):
         reward = self.full_reward_spec.zero()
         return observation.update(done).update(reward)
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         self.manual_seed = seed
         return seed
 
@@ -2280,7 +2271,7 @@ class EnvWithScalarAction(EnvBase):
             ),
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         ...
 
 
@@ -2328,7 +2319,7 @@ class Str2StrEnv(EnvBase):
     def get_random_string(self):
         return get_random_string(self.min_size, self.max_size)
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         random.seed(seed)
         torch.manual_seed(0)
         return seed
@@ -2356,7 +2347,7 @@ class EnvThatErrorsAfter10Iters(EnvBase):
             .update(self.full_reward_spec.zero())
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         ...
 
 

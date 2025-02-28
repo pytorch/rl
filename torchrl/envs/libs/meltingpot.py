@@ -5,17 +5,14 @@
 from __future__ import annotations
 
 import importlib
-
 from typing import Dict, List, Mapping, Sequence
 
 import torch
-
 from tensordict import TensorDict, TensorDictBase
-
 from torchrl.data import Categorical, Composite, TensorSpec
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform
-from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
+from torchrl.envs.utils import MarlGroupMapType, _classproperty, check_marl_grouping
 
 _has_meltingpot = importlib.util.find_spec("meltingpot") is not None
 
@@ -31,7 +28,7 @@ def _get_envs():
     return list(substrate_configs.SUBSTRATES)
 
 
-def _filter_global_state_from_dict(obs_dict: Dict, world: bool) -> Dict:  # noqa
+def _filter_global_state_from_dict(obs_dict: dict, world: bool) -> dict:  # noqa
     return {
         key: value
         for key, value in obs_dict.items()
@@ -40,8 +37,8 @@ def _filter_global_state_from_dict(obs_dict: Dict, world: bool) -> Dict:  # noqa
 
 
 def _remove_world_observations_from_obs_spec(
-    observation_spec: Sequence[Mapping[str, "dm_env.specs.Array"]],  # noqa
-) -> Sequence[Mapping[str, "dm_env.specs.Array"]]:  # noqa
+    observation_spec: Sequence[Mapping[str, dm_env.specs.Array]],  # noqa
+) -> Sequence[Mapping[str, dm_env.specs.Array]]:  # noqa
     return [
         _filter_global_state_from_dict(agent_obs, world=False)
         for agent_obs in observation_spec
@@ -49,8 +46,8 @@ def _remove_world_observations_from_obs_spec(
 
 
 def _global_state_spec_from_obs_spec(
-    observation_spec: Sequence[Mapping[str, "dm_env.specs.Array"]]  # noqa
-) -> Mapping[str, "dm_env.specs.Array"]:  # noqa
+    observation_spec: Sequence[Mapping[str, dm_env.specs.Array]]  # noqa
+) -> Mapping[str, dm_env.specs.Array]:  # noqa
     # We only look at agent 0 since world entries are the same for all agents
     world_entries = _filter_global_state_from_dict(observation_spec[0], world=True)
     if len(world_entries) != 1 and _WORLD_PREFIX + "RGB" not in world_entries:
@@ -60,7 +57,7 @@ def _global_state_spec_from_obs_spec(
     return _remove_world_prefix(world_entries)
 
 
-def _remove_world_prefix(world_entries: Dict) -> Dict:
+def _remove_world_prefix(world_entries: dict) -> dict:
     return {key[len(_WORLD_PREFIX) :]: value for key, value in world_entries.items()}
 
 
@@ -181,10 +178,10 @@ class MeltingpotWrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env: "meltingpot.utils.substrates.substrate.Substrate" = None,  # noqa
+        env: meltingpot.utils.substrates.substrate.Substrate = None,  # noqa
         categorical_actions: bool = True,
         group_map: MarlGroupMapType
-        | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
         max_steps: int = None,
         **kwargs,
     ):
@@ -198,7 +195,7 @@ class MeltingpotWrapper(_EnvWrapper):
 
     def _build_env(
         self,
-        env: "meltingpot.utils.substrates.substrate.Substrate",  # noqa
+        env: meltingpot.utils.substrates.substrate.Substrate,  # noqa
     ):
         return env
 
@@ -208,7 +205,7 @@ class MeltingpotWrapper(_EnvWrapper):
         check_marl_grouping(self.group_map, self.agent_names)
 
     def _make_specs(
-        self, env: "meltingpot.utils.substrates.substrate.Substrate"  # noqa
+        self, env: meltingpot.utils.substrates.substrate.Substrate  # noqa
     ) -> None:
         mp_obs_spec = self._env.observation_spec()  # List of dict of arrays
         mp_obs_spec_no_world = _remove_world_observations_from_obs_spec(
@@ -278,9 +275,9 @@ class MeltingpotWrapper(_EnvWrapper):
     def _make_group_specs(
         self,
         group: str,
-        torchrl_agent_obs_specs: List[TensorSpec],
-        torchrl_agent_act_specs: List[TensorSpec],
-        torchrl_rew_spec: List[TensorSpec],
+        torchrl_agent_obs_specs: list[TensorSpec],
+        torchrl_agent_act_specs: list[TensorSpec],
+        torchrl_rew_spec: list[TensorSpec],
     ):
         # Agent specs
         action_specs = []
@@ -327,7 +324,7 @@ class MeltingpotWrapper(_EnvWrapper):
             group_reward_spec,
         )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         meltingpot = self.lib
 
         if "env" not in kwargs:
@@ -558,12 +555,12 @@ class MeltingpotEnv(MeltingpotWrapper):
 
     def __init__(
         self,
-        substrate: str | "ml_collections.config_dict.ConfigDict",  # noqa
+        substrate: str | ml_collections.config_dict.ConfigDict,  # noqa
         *,
         max_steps: int | None = None,
         categorical_actions: bool = True,
         group_map: MarlGroupMapType
-        | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
         **kwargs,
     ):
         if not _has_meltingpot:
@@ -579,14 +576,14 @@ class MeltingpotEnv(MeltingpotWrapper):
             **kwargs,
         )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "substrate" not in kwargs:
             raise TypeError("Could not find environment key 'substrate' in kwargs.")
 
     def _build_env(
         self,
-        substrate: str | "ml_collections.config_dict.ConfigDict",  # noqa
-    ) -> "meltingpot.utils.substrates.substrate.Substrate":  # noqa
+        substrate: str | ml_collections.config_dict.ConfigDict,  # noqa
+    ) -> meltingpot.utils.substrates.substrate.Substrate:  # noqa
         from meltingpot import substrate as mp_substrate
 
         if isinstance(substrate, str):

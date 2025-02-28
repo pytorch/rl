@@ -743,7 +743,7 @@ def print_csv_files_in_folder(folder_path):
                 csv_files.append(os.path.join(dirpath, file))
     for csv_file in csv_files:
         output_str += f"File: {csv_file}\n"
-        with open(csv_file, "r") as f:
+        with open(csv_file) as f:
             for i, line in enumerate(f):
                 if i == 10:
                     break

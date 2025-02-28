@@ -14,12 +14,11 @@ from time import sleep
 import pytest
 import torch
 from tensordict import MemoryMappedTensor
-
-from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
+from torchrl.envs import GymEnv, ParallelEnv, check_env_specs
 from torchrl.record.loggers.csv import CSVLogger
-from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
-from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
-from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
+from torchrl.record.loggers.mlflow import MLFlowLogger, _has_mlflow, _has_tv
+from torchrl.record.loggers.tensorboard import TensorboardLogger, _has_tb
+from torchrl.record.loggers.wandb import WandbLogger, _has_wandb
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
 if _has_tv:
@@ -154,7 +153,7 @@ class TestCSVLogger:
                 step=steps[i] if steps else None,
             )
 
-        with open(os.path.join(tmpdir, exp_name, "scalars", "foo.csv"), "r") as file:
+        with open(os.path.join(tmpdir, exp_name, "scalars", "foo.csv")) as file:
             for i, row in enumerate(file.readlines()):
                 step = steps[i] if steps else i
                 assert row == f"{step},{values[i].item()}\n"
@@ -239,7 +238,7 @@ class TestCSVLogger:
         logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name)
         logger.log_hparams(cfg=config)
 
-        with open(os.path.join(tmpdir, exp_name, "texts", "hparams0.txt"), "r") as file:
+        with open(os.path.join(tmpdir, exp_name, "texts", "hparams0.txt")) as file:
             txt = "\n".join([f"{k}: {val}" for k, val in sorted(config.items())])
             text = "".join(file.readlines())
             assert text == txt

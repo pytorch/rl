@@ -8,30 +8,24 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import TensorDictModule, dispatch
 from tensordict.utils import NestedKey
 from torch import nn
-
 from torchrl.data.tensor_specs import TensorSpec
-
 from torchrl.data.utils import _find_action_space
-
 from torchrl.modules import SafeSequential
 from torchrl.modules.tensordict_module.actors import QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
-
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
-    _cache_values,
+    ValueEstimators,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _cache_values,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
@@ -193,13 +187,13 @@ class QMixerLoss(LossModule):
 
     def __init__(
         self,
-        local_value_network: Union[QValueActor, nn.Module],
-        mixer_network: Union[TensorDictModule, nn.Module],
+        local_value_network: QValueActor | nn.Module,
+        mixer_network: TensorDictModule | nn.Module,
         *,
-        loss_function: Optional[str] = "l2",
+        loss_function: str | None = "l2",
         delay_value: bool = True,
         gamma: float = None,
-        action_space: Union[str, TensorSpec] = None,
+        action_space: str | TensorSpec = None,
         priority_key: str = None,
     ) -> None:
         super().__init__()

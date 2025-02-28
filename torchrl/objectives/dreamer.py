@@ -5,25 +5,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
-
 from torchrl._utils import timeit
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    ValueEstimators,
     _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
-    # distance_loss,
     hold_out_net,
-    ValueEstimators,
-)
+)  # distance_loss,
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
@@ -103,8 +100,8 @@ class DreamerModelLoss(LossModule):
         lambda_kl: float = 1.0,
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
-        reco_loss: Optional[str] = None,
-        reward_loss: Optional[str] = None,
+        reco_loss: str | None = None,
+        reward_loss: str | None = None,
         free_nats: int = 3,
         delayed_clamp: bool = False,
         global_average: bool = False,
@@ -277,7 +274,7 @@ class DreamerActorLoss(LossModule):
                 value=self._tensor_keys.value,
             )
 
-    def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
+    def forward(self, tensordict: TensorDict) -> tuple[TensorDict, TensorDict]:
         tensordict = tensordict.select("state", self.tensor_keys.belief).detach()
 
         with timeit("actor_loss/time-rollout"), hold_out_net(
@@ -409,7 +406,7 @@ class DreamerValueLoss(LossModule):
     def __init__(
         self,
         value_model: TensorDictModule,
-        value_loss: Optional[str] = None,
+        value_loss: str | None = None,
         discount_loss: bool = True,  # for consistency with paper
         gamma: int = 0.99,
     ):

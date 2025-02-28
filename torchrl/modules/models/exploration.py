@@ -7,10 +7,9 @@ from __future__ import annotations
 import functools
 import math
 import warnings
-from typing import List, Optional, Sequence, Union
+from typing import Sequence
 
 import torch
-
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import NestedKey
 from torch import distributions as d, nn
@@ -21,7 +20,7 @@ from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 from torchrl._utils import prod
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
-from torchrl.envs.utils import exploration_type, ExplorationType
+from torchrl.envs.utils import ExplorationType, exploration_type
 from torchrl.modules.distributions.utils import _cast_transform_device
 from torchrl.modules.utils import inv_softplus
 
@@ -56,8 +55,8 @@ class NoisyLinear(nn.Linear):
         in_features: int,
         out_features: int,
         bias: bool = True,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: torch.dtype | None = None,
         std_init: float = 0.1,
     ):
         nn.Module.__init__(self)
@@ -128,7 +127,7 @@ class NoisyLinear(nn.Linear):
         if self.bias_mu is not None:
             self.bias_epsilon.copy_(epsilon_out)
 
-    def _scale_noise(self, size: Union[int, torch.Size, Sequence]) -> torch.Tensor:
+    def _scale_noise(self, size: int | torch.Size | Sequence) -> torch.Tensor:
         if isinstance(size, int):
             size = (size,)
         x = torch.randn(*size, device=self.weight_mu.device)
@@ -142,7 +141,7 @@ class NoisyLinear(nn.Linear):
             return self.weight_mu
 
     @property
-    def bias(self) -> Optional[torch.Tensor]:
+    def bias(self) -> torch.Tensor | None:
         if self.bias_mu is not None:
             if self.training:
                 return self.bias_mu + self.bias_sigma * self.bias_epsilon
@@ -177,8 +176,8 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         self,
         out_features: int,
         bias: bool = True,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: torch.dtype | None = None,
         std_init: float = 0.1,
     ):
         super().__init__(0, 0, False, device=device)
@@ -323,8 +322,8 @@ class gSDEModule(nn.Module):
         scale_min: float = 0.01,
         scale_max: float = 10.0,
         learn_sigma: bool = True,
-        transform: Optional[d.Transform] = None,
-        device: Optional[DEVICE_TYPING] = None,
+        transform: d.Transform | None = None,
+        device: DEVICE_TYPING | None = None,
     ) -> None:
         super().__init__()
         self.action_dim = action_dim
@@ -416,7 +415,7 @@ class gSDEModule(nn.Module):
             action = self.transform(action)
         return mu, sigma, action, _eps_gSDE
 
-    def to(self, device_or_dtype: Union[torch.dtype, DEVICE_TYPING]):
+    def to(self, device_or_dtype: torch.dtype | DEVICE_TYPING):
         if isinstance(device_or_dtype, DEVICE_TYPING_ARGS):
             self.transform = _cast_transform_device(self.transform, device_or_dtype)
         return super().to(device_or_dtype)
@@ -458,8 +457,8 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
         scale_min: float = 0.01,
         scale_max: float = 10.0,
         learn_sigma: bool = True,
-        transform: Optional[d.Transform] = None,
-        device: Optional[DEVICE_TYPING] = None,
+        transform: d.Transform | None = None,
+        device: DEVICE_TYPING | None = None,
     ) -> None:
         super().__init__(
             0,
@@ -642,8 +641,8 @@ class ConsistentDropoutModule(TensorDictModuleBase):
     def __init__(
         self,
         p: float,
-        in_keys: NestedKey | List[NestedKey],
-        out_keys: NestedKey | List[NestedKey] | None = None,
+        in_keys: NestedKey | list[NestedKey],
+        out_keys: NestedKey | list[NestedKey] | None = None,
         input_shape: torch.Size = None,
         input_dtype: torch.dtype | None = None,
     ):

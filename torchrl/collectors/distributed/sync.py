@@ -16,13 +16,11 @@ from typing import Callable, List, OrderedDict
 import torch.cuda
 from tensordict import TensorDict
 from torch import nn
-
-from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-
+from torchrl._utils import VERBOSE, _ProcessNoWarn, logger as torchrl_logger
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
-    DataCollectorBase,
     DEFAULT_EXPLORATION_TYPE,
+    DataCollectorBase,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -276,16 +274,16 @@ class DistributedSyncDataCollector(DataCollectorBase):
         *,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | List[torch.device] = None,
-        storing_device: torch.device | List[torch.device] = None,
-        env_device: torch.device | List[torch.device] = None,
-        policy_device: torch.device | List[torch.device] = None,
+        device: torch.device | list[torch.device] = None,
+        storing_device: torch.device | list[torch.device] = None,
+        env_device: torch.device | list[torch.device] = None,
+        policy_device: torch.device | list[torch.device] = None,
         max_frames_per_traj: int = -1,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Callable | None = None,
         split_trajs: bool = False,
-        exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
+        exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
         collector_class=SyncDataCollector,
         collector_kwargs=None,
         num_workers_per_collector=1,
@@ -384,19 +382,19 @@ class DistributedSyncDataCollector(DataCollectorBase):
         self._make_container()
 
     @property
-    def device(self) -> List[torch.device]:
+    def device(self) -> list[torch.device]:
         return self._device
 
     @property
-    def storing_device(self) -> List[torch.device]:
+    def storing_device(self) -> list[torch.device]:
         return self._storing_device
 
     @property
-    def env_device(self) -> List[torch.device]:
+    def env_device(self) -> list[torch.device]:
         return self._env_device
 
     @property
-    def policy_device(self) -> List[torch.device]:
+    def policy_device(self) -> list[torch.device]:
         return self._policy_device
 
     @device.setter

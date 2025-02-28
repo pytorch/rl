@@ -6,23 +6,20 @@ from __future__ import annotations
 
 import weakref
 from numbers import Number
-from typing import Dict, Optional, Sequence, Union
+from typing import Sequence
 
 import numpy as np
 import torch
 from packaging import version
 from torch import distributions as D, nn
-
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
-
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
-
 from torchrl.modules.distributions.utils import (
-    _cast_device,
     FasterTransformedDistribution,
+    _cast_device,
     safeatanh_noeps,
     safetanh_noeps,
 )
@@ -179,9 +176,9 @@ class TruncatedNormal(D.Independent):
         self,
         loc: torch.Tensor,
         scale: torch.Tensor,
-        upscale: Union[torch.Tensor, float] = 5.0,
-        low: Union[torch.Tensor, float] = -1.0,
-        high: Union[torch.Tensor, float] = 1.0,
+        upscale: torch.Tensor | float = 5.0,
+        low: torch.Tensor | float = -1.0,
+        high: torch.Tensor | float = 1.0,
         tanh_loc: bool = False,
     ):
 
@@ -345,9 +342,9 @@ class TanhNormal(FasterTransformedDistribution):
         self,
         loc: torch.Tensor,
         scale: torch.Tensor,
-        upscale: Union[torch.Tensor, Number] = 5.0,
-        low: Union[torch.Tensor, Number] = -1.0,
-        high: Union[torch.Tensor, Number] = 1.0,
+        upscale: torch.Tensor | Number = 5.0,
+        low: torch.Tensor | Number = -1.0,
+        high: torch.Tensor | Number = 1.0,
         event_dims: int | None = None,
         tanh_loc: bool = False,
         safe_tanh: bool = True,
@@ -543,15 +540,15 @@ class Delta(D.Distribution):
 
     """
 
-    arg_constraints: Dict = {}
+    arg_constraints: dict = {}
 
     def __init__(
         self,
         param: torch.Tensor,
         atol: float = 1e-6,
         rtol: float = 1e-6,
-        batch_shape: Union[torch.Size, Sequence[int]] = None,
-        event_shape: Union[torch.Size, Sequence[int]] = None,
+        batch_shape: torch.Size | Sequence[int] = None,
+        event_shape: torch.Size | Sequence[int] = None,
     ):
         if batch_shape is None:
             batch_shape = torch.Size([])
@@ -640,8 +637,8 @@ class TanhDelta(FasterTransformedDistribution):
     def __init__(
         self,
         param: torch.Tensor,
-        low: Union[torch.Tensor, float] = -1.0,
-        high: Union[torch.Tensor, float] = 1.0,
+        low: torch.Tensor | float = -1.0,
+        high: torch.Tensor | float = 1.0,
         event_dims: int = 1,
         atol: float = 1e-6,
         rtol: float = 1e-6,
@@ -714,7 +711,7 @@ class TanhDelta(FasterTransformedDistribution):
         self._warn_minmax()
         return self.high
 
-    def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
+    def update(self, net_output: torch.Tensor) -> torch.Tensor | None:
         loc = net_output
         if self.non_trivial:
             device = loc.device

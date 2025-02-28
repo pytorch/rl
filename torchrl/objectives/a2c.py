@@ -7,38 +7,30 @@ from __future__ import annotations
 import contextlib
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Tuple
 
 import torch
-from tensordict import (
-    is_tensor_collection,
-    TensorDict,
-    TensorDictBase,
-    TensorDictParams,
-)
+from tensordict import (TensorDict, TensorDictBase, TensorDictParams, is_tensor_collection)
 from tensordict.nn import (
-    composite_lp_aggregate,
     CompositeDistribution,
-    dispatch,
     ProbabilisticTensorDictSequential,
-    set_composite_lp_aggregate,
     TensorDictModule,
+    composite_lp_aggregate,
+    dispatch,
+    set_composite_lp_aggregate,
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
-
 from torchrl.modules.distributions import HAS_ENTROPY
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
+    ValueEstimators,
+    _GAMMA_LMBDA_DEPREC_ERROR,
     _cache_values,
     _clip_value_loss,
-    _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
     _reduce,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import (
     GAE,
@@ -437,7 +429,7 @@ class A2CLoss(LossModule):
     @set_composite_lp_aggregate(False)
     def _log_probs(
         self, tensordict: TensorDictBase
-    ) -> Tuple[torch.Tensor, d.Distribution]:
+    ) -> tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
         tensordict_clone = tensordict.select(
             *self.actor_network.in_keys, strict=False
@@ -466,7 +458,7 @@ class A2CLoss(LossModule):
         log_prob = log_prob.unsqueeze(-1)
         return log_prob, dist
 
-    def loss_critic(self, tensordict: TensorDictBase) -> Tuple[torch.Tensor, float]:
+    def loss_critic(self, tensordict: TensorDictBase) -> tuple[torch.Tensor, float]:
         """Returns the loss value of the critic, multiplied by ``critic_coef`` if it is not ``None``.
 
         Returns the loss and the clip-fraction.

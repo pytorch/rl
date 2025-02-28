@@ -5,12 +5,10 @@
 from __future__ import annotations
 
 import warnings
-from typing import Dict, List, Optional, Union
+from typing import Dict, List
 
 import torch
-
 from tensordict import TensorDictBase, unravel_key_list
-
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
@@ -186,16 +184,16 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
 
     def __init__(
         self,
-        in_keys: NestedKey | List[NestedKey] | Dict[str, NestedKey],
-        out_keys: NestedKey | List[NestedKey] | None = None,
-        spec: Optional[TensorSpec] = None,
+        in_keys: NestedKey | list[NestedKey] | dict[str, NestedKey],
+        out_keys: NestedKey | list[NestedKey] | None = None,
+        spec: TensorSpec | None = None,
         *,
         safe: bool = False,
         default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
-        log_prob_keys: List[NestedKey] | None = None,
+        log_prob_keys: list[NestedKey] | None = None,
         log_prob_key: NestedKey | None = None,
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
@@ -315,7 +313,7 @@ class SafeProbabilisticTensorDictSequential(
 
     def __init__(
         self,
-        *modules: Union[TensorDictModule, ProbabilisticTensorDictModule],
+        *modules: TensorDictModule | ProbabilisticTensorDictModule,
         partial_tolerant: bool = False,
     ) -> None:
         super().__init__(*modules, partial_tolerant=partial_tolerant)

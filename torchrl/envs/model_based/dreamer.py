@@ -8,7 +8,6 @@ from typing import Optional, Tuple
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
-
 from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -28,9 +27,7 @@ class DreamerEnv(ModelBasedEnvBase):
         device: DEVICE_TYPING = "cpu",
         batch_size: Optional[torch.Size] = None,
     ):
-        super(DreamerEnv, self).__init__(
-            world_model, device=device, batch_size=batch_size
-        )
+        super().__init__(world_model, device=device, batch_size=batch_size)
         self.obs_decoder = obs_decoder
         self.prior_shape = prior_shape
         self.belief_shape = belief_shape

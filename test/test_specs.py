@@ -21,9 +21,7 @@ from tensordict import (
 )
 from tensordict.utils import _unravel_key_to_tuple, set_capture_non_tensor_stack
 from torchrl._utils import _make_ordinal_device
-
 from torchrl.data.tensor_specs import (
-    _keys_to_empty_composite_spec,
     Binary,
     BinaryDiscreteTensorSpec,
     Bounded,
@@ -49,6 +47,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscrete,
     UnboundedDiscreteTensorSpec,
+    _keys_to_empty_composite_spec,
 )
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
 
@@ -3573,8 +3572,8 @@ def test_valid_indexing(spec_class):
     assert spec_3d[1:, range(3)].shape == torch.Size([4, 3, 4])
     assert spec_3d[[[[[0, 1]]]], [[0]]].shape == torch.Size([1, 1, 1, 2, 4])
     assert spec_3d[0, [[[[0, 1]]]]].shape == torch.Size([1, 1, 1, 2, 4])
-    assert spec_3d[0, ((((0, 1))))].shape == torch.Size([2, 4])
-    assert spec_3d[((((0, 1)))), [0, 2]].shape == torch.Size([2, 4])
+    assert spec_3d[0, ((0, 1))].shape == torch.Size([2, 4])
+    assert spec_3d[((0, 1)), [0, 2]].shape == torch.Size([2, 4])
     assert spec_4d[2:, [[[0, 1]]], :3].shape == torch.Size([3, 1, 1, 2, 3, 6])
     assert spec_5d[2:, [[[0, 1]]], [[0, 1]], :3].shape == torch.Size([3, 1, 1, 2, 3, 7])
     assert spec_5d[2:, [[[0, 1]]], 0, :3].shape == torch.Size([3, 1, 1, 2, 3, 7])

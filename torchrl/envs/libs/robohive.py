@@ -5,7 +5,6 @@
 import importlib
 import os
 import warnings
-
 from copy import copy
 from pathlib import Path
 
@@ -14,12 +13,7 @@ import torch
 from tensordict import TensorDict
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.envs.common import _maybe_unlock
-from torchrl.envs.libs.gym import (
-    _gym_to_torchrl_spec_transform,
-    _GymAsyncMeta,
-    gym_backend,
-    GymEnv,
-)
+from torchrl.envs.libs.gym import (GymEnv, _GymAsyncMeta, _gym_to_torchrl_spec_transform, gym_backend)
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
 _has_gym = (
@@ -32,7 +26,7 @@ if _has_robohive:
     os.environ.setdefault("sim_backend", "MUJOCO")
 
 
-class set_directory(object):
+class set_directory:
     """Sets the cwd within the context.
 
     Args:

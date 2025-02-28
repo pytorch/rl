@@ -11,23 +11,17 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from tensordict import (
-    is_tensor_collection,
-    NonTensorData,
-    PersistentTensorDict,
-    TensorDict,
-)
+from tensordict import (NonTensorData, PersistentTensorDict, TensorDict, is_tensor_collection)
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _STRDTYPE2DTYPE
-
 from torchrl.data.replay_buffers.utils import (
-    _save_pytree,
     Flat2TED,
     H5Combine,
     H5Split,
     Nested2TED,
     TED2Flat,
     TED2Nested,
+    _save_pytree,
 )
 
 
@@ -120,7 +114,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             )
 
     def loads(self, storage, path):
-        with open(path / "storage_metadata.json", "r") as file:
+        with open(path / "storage_metadata.json") as file:
             metadata = json.load(file)
         is_pytree = metadata["is_pytree"]
         _len = metadata["len"]

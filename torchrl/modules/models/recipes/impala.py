@@ -17,7 +17,7 @@ class _ResNetBlock(nn.Module):
         self,
         num_ch,
     ):
-        super(_ResNetBlock, self).__init__()
+        super().__init__()
         resnet_block = []
         resnet_block.append(nn.ReLU(inplace=True))
         resnet_block.append(
