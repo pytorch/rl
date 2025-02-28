@@ -2,3 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+from .chess import ChessEnv
+from .llm import LLMHashingEnv
+from .pendulum import PendulumEnv
+from .tictactoeenv import TicTacToeEnv

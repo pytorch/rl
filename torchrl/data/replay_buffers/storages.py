@@ -416,7 +416,7 @@ class LazyStackStorage(ListStorage):
         max_size: int | None = None,
         *,
         compilable: bool = False,
-        stack_dim: int = -1,
+        stack_dim: int = 0,
     ):
         super().__init__(max_size=max_size, compilable=compilable)
         self.stack_dim = stack_dim
