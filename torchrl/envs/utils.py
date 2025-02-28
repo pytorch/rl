@@ -719,7 +719,7 @@ def check_env_specs(
 
     """
     if return_contiguous is None:
-        return_contiguous = not env._has_dynamic_spec()
+        return_contiguous = not env._has_dynamic_specs()
     if break_when_any_done == "both":
         check_env_specs(
             env,
