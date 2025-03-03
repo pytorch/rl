@@ -2,9 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import abc
-from typing import Dict, Sequence, Union
+from typing import Sequence
 
 from torch import Tensor
 
@@ -21,7 +22,7 @@ class Logger:
         self.experiment = self._create_experiment()
 
     @abc.abstractmethod
-    def _create_experiment(self) -> "Experiment":  # noqa: F821
+    def _create_experiment(self) -> Experiment:  # noqa: F821
         ...
 
     @abc.abstractmethod
@@ -33,7 +34,7 @@ class Logger:
         ...
 
     @abc.abstractmethod
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         ...
 
     @abc.abstractmethod

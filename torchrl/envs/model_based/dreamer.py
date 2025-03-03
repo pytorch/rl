@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
-from typing import Optional, Tuple
 
 import torch
 from tensordict import TensorDict
@@ -21,11 +21,11 @@ class DreamerEnv(ModelBasedEnvBase):
     def __init__(
         self,
         world_model: TensorDictModule,
-        prior_shape: Tuple[int, ...],
-        belief_shape: Tuple[int, ...],
+        prior_shape: tuple[int, ...],
+        belief_shape: tuple[int, ...],
         obs_decoder: TensorDictModule = None,
         device: DEVICE_TYPING = "cpu",
-        batch_size: Optional[torch.Size] = None,
+        batch_size: torch.Size | None = None,
     ):
         super().__init__(world_model, device=device, batch_size=batch_size)
         self.obs_decoder = obs_decoder

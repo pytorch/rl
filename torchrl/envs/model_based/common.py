@@ -2,10 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import abc
 import warnings
-from typing import List, Optional
 
 import torch
 from tensordict import TensorDict
@@ -112,10 +112,10 @@ class ModelBasedEnvBase(EnvBase):
     def __init__(
         self,
         world_model: TensorDictModule,
-        params: Optional[List[torch.Tensor]] = None,
-        buffers: Optional[List[torch.Tensor]] = None,
+        params: list[torch.Tensor] | None = None,
+        buffers: list[torch.Tensor] | None = None,
         device: DEVICE_TYPING = "cpu",
-        batch_size: Optional[torch.Size] = None,
+        batch_size: torch.Size | None = None,
         run_type_checks: bool = False,
     ):
         super().__init__(
@@ -173,6 +173,6 @@ class ModelBasedEnvBase(EnvBase):
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError
 
-    def _set_seed(self, seed: Optional[int]) -> int:
+    def _set_seed(self, seed: int | None) -> int:
         warnings.warn("Set seed isn't needed for model based environments")
         return seed

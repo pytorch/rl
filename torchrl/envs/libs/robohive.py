@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib
 import os
 import warnings
@@ -162,7 +164,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         pixels_only: bool = False,
         from_depths: bool = False,
         **kwargs,
-    ) -> "gym.core.Env":  # noqa: F821
+    ) -> gym.core.Env:  # noqa: F821
         if from_pixels:
             if "cameras" not in kwargs:
                 warnings.warn(
@@ -219,7 +221,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             self.set_info_dict_reader(self.read_info)
         return env
 
-    def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+    def _make_specs(self, env: gym.Env, batch_size=None) -> None:  # noqa: F821
         out = super()._make_specs(env=env, batch_size=batch_size)
         self.env.reset()
         *_, info = self.env.step(self.env.action_space.sample())

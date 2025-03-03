@@ -4785,7 +4785,7 @@ class TestFlattenObservation(TransformBase):
             )
             return env
 
-        SerialEnv(2, make_env)
+        SerialEnv(2, make_env).check_env_specs()
 
     def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
         def make_env():

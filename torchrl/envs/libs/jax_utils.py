@@ -2,9 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import dataclasses
 import importlib.util
-from typing import Union
 
 # import jax
 import numpy as np
@@ -41,7 +42,7 @@ _dtype_conversion = {
 
 
 def _ndarray_to_tensor(
-    value: Union["jnp.ndarray", np.ndarray]  # noqa: F821
+    value: jnp.ndarray | np.ndarray  # noqa: F821
 ) -> torch.Tensor:
     from jax import dlpack as jax_dlpack, numpy as jnp
 
@@ -59,7 +60,7 @@ def _ndarray_to_tensor(
     return out.to(numpy_to_torch_dtype_dict[value.dtype])
 
 
-def _tensor_to_ndarray(value: torch.Tensor) -> "jnp.ndarray":  # noqa: F821
+def _tensor_to_ndarray(value: torch.Tensor) -> jnp.ndarray:  # noqa: F821
     from jax import dlpack as jax_dlpack
 
     return jax_dlpack.from_dlpack(torch_dlpack.to_dlpack(value.contiguous()))
@@ -148,7 +149,7 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example, batch_size
     return type(object_example)(**t)
 
 
-def _extract_spec(data: Union[torch.Tensor, TensorDictBase], key=None) -> TensorSpec:
+def _extract_spec(data: torch.Tensor | TensorDictBase, key=None) -> TensorSpec:
     if isinstance(data, torch.Tensor):
         shape = data.shape
         if key in ("reward", "done"):

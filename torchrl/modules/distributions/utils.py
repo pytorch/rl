@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
-from typing import Union
 
 import torch
 from torch import autograd, distributions as d
@@ -15,7 +15,7 @@ except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
 
-def _cast_device(elt: Union[torch.Tensor, float], device) -> Union[torch.Tensor, float]:
+def _cast_device(elt: torch.Tensor | float, device) -> torch.Tensor | float:
     if isinstance(elt, torch.Tensor):
         return elt.to(device)
     return elt
