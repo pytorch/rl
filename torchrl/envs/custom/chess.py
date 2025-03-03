@@ -10,7 +10,14 @@ import pathlib
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data import Binary, Bounded, Categorical, Composite, NonTensor, Unbounded
+from torchrl.data.tensor_specs import (
+    Binary,
+    Bounded,
+    Categorical,
+    Composite,
+    NonTensor,
+    Unbounded,
+)
 from torchrl.envs import EnvBase
 from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty

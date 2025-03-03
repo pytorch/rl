@@ -11,12 +11,12 @@ from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
-from torchrl.data import (
+from torchrl.data.map.hash import SipHash
+from torchrl.data.tensor_specs import (
     Bounded,
     Categorical as CategoricalSpec,
     Composite,
     NonTensor,
-    SipHash,
     TensorSpec,
     Unbounded,
 )

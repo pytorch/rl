@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict import TensorDictBase
-from torchrl.data import Composite
+from torchrl.data.tensor_specs import Composite
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 

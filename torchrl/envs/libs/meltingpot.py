@@ -10,7 +10,7 @@ from typing import Mapping, Sequence
 import torch
 from tensordict import TensorDict, TensorDictBase
 
-from torchrl.data import Categorical, Composite, TensorSpec
+from torchrl.data.tensor_specs import Categorical, Composite, TensorSpec
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform
 from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType

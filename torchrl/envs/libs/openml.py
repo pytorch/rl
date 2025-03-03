@@ -6,7 +6,7 @@ import importlib.util
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 
 from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.envs.common import EnvBase
