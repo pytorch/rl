@@ -82,7 +82,7 @@ def as_padded_tensor(
 
 
 class DataLoadingPrimer(TensorDictPrimer):
-    """A primer that loads data from a dataloader and stacks it into a tensordict.
+    """A primer that loads data from a dataloader and converts it into a tensordict using ``stack_method``.
 
     Args:
         dataloader (Iterable[Any]): The dataloader to load data from.
@@ -90,7 +90,7 @@ class DataLoadingPrimer(TensorDictPrimer):
         data_keys (List[NestedKey] | None, optional): The keys to use for each item in the dataloader. Defaults to None.
         data_specs (List[TensorSpec] | None, optional): The specs to use for each item in the dataloader. Defaults to None.
         example_data (Any, optional): Example data to use for initializing the primer. Defaults to None.
-        stack_method (Callable[[Any], Any] | Literal["as_nested_tensor", "as_padded_tensor"], optional): The method to use for stacking the data. Defaults to None.
+        stack_method (Callable[[Any], Any] | Literal["as_nested_tensor", "as_padded_tensor"], optional): The method to use for stacking the data. Defaults to ``maybe_dense_stack``.
 
     Attributes:
         dataloader (Iterable[Any]): The dataloader to load data from.
