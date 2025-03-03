@@ -7,13 +7,12 @@
 # Therefore we need Optional and Union
 # from __future__ import annotations
 
+import importlib.util
 from copy import copy
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Callable, Optional, Sequence, Union
 
 import torch
-from omegaconf import DictConfig
-
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
@@ -48,6 +47,14 @@ LIBS = {
     "gym": GymEnv,
     "dm_control": DMControlEnv,
 }
+
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
+if _has_omegaconf:
+    from omegaconf import DictConfig
+else:
+
+    class DictConfig:  # noqa
+        ...
 
 
 def correct_for_frame_skip(cfg: DictConfig) -> DictConfig:  # noqa: F821
