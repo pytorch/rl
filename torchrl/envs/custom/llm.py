@@ -31,7 +31,14 @@ class LLMEnv(EnvBase):
     integers representing a sequence of tokens.
     The action is also a string or a tensor of integers, which is concatenated to the previous observation to form the
     new observation.
-     Prompts to the language model can be loaded when the environment is ``reset`` if the environment is created via :meth:`~from_dataloader`
+
+    By default, this environment is meant to track history for a prompt. Users can append transforms to tailor
+    this to their use case, such as Chain of Thought (CoT) reasoning or other custom processing.
+
+    Users must append a transform to set the "done" condition, which would trigger the loading of the next prompt.
+
+    Prompts to the language model can be loaded when the environment is ``reset`` if the environment is created via :meth:`~from_dataloader`
+
     Args:
         observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults to
             ``"observation"``.
