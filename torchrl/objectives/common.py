@@ -633,6 +633,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
         """
         if self._vmap_randomness is None:
+            import torchrl.objectives.utils
+
             main_modules = list(self.__dict__.values()) + list(self.children())
             modules = (
                 module
@@ -641,7 +643,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 for module in main_module.modules()
             )
             for val in modules:
-                if isinstance(val, RANDOM_MODULE_LIST):
+                if isinstance(val, torchrl.objectives.utils.RANDOM_MODULE_LIST):
                     self._vmap_randomness = "different"
                     break
             else:
@@ -685,7 +687,10 @@ class _make_target_param:
         return x
 
 
-def add_ramdom_module(module):
+def add_random_module(module):
     """Adds a random module to the list of modules that will be detected by :meth:`~torchrl.objectives.LossModule.vmap_randomness` as random."""
-    global RANDOM_MODULE_LIST
-    RANDOM_MODULE_LIST = RANDOM_MODULE_LIST + (module,)
+    import torchrl.objectives.utils
+
+    torchrl.objectives.utils.RANDOM_MODULE_LIST = (
+        torchrl.objectives.utils.RANDOM_MODULE_LIST + (module,)
+    )

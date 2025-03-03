@@ -29,12 +29,7 @@ from torch import Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
-from torchrl.objectives.utils import (
-    _maybe_get_or_select,
-    _vmap_func,
-    hold_out_net,
-    RANDOM_MODULE_LIST,
-)
+from torchrl.objectives.utils import _maybe_get_or_select, _vmap_func, hold_out_net
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -388,8 +383,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
             do_break = False
             for val in self.__dict__.values():
                 if isinstance(val, torch.nn.Module):
+                    import torchrl.objectives.utils
+
                     for module in val.modules():
-                        if isinstance(module, RANDOM_MODULE_LIST):
+                        if isinstance(
+                            module, torchrl.objectives.utils.RANDOM_MODULE_LIST
+                        ):
                             self._vmap_randomness = "different"
                             do_break = True
                             break

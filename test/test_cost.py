@@ -100,7 +100,7 @@ from torchrl.objectives import (
     TD3BCLoss,
     TD3Loss,
 )
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import add_random_module, LossModule
 from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_deprecated
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
@@ -16161,6 +16161,15 @@ class TestUtils:
         setter.set()
         yield
         setter.unset()
+
+    def test_add_random_module(self):
+        class MyMod(nn.Module):
+            ...
+
+        add_random_module(MyMod)
+        import torchrl.objectives.utils
+
+        assert MyMod in torchrl.objectives.utils.RANDOM_MODULE_LIST
 
     def test_standardization(self):
         t = torch.arange(3 * 4 * 5 * 6, dtype=torch.float32).view(3, 4, 5, 6)

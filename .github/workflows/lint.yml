@@ -35,7 +35,7 @@ jobs:
         echo '::endgroup::'
         
         echo '::group::Install lint tools'
-        pip install --progress-bar=off pre-commit
+        pip install --progress-bar=off pre-commit autoflake
         echo '::endgroup::'
         
         echo '::group::Lint Python source and configs'
