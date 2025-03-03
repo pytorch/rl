@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import abc
-
 import logging
 import os
 import textwrap
@@ -13,7 +12,7 @@ import warnings
 from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Sequence
 
 import numpy as np
 import tensordict
@@ -29,6 +28,7 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
+
 from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
     ListStorageCheckpointer,
@@ -86,7 +86,7 @@ class Storage:
         return len(self) == self.max_size
 
     @property
-    def _attached_entities(self) -> List:
+    def _attached_entities(self) -> list:
         # RBs that use a given instance of Storage should add
         # themselves to this set.
         _attached_entities_list = getattr(self, "_attached_entities_list", None)
@@ -142,11 +142,11 @@ class Storage:
         ...
 
     @abc.abstractmethod
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         ...
 
     @abc.abstractmethod
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         ...
 
     @abc.abstractmethod
@@ -241,7 +241,7 @@ class ListStorage(Storage):
 
     def set(
         self,
-        cursor: Union[int, Sequence[int], slice],
+        cursor: int | Sequence[int] | slice,
         data: Any,
         *,
         set_cursor: bool = True,
@@ -294,7 +294,7 @@ class ListStorage(Storage):
             else:
                 self._storage[cursor] = data
 
-    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+    def get(self, index: int | Sequence[int] | slice) -> Any:
         if isinstance(index, (INT_CLASSES, slice)):
             return self._storage[index]
         elif isinstance(index, tuple):
@@ -311,7 +311,7 @@ class ListStorage(Storage):
     def __len__(self):
         return len(self._storage)
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {
             "_storage": [
                 elt if not hasattr(elt, "state_dict") else elt.state_dict()
@@ -382,7 +382,7 @@ class LazyStackStorage(ListStorage):
     Keyword Args:
         compilable (bool, optional): if ``True``, the storage will be made compatible with :func:`~torch.compile` at
             the cost of being executable in multiprocessed settings.
-        stack_dim (int, optional): the stack dimension in terms of TensorDict batch sizes. Defaults to `-1`.
+        stack_dim (int, optional): the stack dimension in terms of TensorDict batch sizes. Defaults to `0`.
 
     Examples:
         >>> import torch
@@ -416,12 +416,12 @@ class LazyStackStorage(ListStorage):
         max_size: int | None = None,
         *,
         compilable: bool = False,
-        stack_dim: int = -1,
+        stack_dim: int = 0,
     ):
         super().__init__(max_size=max_size, compilable=compilable)
         self.stack_dim = stack_dim
 
-    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+    def get(self, index: int | Sequence[int] | slice) -> Any:
         out = super().get(index=index)
         if isinstance(out, list):
             stack_dim = self.stack_dim
@@ -720,7 +720,7 @@ class TensorStorage(Storage):
                 state["_len_value"] = _len_value
         self.__dict__.update(state)
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         _storage = self._storage
         if isinstance(_storage, torch.Tensor):
             pass
@@ -794,8 +794,8 @@ class TensorStorage(Storage):
     @implement_for("torch", "2.0", None, compilable=True)
     def set(
         self,
-        cursor: Union[int, Sequence[int], slice],
-        data: Union[TensorDictBase, torch.Tensor],
+        cursor: int | Sequence[int] | slice,
+        data: TensorDictBase | torch.Tensor,
         *,
         set_cursor: bool = True,
     ):
@@ -836,8 +836,8 @@ class TensorStorage(Storage):
     @implement_for("torch", None, "2.0", compilable=True)
     def set(  # noqa: F811
         self,
-        cursor: Union[int, Sequence[int], slice],
-        data: Union[TensorDictBase, torch.Tensor],
+        cursor: int | Sequence[int] | slice,
+        data: TensorDictBase | torch.Tensor,
         *,
         set_cursor: bool = True,
     ):
@@ -888,7 +888,7 @@ class TensorStorage(Storage):
                 )
         self._storage[cursor] = data
 
-    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+    def get(self, index: int | Sequence[int] | slice) -> Any:
         _storage = self._storage
         is_tc = is_tensor_collection(_storage)
         if not self.initialized:
@@ -1062,7 +1062,7 @@ class LazyTensorStorage(TensorStorage):
 
     def _init(
         self,
-        data: Union[TensorDictBase, torch.Tensor, "PyTree"],  # noqa: F821
+        data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
     ) -> None:
         if not self._compilable:
             # TODO: Investigate why this seems to have a performance impact with
@@ -1225,7 +1225,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             )
         self._len = 0
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         _storage = self._storage
         if isinstance(_storage, torch.Tensor):
             _storage = _mem_map_tensor_as_tensor(_storage)
@@ -1282,7 +1282,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
 
-    def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
+    def _init(self, data: TensorDictBase | torch.Tensor) -> None:
         torchrl_logger.debug("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
@@ -1324,7 +1324,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         self._storage = out
         self.initialized = True
 
-    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+    def get(self, index: int | Sequence[int] | slice) -> Any:
         result = super().get(index)
         return result
 
@@ -1357,7 +1357,7 @@ class StorageEnsemble(Storage):
     def __init__(
         self,
         *storages: Storage,
-        transforms: List["Transform"] = None,  # noqa: F821
+        transforms: list[Transform] = None,  # noqa: F821
     ):
         self._rng_private = None
         self._storages = storages
@@ -1408,10 +1408,10 @@ class StorageEnsemble(Storage):
     def _get_storage(self, sub):
         return self._storages[sub]
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         raise NotImplementedError
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         raise NotImplementedError
 
     _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."

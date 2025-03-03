@@ -9,8 +9,6 @@ import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 
-from typing import List, Optional, Tuple, Union
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,7 +20,6 @@ from torch import Tensor
 from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-
 from torchrl.modules import ProbabilisticActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.objectives.common import LossModule
@@ -35,7 +32,6 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
@@ -274,7 +270,7 @@ class CQLLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
@@ -282,7 +278,7 @@ class CQLLoss(LossModule):
         max_alpha: float = None,
         action_spec=None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, float] = "auto",
+        target_entropy: str | float = "auto",
         delay_actor: bool = False,
         delay_qvalue: bool = True,
         gamma: float = None,
@@ -581,7 +577,7 @@ class CQLLoss(LossModule):
         )
         return bc_actor_loss, metadata
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
@@ -705,7 +701,7 @@ class CQLLoss(LossModule):
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
         return target_value
 
-    def q_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def q_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
         target_value = self._get_value_v(
             tensordict.copy(),
@@ -743,7 +739,7 @@ class CQLLoss(LossModule):
         )
         return loss_qval, metadata
 
-    def cql_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def cql_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         pred_q1 = tensordict.get(self.tensor_keys.pred_q1)
         pred_q2 = tensordict.get(self.tensor_keys.pred_q2)
 
@@ -1089,9 +1085,9 @@ class DiscreteCQLLoss(LossModule):
 
     def __init__(
         self,
-        value_network: Union[QValueActor, nn.Module],
+        value_network: QValueActor | nn.Module,
         *,
-        loss_function: Optional[str] = "l2",
+        loss_function: str | None = "l2",
         delay_value: bool = True,
         gamma: float = None,
         action_space=None,
@@ -1218,7 +1214,7 @@ class DiscreteCQLLoss(LossModule):
     def value_loss(
         self,
         tensordict: TensorDictBase,
-    ) -> Tuple[torch.Tensor, dict]:
+    ) -> tuple[torch.Tensor, dict]:
         td_copy = tensordict.clone(False)
         with self.value_network_params.to_module(self.value_network):
             self.value_network(td_copy)

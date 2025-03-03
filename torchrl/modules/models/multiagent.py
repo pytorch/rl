@@ -7,16 +7,13 @@ from __future__ import annotations
 import abc
 from copy import deepcopy
 from textwrap import indent
-from typing import Optional, Sequence, Tuple, Type, Union
+from typing import Sequence
 
 import numpy as np
-
 import torch
-
 from tensordict import TensorDict
 from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
-
 from torchrl.modules.models import ConvNet, MLP
 from torchrl.modules.models.utils import _reset_parameters_recursive
 
@@ -129,7 +126,7 @@ class MultiAgentNetBase(nn.Module):
 
         return torch.vmap(exec_module, *args, **kwargs)
 
-    def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
+    def forward(self, *inputs: tuple[torch.Tensor]) -> torch.Tensor:
         if len(inputs) > 1:
             inputs = torch.cat([*inputs], -1)
         else:
@@ -418,10 +415,10 @@ class MultiAgentMLP(MultiAgentNetBase):
         *,
         centralized: bool | None = None,
         share_params: bool | None = None,
-        device: Optional[DEVICE_TYPING] = None,
-        depth: Optional[int] = None,
-        num_cells: Optional[Union[Sequence, int]] = None,
-        activation_class: Optional[Type[nn.Module]] = nn.Tanh,
+        device: DEVICE_TYPING | None = None,
+        depth: int | None = None,
+        num_cells: Sequence | int | None = None,
+        activation_class: type[nn.Module] | None = nn.Tanh,
         use_td_params: bool = True,
         **kwargs,
     ):
@@ -631,10 +628,10 @@ class MultiAgentConvNet(MultiAgentNetBase):
         in_features: int | None = None,
         device: DEVICE_TYPING | None = None,
         num_cells: Sequence[int] | None = None,
-        kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 5,
-        strides: Union[Sequence, int] = 2,
-        paddings: Union[Sequence, int] = 0,
-        activation_class: Type[nn.Module] = nn.ELU,
+        kernel_sizes: Sequence[int | Sequence[int]] | int = 5,
+        strides: Sequence | int = 2,
+        paddings: Sequence | int = 0,
+        activation_class: type[nn.Module] = nn.ELU,
         use_td_params: bool = True,
         **kwargs,
     ):
@@ -789,7 +786,7 @@ class Mixer(nn.Module):
         self,
         n_agents: int,
         needs_state: bool,
-        state_shape: Union[Tuple[int, ...], torch.Size],
+        state_shape: tuple[int, ...] | torch.Size,
         device: DEVICE_TYPING,
     ):
         super().__init__()
@@ -799,7 +796,7 @@ class Mixer(nn.Module):
         self.needs_state = needs_state
         self.state_shape = state_shape
 
-    def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
+    def forward(self, *inputs: tuple[torch.Tensor]) -> torch.Tensor:
         """Forward pass of the mixer.
 
         Args:
@@ -1001,7 +998,7 @@ class QMixer(Mixer):
 
     def __init__(
         self,
-        state_shape: Union[Tuple[int, ...], torch.Size],
+        state_shape: tuple[int, ...] | torch.Size,
         mixing_embed_dim: int,
         n_agents: int,
         device: DEVICE_TYPING,

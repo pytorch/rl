@@ -195,7 +195,7 @@ def get_gym_pixel_wrapper():
         PixelObservationWrapper = gym_backend(
             "wrappers.pixel_observation"
         ).PixelObservationWrapper
-    except Exception as err:
+    except Exception:
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as PixelObservationWrapper,
         )

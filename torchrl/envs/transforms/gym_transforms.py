@@ -4,6 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 """Gym-specific transforms."""
+
+from __future__ import annotations
+
 import warnings
 
 import torch
@@ -186,7 +189,7 @@ class EndOfLifeTransform(Transform):
         )
         return observation_spec
 
-    def register_keys(self, loss_or_advantage: "torchrl.objectives.common.LossModule"):
+    def register_keys(self, loss_or_advantage: torchrl.objectives.common.LossModule):
         """Registers the end-of-life key at appropriate places within the loss.
 
         Args:

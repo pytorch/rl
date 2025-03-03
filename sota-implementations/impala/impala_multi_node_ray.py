@@ -14,7 +14,7 @@ from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(config_path="", config_name="config_multi_node_ray", version_base="1.1")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
 
     import time
 

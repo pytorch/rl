@@ -46,12 +46,6 @@ except RuntimeError as err:
             )
 
 
-import torchrl.collectors
-import torchrl.data
-import torchrl.envs
-import torchrl.modules
-import torchrl.objectives
-import torchrl.trainers
 from torchrl._utils import (
     auto_unwrap_transformed_env,
     compile_with_warmup,
@@ -107,3 +101,11 @@ def _inv(self):
 
 
 ComposeTransform.inv = _inv
+
+__all__ = [
+    "auto_unwrap_transformed_env",
+    "compile_with_warmup",
+    "implement_for",
+    "set_auto_unwrap_transformed_env",
+    "timeit",
+]

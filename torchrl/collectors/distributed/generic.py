@@ -11,7 +11,7 @@ import socket
 import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
-from typing import Callable, List, OrderedDict, Type
+from typing import Callable, OrderedDict
 
 import torch.cuda
 from tensordict import TensorDict
@@ -410,17 +410,17 @@ class DistributedDataCollector(DataCollectorBase):
         *,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | List[torch.device] = None,
-        storing_device: torch.device | List[torch.device] = None,
-        env_device: torch.device | List[torch.device] = None,
-        policy_device: torch.device | List[torch.device] = None,
+        device: torch.device | list[torch.device] = None,
+        storing_device: torch.device | list[torch.device] = None,
+        env_device: torch.device | list[torch.device] = None,
+        policy_device: torch.device | list[torch.device] = None,
         max_frames_per_traj: int = -1,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Callable | None = None,
         split_trajs: bool = False,
-        exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
-        collector_class: Type = SyncDataCollector,
+        exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
+        collector_class: type = SyncDataCollector,
         collector_kwargs: dict = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
@@ -527,19 +527,19 @@ class DistributedDataCollector(DataCollectorBase):
         self._make_container()
 
     @property
-    def device(self) -> List[torch.device]:
+    def device(self) -> list[torch.device]:
         return self._device
 
     @property
-    def storing_device(self) -> List[torch.device]:
+    def storing_device(self) -> list[torch.device]:
         return self._storing_device
 
     @property
-    def env_device(self) -> List[torch.device]:
+    def env_device(self) -> list[torch.device]:
         return self._env_device
 
     @property
-    def policy_device(self) -> List[torch.device]:
+    def policy_device(self) -> list[torch.device]:
         return self._policy_device
 
     @device.setter
@@ -899,7 +899,7 @@ class DistributedDataCollector(DataCollectorBase):
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         for i in range(self.num_workers):
             rank = i + 1
-            self._store.set(f"NODE_{rank}_in", f"seeding_{seed}".encode("utf-8"))
+            self._store.set(f"NODE_{rank}_in", f"seeding_{seed}".encode())
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"updated":
                 raise RuntimeError(f"Expected 'seeded' but got status {status}.")
