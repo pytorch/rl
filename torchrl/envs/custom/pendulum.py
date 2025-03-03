@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import numpy as np
 
 import torch
@@ -269,11 +271,20 @@ class PendulumEnv(EnvBase):
         batch_size = (
             tensordict.batch_size if tensordict is not None else self.batch_size
         )
-        if tensordict is None or tensordict.is_empty():
+        if tensordict is None or "params" not in tensordict:
             # if no ``tensordict`` is passed, we generate a single set of hyperparameters
             # Otherwise, we assume that the input ``tensordict`` contains all the relevant
             # parameters to get started.
             tensordict = self.gen_params(batch_size=batch_size, device=self.device)
+        elif "th" in tensordict and "thdot" in tensordict:
+            # we can hard-reset the env too
+            return tensordict
+        out = self._reset_random_data(
+            tensordict.shape, batch_size, tensordict["params"]
+        )
+        return out
+
+    def _reset_random_data(self, shape, batch_size, params):
 
         high_th = torch.tensor(self.DEFAULT_X, device=self.device)
         high_thdot = torch.tensor(self.DEFAULT_Y, device=self.device)
@@ -284,12 +295,12 @@ class PendulumEnv(EnvBase):
         # of simulators run simultaneously. In other contexts, the initial
         # random state's shape will depend upon the environment batch-size instead.
         th = (
-            torch.rand(tensordict.shape, generator=self.rng, device=self.device)
+            torch.rand(shape, generator=self.rng, device=self.device)
             * (high_th - low_th)
             + low_th
         )
         thdot = (
-            torch.rand(tensordict.shape, generator=self.rng, device=self.device)
+            torch.rand(shape, generator=self.rng, device=self.device)
             * (high_thdot - low_thdot)
             + low_thdot
         )
@@ -297,7 +308,7 @@ class PendulumEnv(EnvBase):
             {
                 "th": th,
                 "thdot": thdot,
-                "params": tensordict["params"],
+                "params": params,
             },
             batch_size=batch_size,
         )

@@ -6,11 +6,10 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
-
 from tensordict import TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.tensor_specs import Categorical, Composite, TensorSpec, Unbounded
@@ -72,7 +71,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env: Optional["envpool.python.envpool.EnvPoolMixin"] = None,  # noqa: F821
+        env: envpool.python.envpool.EnvPoolMixin | None = None,  # noqa: F821
         **kwargs,
     ):
         if not _has_envpool:
@@ -88,9 +87,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         # Buffer to keep the latest observation for each worker
         # It's a TensorDict when the observation consists of several variables, e.g. "position" and "velocity"
-        self.obs: Union[torch.tensor, TensorDict] = self.observation_spec.zero()
+        self.obs: torch.tensor | TensorDict = self.observation_spec.zero()
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -99,11 +98,11 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         if not isinstance(env, (envpool.python.envpool.EnvPoolMixin,)):
             raise TypeError("env is not of type 'envpool.python.envpool.EnvPoolMixin'.")
 
-    def _build_env(self, env: "envpool.python.envpool.EnvPoolMixin"):  # noqa: F821
+    def _build_env(self, env: envpool.python.envpool.EnvPoolMixin):  # noqa: F821
         return env
 
     def _make_specs(
-        self, env: "envpool.python.envpool.EnvPoolMixin"  # noqa: F821
+        self, env: envpool.python.envpool.EnvPoolMixin  # noqa: F821
     ) -> None:  # noqa: F821
         from torchrl.envs.libs.gym import set_gym_backend
 
@@ -114,7 +113,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             self.reward_spec = output_spec["full_reward_spec"]
             self.done_spec = output_spec["full_done_spec"]
 
-    def _init_env(self) -> Optional[int]:
+    def _init_env(self) -> int | None:
         pass
 
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -212,10 +211,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _transform_reset_output(
         self,
-        envpool_output: Tuple[
-            Union["treevalue.TreeValue", np.ndarray], Any  # noqa: F821
-        ],
-        reset_workers: Optional[torch.Tensor],
+        envpool_output: tuple[treevalue.TreeValue | np.ndarray, Any],  # noqa: F821
+        reset_workers: torch.Tensor | None,
     ):
         """Process output of envpool env.reset."""
         import treevalue
@@ -243,7 +240,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return obs
 
     def _transform_step_output(
-        self, envpool_output: Tuple[Any, Any, Any, ...]
+        self, envpool_output: tuple[Any, Any, Any, ...]
     ) -> TensorDict:
         """Process output of envpool env.step."""
         out = envpool_output
@@ -272,8 +269,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return tensordict_out
 
     def _treevalue_or_numpy_to_tensor_or_dict(
-        self, x: Union["treevalue.TreeValue", np.ndarray]  # noqa: F821
-    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+        self, x: treevalue.TreeValue | np.ndarray  # noqa: F821
+    ) -> torch.Tensor | dict[str, torch.Tensor]:
         """Converts observation returned by EnvPool.
 
         EnvPool step and reset return observation as a numpy array or a TreeValue of numpy arrays, which we convert
@@ -291,8 +288,8 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return ret
 
     def _treevalue_to_dict(
-        self, tv: "treevalue.TreeValue"  # noqa: F821
-    ) -> Dict[str, Any]:
+        self, tv: treevalue.TreeValue  # noqa: F821
+    ) -> dict[str, Any]:
         """Converts TreeValue to a dictionary.
 
         Currently only supports depth 1 trees, but can easily be extended to arbitrary depth if necessary.
@@ -301,7 +298,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         return {k[0]: torch.as_tensor(v) for k, v in treevalue.flatten(tv)}
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         if seed is not None:
             torchrl_logger.info(
                 "MultiThreadedEnvWrapper._set_seed ignored, as setting seed in an existing envorinment is not\
@@ -359,7 +356,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         num_workers: int,
         env_name: str,
         *,
-        create_env_kwargs: Optional[Dict[str, Any]] = None,
+        create_env_kwargs: dict[str, Any] | None = None,
         **kwargs,
     ):
         self.env_name = env_name.replace("ALE/", "")  # Naming convention of EnvPool
@@ -376,7 +373,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         self,
         env_name: str,
         num_workers: int,
-        create_env_kwargs: Optional[Dict[str, Any]],
+        create_env_kwargs: dict[str, Any] | None,
     ) -> Any:
         import envpool
 
@@ -390,7 +387,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         )
         return super()._build_env(env)
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         """Library EnvPool only supports setting a seed by recreating the environment."""
         if seed is not None:
             torchrl_logger.debug("Recreating EnvPool environment to set seed.")
@@ -401,7 +398,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
                 create_env_kwargs=self.create_env_kwargs,
             )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         for arg in ["num_workers", "env_name", "create_env_kwargs"]:
             if arg not in kwargs:
                 raise TypeError(f"Expected '{arg}' to be part of kwargs")

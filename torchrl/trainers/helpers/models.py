@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import itertools
 from dataclasses import dataclass
 
@@ -60,7 +62,7 @@ ACTIVATIONS = {
 
 
 def make_dqn_actor(
-    proof_environment: EnvBase, cfg: "DictConfig", device: torch.device  # noqa: F821
+    proof_environment: EnvBase, cfg: DictConfig, device: torch.device  # noqa: F821
 ) -> Actor:
     """DQN constructor helper function.
 
@@ -194,7 +196,7 @@ def make_dqn_actor(
 
 @set_lazy_legacy(False)
 def make_dreamer(
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     proof_environment: EnvBase = None,
     device: DEVICE_TYPING = "cpu",
     action_key: str = "action",

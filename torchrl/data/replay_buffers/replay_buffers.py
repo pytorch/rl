@@ -13,10 +13,9 @@ import threading
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
+from typing import Any, Callable, Sequence
 
 import numpy as np
-
 import torch
 
 try:
@@ -222,10 +221,10 @@ class ReplayBuffer:
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "Transform" | None = None,  # noqa-F821
+        transform: Transform | None = None,  # noqa-F821
         batch_size: int | None = None,
         dim_extend: int | None = None,
-        checkpointer: "StorageCheckpointerBase" | None = None,  # noqa: F821
+        checkpointer: StorageCheckpointerBase | None = None,  # noqa: F821
         generator: torch.Generator | None = None,
         shared: bool = False,
         compilable: bool = None,
@@ -460,7 +459,7 @@ class ReplayBuffer:
                 self._storage[index] = value
         return
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {
             "_storage": self._storage.state_dict(),
             "_sampler": self._sampler.state_dict(),
@@ -472,7 +471,7 @@ class ReplayBuffer:
             else None,
         }
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self._storage.load_state_dict(state_dict["_storage"])
         self._sampler.load_state_dict(state_dict["_sampler"])
         self._writer.load_state_dict(state_dict["_writer"])
@@ -564,7 +563,7 @@ class ReplayBuffer:
         # fall back on state_dict for transforms
         if (path / "transform.t").exists():
             self._transform.load_state_dict(torch.load(path / "transform.t"))
-        with open(path / "buffer_metadata.json", "r") as file:
+        with open(path / "buffer_metadata.json") as file:
             metadata = json.load(file)
         self._batch_size = metadata["batch_size"]
 
@@ -662,8 +661,8 @@ class ReplayBuffer:
 
     def update_priority(
         self,
-        index: Union[int, torch.Tensor, Tuple[torch.Tensor]],
-        priority: Union[int, torch.Tensor],
+        index: int | torch.Tensor | tuple[torch.Tensor],
+        priority: int | torch.Tensor,
     ) -> None:
         if isinstance(index, tuple):
             index = torch.stack(index, -1)
@@ -675,7 +674,7 @@ class ReplayBuffer:
             self._sampler.update_priority(index, priority, storage=self.storage)
 
     @pin_memory_output
-    def _sample(self, batch_size: int) -> Tuple[Any, dict]:
+    def _sample(self, batch_size: int) -> tuple[Any, dict]:
         with self._replay_lock if not is_compiling() else contextlib.nullcontext():
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
@@ -755,11 +754,11 @@ class ReplayBuffer:
             return out, info
         return result[0]
 
-    def mark_update(self, index: Union[int, torch.Tensor]) -> None:
+    def mark_update(self, index: int | torch.Tensor) -> None:
         self._sampler.mark_update(index, storage=self._storage)
 
     def append_transform(
-        self, transform: "Transform", *, invert: bool = False  # noqa-F821
+        self, transform: Transform, *, invert: bool = False  # noqa-F821
     ) -> ReplayBuffer:  # noqa: D417
         """Appends transform at the end.
 
@@ -796,7 +795,7 @@ class ReplayBuffer:
     def insert_transform(
         self,
         index: int,
-        transform: "Transform",  # noqa-F821
+        transform: Transform,  # noqa-F821
         *,
         invert: bool = False,
     ) -> ReplayBuffer:  # noqa: D417
@@ -832,7 +831,7 @@ class ReplayBuffer:
         ):
             yield self.sample()
 
-    def __getstate__(self) -> Dict[str, Any]:
+    def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         if self._rng is not None:
             rng_state = TensorDict(
@@ -848,7 +847,7 @@ class ReplayBuffer:
             state["_futures_lock_placeholder"] = None
         return state
 
-    def __setstate__(self, state: Dict[str, Any]):
+    def __setstate__(self, state: dict[str, Any]):
         rngstate = None
         if "_rng" in state:
             rngstate = state["_rng"]
@@ -1008,14 +1007,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "Transform" | None = None,  # noqa-F821
+        transform: Transform | None = None,  # noqa-F821
         batch_size: int | None = None,
         dim_extend: int | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
         sampler = PrioritizedSampler(storage.max_size, alpha, beta, eps, dtype)
-        super(PrioritizedReplayBuffer, self).__init__(
+        super().__init__(
             storage=storage,
             sampler=sampler,
             collate_fn=collate_fn,
@@ -1355,7 +1354,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return data
 
     @pin_memory_output
-    def _sample(self, batch_size: int) -> Tuple[Any, dict]:
+    def _sample(self, batch_size: int) -> tuple[Any, dict]:
         with self._replay_lock if not is_compiling() else contextlib.nullcontext():
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
@@ -1523,7 +1522,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "Transform" | None = None,  # noqa-F821
+        transform: Transform | None = None,  # noqa-F821
         reduction: str = "max",
         batch_size: int | None = None,
         dim_extend: int | None = None,
@@ -1536,7 +1535,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         sampler = PrioritizedSampler(
             storage.max_size, alpha, beta, eps, reduction=reduction
         )
-        super(TensorDictPrioritizedReplayBuffer, self).__init__(
+        super().__init__(
             priority_key=priority_key,
             storage=storage,
             sampler=sampler,
@@ -1572,11 +1571,11 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
     def add(self, data: TensorDictBase) -> int:
         return super().add(data)
 
-    def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
+    def extend(self, tensordicts: list | TensorDictBase) -> torch.Tensor:
         return super().extend(tensordicts)
 
     def update_priority(
-        self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]
+        self, index: int | torch.Tensor, priority: int | torch.Tensor
     ) -> None:
         return super().update_priority(index, priority)
 
@@ -1593,7 +1592,7 @@ class InPlaceSampler:
         )
 
 
-def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
+def stack_tensors(list_of_tensor_iterators: list) -> tuple[torch.Tensor]:
     """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
 
     Args:
@@ -1765,10 +1764,10 @@ class ReplayBufferEnsemble(ReplayBuffer):
         storages: StorageEnsemble | None = None,
         samplers: SamplerEnsemble | None = None,
         writers: WriterEnsemble | None = None,
-        transform: "Transform" | None = None,  # noqa: F821
+        transform: Transform | None = None,  # noqa: F821
         batch_size: int | None = None,
         collate_fn: Callable | None = None,
-        collate_fns: List[Callable] | None = None,
+        collate_fns: list[Callable] | None = None,
         p: Tensor = None,
         sample_from_all: bool = False,
         num_buffer_sampled: int | None = None,
@@ -1849,7 +1848,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
     _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
 
     def __getitem__(
-        self, index: Union[int, torch.Tensor, Tuple, np.ndarray, List, slice, Ellipsis]
+        self, index: int | torch.Tensor | tuple | np.ndarray | list | slice | Ellipsis
     ) -> Any:
         # accepts inputs:
         # (int | 1d tensor | 1d list | 1d array | slice | ellipsis | range, int | tensor | list | array | slice | ellipsis | range)

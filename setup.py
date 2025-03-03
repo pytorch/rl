@@ -30,7 +30,7 @@ except Exception:
 
 def get_version():
     version_txt = os.path.join(cwd, "version.txt")
-    with open(version_txt, "r") as f:
+    with open(version_txt) as f:
         version = f.readline().strip()
     if os.getenv("TORCHRL_BUILD_VERSION"):
         version = os.getenv("TORCHRL_BUILD_VERSION")
@@ -64,8 +64,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 def write_version_file(version):
     version_path = os.path.join(cwd, "torchrl", "version.py")
     with open(version_path, "w") as f:
-        f.write("__version__ = '{}'\n".format(version))
-        f.write("git_version = {}\n".format(repr(sha)))
+        f.write(f"__version__ = '{version}'\n")
+        f.write(f"git_version = {repr(sha)}\n")
 
 
 def _get_pytorch_version(is_nightly, is_local):
@@ -185,7 +185,7 @@ def _main(argv):
         version = get_version()
         write_version_file(version)
     TORCHRL_BUILD_VERSION = os.getenv("TORCHRL_BUILD_VERSION")
-    logging.info("Building wheel {}-{}".format(package_name, version))
+    logging.info(f"Building wheel {package_name}-{version}")
     logging.info(f"TORCHRL_BUILD_VERSION is {TORCHRL_BUILD_VERSION}")
 
     is_local = TORCHRL_BUILD_VERSION is None

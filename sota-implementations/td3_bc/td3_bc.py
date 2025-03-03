@@ -19,13 +19,10 @@ import torch
 import tqdm
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-
 from torchrl._utils import compile_with_warmup, timeit
-
 from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
-
 from utils import (
     dump_video,
     log_metrics,
@@ -38,7 +35,7 @@ from utils import (
 
 
 @hydra.main(config_path="", config_name="config")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
     set_gym_backend(cfg.env.library).set()
 
     # Create logger

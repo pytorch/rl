@@ -7,7 +7,6 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-
 import os.path
 import sys
 import time
@@ -15,16 +14,13 @@ import unittest
 import warnings
 from functools import wraps
 
-# Get relative file path
-# this returns relative path from current file.
-
 import pytest
 import torch
 import torch.cuda
-
 from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn, vmap
+
 from torchrl._utils import (
     implement_for,
     logger as torchrl_logger,
@@ -32,7 +28,6 @@ from torchrl._utils import (
     seed_generator,
 )
 from torchrl.data.utils import CloudpickleWrapper
-
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.envpool import _has_envpool
@@ -45,6 +40,9 @@ from torchrl.envs.transforms import (
 )
 from torchrl.modules import MLP
 from torchrl.objectives.value.advantages import _vmap_func
+
+# Get relative file path
+# this returns relative path from current file.
 
 # Specified for test_utils.py
 __version__ = "0.3"
@@ -671,7 +669,7 @@ class LSTMNet(nn.Module):
 
         if hidden1_in is None and hidden0_in is None:
             shape = (batch, steps) if not squeeze1 else (batch,)
-            hidden0_in, hidden1_in = [
+            hidden0_in, hidden1_in = (
                 torch.zeros(
                     *shape,
                     self.lstm.num_layers,
@@ -680,7 +678,7 @@ class LSTMNet(nn.Module):
                     dtype=input.dtype,
                 )
                 for _ in range(2)
-            ]
+            )
         elif hidden1_in is None or hidden0_in is None:
             raise RuntimeError(
                 f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"

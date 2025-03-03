@@ -108,7 +108,6 @@ except RuntimeError:
     # If we can't set the method globally we can still run the parallel env with "fork"
     # This will fail on windows! Use "spawn" and put the script within `if __name__ == "__main__"`
     mp_context = "fork"
-    pass
 
 # sphinx_gallery_end_ignore
 import os
@@ -743,7 +742,7 @@ def print_csv_files_in_folder(folder_path):
                 csv_files.append(os.path.join(dirpath, file))
     for csv_file in csv_files:
         output_str += f"File: {csv_file}\n"
-        with open(csv_file, "r") as f:
+        with open(csv_file) as f:
             for i, line in enumerate(f):
                 if i == 10:
                     break

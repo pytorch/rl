@@ -2,12 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+# This makes omegaconf unhappy with typing.Any
+# Therefore we need Optional and Union
+# from __future__ import annotations
+
+import importlib.util
 from copy import copy
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 import torch
-
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
@@ -43,8 +48,16 @@ LIBS = {
     "dm_control": DMControlEnv,
 }
 
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
+if _has_omegaconf:
+    from omegaconf import DictConfig
+else:
 
-def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
+    class DictConfig:  # noqa
+        ...
+
+
+def correct_for_frame_skip(cfg: DictConfig) -> DictConfig:  # noqa: F821
     """Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.
 
     This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targeting a total number of frames
@@ -208,9 +221,9 @@ def get_norm_state_dict(env):
 
 
 def transformed_env_constructor(
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     video_tag: str = "",
-    logger: Optional[Logger] = None,
+    logger: Optional[Logger] = None,  # noqa
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = False,
@@ -326,7 +339,7 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    cfg: "DictConfig", **kwargs  # noqa: F821
+    cfg: DictConfig, **kwargs  # noqa: F821
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
@@ -370,7 +383,7 @@ def parallel_env_constructor(
 
 @torch.no_grad()
 def get_stats_random_rollout(
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     proof_environment: EnvBase = None,
     key: Optional[str] = None,
 ):
@@ -450,7 +463,7 @@ def get_stats_random_rollout(
 def initialize_observation_norm_transforms(
     proof_environment: EnvBase,
     num_iter: int = 1000,
-    key: Union[str, Tuple[str, ...]] = None,
+    key: Union[str, tuple[str, ...]] = None,
 ):
     """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
 
@@ -530,7 +543,7 @@ class EnvConfig:
     # maximum steps per trajectory, frames per batch or any other factor in the algorithm,
     # e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4
     # the actual number of frames retrieved will be 200e6. Default=1.
-    reward_scaling: Optional[float] = None
+    reward_scaling: Any = None  # noqa
     # scale of the reward.
     reward_loc: float = 0.0
     # location of the reward.

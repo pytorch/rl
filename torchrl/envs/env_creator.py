@@ -7,13 +7,11 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from multiprocessing.sharedctypes import Synchronized
-from typing import Callable, Dict, Optional, Union
+from typing import Callable
 
 import torch
 from tensordict import TensorDictBase
-
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase, EnvMetaData
 
@@ -80,7 +78,7 @@ class EnvCreator:
     def __init__(
         self,
         create_env_fn: Callable[..., EnvBase],
-        create_env_kwargs: Optional[Dict] = None,
+        create_env_kwargs: dict | None = None,
         share_memory: bool = True,
         **kwargs,
     ) -> None:
@@ -230,9 +228,7 @@ def env_creator(fun: Callable) -> EnvCreator:
     return EnvCreator(fun)
 
 
-def get_env_metadata(
-    env_or_creator: Union[EnvBase, Callable], kwargs: Optional[Dict] = None
-):
+def get_env_metadata(env_or_creator: EnvBase | Callable, kwargs: dict | None = None):
     """Retrieves a EnvMetaData object from an env."""
     if isinstance(env_or_creator, (EnvBase,)):
         return EnvMetaData.metadata_from_env(env_or_creator)

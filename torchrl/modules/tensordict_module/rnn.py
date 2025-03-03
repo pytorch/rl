@@ -6,27 +6,19 @@ from __future__ import annotations
 
 import typing
 import warnings
-from typing import Any, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from tensordict import TensorDictBase, unravel_key_list
-
 from tensordict.base import NO_DEFAULT
-
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, prod, set_lazy_legacy
-
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
 
 from torchrl._utils import _ContextManager, _DecoratorContextManager
 from torchrl.data.tensor_specs import Unbounded
-from torchrl.objectives.value.functional import (
-    _inv_pad_sequence,
-    _split_and_pad_sequence,
-)
-from torchrl.objectives.value.utils import _get_num_per_traj_init
 
 
 class LSTMCell(RNNCellBase):
@@ -78,8 +70,8 @@ class LSTMCell(RNNCellBase):
         super().__init__(input_size, hidden_size, bias, num_chunks=4, **factory_kwargs)
 
     def forward(
-        self, input: Tensor, hx: Optional[Tuple[Tensor, Tensor]] = None
-    ) -> Tuple[Tensor, Tensor]:
+        self, input: Tensor, hx: tuple[Tensor, Tensor] | None = None
+    ) -> tuple[Tensor, Tensor]:
         if input.dim() not in (1, 2):
             raise ValueError(
                 f"LSTMCell: Expected input to be 1D or 2D, got {input.dim()}D instead"
@@ -721,6 +713,11 @@ class LSTMModule(ModuleBase):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase):
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None, None]
         shape = tensordict.shape
@@ -745,6 +742,8 @@ class LSTMModule(ModuleBase):
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
         if self.recurrent_mode and is_init[..., 1:].any():
+            from torchrl.objectives.value.utils import _get_num_per_traj_init
+
             # if we have consecutive trajectories, things get a little more complicated
             # we have a tensordict of shape [B, T]
             # we will split / pad things such that we get a tensordict of shape
@@ -795,16 +794,16 @@ class LSTMModule(ModuleBase):
         steps,
         device,
         dtype,
-        hidden0_in: Optional[torch.Tensor] = None,
-        hidden1_in: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden0_in: torch.Tensor | None = None,
+        hidden1_in: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
             raise ValueError("Expected a single step")
 
         if hidden1_in is None and hidden0_in is None:
             shape = (batch, steps)
-            hidden0_in, hidden1_in = [
+            hidden0_in, hidden1_in = (
                 torch.zeros(
                     *shape,
                     self.lstm.num_layers,
@@ -813,7 +812,7 @@ class LSTMModule(ModuleBase):
                     dtype=dtype,
                 )
                 for _ in range(2)
-            ]
+            )
         elif hidden1_in is None or hidden0_in is None:
             raise RuntimeError(
                 f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"
@@ -887,7 +886,7 @@ class GRUCell(RNNCellBase):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__(input_size, hidden_size, bias, num_chunks=3, **factory_kwargs)
 
-    def forward(self, input: Tensor, hx: Optional[Tensor] = None) -> Tensor:
+    def forward(self, input: Tensor, hx: Tensor | None = None) -> Tensor:
         if input.dim() not in (1, 2):
             raise ValueError(
                 f"GRUCell: Expected input to be 1D or 2D, got {input.dim()}D instead"
@@ -1536,6 +1535,11 @@ class GRUModule(ModuleBase):
     @dispatch
     @set_lazy_legacy(False)
     def forward(self, tensordict: TensorDictBase):
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None]
         shape = tensordict.shape
@@ -1560,6 +1564,8 @@ class GRUModule(ModuleBase):
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
         if self.recurrent_mode and is_init[..., 1:].any():
+            from torchrl.objectives.value.utils import _get_num_per_traj_init
+
             # if we have consecutive trajectories, things get a little more complicated
             # we have a tensordict of shape [B, T]
             # we will split / pad things such that we get a tensordict of shape
@@ -1606,8 +1612,8 @@ class GRUModule(ModuleBase):
         steps,
         device,
         dtype,
-        hidden_in: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden_in: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
             raise ValueError("Expected a single step")

@@ -5,12 +5,9 @@
 from __future__ import annotations
 
 import collections
-
 import functools
 import inspect
-
 import logging
-
 import math
 import os
 import pickle
@@ -24,13 +21,12 @@ from copy import copy
 from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
-from typing import Any, Callable, cast, Dict, Tuple, TypeVar, Union
+from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
 import torch
 from packaging.version import parse
 from tensordict import unravel_key
-
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
 
@@ -345,7 +341,7 @@ class implement_for:
 
     def __init__(
         self,
-        module_name: Union[str, Callable],
+        module_name: str | Callable,
         from_version: str = None,
         to_version: str = None,
         *,
@@ -419,7 +415,7 @@ class implement_for:
             setattr(cls, self.fn.__name__, self.fn)
 
     @classmethod
-    def import_module(cls, module_name: Union[Callable, str]) -> str:
+    def import_module(cls, module_name: Callable | str) -> str:
         """Imports module and returns its version."""
         if not callable(module_name):
             module = cls._cache_modules.get(module_name, None)
@@ -515,7 +511,7 @@ class implement_for:
         return unsupported
 
     @classmethod
-    def reset(cls, setters_dict: Dict[str, implement_for] = None):
+    def reset(cls, setters_dict: dict[str, implement_for] = None):
         """Resets the setters in setter_dict.
 
         ``setter_dict`` is a copy of implementations. We just need to iterate through its
@@ -880,7 +876,7 @@ class _ContextManager:
 
 def _standardize(
     input: Tensor,
-    exclude_dims: Tuple[int] = (),
+    exclude_dims: tuple[int] = (),
     mean: Tensor | None = None,
     std: Tensor | None = None,
     eps: float | None = None,
