@@ -31,7 +31,7 @@ class LLMEnv(EnvBase):
     integers representing a sequence of tokens.
     The action is also a string or a tensor of integers, which is concatenated to the previous observation to form the
     new observation.
-
+     Prompts to the language model can be loaded when the environment is ``reset`` if the environment is created via :meth:`~from_dataloader`
     Args:
         observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults to
             ``"observation"``.
@@ -138,7 +138,7 @@ class LLMEnv(EnvBase):
     ) -> LLMEnv:
         """Creates an LLMEnv instance from a dataloader.
 
-        This method creates an LLMEnv instance and appends a DataLoadingPrimer to it, which loads data from the provided dataloader.
+        This method creates an LLMEnv instance and appends a DataLoadingPrimer to it, which populates ``data_keys`` (by default ``observation_key``) with data from the provided dataloader when the environment is reset.
 
         Args:
             dataloader (DataLoader): The dataloader to load data from.
@@ -151,7 +151,7 @@ class LLMEnv(EnvBase):
                 unbounded vocabulary. Defaults to ``None``.
             primers (Composite | None, optional): The primers to use for each key in the dataloader.
                 Defaults to ``None``.
-            data_keys (list[NestedKey] | None, optional): The keys to use for each item in the dataloader.
+            data_keys (list[NestedKey] | None, optional): The keys to use for each item in the dataloader. If not passed ``observation_key`` will be populated with the data.
                 Defaults to ``None``.
             data_specs (list[TensorSpec] | None, optional): The specs to use for each item in the dataloader.
                 Defaults to ``None``.

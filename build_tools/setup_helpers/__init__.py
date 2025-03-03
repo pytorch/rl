@@ -4,3 +4,5 @@
 # LICENSE file in the root directory of this source tree.
 
 from .extension import CMakeBuild, get_ext_modules  # noqa
+
+__all__ = ["CMakeBuild", "get_ext_modules"]
