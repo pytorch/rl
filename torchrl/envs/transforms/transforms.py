@@ -87,7 +87,6 @@ from torchrl.envs.utils import (
     make_composite_from_td,
     step_mdp,
 )
-from torchrl.objectives.value.functional import reward2go
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
@@ -318,7 +317,6 @@ class Transform(nn.Module):
 
     def init(self, tensordict) -> None:
         """Runs init steps for the transform."""
-        pass
 
     def _apply_transform(self, obs: torch.Tensor) -> None:
         """Applies the transform to a tensor or a leaf.
@@ -1161,7 +1159,6 @@ but got an object of type {type(transform)}."""
 
     def _set_seed(self, seed: int | None):
         """This method is not used in transformed envs."""
-        pass
 
     def _reset(self, tensordict: TensorDictBase | None = None, **kwargs):
         if tensordict is not None:
@@ -8541,6 +8538,8 @@ class Reward2GoTransform(Transform):
     def _inv_apply_transform(
         self, reward: torch.Tensor, done: torch.Tensor
     ) -> torch.Tensor:
+        from torchrl.objectives.value.functional import reward2go
+
         return reward2go(reward, done, self.gamma)
 
     def set_container(self, container):

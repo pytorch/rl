@@ -10,7 +10,7 @@ import warnings
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Callable, List, Union
+from typing import Callable
 
 import torch
 from tensordict import is_tensor_collection, TensorDictBase
@@ -29,13 +29,7 @@ from torch import Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
-
-from torchrl.objectives.utils import (
-    _maybe_get_or_select,
-    _vmap_func,
-    hold_out_net,
-    RANDOM_MODULE_LIST,
-)
+from torchrl.objectives.utils import _maybe_get_or_select, _vmap_func, hold_out_net
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -153,7 +147,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
-    value_network: Union[TensorDictModule, Callable]
+    value_network: TensorDictModule | Callable
     _vmap_randomness = None
 
     @property
@@ -290,7 +284,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
         except AttributeError:
             # value network does not have an `in_keys` attribute
             in_keys = []
-            pass
         return in_keys
 
     @property
@@ -390,8 +383,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
             do_break = False
             for val in self.__dict__.values():
                 if isinstance(val, torch.nn.Module):
+                    import torchrl.objectives.utils
+
                     for module in val.modules():
-                        if isinstance(module, RANDOM_MODULE_LIST):
+                        if isinstance(
+                            module, torchrl.objectives.utils.RANDOM_MODULE_LIST
+                        ):
                             self._vmap_randomness = "different"
                             do_break = True
                             break
@@ -1038,8 +1035,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
         self,
         tensordict: TensorDictBase,
         *,
-        params: List[Tensor] | None = None,
-        target_params: List[Tensor] | None = None,
+        params: list[Tensor] | None = None,
+        target_params: list[Tensor] | None = None,
     ) -> TensorDictBase:
         r"""Computes the TD(:math:`\lambda`) advantage given the data in tensordict.
 
@@ -1307,8 +1304,8 @@ class GAE(ValueEstimatorBase):
         self,
         tensordict: TensorDictBase,
         *,
-        params: List[Tensor] | None = None,
-        target_params: List[Tensor] | None = None,
+        params: list[Tensor] | None = None,
+        target_params: list[Tensor] | None = None,
         time_dim: int | None = None,
     ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
@@ -1646,8 +1643,8 @@ class VTrace(ValueEstimatorBase):
         self,
         tensordict: TensorDictBase,
         *,
-        params: List[Tensor] | None = None,
-        target_params: List[Tensor] | None = None,
+        params: list[Tensor] | None = None,
+        target_params: list[Tensor] | None = None,
         time_dim: int | None = None,
     ) -> TensorDictBase:
         """Computes the V-Trace correction given the data in tensordict.

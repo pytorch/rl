@@ -2,10 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 import warnings
-
-from typing import Dict, Optional, Union
 
 import torch
 from packaging import version
@@ -209,7 +209,7 @@ class BraxWrapper(_EnvWrapper):
                 f"Setting a device in Brax wrapped environments is strongly recommended."
             )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         brax = self.lib
         if version.parse(brax.__version__) < version.parse("0.10.4"):
             raise ImportError("Brax v0.10.4 or greater is required.")
@@ -223,12 +223,12 @@ class BraxWrapper(_EnvWrapper):
     def _build_env(
         self,
         env,
-        _seed: Optional[int] = None,
+        _seed: int | None = None,
         from_pixels: bool = False,
-        render_kwargs: Optional[dict] = None,
+        render_kwargs: dict | None = None,
         pixels_only: bool = False,
         requires_grad: bool = False,
-        camera_id: Union[int, str] = 0,
+        camera_id: int | str = 0,
         **kwargs,
     ):
         self.from_pixels = from_pixels
@@ -241,7 +241,7 @@ class BraxWrapper(_EnvWrapper):
             )
         return env
 
-    def _make_state_spec(self, env: "brax.envs.env.Env"):  # noqa: F821
+    def _make_state_spec(self, env: brax.envs.env.Env):  # noqa: F821
         jax = self.jax
 
         key = jax.random.PRNGKey(0)
@@ -250,7 +250,7 @@ class BraxWrapper(_EnvWrapper):
         state_spec = _extract_spec(state_dict).expand(self.batch_size)
         return state_spec
 
-    def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
+    def _make_specs(self, env: brax.envs.env.Env) -> None:  # noqa: F821
         self.action_spec = Bounded(
             low=-1,
             high=1,
@@ -291,7 +291,7 @@ class BraxWrapper(_EnvWrapper):
         state = _tree_reshape(state, self.batch_size)
         return state
 
-    def _init_env(self) -> Optional[int]:
+    def _init_env(self) -> int | None:
         jax = self.jax
         self._key = None
         self._vmap_jit_env_reset = jax.vmap(jax.jit(self._env.reset))
@@ -551,7 +551,7 @@ class BraxEnv(BraxWrapper):
         self,
         env_name: str,
         **kwargs,
-    ) -> "brax.envs.env.Env":  # noqa: F821
+    ) -> brax.envs.env.Env:  # noqa: F821
         if not _has_brax:
             raise ImportError(
                 f"brax not found, unable to create {env_name}. "
@@ -576,7 +576,7 @@ class BraxEnv(BraxWrapper):
     def env_name(self):
         return self._constructor_kwargs["env_name"]
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "env_name" not in kwargs:
             raise TypeError("Expected 'env_name' to be part of kwargs")
 

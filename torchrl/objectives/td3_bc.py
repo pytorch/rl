@@ -5,18 +5,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import torch
-
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 
+from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
     _cache_values,
     _reduce,
@@ -241,10 +238,10 @@ class TD3BCLoss(LossModule):
     def __init__(
         self,
         actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         action_spec: TensorSpec = None,
-        bounds: Optional[Tuple[float]] = None,
+        bounds: tuple[float] | None = None,
         num_qvalue_nets: int = 2,
         policy_noise: float = 0.2,
         noise_clip: float = 0.5,
@@ -387,7 +384,7 @@ class TD3BCLoss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    def actor_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
+    def actor_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         """Compute the actor loss.
 
         The actor loss should be computed after the :meth:`~.qvalue_loss` and is usually delayed 1-3 critic updates.
@@ -441,7 +438,7 @@ class TD3BCLoss(LossModule):
         )
         return loss_actor, metadata
 
-    def qvalue_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
+    def qvalue_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         """Compute the q-value loss.
 
         The q-value loss should be computed before the :meth:`~.actor_loss`.

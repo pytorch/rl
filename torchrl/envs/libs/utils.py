@@ -2,10 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+#
 # Copied from gym > 0.19 release
-
+#
 # this file should only be accessed when gym is installed
+from __future__ import annotations
 
 import collections
 import copy

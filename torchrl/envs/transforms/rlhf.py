@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from copy import copy, deepcopy
-from typing import Any, Callable, Iterable, List, Literal
+from typing import Any, Callable, Iterable, Literal
 
 import torch
 from tensordict import (
@@ -19,6 +19,7 @@ from tensordict import (
 from tensordict.nn import ProbabilisticTensorDictModule, TensorDictParams
 from tensordict.utils import _zip_strict, is_seq_of_nested_key
 from torch import nn
+
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
@@ -339,8 +340,8 @@ class DataLoadingPrimer(TensorDictPrimer):
         self,
         dataloader: Iterable[Any],
         primers: Composite | None = None,
-        data_keys: List[NestedKey] | None = None,
-        data_specs: List[TensorSpec] | None = None,
+        data_keys: list[NestedKey] | None = None,
+        data_specs: list[TensorSpec] | None = None,
         example_data: Any = None,
         stack_method: Callable[[Any], Any]
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,

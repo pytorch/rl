@@ -1220,7 +1220,7 @@ Recorders are transforms that register data as they come in, for logging purpose
 
 Helpers
 -------
-.. currentmodule:: torchrl.envs.utils
+.. currentmodule:: torchrl.envs
 
 .. autosummary::
     :toctree: generated/

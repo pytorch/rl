@@ -6,24 +6,21 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import nn
+
 from torchrl.data.tensor_specs import TensorSpec
-
 from torchrl.data.utils import _find_action_space
-
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.tensordict_module.actors import (
     DistributionalQValueActor,
     QValueActor,
 )
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
-
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -175,13 +172,13 @@ class DQNLoss(LossModule):
 
     def __init__(
         self,
-        value_network: Union[QValueActor, nn.Module],
+        value_network: QValueActor | nn.Module,
         *,
-        loss_function: Optional[str] = "l2",
+        loss_function: str | None = "l2",
         delay_value: bool = True,
         double_dqn: bool = False,
         gamma: float = None,
-        action_space: Union[str, TensorSpec] = None,
+        action_space: str | TensorSpec = None,
         priority_key: str = None,
         reduction: str = None,
     ) -> None:
@@ -454,7 +451,7 @@ class DistributionalDQNLoss(LossModule):
 
     def __init__(
         self,
-        value_network: Union[DistributionalQValueActor, nn.Module],
+        value_network: DistributionalQValueActor | nn.Module,
         *,
         gamma: float,
         delay_value: bool = True,
