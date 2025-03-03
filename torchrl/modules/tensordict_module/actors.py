@@ -4,10 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Sequence
 
 import torch
-
 from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import (
     CompositeDistribution,
@@ -98,10 +97,10 @@ class Actor(SafeModule):
     def __init__(
         self,
         module: nn.Module,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
         *,
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec | None = None,
         **kwargs,
     ):
         if in_keys is None:
@@ -360,10 +359,10 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     def __init__(
         self,
         module: TensorDictModule,
-        in_keys: Union[NestedKey, Sequence[NestedKey]],
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: NestedKey | Sequence[NestedKey],
+        out_keys: Sequence[NestedKey] | None = None,
         *,
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec | None = None,
         **kwargs,
     ):
         distribution_class = kwargs.get("distribution_class")
@@ -450,8 +449,8 @@ class ValueOperator(TensorDictModule):
     def __init__(
         self,
         module: nn.Module,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ) -> None:
         if in_keys is None:
             in_keys = ["observation"]
@@ -532,12 +531,12 @@ class QValueModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        action_space: Optional[str] = None,
-        action_value_key: Optional[NestedKey] = None,
-        action_mask_key: Optional[NestedKey] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        var_nums: Optional[int] = None,
-        spec: Optional[TensorSpec] = None,
+        action_space: str | None = None,
+        action_value_key: NestedKey | None = None,
+        action_mask_key: NestedKey | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        var_nums: int | None = None,
+        spec: TensorSpec | None = None,
         safe: bool = False,
     ):
         if isinstance(action_space, TensorSpec):
@@ -748,12 +747,12 @@ class DistributionalQValueModule(QValueModule):
 
     def __init__(
         self,
-        action_space: Optional[str],
+        action_space: str | None,
         support: torch.Tensor,
-        action_value_key: Optional[NestedKey] = None,
-        action_mask_key: Optional[NestedKey] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        var_nums: Optional[int] = None,
+        action_value_key: NestedKey | None = None,
+        action_mask_key: NestedKey | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        var_nums: int | None = None,
         spec: TensorSpec = None,
         safe: bool = False,
     ):
@@ -911,10 +910,10 @@ class QValueHook:
     def __init__(
         self,
         action_space: str,
-        var_nums: Optional[int] = None,
-        action_value_key: Optional[NestedKey] = None,
-        action_mask_key: Optional[NestedKey] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        var_nums: int | None = None,
+        action_value_key: NestedKey | None = None,
+        action_mask_key: NestedKey | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError(
@@ -938,7 +937,7 @@ class QValueHook:
 
     def __call__(
         self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         kwargs = {self.action_value_key: values}
         return self.qvalue_model(**kwargs)
 
@@ -1007,10 +1006,10 @@ class DistributionalQValueHook(QValueHook):
         self,
         action_space: str,
         support: torch.Tensor,
-        var_nums: Optional[int] = None,
-        action_value_key: Optional[NestedKey] = None,
-        action_mask_key: Optional[NestedKey] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        var_nums: int | None = None,
+        action_value_key: NestedKey | None = None,
+        action_mask_key: NestedKey | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError("Using specs in action_space is deprecated")
@@ -1125,9 +1124,9 @@ class QValueActor(SafeSequential):
         in_keys=None,
         spec=None,
         safe=False,
-        action_space: Optional[str] = None,
+        action_space: str | None = None,
         action_value_key=None,
-        action_mask_key: Optional[NestedKey] = None,
+        action_mask_key: NestedKey | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError(
@@ -1268,10 +1267,10 @@ class DistributionalQValueActor(QValueActor):
         in_keys=None,
         spec=None,
         safe=False,
-        var_nums: Optional[int] = None,
-        action_space: Optional[str] = None,
+        var_nums: int | None = None,
+        action_space: str | None = None,
         action_value_key: str = "action_value",
-        action_mask_key: Optional[NestedKey] = None,
+        action_mask_key: NestedKey | None = None,
         make_log_softmax: bool = True,
     ):
         if isinstance(action_space, TensorSpec):
@@ -1836,7 +1835,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         policy: TensorDictModule,
         *,
         inference_context: int = 5,
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec | None = None,
         device: torch.device | None = None,
     ):
         super().__init__(policy)
@@ -2066,7 +2065,7 @@ class TanhModule(TensorDictModuleBase):
         high=None,
         clamp: bool = False,
     ):
-        super(TanhModule, self).__init__()
+        super().__init__()
         self.in_keys = in_keys
         if out_keys is None:
             out_keys = in_keys
@@ -2291,8 +2290,8 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         actor: TensorDictModuleBase,
         n_steps: int,
         *,
-        action_keys: List[NestedKey] | None = None,
-        init_key: List[NestedKey] | None = None,
+        action_keys: list[NestedKey] | None = None,
+        init_key: list[NestedKey] | None = None,
     ):
         self.action_keys = action_keys
         self.init_key = init_key
@@ -2387,7 +2386,7 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         return tensordict
 
     @property
-    def action_keys(self) -> List[NestedKey]:
+    def action_keys(self) -> list[NestedKey]:
         action_keys = self.__dict__.get("_action_keys", None)
         if action_keys is None:
 
@@ -2411,7 +2410,7 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         self._action_keys = [unravel_key(key) for key in value]
 
     @property
-    def _actor_keys_map(self) -> Dict[NestedKey, NestedKey]:
+    def _actor_keys_map(self) -> dict[NestedKey, NestedKey]:
         val = self.__dict__.get("_actor_keys_map_values", None)
         if val is None:
 

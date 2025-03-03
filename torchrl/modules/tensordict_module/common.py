@@ -9,20 +9,16 @@ import importlib.util
 import inspect
 import re
 import warnings
-from typing import Iterable, List, Optional, Type, Union
+from typing import Iterable
 
 import torch
-
 from tensordict import TensorDictBase, unravel_key_list
-
 from tensordict.nn import dispatch, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey
-
 from torch import nn
 from torch.nn import functional as F
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
-
 from torchrl.data.utils import DEVICE_TYPING
 
 _has_functorch = importlib.util.find_spec("functorch") is not None
@@ -194,12 +190,15 @@ class SafeModule(TensorDictModule):
 
     def __init__(
         self,
-        module: Union[
-            FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
-        ],
+        module: (
+            FunctionalModule
+            | FunctionalModuleWithBuffers
+            | TensorDictModule
+            | nn.Module
+        ),
         in_keys: Iterable[str],
         out_keys: Iterable[str],
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec | None = None,
         safe: bool = False,
     ):
         super().__init__(module, in_keys, out_keys)
@@ -282,14 +281,14 @@ class SafeModule(TensorDictModule):
         """See :obj:`TensorDictModule.random(...)`."""
         return self.random(tensordict)
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> TensorDictModule:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> TensorDictModule:
         if hasattr(self, "spec") and self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
         return out
 
 
-def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
+def is_tensordict_compatible(module: TensorDictModule | nn.Module):
     """Returns `True` if a module can be used as a TensorDictModule, and False if it can't.
 
     If the signature is misleading an error is raised.
@@ -356,13 +355,13 @@ def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
 
 
 def ensure_tensordict_compatible(
-    module: Union[
-        FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
-    ],
-    in_keys: Optional[List[NestedKey]] = None,
-    out_keys: Optional[List[NestedKey]] = None,
+    module: (
+        FunctionalModule | FunctionalModuleWithBuffers | TensorDictModule | nn.Module
+    ),
+    in_keys: list[NestedKey] | None = None,
+    out_keys: list[NestedKey] | None = None,
     safe: bool = False,
-    wrapper_type: Optional[Type] = TensorDictModule,
+    wrapper_type: type | None = TensorDictModule,
     **kwargs,
 ):
     """Ensures module is compatible with TensorDictModule and, if not, it wraps it."""

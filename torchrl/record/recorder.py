@@ -7,15 +7,12 @@ from __future__ import annotations
 import importlib.util
 import math
 from copy import copy
-from typing import Callable, List, Optional, Sequence, Union
+from typing import Callable, Sequence
 
 import numpy as np
 import torch
-
 from tensordict import NonTensorData, TensorDictBase
-
 from tensordict.utils import NestedKey
-
 from torchrl._utils import _can_be_pickled
 from torchrl.data import TensorSpec
 from torchrl.data.tensor_specs import NonTensor, Unbounded
@@ -108,11 +105,11 @@ class VideoRecorder(ObservationTransform):
         self,
         logger: Logger,
         tag: str,
-        in_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
         skip: int | None = None,
-        center_crop: Optional[int] = None,
+        center_crop: int | None = None,
         make_grid: bool | None = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Sequence[NestedKey] | None = None,
         fps: int | None = None,
         **kwargs,
     ) -> None:
@@ -239,7 +236,7 @@ class VideoRecorder(ObservationTransform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self._call(tensordict)
 
-    def dump(self, suffix: Optional[str] = None) -> None:
+    def dump(self, suffix: str | None = None) -> None:
         """Writes the video to the ``self.logger`` attribute.
 
         Calling ``dump`` when no image has been stored in a no-op.
@@ -296,7 +293,7 @@ class TensorDictRecorder(Transform):
         out_file_base: str,
         skip_reset: bool = True,
         skip: int = 4,
-        in_keys: Optional[Sequence[str]] = None,
+        in_keys: Sequence[str] | None = None,
     ) -> None:
         if in_keys is None:
             in_keys = []
@@ -318,7 +315,7 @@ class TensorDictRecorder(Transform):
             self.td.append(_td)
         return next_tensordict
 
-    def dump(self, suffix: Optional[str] = None) -> None:
+    def dump(self, suffix: str | None = None) -> None:
         if suffix is None:
             tag = self.tag
         else:
@@ -430,7 +427,7 @@ class PixelRenderTransform(Transform):
 
     def __init__(
         self,
-        out_keys: List[NestedKey] = None,
+        out_keys: list[NestedKey] = None,
         preproc: Callable[
             [np.ndarray | torch.Tensor], np.ndarray | torch.Tensor
         ] = None,
@@ -544,7 +541,7 @@ class PixelRenderTransform(Transform):
         """Whether the recorder is enabled."""
         return self._enabled
 
-    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+    def set_container(self, container: Transform | EnvBase) -> None:
         out = super().set_container(container)
         if isinstance(self.parent, EnvBase):
             # Start the env if needed

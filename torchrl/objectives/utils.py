@@ -8,7 +8,7 @@ import functools
 import re
 import warnings
 from enum import Enum
-from typing import Iterable, List, Optional, Union
+from typing import Iterable
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
@@ -159,7 +159,7 @@ class TargetNetUpdater:
 
     def __init__(
         self,
-        loss_module: "LossModule",  # noqa: F821
+        loss_module: LossModule,  # noqa: F821
     ):
         from torchrl.objectives.common import LossModule
 
@@ -284,7 +284,7 @@ class TargetNetUpdater:
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
         for key, param in self._sources.items():
-            target = self._targets.get("target_{}".format(key))
+            target = self._targets.get(f"target_{key}")
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
             self._step(param, target)
@@ -320,16 +320,16 @@ class SoftUpdate(TargetNetUpdater):
 
     def __init__(
         self,
-        loss_module: Union[
-            "DQNLoss",  # noqa: F821
-            "DDPGLoss",  # noqa: F821
-            "SACLoss",  # noqa: F821
-            "REDQLoss",  # noqa: F821
-            "TD3Loss",  # noqa: F821
-        ],
+        loss_module: (
+            DQNLoss  # noqa: F821
+            | DDPGLoss  # noqa: F821
+            | SACLoss  # noqa: F821
+            | REDQLoss  # noqa: F821
+            | TD3Loss  # noqa: F821  # noqa: F821
+        ),
         *,
         eps: float = None,
-        tau: Optional[float] = None,
+        tau: float | None = None,
     ):
         if eps is None and tau is None:
             raise RuntimeError(
@@ -350,7 +350,7 @@ class SoftUpdate(TargetNetUpdater):
             raise ValueError(
                 f"Got eps = {eps} when it was supposed to be between 0 and 1."
             )
-        super(SoftUpdate, self).__init__(loss_module)
+        super().__init__(loss_module)
         self.eps = eps
 
     def _step(
@@ -375,11 +375,11 @@ class HardUpdate(TargetNetUpdater):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "TD3Loss"],  # noqa: F821
+        loss_module: DQNLoss | DDPGLoss | SACLoss | TD3Loss,  # noqa: F821
         *,
         value_network_update_interval: float = 1000,
     ):
-        super(HardUpdate, self).__init__(loss_module)
+        super().__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval
         self.counter = 0
 
@@ -441,10 +441,10 @@ class hold_out_params(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensordict: TensorDictBase,
-    operator: Optional[TensorDictModule] = None,
+    operator: TensorDictModule | None = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
-    pred_next_val: Optional[Tensor] = None,
+    pred_next_val: Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
     """Computes the next state value (without gradient) to compute a target value.
@@ -550,7 +550,7 @@ def _vmap_func(module, *args, func=None, **kwargs):
             ) from err
 
 
-def _reduce(tensor: torch.Tensor, reduction: str) -> Union[float, torch.Tensor]:
+def _reduce(tensor: torch.Tensor, reduction: str) -> float | torch.Tensor:
     """Reduces a tensor given the reduction method."""
     if reduction == "none":
         result = tensor
@@ -632,8 +632,8 @@ def _maybe_get_or_select(td, key_or_keys, target_shape=None):
 
 
 def _maybe_add_or_extend_key(
-    tensor_keys: List[NestedKey],
-    key_or_list_of_keys: NestedKey | List[NestedKey],
+    tensor_keys: list[NestedKey],
+    key_or_list_of_keys: NestedKey | list[NestedKey],
     prefix: NestedKey = None,
 ):
     if prefix is not None:

@@ -2,8 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from typing import List
+from __future__ import annotations
 
 from torch import Tensor
 
@@ -15,10 +14,10 @@ def _get_image_num_channels(img: Tensor) -> int:
     elif img.ndim > 2:
         return img.shape[-3]
 
-    raise TypeError("Input ndim should be 2 or more. Got {}".format(img.ndim))
+    raise TypeError(f"Input ndim should be 2 or more. Got {img.ndim}")
 
 
-def _assert_channels(img: Tensor, permitted: List[int]) -> None:
+def _assert_channels(img: Tensor, permitted: list[int]) -> None:
     c = _get_image_num_channels(img)
     if c not in permitted:
         raise TypeError(

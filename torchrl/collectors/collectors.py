@@ -7,9 +7,7 @@ from __future__ import annotations
 import _pickle
 import abc
 import collections
-
 import contextlib
-
 import functools
 import os
 import queue
@@ -23,10 +21,9 @@ from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
 from queue import Empty
 from textwrap import indent
-from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Iterator, Sequence
 
 import numpy as np
-
 import torch
 import torch.nn as nn
 from tensordict import (
@@ -124,8 +121,6 @@ class _InterruptorManager(SyncManager):
     between processes.
     """
 
-    pass
-
 
 _InterruptorManager.register("_Interruptor", _Interruptor)
 
@@ -162,7 +157,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         policy_device: Any = NO_DEFAULT,
         env_maker: Any | None = None,
         env_maker_kwargs: dict | None = None,
-    ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
+    ) -> tuple[TensorDictModule, None | Callable[[], dict]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
         We want to copy the policy and then move the data there, not call policy.to(device).
@@ -245,7 +240,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         return policy, get_original_weights
 
     def update_policy_weights_(
-        self, policy_weights: Optional[TensorDictBase] = None
+        self, policy_weights: TensorDictBase | None = None
     ) -> None:
         """Updates the policy weights if the policy of the data collector and the trained policy live on different devices.
 
@@ -513,15 +508,11 @@ class SyncDataCollector(DataCollectorBase):
 
     def __init__(
         self,
-        create_env_fn: Union[
-            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]  # noqa: F821
-        ],  # noqa: F821
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ] = None,
+        create_env_fn: (
+            EnvBase | EnvCreator | Sequence[Callable[[], EnvBase]]  # noqa: F821
+        ),  # noqa: F821
+        policy: None
+        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
         frames_per_batch: int,
         total_frames: int = -1,
@@ -543,8 +534,8 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         trust_policy: bool = None,
-        compile_policy: bool | Dict[str, Any] | None = None,
-        cudagraph_policy: bool | Dict[str, Any] | None = None,
+        compile_policy: bool | dict[str, Any] | None = None,
+        cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
         **kwargs,
     ):
@@ -990,7 +981,7 @@ class SyncDataCollector(DataCollectorBase):
 
     # for RPC
     def update_policy_weights_(
-        self, policy_weights: Optional[TensorDictBase] = None
+        self, policy_weights: TensorDictBase | None = None
     ) -> None:
         super().update_policy_weights_(policy_weights)
 
@@ -1617,25 +1608,21 @@ class _MultiDataCollector(DataCollectorBase):
     def __init__(
         self,
         create_env_fn: Sequence[Callable[[], EnvBase]],
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ] = None,
+        policy: None
+        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
         frames_per_batch: int,
-        total_frames: Optional[int] = -1,
+        total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        create_env_kwargs: Optional[Sequence[dict]] = None,
+        create_env_kwargs: Sequence[dict] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: Optional[bool] = None,
+        postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
+        split_trajs: bool | None = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
@@ -1648,8 +1635,8 @@ class _MultiDataCollector(DataCollectorBase):
         replay_buffer: ReplayBuffer | None = None,
         replay_buffer_chunk: bool = True,
         trust_policy: bool = None,
-        compile_policy: bool | Dict[str, Any] | None = None,
-        cudagraph_policy: bool | Dict[str, Any] | None = None,
+        compile_policy: bool | dict[str, Any] | None = None,
+        cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
     ):
         self.closed = True
@@ -2086,7 +2073,7 @@ also that the state dict is synchronised across processes if needed."""
         self.reset()
         return seed
 
-    def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
+    def reset(self, reset_idx: Sequence[bool] | None = None) -> None:
         """Resets the environments to a new initial state.
 
         Args:
@@ -2282,7 +2269,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def update_policy_weights_(
-        self, policy_weights: Optional[TensorDictBase] = None
+        self, policy_weights: TensorDictBase | None = None
     ) -> None:
         super().update_policy_weights_(policy_weights)
 
@@ -2646,7 +2633,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def update_policy_weights_(
-        self, policy_weights: Optional[TensorDictBase] = None
+        self, policy_weights: TensorDictBase | None = None
     ) -> None:
         super().update_policy_weights_(policy_weights)
 
@@ -2654,7 +2641,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     def frames_per_batch_worker(self):
         return self.requested_frames_per_batch
 
-    def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
+    def _get_from_queue(self, timeout=None) -> tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
         use_buffers = self._use_buffers
         if self.replay_buffer is not None:
@@ -2745,7 +2732,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             del self.out_tensordicts
         return super()._shutdown_main()
 
-    def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
+    def reset(self, reset_idx: Sequence[bool] | None = None) -> None:
         super().reset(reset_idx)
         if self.queue_out.full():
             time.sleep(_TIMEOUT)  # wait until queue is empty
@@ -2900,25 +2887,20 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     def __init__(
         self,
         create_env_fn: Callable[[], EnvBase],
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ],
+        policy: None | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]),
         *,
         frames_per_batch: int,
-        total_frames: Optional[int] = -1,
+        total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        create_env_kwargs: Optional[Sequence[dict]] = None,
+        create_env_kwargs: Sequence[dict] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: Optional[bool] = None,
+        postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
+        split_trajs: bool | None = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
@@ -2977,15 +2959,15 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],  # noqa: F821
-    create_env_kwargs: Dict[str, Any],
+    create_env_fn: EnvBase | EnvCreator | Callable[[], EnvBase],  # noqa: F821
+    create_env_kwargs: dict[str, Any],
     policy: Callable[[TensorDictBase], TensorDictBase],
     max_frames_per_traj: int,
     frames_per_batch: int,
     reset_at_each_iter: bool,
-    storing_device: Optional[Union[torch.device, str, int]],
-    env_device: Optional[Union[torch.device, str, int]],
-    policy_device: Optional[Union[torch.device, str, int]],
+    storing_device: torch.device | str | int | None,
+    env_device: torch.device | str | int | None,
+    policy_device: torch.device | str | int | None,
     idx: int = 0,
     exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
     reset_when_done: bool = True,
