@@ -87,7 +87,6 @@ from torchrl.envs.utils import (
     make_composite_from_td,
     step_mdp,
 )
-from torchrl.objectives.value.functional import reward2go
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
@@ -8539,6 +8538,8 @@ class Reward2GoTransform(Transform):
     def _inv_apply_transform(
         self, reward: torch.Tensor, done: torch.Tensor
     ) -> torch.Tensor:
+        from torchrl.objectives.value.functional import reward2go
+
         return reward2go(reward, done, self.gamma)
 
     def set_container(self, container):
