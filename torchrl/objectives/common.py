@@ -21,7 +21,7 @@ from torch.nn import Parameter
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import set_recurrent_mode
+from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
 from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
