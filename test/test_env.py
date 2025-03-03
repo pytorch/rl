@@ -33,6 +33,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.nn import TensorDictModuleBase
+from tensordict.tensorclass import NonTensorStack
 from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
@@ -4577,12 +4578,13 @@ class TestLLMEnv:
         ],
     )
     @pytest.mark.parametrize("batched", [True, False])
+    @pytest.mark.parametrize("batch_size", [0, 4])
     @pytest.mark.parametrize("device", [None, "cpu"])
-    def test_llm_env(self, str2str, batched, stack_method, device):
+    def test_llm_env(self, str2str, batched, stack_method, device, batch_size):
         env = LLMEnv(str2str=str2str, device=device)
         if str2str:
             primer = DataLoadingPrimer(
-                dataloader=self.DummyDataLoader(),
+                dataloader=self.DummyDataLoader(batch_size=batch_size),
                 data_keys=["observation"],
                 example_data="a string!",
             )
@@ -4590,7 +4592,9 @@ class TestLLMEnv:
             if stack_method is None:
                 stack_method = as_padded_tensor
             primer = DataLoadingPrimer(
-                dataloader=self.DummyTensorDataLoader(padding=True),
+                dataloader=self.DummyTensorDataLoader(
+                    batch_size=batch_size, padding=True
+                ),
                 data_keys=["observation"],
                 data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],
                 stack_method=stack_method,
@@ -4601,6 +4605,7 @@ class TestLLMEnv:
         if batched:
             td = env.reset(TensorDict(batch_size=[3]))
             env.check_env_specs(break_when_any_done="both", tensordict=td)
+            r = env.rollout(10, tensordict=TensorDict(batch_size=[3]))
         else:
             env.check_env_specs(break_when_any_done="both")
 
@@ -4616,10 +4621,13 @@ class TestLLMEnv:
     )
     @pytest.mark.parametrize("batched", [True, False])
     @pytest.mark.parametrize("device", [None, "cpu"])
-    def test_llm_from_dataloader(self, str2str, batched, stack_method, device):
+    @pytest.mark.parametrize("batch_size", [0, 4])
+    def test_llm_from_dataloader(
+        self, str2str, batched, stack_method, device, batch_size
+    ):
         if str2str:
             kwargs = {
-                "dataloader": self.DummyDataLoader(),
+                "dataloader": self.DummyDataLoader(batch_size=batch_size),
                 "data_keys": ["observation"],
                 "example_data": "a string!",
             }
@@ -4627,7 +4635,9 @@ class TestLLMEnv:
             if stack_method is None:
                 stack_method = as_padded_tensor
             kwargs = {
-                "dataloader": self.DummyTensorDataLoader(padding=True),
+                "dataloader": self.DummyTensorDataLoader(
+                    padding=True, batch_size=batch_size
+                ),
                 "data_keys": ["observation"],
                 "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
                 "stack_method": stack_method,
@@ -4640,6 +4650,55 @@ class TestLLMEnv:
             env.check_env_specs(break_when_any_done="both", tensordict=td)
         else:
             env.check_env_specs(break_when_any_done="both")
+        if batch_size > 0:
+
+            def policy(td):
+                if str2str:
+                    if not td.shape:
+                        td["action"] = "<nothing>"
+                    else:
+                        td["action"] = NonTensorStack(
+                            *["<nothing>" for _ in range(td.shape[0])]
+                        )
+                else:
+                    td["action"] = torch.ones(td.shape + (1,), dtype=torch.int64)
+                return td
+
+            if batched:
+                # Tell the env that we want 3 sub-envs
+                r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[3]))
+                assert r.ndim == 2
+                if str2str:
+                    assert isinstance(r[0, 0]["observation"], str)
+                    assert isinstance(r[0, 1]["observation"], str)
+                    assert (
+                        r[0, 0]["observation"]
+                        == r[0, 1]["observation"][: -len(r[0, 0]["action"])]
+                    )
+                    assert (
+                        r[0, 1]["observation"]
+                        == r[0, 2]["observation"][: -len(r[0, 1]["action"])]
+                    )
+                    assert (
+                        r[-1, 0]["observation"]
+                        == r[-1, 1]["observation"][: -len(r[-1, 0]["action"])]
+                    )
+                    assert (
+                        r[-1, 1]["observation"]
+                        == r[-1, 2]["observation"][: -len(r[-1, 1]["action"])]
+                    )
+                else:
+                    assert (r[0, 0]["observation"] == r[0, 1]["observation"][:-1]).all()
+                    assert (r[0, 1]["observation"] == r[0, 2]["observation"][:-1]).all()
+                    assert (
+                        r[-1, 0]["observation"] == r[-1, 1]["observation"][:-1]
+                    ).all()
+                    assert (
+                        r[-1, 1]["observation"] == r[-1, 2]["observation"][:-1]
+                    ).all()
+            else:
+                r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[]))
+                assert r.ndim == 1
 
 
 if __name__ == "__main__":

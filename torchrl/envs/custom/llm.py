@@ -188,6 +188,14 @@ class LLMEnv(EnvBase):
         )
         return env.append_transform(primer)
 
+    @staticmethod
+    def _check_obs_act_and_cat(obs, action):
+        if not isinstance(obs, str):
+            raise TypeError(f"Observation must be a string, got {type(obs)}.")
+        if not isinstance(action, str):
+            raise TypeError(f"Action must be a string, got {type(action)}.")
+        return obs + action
+
     def _step(
         self,
         tensordict: TensorDictBase,
@@ -202,11 +210,14 @@ class LLMEnv(EnvBase):
                         "The tensordict is batchless, yet the action and/or observations are not "
                         f"strings but {type(action)} and {type(obs)}, respectivly."
                     )
-                observation = obs + action
+                observation = self._check_obs_act_and_cat(obs, action)
             else:
-                observation = [
-                    _obs + _action for (_obs, _action) in _zip_strict(obs, action)
-                ]
+                observation = NonTensorStack(
+                    *[
+                        self._check_obs_act_and_cat(_obs, _action)
+                        for (_obs, _action) in _zip_strict(obs, action)
+                    ]
+                )
         else:
             try:
                 obs: torch.Tensor = tensordict.get(self.observation_key)
