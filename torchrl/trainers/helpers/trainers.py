@@ -82,9 +82,7 @@ def make_trainer(
     loss_module: LossModule,
     recorder: EnvBase | None = None,
     target_net_updater: TargetNetUpdater | None = None,
-    policy_exploration: None | (
-        TensorDictModuleWrapper | TensorDictModule
-    ) = None,
+    policy_exploration: None | (TensorDictModuleWrapper | TensorDictModule) = None,
     replay_buffer: ReplayBuffer | None = None,
     logger: Logger | None = None,
     cfg: DictConfig = None,  # noqa: F821

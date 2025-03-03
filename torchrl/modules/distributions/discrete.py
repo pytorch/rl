@@ -128,9 +128,7 @@ class OneHotCategorical(D.Categorical):
         return -p_log_p.sum(-1)
 
     @_one_hot_wrapper(D.Categorical)
-    def sample(
-        self, sample_shape: torch.Size | Sequence | None = None
-    ) -> torch.Tensor:
+    def sample(self, sample_shape: torch.Size | Sequence | None = None) -> torch.Tensor:
         ...
 
     def rsample(self, sample_shape: torch.Size | Sequence = None) -> torch.Tensor:

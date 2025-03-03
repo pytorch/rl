@@ -250,9 +250,7 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: (
-        TensorDictModuleWrapper | ProbabilisticTensorDictSequential
-    ),
+    actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential),
     cfg: DictConfig,  # noqa: F821
     make_env_kwargs: dict | None = None,
 ) -> DataCollectorBase:
@@ -314,9 +312,7 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: (
-        TensorDictModuleWrapper | ProbabilisticTensorDictSequential
-    ),
+    actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential),
     cfg: DictConfig,  # noqa: F821
     make_env_kwargs: dict | None = None,
 ) -> DataCollectorBase:
