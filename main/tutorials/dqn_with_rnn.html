@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+8c9dc05) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
     </div>
     
 
@@ -510,7 +510,7 @@ current recurrent states in the TensorDict of the next state:</p>
 <p>As this figure shows, our environment populates the TensorDict with zeroed recurrent
 states which are read by the policy together with the observation to produce an
 action, and recurrent states that will be used for the next step.
-When the <a class="reference internal" href="../reference/generated/torchrl.envs.utils.step_mdp.html#torchrl.envs.utils.step_mdp" title="torchrl.envs.utils.step_mdp"><code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code></a> function is called, the recurrent states
+When the <code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code> function is called, the recurrent states
 from the next state are brought to the current TensorDict. Let’s see how this
 is implemented in practice.</p>
 <p>If you are running this in Google Colab, make sure you install the following dependencies:</p>
@@ -682,7 +682,7 @@ is the correct one.</p>
 as well as recurrent key names. The out_keys are preceded by a “next” prefix
 that indicates that they will need to be written in the “next” TensorDict.
 We use this convention (which can be overridden by passing the in_keys/out_keys
-arguments) to make sure that a call to <a class="reference internal" href="../reference/generated/torchrl.envs.utils.step_mdp.html#torchrl.envs.utils.step_mdp" title="torchrl.envs.utils.step_mdp"><code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code></a> will
+arguments) to make sure that a call to <code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code> will
 move the recurrent state to the root TensorDict, making it available to the
 RNN during the following call (see figure in the intro).</p>
 <p>As mentioned earlier, we have one more optional transform to add to our

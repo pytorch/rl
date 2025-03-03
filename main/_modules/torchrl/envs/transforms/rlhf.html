@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+8c9dc05) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
     </div>
     
 
@@ -423,16 +423,457 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">maybe_dense_stack</span><span class="p">,</span>
+    <span class="n">NestedKey</span><span class="p">,</span>
+    <span class="n">TensorDict</span><span class="p">,</span>
+    <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="n">unravel_key</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProbabilisticTensorDictModule</span><span class="p">,</span> <span class="n">TensorDictParams</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_seq_of_nested_key</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span><span class="p">,</span> <span class="n">is_seq_of_nested_key</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transform</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictPrimer</span><span class="p">,</span> <span class="n">Transform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_set_missing_tolerance</span><span class="p">,</span> <span class="n">_stateless_param</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">as_nested_tensor</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Stacks a list of tensordicts into a single tensordict with nested tensors.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        list_of_tensordicts (list[TensorDictBase]): A list of tensordicts to stack.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        TensorDictBase: A tensordict with nested tensors.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_as_nested_tensor</span><span class="p">(</span><span class="o">*</span><span class="n">list_of_tensors</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">as_nested_tensor</span><span class="p">(</span><span class="n">list_of_tensors</span><span class="p">,</span> <span class="n">layout</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">jagged</span><span class="p">)</span>
+
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">batch_size</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+        <span class="n">_as_nested_tensor</span><span class="p">,</span> <span class="o">*</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">as_padded_tensor</span><span class="p">(</span>
+    <span class="n">list_of_tensordicts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">]],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stack_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Stacks a list of tensordicts into a single tensordict with padded tensors.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        list_of_tensordicts (list[[TensorDictBase]]): A list of tensordicts to stack.</span>
+<span class="sd">        dim (int, optional): The dimension along which to pad. Defaults to 0.</span>
+<span class="sd">        stack_dim (int, optional): The dimension along which to stack. Defaults to 0.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        TensorDictBase: A tensordict with padded tensors.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_stack_tensors</span><span class="p">(</span><span class="o">*</span><span class="n">list_of_tensors</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">dim</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;dim must be &gt;= 0&quot;</span><span class="p">)</span>
+        <span class="n">max_length</span> <span class="o">=</span> <span class="nb">max</span><span class="p">([</span><span class="n">t</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">dim</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">list_of_tensors</span><span class="p">])</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">pad_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">):</span>
+            <span class="n">padding_length</span> <span class="o">=</span> <span class="n">max_length</span> <span class="o">-</span> <span class="n">tensor</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">dim</span><span class="p">)</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">s</span> <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="n">dim</span> <span class="k">else</span> <span class="n">padding_length</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="p">]</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">tensor</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">shape</span><span class="p">),</span> <span class="n">tensor</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="n">dim</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">pad_tensor</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">list_of_tensors</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="n">stack_dim</span><span class="p">)</span>
+
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">batch_size</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">))</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+        <span class="n">_stack_tensors</span><span class="p">,</span> <span class="o">*</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<div class="viewcode-block" id="DataLoadingPrimer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.DataLoadingPrimer.html#torchrl.envs.transforms.DataLoadingPrimer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DataLoadingPrimer</span><span class="p">(</span><span class="n">TensorDictPrimer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A primer that loads data from a dataloader and converts it into a tensordict using ``stack_method``.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        dataloader (Iterable[Any]): The dataloader to load data from.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None.</span>
+<span class="sd">        data_keys (List[NestedKey] | None, optional): The keys to use for each item in the dataloader. Defaults to None.</span>
+<span class="sd">        data_specs (List[TensorSpec] | None, optional): The specs to use for each item in the dataloader. Defaults to None.</span>
+<span class="sd">        example_data (Any, optional): Example data to use for initializing the primer. Defaults to None.</span>
+<span class="sd">        stack_method (Callable[[Any], Any] | Literal[&quot;as_nested_tensor&quot;, &quot;as_padded_tensor&quot;], optional): The method to use for stacking the data. Defaults to ``maybe_dense_stack``.</span>
+<span class="sd">        use_buffer (bool, optional): Whether to use a buffer to load the batches. When an environment has a batch-size</span>
+<span class="sd">            that differs from the dataloader&#39;s, or when partial resets are to be expected, using a buffer to store data</span>
+<span class="sd">            ensures that `next()` is called on the dataloader only when necessary, and that elements of the dataset</span>
+<span class="sd">            are loaded in order.</span>
+<span class="sd">            Defaults to ``True`` whenever the batch-size of the dataloader is greater than 1.</span>
+<span class="sd">        auto_batch_size (bool, optional): If ``True`` (default if `dataloader.batch_size &gt; 0`), the batch size of the</span>
+<span class="sd">            tensordict returned by the transform will be automatically determined assuming that there is a single batch</span>
+<span class="sd">            dimension.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        dataloader (Iterable[Any]): The dataloader to load data from.</span>
+<span class="sd">        endless_dataloader (Iterable[Any]): An endless iterator over the dataloader.</span>
+<span class="sd">        data_keys (List[NestedKey]): The keys to use for each item in the dataloader.</span>
+<span class="sd">        stack_method (Callable[[Any], Any]): The method to use for stacking the data.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.envs.LLMEnv` and :class:`~torchrl.envs.LLMEnv.from_dataloader`.</span>
+
+<span class="sd">    Example of a dataloader yielding strings:</span>
+<span class="sd">        &gt;&gt;&gt; import random</span>
+<span class="sd">        &gt;&gt;&gt; import string</span>
+<span class="sd">        &gt;&gt;&gt; import tensordict as td</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import Unbounded</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import DataLoadingPrimer, LLMEnv</span>
+<span class="sd">        &gt;&gt;&gt; td.set_capture_non_tensor_stack(False).set()</span>
+<span class="sd">        &gt;&gt;&gt; class DummyDataLoader:</span>
+<span class="sd">        ...     &#39;&#39;&#39;A dummy dataloader that generates random strings.&#39;&#39;&#39;</span>
+<span class="sd">        ...     def __init__(self, batch_size: int = 0):</span>
+<span class="sd">        ...         self.batch_size = batch_size</span>
+<span class="sd">        ...     def generate_random_string(self, length: int = 10) -. str:</span>
+<span class="sd">        ...         &#39;&#39;&#39;Generate a random string of a given length.&#39;&#39;&#39;</span>
+<span class="sd">        ...         return &#39;&#39;.join(random.choice(string.ascii_lowercase) for _ in range(length))</span>
+<span class="sd">        ...     def __iter__(self):</span>
+<span class="sd">        ...         return self</span>
+<span class="sd">        ...     def __next__(self):</span>
+<span class="sd">        ...         if self.batch_size == 0:</span>
+<span class="sd">        ...             return self.generate_random_string()</span>
+<span class="sd">        ...         else:</span>
+<span class="sd">        ...             return [self.generate_random_string() for _ in range(self.batch_size)]</span>
+<span class="sd">        &gt;&gt;&gt; # Create an LLM environment with string-to-string input/output.</span>
+<span class="sd">        &gt;&gt;&gt; env = LLMEnv(str2str=True)</span>
+<span class="sd">        &gt;&gt;&gt; # Append a DataLoadingPrimer to the environment.</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        &gt;&gt;&gt;     DataLoadingPrimer(</span>
+<span class="sd">        &gt;&gt;&gt;         dataloader=DummyDataLoader(),</span>
+<span class="sd">        &gt;&gt;&gt;         data_keys=[&quot;observation&quot;],</span>
+<span class="sd">        &gt;&gt;&gt;         example_data=&quot;a string!&quot;,</span>
+<span class="sd">        &gt;&gt;&gt;     )</span>
+<span class="sd">        &gt;&gt;&gt; )</span>
+<span class="sd">        &gt;&gt;&gt; # Test the environment.</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rand_action(TensorDict()))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: NonTensorData(data=a string, batch_size=torch.Size([]), device=None)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(3))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: NonTensorStack(</span>
+<span class="sd">                    [&#39;a string&#39;, &#39;a string&#39;, &#39;a string&#39;],</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: NonTensorStack(</span>
+<span class="sd">                            [&#39;zxwvupirska string&#39;, &#39;zxwvupirska stringa string...,</span>
+<span class="sd">                            batch_size=torch.Size([3]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: NonTensorStack(</span>
+<span class="sd">                    [&#39;zxwvupirsk&#39;, &#39;zxwvupirska string&#39;, &#39;zxwvupirska ...,</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; # Roll out the environment with a specific initial state.</span>
+<span class="sd">        &gt;&gt;&gt; init_state = env.reset(TensorDict(batch_size=[3]))</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(3, auto_reset=False, tensordict=init_state))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: NonTensorStack(</span>
+<span class="sd">                    [[&#39;a string&#39;, &#39;a string&#39;, &#39;a string&#39;], [&#39;a string&#39;...,</span>
+<span class="sd">                    batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: NonTensorStack(</span>
+<span class="sd">                            [[array([&#39;nngcmflsana string&#39;, &#39;vrrbnhzpmga string...,</span>
+<span class="sd">                            batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: NonTensorStack(</span>
+<span class="sd">                    [[&#39;nngcmflsan&#39;, array([&#39;nngcmflsana string&#39;, &#39;vrrb...,</span>
+<span class="sd">                    batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([3, 3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+
+<span class="sd">    Example of dataloader yielding tensors:</span>
+<span class="sd">        &gt;&gt;&gt; import random</span>
+<span class="sd">        &gt;&gt;&gt; import string</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; import tensordict as td</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import Unbounded</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import DataLoadingPrimer, LLMEnv</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; td.set_capture_non_tensor_stack(False).set()</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; class DummyTensorDataLoader:</span>
+<span class="sd">        ...     &#39;&#39;&#39;A dummy dataloader that generates tensors of random int64 values.&#39;&#39;&#39;</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def __init__(self, batch_size: int = 0, max_length: int = 10, padding: bool = False):</span>
+<span class="sd">        ...         &#39;&#39;&#39;</span>
+<span class="sd">        ...         Args:</span>
+<span class="sd">        ...             batch_size (int, optional): The batch size of the generated tensors. Defaults to 0.</span>
+<span class="sd">        ...             max_length (int, optional): The maximum length of the generated tensors. Defaults to 10.</span>
+<span class="sd">        ...             padding (bool, optional): Whether to pad the tensors to the maximum length. Defaults to False.</span>
+<span class="sd">        ...         &#39;&#39;&#39;</span>
+<span class="sd">        ...         self.batch_size = batch_size</span>
+<span class="sd">        ...         self.max_length = max_length</span>
+<span class="sd">        ...         self.padding = padding</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def generate_random_tensor(self) -. torch.Tensor:</span>
+<span class="sd">        ...         &#39;&#39;&#39;Generate a tensor of random int64 values.&#39;&#39;&#39;</span>
+<span class="sd">        ...         length = random.randint(1, self.max_length)</span>
+<span class="sd">        ...         return torch.tensor([random.randint(0, 100) for _ in range(length)], dtype=torch.int64)</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def pad_tensor(self, tensor: torch.Tensor) -. torch.Tensor:</span>
+<span class="sd">        ...         &#39;&#39;&#39;Pad a tensor to the maximum length.&#39;&#39;&#39;</span>
+<span class="sd">        ...         padding_length = self.max_length - len(tensor)</span>
+<span class="sd">        ...         return torch.cat((torch.zeros(padding_length, dtype=torch.int64), tensor))</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def __iter__(self):</span>
+<span class="sd">        ...         return self</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def __next__(self):</span>
+<span class="sd">        ...         if self.batch_size == 0:</span>
+<span class="sd">        ...             tensor = self.generate_random_tensor()</span>
+<span class="sd">        ...             return self.pad_tensor(tensor) if self.padding else tensor</span>
+<span class="sd">        ...         else:</span>
+<span class="sd">        ...             tensors = [self.generate_random_tensor() for _ in range(self.batch_size)]</span>
+<span class="sd">        ...             if self.padding:</span>
+<span class="sd">        ...                 tensors = [self.pad_tensor(tensor) for tensor in tensors]</span>
+<span class="sd">        ...                 return torch.stack(tensors)</span>
+<span class="sd">        ...             else:</span>
+<span class="sd">        ...                 return tensors</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create an LLM environment with non-string input/output and append a DataLoadingPrimer.</span>
+<span class="sd">        &gt;&gt;&gt; env = LLMEnv(str2str=False)</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        &gt;&gt;&gt;     DataLoadingPrimer(</span>
+<span class="sd">        &gt;&gt;&gt;         dataloader=DummyTensorDataLoader(),</span>
+<span class="sd">        &gt;&gt;&gt;         data_keys=[&quot;observation&quot;],</span>
+<span class="sd">        &gt;&gt;&gt;         data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],</span>
+<span class="sd">        &gt;&gt;&gt;     )</span>
+<span class="sd">        &gt;&gt;&gt; )</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rand_action(TensorDict()))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(3))</span>
+<span class="sd">        LazyStackedTensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: LazyStackedTensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: Tensor(shape=torch.Size([3, -1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    exclusive_fields={</span>
+<span class="sd">                    },</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False,</span>
+<span class="sd">                    stack_dim=0),</span>
+<span class="sd">                observation: Tensor(shape=torch.Size([3, -1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            exclusive_fields={</span>
+<span class="sd">            },</span>
+<span class="sd">            batch_size=torch.Size([3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False,</span>
+<span class="sd">            stack_dim=0)</span>
+<span class="sd">        &gt;&gt;&gt; # Create an LLM environment with padded tensor input/output and append a DataLoadingPrimer.</span>
+<span class="sd">        &gt;&gt;&gt; env = LLMEnv(str2str=False)</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        &gt;&gt;&gt;     DataLoadingPrimer(</span>
+<span class="sd">        &gt;&gt;&gt;         dataloader=DummyTensorDataLoader(padding=True),</span>
+<span class="sd">        &gt;&gt;&gt;         data_keys=[&quot;observation&quot;],</span>
+<span class="sd">        &gt;&gt;&gt;         data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],</span>
+<span class="sd">        &gt;&gt;&gt;         stack_method=&quot;as_padded_tensor&quot;,</span>
+<span class="sd">        &gt;&gt;&gt;     )</span>
+<span class="sd">        &gt;&gt;&gt; )</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(3, auto_reset=False, tensordict=env.reset(TensorDict(batch_size=[3]))))</span>
+<span class="sd">        LazyStackedTensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: LazyStackedTensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: Tensor(shape=torch.Size([3, 3, -1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    exclusive_fields={</span>
+<span class="sd">                    },</span>
+<span class="sd">                    batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False,</span>
+<span class="sd">                    stack_dim=1),</span>
+<span class="sd">                observation: Tensor(shape=torch.Size([3, 3, -1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            exclusive_fields={</span>
+<span class="sd">            },</span>
+<span class="sd">            batch_size=torch.Size([3, 3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False,</span>
+<span class="sd">            stack_dim=1)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataloader</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">data_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">data_specs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">example_data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stack_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">,</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">use_buffer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">auto_batch_size</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataloader</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">use_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">use_buffer</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_buffer</span> <span class="o">=</span> <span class="n">use_buffer</span>
+        <span class="c1"># No auto_batch_size if we know we have a single element</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span> <span class="o">=</span> <span class="n">auto_batch_size</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;dataloader&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endless_dataloader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_endless_iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">primers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">data_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">data_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">data_specs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">data_specs</span> <span class="o">=</span> <span class="p">[</span><span class="n">NonTensor</span><span class="p">(</span><span class="n">example_data</span><span class="o">=</span><span class="n">example_data</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">())]</span>
+            <span class="n">primers</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="n">data_key</span><span class="p">:</span> <span class="n">data_spec</span>
+                    <span class="k">for</span> <span class="n">data_key</span><span class="p">,</span> <span class="n">data_spec</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">data_keys</span><span class="p">,</span> <span class="n">data_specs</span><span class="p">)</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span> <span class="o">=</span> <span class="n">data_keys</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">primers</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">stack_method</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">stack_method</span> <span class="o">=</span> <span class="n">maybe_dense_stack</span>
+        <span class="k">elif</span> <span class="n">stack_method</span> <span class="o">==</span> <span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">:</span>
+            <span class="n">stack_method</span> <span class="o">=</span> <span class="n">as_nested_tensor</span>
+        <span class="k">elif</span> <span class="n">stack_method</span> <span class="o">==</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">:</span>
+            <span class="n">stack_method</span> <span class="o">=</span> <span class="n">as_padded_tensor</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">stack_method</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown stack_method=</span><span class="si">{</span><span class="n">stack_method</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_method</span> <span class="o">=</span> <span class="n">stack_method</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
+            <span class="n">default_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_load_from_dataloader</span><span class="p">,</span>
+            <span class="n">reset_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">expand_specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">single_default_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">call_before_env_reset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_buffer</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_endless_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="n">obj</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_from_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads a single element from the dataloader, or alternatively from the buffer.</span>
+
+<span class="sd">        If `reset` is passed, the one element per reset will be loaded.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">reset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">reset</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;reset must have at least one True value.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">reset</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_method</span><span class="p">(</span>
+                    <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_load_from_dataloader</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">reset</span><span class="o">.</span><span class="n">sum</span><span class="p">())]</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_buffer</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">endless_dataloader</span><span class="p">)</span>
+        <span class="c1"># Some heuristic here:</span>
+        <span class="c1"># if data is a map, assume its keys match the keys in spec</span>
+        <span class="c1"># TODO: one could rename the keys too</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
+                <span class="n">data</span><span class="p">,</span> <span class="n">auto_batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span><span class="p">,</span> <span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
+                <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">val</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span><span class="p">,</span> <span class="n">data</span><span class="p">)},</span>
+                <span class="n">auto_batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span><span class="p">,</span>
+                <span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
+                <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span> <span class="n">data</span><span class="p">},</span>
+                <span class="n">auto_batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span><span class="p">,</span>
+                <span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unrecognized data type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2"> with keys </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_buffer</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">out</span></div>
 
 
 <div class="viewcode-block" id="KLRewardTransform"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.KLRewardTransform.html#torchrl.envs.transforms.KLRewardTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">KLRewardTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>

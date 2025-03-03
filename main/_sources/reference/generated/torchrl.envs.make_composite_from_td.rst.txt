@@ -1,4 +1,4 @@
-﻿.. currentmodule:: torchrl.envs.utils
+﻿.. currentmodule:: torchrl.envs
 
 
 make_composite_from_td

@@ -157,7 +157,7 @@ of this algorithm.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 165-217
+.. GENERATED FROM PYTHON SOURCE LINES 164-216
 
 Let's get started with the various pieces we need for our algorithm:
 
@@ -212,7 +212,7 @@ In practice, our environment builder has two arguments:
   the :class:`~torchrl.envs.ObservationNorm` transform.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-266
+.. GENERATED FROM PYTHON SOURCE LINES 216-265
 
 .. code-block:: Python
 
@@ -266,7 +266,7 @@ In practice, our environment builder has two arguments:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 267-278
+.. GENERATED FROM PYTHON SOURCE LINES 266-277
 
 Compute normalizing constants
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -280,7 +280,7 @@ dimensions must be reduced, and the ``keep_dims`` parameter to ensure that
 not all dimensions disappear in the process:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 278-294
+.. GENERATED FROM PYTHON SOURCE LINES 277-293
 
 .. code-block:: Python
 
@@ -301,7 +301,7 @@ not all dimensions disappear in the process:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 295-317
+.. GENERATED FROM PYTHON SOURCE LINES 294-316
 
 Building the model (Deep Q-network)
 -----------------------------------
@@ -326,7 +326,7 @@ values, pick up the one with the maximum value and write all those results
 in the input :class:`tensordict.TensorDict`.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 317-361
+.. GENERATED FROM PYTHON SOURCE LINES 316-360
 
 .. code-block:: Python
 
@@ -375,7 +375,7 @@ in the input :class:`tensordict.TensorDict`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 362-381
+.. GENERATED FROM PYTHON SOURCE LINES 361-380
 
 Collecting and storing data
 ---------------------------
@@ -397,7 +397,7 @@ first batch of data is passed to it.
 The only requirement of this storage is that the data passed to it at write
 time must always have the same shape.
 
-.. GENERATED FROM PYTHON SOURCE LINES 381-396
+.. GENERATED FROM PYTHON SOURCE LINES 380-395
 
 .. code-block:: Python
 
@@ -417,7 +417,7 @@ time must always have the same shape.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 397-432
+.. GENERATED FROM PYTHON SOURCE LINES 396-431
 
 Data collector
 ~~~~~~~~~~~~~~
@@ -455,7 +455,7 @@ we collect won't sit on the same device each time, which is something that
 out training loop must account for. For simplicity, we set the devices to
 the same value for all sub-collectors.
 
-.. GENERATED FROM PYTHON SOURCE LINES 432-468
+.. GENERATED FROM PYTHON SOURCE LINES 431-467
 
 .. code-block:: Python
 
@@ -496,7 +496,7 @@ the same value for all sub-collectors.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 469-486
+.. GENERATED FROM PYTHON SOURCE LINES 468-485
 
 Loss function
 -------------
@@ -516,7 +516,7 @@ This is a powerful trick (known as "Double Q-Learning") that is ubiquitous
 in similar algorithms.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 486-495
+.. GENERATED FROM PYTHON SOURCE LINES 485-494
 
 .. code-block:: Python
 
@@ -530,7 +530,7 @@ in similar algorithms.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 496-502
+.. GENERATED FROM PYTHON SOURCE LINES 495-501
 
 Hyperparameters
 ---------------
@@ -539,7 +539,7 @@ Let's start with our hyperparameters. The following setting should work well
 in practice, and the performance of the algorithm should hopefully not be
 too sensitive to slight variations of these.
 
-.. GENERATED FROM PYTHON SOURCE LINES 502-510
+.. GENERATED FROM PYTHON SOURCE LINES 501-509
 
 .. code-block:: Python
 
@@ -552,12 +552,12 @@ too sensitive to slight variations of these.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 511-513
+.. GENERATED FROM PYTHON SOURCE LINES 510-512
 
 Optimizer
 ~~~~~~~~~
 
-.. GENERATED FROM PYTHON SOURCE LINES 513-523
+.. GENERATED FROM PYTHON SOURCE LINES 512-522
 
 .. code-block:: Python
 
@@ -572,33 +572,33 @@ Optimizer
     n_optim = 8
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 524-527
+.. GENERATED FROM PYTHON SOURCE LINES 523-526
 
 DQN parameters
 ~~~~~~~~~~~~~~
 gamma decay factor
 
-.. GENERATED FROM PYTHON SOURCE LINES 527-529
+.. GENERATED FROM PYTHON SOURCE LINES 526-528
 
 .. code-block:: Python
 
     gamma = 0.99
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 530-533
+.. GENERATED FROM PYTHON SOURCE LINES 529-532
 
 Smooth target network update decay parameter.
 This loosely corresponds to a 1/tau interval with hard target network
 update
 
-.. GENERATED FROM PYTHON SOURCE LINES 533-535
+.. GENERATED FROM PYTHON SOURCE LINES 532-534
 
 .. code-block:: Python
 
     tau = 0.02
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 536-549
+.. GENERATED FROM PYTHON SOURCE LINES 535-548
 
 Data collection and replay buffer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -614,62 +614,62 @@ However, one can easily get the same restriction on number of episodes by
 breaking the training loop when a certain number
 episodes has been collected.
 
-.. GENERATED FROM PYTHON SOURCE LINES 549-551
+.. GENERATED FROM PYTHON SOURCE LINES 548-550
 
 .. code-block:: Python
 
     total_frames = 5_000  # 500000
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 552-553
+.. GENERATED FROM PYTHON SOURCE LINES 551-552
 
 Random frames used to initialize the replay buffer.
 
-.. GENERATED FROM PYTHON SOURCE LINES 553-555
+.. GENERATED FROM PYTHON SOURCE LINES 552-554
 
 .. code-block:: Python
 
     init_random_frames = 100  # 1000
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 556-557
+.. GENERATED FROM PYTHON SOURCE LINES 555-556
 
 Frames in each batch collected.
 
-.. GENERATED FROM PYTHON SOURCE LINES 557-559
+.. GENERATED FROM PYTHON SOURCE LINES 556-558
 
 .. code-block:: Python
 
     frames_per_batch = 32  # 128
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 560-561
+.. GENERATED FROM PYTHON SOURCE LINES 559-560
 
 Frames sampled from the replay buffer at each optimization step
 
-.. GENERATED FROM PYTHON SOURCE LINES 561-563
+.. GENERATED FROM PYTHON SOURCE LINES 560-562
 
 .. code-block:: Python
 
     batch_size = 32  # 256
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 564-565
+.. GENERATED FROM PYTHON SOURCE LINES 563-564
 
 Size of the replay buffer in terms of frames
 
-.. GENERATED FROM PYTHON SOURCE LINES 565-567
+.. GENERATED FROM PYTHON SOURCE LINES 564-566
 
 .. code-block:: Python
 
     buffer_size = min(total_frames, 100000)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 568-569
+.. GENERATED FROM PYTHON SOURCE LINES 567-568
 
 Number of environments run in parallel in each data collector
 
-.. GENERATED FROM PYTHON SOURCE LINES 569-572
+.. GENERATED FROM PYTHON SOURCE LINES 568-571
 
 .. code-block:: Python
 
@@ -677,7 +677,7 @@ Number of environments run in parallel in each data collector
     num_collectors = 2  # 4
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 573-580
+.. GENERATED FROM PYTHON SOURCE LINES 572-579
 
 Environment and exploration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -687,7 +687,7 @@ exploration.
 Since our policy is deterministic, exploration is crucial: without it, the
 only source of randomness would be the environment reset.
 
-.. GENERATED FROM PYTHON SOURCE LINES 580-584
+.. GENERATED FROM PYTHON SOURCE LINES 579-583
 
 .. code-block:: Python
 
@@ -696,19 +696,19 @@ only source of randomness would be the environment reset.
     eps_greedy_val_env = 0.005
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 585-587
+.. GENERATED FROM PYTHON SOURCE LINES 584-586
 
 To speed up learning, we set the bias of the last layer of our value network
 to a predefined value (this is not mandatory)
 
-.. GENERATED FROM PYTHON SOURCE LINES 587-589
+.. GENERATED FROM PYTHON SOURCE LINES 586-588
 
 .. code-block:: Python
 
     init_bias = 2.0
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 590-595
+.. GENERATED FROM PYTHON SOURCE LINES 589-594
 
 .. note::
   For fast rendering of the tutorial ``total_frames`` hyperparameter
@@ -716,7 +716,7 @@ to a predefined value (this is not mandatory)
   value e.g. 500000
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 597-614
+.. GENERATED FROM PYTHON SOURCE LINES 596-613
 
 Building a Trainer
 ------------------
@@ -736,7 +736,7 @@ following keyword-only arguments:
   the total number of frames (budget) is fixed but the frame-skip is
   variable.
 
-.. GENERATED FROM PYTHON SOURCE LINES 614-637
+.. GENERATED FROM PYTHON SOURCE LINES 613-636
 
 .. code-block:: Python
 
@@ -764,12 +764,12 @@ following keyword-only arguments:
     warnings.warn(f"log dir: {logger.experiment.log_dir}")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 638-640
+.. GENERATED FROM PYTHON SOURCE LINES 637-639
 
 We can control how often the scalars should be logged. Here we set this
 to a low value as our training loop is short:
 
-.. GENERATED FROM PYTHON SOURCE LINES 640-654
+.. GENERATED FROM PYTHON SOURCE LINES 639-653
 
 .. code-block:: Python
 
@@ -788,7 +788,7 @@ to a low value as our training loop is short:
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 655-666
+.. GENERATED FROM PYTHON SOURCE LINES 654-665
 
 Registering hooks
 ~~~~~~~~~~~~~~~~~
@@ -802,7 +802,7 @@ Registering hooks can be achieved in two separate ways:
   requires 3 hooks (``extend``, ``sample`` and ``update_priority``) which
   can be cumbersome to implement.
 
-.. GENERATED FROM PYTHON SOURCE LINES 666-686
+.. GENERATED FROM PYTHON SOURCE LINES 665-685
 
 .. code-block:: Python
 
@@ -827,12 +827,12 @@ Registering hooks can be achieved in two separate ways:
     recorder.register(trainer)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 687-689
+.. GENERATED FROM PYTHON SOURCE LINES 686-688
 
 The exploration module epsilon factor is also annealed:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 689-692
+.. GENERATED FROM PYTHON SOURCE LINES 688-691
 
 .. code-block:: Python
 
@@ -840,7 +840,7 @@ The exploration module epsilon factor is also annealed:
     trainer.register_op("post_steps", actor_explore[1].step, frames=frames_per_batch)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 693-701
+.. GENERATED FROM PYTHON SOURCE LINES 692-700
 
 - Any callable (including :class:`~torchrl.trainers.TrainerHookBase`
   subclasses) can be registered using :meth:`~torchrl.trainers.Trainer.register_op`.
@@ -851,14 +851,14 @@ The exploration module epsilon factor is also annealed:
   for a detailed description of the trainer hooks.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 701-703
+.. GENERATED FROM PYTHON SOURCE LINES 700-702
 
 .. code-block:: Python
 
     trainer.register_op("post_optim", target_net_updater.step)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 704-711
+.. GENERATED FROM PYTHON SOURCE LINES 703-710
 
 We can log the training rewards too. Note that this is of limited interest
 with CartPole, as rewards are always 1. The discounted sum of rewards is
@@ -868,7 +868,7 @@ This will be reflected by the `total_rewards` value displayed in the
 progress bar.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 711-714
+.. GENERATED FROM PYTHON SOURCE LINES 710-713
 
 .. code-block:: Python
 
@@ -876,7 +876,7 @@ progress bar.
     log_reward.register(trainer)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 715-724
+.. GENERATED FROM PYTHON SOURCE LINES 714-723
 
 .. note::
   It is possible to link multiple optimizers to the trainer if needed.
@@ -888,18 +888,18 @@ Here we are, ready to train our algorithm! A simple call to
 ``trainer.train()`` and we'll be getting our results logged in.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 724-726
+.. GENERATED FROM PYTHON SOURCE LINES 723-725
 
 .. code-block:: Python
 
     trainer.train()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 727-728
+.. GENERATED FROM PYTHON SOURCE LINES 726-727
 
 We can now quickly check the CSVs with the results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 728-760
+.. GENERATED FROM PYTHON SOURCE LINES 727-759
 
 .. code-block:: Python
 
@@ -921,7 +921,7 @@ We can now quickly check the CSVs with the results.
                     csv_files.append(os.path.join(dirpath, file))
         for csv_file in csv_files:
             output_str += f"File: {csv_file}\n"
-            with open(csv_file, "r") as f:
+            with open(csv_file) as f:
                 for i, line in enumerate(f):
                     if i == 10:
                         break
@@ -936,7 +936,7 @@ We can now quickly check the CSVs with the results.
     del trainer
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 761-783
+.. GENERATED FROM PYTHON SOURCE LINES 760-782
 
 Conclusion and possible improvements
 ------------------------------------

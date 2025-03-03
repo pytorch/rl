@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.datasets
-
-
-D4RLExperienceReplay
-====================
-
-.. autoclass:: D4RLExperienceReplay
-    :members:
-    :inherited-members:

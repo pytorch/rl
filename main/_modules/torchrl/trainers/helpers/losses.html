@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+8c9dc05) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
     </div>
     
 
@@ -423,9 +423,10 @@
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributionalDQNLoss</span><span class="p">,</span> <span class="n">DQNLoss</span><span class="p">,</span> <span class="n">HardUpdate</span><span class="p">,</span> <span class="n">SoftUpdate</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LossModule</span>
@@ -433,8 +434,8 @@
 
 
 <div class="viewcode-block" id="make_target_updater"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_target_updater.html#torchrl.trainers.helpers.make_target_updater">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_target_updater</span><span class="p">(</span>
-    <span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">,</span> <span class="n">loss_module</span><span class="p">:</span> <span class="n">LossModule</span>  <span class="c1"># noqa: F821</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TargetNetUpdater</span><span class="p">]:</span>
+    <span class="n">cfg</span><span class="p">:</span> <span class="n">DictConfig</span><span class="p">,</span> <span class="n">loss_module</span><span class="p">:</span> <span class="n">LossModule</span>  <span class="c1"># noqa: F821</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TargetNetUpdater</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Builds a target network weight update object.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">loss</span> <span class="o">==</span> <span class="s2">&quot;double&quot;</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">cfg</span><span class="o">.</span><span class="n">hard_update</span><span class="p">:</span>
@@ -456,7 +457,7 @@
     <span class="k">return</span> <span class="n">target_net_updater</span></div>
 
 
-<div class="viewcode-block" id="make_dqn_loss"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_dqn_loss.html#torchrl.trainers.helpers.make_dqn_loss">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_dqn_loss</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">DQNLoss</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TargetNetUpdater</span><span class="p">]]:</span>
+<div class="viewcode-block" id="make_dqn_loss"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_dqn_loss.html#torchrl.trainers.helpers.make_dqn_loss">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_dqn_loss</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DQNLoss</span><span class="p">,</span> <span class="n">TargetNetUpdater</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Builds the DQN loss module.&quot;&quot;&quot;</span>
     <span class="n">loss_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">distributional</span><span class="p">:</span>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+8c9dc05) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
     </div>
     
 
@@ -428,15 +428,19 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Binary</span><span class="p">,</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Categorical</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span><span class="p">,</span> <span class="n">Unbounded</span>
-
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Binary</span><span class="p">,</span>
+    <span class="n">Bounded</span><span class="p">,</span>
+    <span class="n">Categorical</span><span class="p">,</span>
+    <span class="n">Composite</span><span class="p">,</span>
+    <span class="n">NonTensor</span><span class="p">,</span>
+    <span class="n">Unbounded</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_EnvPostInit</span>
-
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_classproperty</span>
 
 
@@ -470,10 +474,8 @@
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">include_hash_inv</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="p">(</span>
-                    <span class="s2">&quot;&#39;include_hash_inv=True&#39; can only be set if&quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;&#39;include_hash=True&#39;, but got &#39;include_hash=</span><span class="si">{</span><span class="n">include_hash</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
-                <span class="p">)</span>
+                <span class="s2">&quot;&#39;include_hash_inv=True&#39; can only be set if&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;&#39;include_hash=True&#39;, but got &#39;include_hash=</span><span class="si">{</span><span class="n">include_hash</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mask_actions&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionMask</span>
@@ -618,7 +620,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">_hash_table</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_hash_table</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="n">_PGN_RESTART</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;[Event &quot;?&quot;]</span>
 <span class="s2">[Site &quot;?&quot;]</span>
 <span class="s2">[Date &quot;????.??.??&quot;]</span>
@@ -652,7 +654,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_legal_moves_to_index</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">board</span><span class="p">:</span> <span class="s2">&quot;chess.Board&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">board</span><span class="p">:</span> <span class="n">chess</span><span class="o">.</span><span class="n">Board</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
         <span class="n">return_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">pad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
@@ -778,16 +780,12 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_is_done</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">board</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">board</span><span class="o">.</span><span class="n">is_game_over</span><span class="p">()</span> <span class="o">|</span> <span class="n">board</span><span class="o">.</span><span class="n">is_fifty_moves</span><span class="p">()</span>
 
-<div class="viewcode-block" id="ChessEnv.all_actions"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.all_actions">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">all_actions</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="viewcode-block" id="ChessEnv.all_actions"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv.all_actions">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">all_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_actions</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="p">(</span>
-                    <span class="s2">&quot;Cannot generate legal actions since &#39;mask_actions=False&#39; was &quot;</span>
-                    <span class="s2">&quot;set. If you really want to generate all actions, not just &quot;</span>
-                    <span class="s2">&quot;legal ones, call &#39;env.full_action_spec.enumerate()&#39;.&quot;</span>
-                <span class="p">)</span>
+                <span class="s2">&quot;Cannot generate legal actions since &#39;mask_actions=False&#39; was &quot;</span>
+                <span class="s2">&quot;set. If you really want to generate all actions, not just &quot;</span>
+                <span class="s2">&quot;legal ones, call &#39;env.full_action_spec.enumerate()&#39;.&quot;</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">all_actions</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
 
@@ -901,8 +899,8 @@
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_pgn_to_board</span><span class="p">(</span>
-        <span class="bp">cls</span><span class="p">,</span> <span class="n">pgn_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">board</span><span class="p">:</span> <span class="s2">&quot;chess.Board&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># noqa: F821</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;chess.Board&quot;</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">pgn_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">board</span><span class="p">:</span> <span class="n">chess</span><span class="o">.</span><span class="n">Board</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># noqa: F821</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">chess</span><span class="o">.</span><span class="n">Board</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
         <span class="n">pgn_io</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(</span><span class="n">pgn_string</span><span class="p">)</span>
         <span class="n">game</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">pgn</span><span class="o">.</span><span class="n">read_game</span><span class="p">(</span><span class="n">pgn_io</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">board</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -914,7 +912,7 @@
         <span class="k">return</span> <span class="n">board</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_add_move_to_pgn</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">pgn_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">move</span><span class="p">:</span> <span class="s2">&quot;chess.Move&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_add_move_to_pgn</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">pgn_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">move</span><span class="p">:</span> <span class="n">chess</span><span class="o">.</span><span class="n">Move</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
         <span class="n">pgn_io</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(</span><span class="n">pgn_string</span><span class="p">)</span>
         <span class="n">game</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">pgn</span><span class="o">.</span><span class="n">read_game</span><span class="p">(</span><span class="n">pgn_io</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">game</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -923,7 +921,7 @@
         <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">game</span><span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_board_to_pgn</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">board</span><span class="p">:</span> <span class="s2">&quot;chess.Board&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_board_to_pgn</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">board</span><span class="p">:</span> <span class="n">chess</span><span class="o">.</span><span class="n">Board</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
         <span class="n">game</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">pgn</span><span class="o">.</span><span class="n">Game</span><span class="o">.</span><span class="n">from_board</span><span class="p">(</span><span class="n">board</span><span class="p">)</span>
         <span class="n">pgn_string</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">game</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">pgn_string</span>

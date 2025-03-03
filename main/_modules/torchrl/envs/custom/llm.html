@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+8c9dc05) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
     </div>
     
 
@@ -425,21 +425,268 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">NonTensorStack</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.map.hash</span><span class="w"> </span><span class="kn">import</span> <span class="n">SipHash</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Bounded</span><span class="p">,</span>
     <span class="n">Categorical</span> <span class="k">as</span> <span class="n">CategoricalSpec</span><span class="p">,</span>
     <span class="n">Composite</span><span class="p">,</span>
     <span class="n">NonTensor</span><span class="p">,</span>
-    <span class="n">SipHash</span><span class="p">,</span>
+    <span class="n">TensorSpec</span><span class="p">,</span>
     <span class="n">Unbounded</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_StepMDP</span>
+
+
+<div class="viewcode-block" id="LLMEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.LLMEnv.html#torchrl.envs.LLMEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A text generation environment.</span>
+
+<span class="sd">    This environment is designed to work with language models, where the observation is a string or a tensor of</span>
+<span class="sd">    integers representing a sequence of tokens.</span>
+<span class="sd">    The action is also a string or a tensor of integers, which is concatenated to the previous observation to form the</span>
+<span class="sd">    new observation.</span>
+
+<span class="sd">    By default, this environment is meant to track history for a prompt. Users can append transforms to tailor</span>
+<span class="sd">    this to their use case, such as Chain of Thought (CoT) reasoning or other custom processing.</span>
+
+<span class="sd">    Users must append a transform to set the &quot;done&quot; condition, which would trigger the loading of the next prompt.</span>
+
+<span class="sd">    Prompts to the language model can be loaded when the environment is ``reset`` if the environment is created via :meth:`~from_dataloader`</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults to</span>
+<span class="sd">            ``&quot;observation&quot;``.</span>
+<span class="sd">        action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to ``&quot;action&quot;``.</span>
+<span class="sd">        str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.</span>
+<span class="sd">        device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.</span>
+<span class="sd">        vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an</span>
+<span class="sd">            unbounded vocabulary. Defaults to ``None``.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.envs.DataLoadingPrimer` for examples.</span>
+
+<span class="sd">    Methods:</span>
+<span class="sd">        from_dataloader: Creates an LLMEnv instance from a dataloader.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">observation_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+        <span class="n">str2str</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">vocab_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batch_locked</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">str2str</span> <span class="o">=</span> <span class="n">str2str</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vocab_size</span> <span class="o">=</span> <span class="n">vocab_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">observation_key</span><span class="p">)</span>
+        <span class="c1"># self.action_key = unravel_key(action_key)</span>
+        <span class="k">if</span> <span class="n">str2str</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="n">observation_key</span><span class="p">:</span> <span class="n">NonTensor</span><span class="p">(</span>
+                        <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">batched</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">()</span>
+                    <span class="p">)</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="p">{</span><span class="n">action_key</span><span class="p">:</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">batched</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">())}</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">vocab_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="n">observation_key</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span>
+                            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                        <span class="p">)</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="n">action_key</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span>
+                            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                        <span class="p">)</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="n">observation_key</span><span class="p">:</span> <span class="n">Bounded</span><span class="p">(</span>
+                            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span>
+                            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+                            <span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                            <span class="n">high</span><span class="o">=</span><span class="n">vocab_size</span><span class="p">,</span>
+                            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="n">action_key</span><span class="p">:</span> <span class="n">Bounded</span><span class="p">(</span>
+                            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span>
+                            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+                            <span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                            <span class="n">high</span><span class="o">=</span><span class="n">vocab_size</span><span class="p">,</span>
+                            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">done</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+            <span class="n">truncated</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+            <span class="n">terminated</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="LLMEnv.from_dataloader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.LLMEnv.html#torchrl.envs.LLMEnv.from_dataloader">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_dataloader</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">dataloader</span><span class="p">:</span> <span class="n">DataLoader</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">observation_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+        <span class="n">str2str</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">vocab_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">data_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">data_specs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">example_data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stack_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">,</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMEnv</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates an LLMEnv instance from a dataloader.</span>
+
+<span class="sd">        This method creates an LLMEnv instance and appends a DataLoadingPrimer to it, which populates ``data_keys`` (by default ``observation_key``) with data from the provided dataloader when the environment is reset.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dataloader (DataLoader): The dataloader to load data from.</span>
+<span class="sd">            observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults</span>
+<span class="sd">                to ``&quot;observation&quot;``.</span>
+<span class="sd">            action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to ``&quot;action&quot;``.</span>
+<span class="sd">            str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.</span>
+<span class="sd">            device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.</span>
+<span class="sd">            vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an</span>
+<span class="sd">                unbounded vocabulary. Defaults to ``None``.</span>
+<span class="sd">            primers (Composite | None, optional): The primers to use for each key in the dataloader.</span>
+<span class="sd">                Defaults to ``None``.</span>
+<span class="sd">            data_keys (list[NestedKey] | None, optional): The keys to use for each item in the dataloader. If not passed ``observation_key`` will be populated with the data.</span>
+<span class="sd">                Defaults to ``None``.</span>
+<span class="sd">            data_specs (list[TensorSpec] | None, optional): The specs to use for each item in the dataloader.</span>
+<span class="sd">                Defaults to ``None``.</span>
+<span class="sd">            example_data (Any, optional): Example data to use for initializing the primer. Defaults to ``None``.</span>
+<span class="sd">            stack_method (Callable[[Any], Any] | Literal[&quot;as_nested_tensor&quot;, &quot;as_padded_tensor&quot;], optional): The</span>
+<span class="sd">                method to use for stacking the data. Defaults to ``None``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            LLMEnv: The created LLMEnv instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoadingPrimer</span>
+
+        <span class="n">primer</span> <span class="o">=</span> <span class="n">DataLoadingPrimer</span><span class="p">(</span>
+            <span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">,</span>
+            <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
+            <span class="n">data_keys</span><span class="o">=</span><span class="n">data_keys</span> <span class="k">if</span> <span class="n">data_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="n">observation_key</span><span class="p">],</span>
+            <span class="n">data_specs</span><span class="o">=</span><span class="n">data_specs</span><span class="p">,</span>
+            <span class="n">example_data</span><span class="o">=</span><span class="n">example_data</span><span class="p">,</span>
+            <span class="n">stack_method</span><span class="o">=</span><span class="n">stack_method</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">LLMEnv</span><span class="p">(</span>
+            <span class="n">str2str</span><span class="o">=</span><span class="n">str2str</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">observation_key</span><span class="o">=</span><span class="n">observation_key</span><span class="p">,</span>
+            <span class="n">action_key</span><span class="o">=</span><span class="n">action_key</span><span class="p">,</span>
+            <span class="n">vocab_size</span><span class="o">=</span><span class="n">vocab_size</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">primer</span><span class="p">)</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_obs_act_and_cat</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Observation must be a string, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Action must be a string, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">action</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">obs</span> <span class="o">+</span> <span class="n">action</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># Cat action entry with prev obs</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2str</span><span class="p">:</span>
+            <span class="n">obs</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">]</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="s2">&quot;The tensordict is batchless, yet the action and/or observations are not &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;strings but </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">action</span><span class="p">)</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span><span class="si">}</span><span class="s2">, respectivly.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_obs_act_and_cat</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">observation</span> <span class="o">=</span> <span class="n">NonTensorStack</span><span class="p">(</span>
+                    <span class="o">*</span><span class="p">[</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_check_obs_act_and_cat</span><span class="p">(</span><span class="n">_obs</span><span class="p">,</span> <span class="n">_action</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="p">(</span><span class="n">_obs</span><span class="p">,</span> <span class="n">_action</span><span class="p">)</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+                    <span class="p">]</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">)</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="s2">&quot;is_nested&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                    <span class="n">observation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">as_nested_tensor</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                                <span class="p">[</span>
+                                    <span class="n">_obs</span><span class="p">,</span>
+                                    <span class="n">_action</span><span class="p">,</span>
+                                <span class="p">],</span>
+                                <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                            <span class="p">)</span>
+                            <span class="k">for</span> <span class="n">_obs</span><span class="p">,</span> <span class="n">_action</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span>
+                                <span class="n">obs</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">action</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                            <span class="p">)</span>
+                        <span class="p">],</span>
+                        <span class="n">layout</span><span class="o">=</span><span class="n">obs</span><span class="o">.</span><span class="n">layout</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">observation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="n">obs</span><span class="p">,</span>
+                            <span class="n">action</span><span class="p">,</span>
+                        <span class="p">],</span>
+                        <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Failed to cat action and observation tensors. Check that str2str argument is correctly &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;set in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">,</span> <span class="n">observation</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># We should have an observation by this time, if not raise an exception</span>
+        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Observation key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="si">}</span><span class="s2"> is not defined. Make sure a TensorDictPrimer (eg, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;torchrl.envs.DataLoadingPrimer) is appended to the env transforms.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">seed</span></div>
 
 
 <div class="viewcode-block" id="LLMHashingEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMHashingEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">):</span>
@@ -505,7 +752,7 @@
         <span class="n">hashing_module</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">observation_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span>
         <span class="n">text_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">tokenizer</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tokenizer</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">text_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
@@ -538,7 +785,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">CategoricalSpec</span><span class="p">(</span><span class="n">vocab_size</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,)))</span>
         <span class="n">_StepMDP</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 
-<div class="viewcode-block" id="LLMHashingEnv.make_tensordict"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv.make_tensordict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">make_tensordict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
+<div class="viewcode-block" id="LLMHashingEnv.make_tensordict"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv.make_tensordict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">make_tensordict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Converts a string or list of strings in a TensorDict with appropriate shape and device.&quot;&quot;&quot;</span>
         <span class="n">list_len</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span>
         <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
@@ -630,8 +877,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the seed for the environment&#39;s randomness.</span>
 
 <span class="sd">        .. note:: This environment has no randomness, so this method does nothing.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">pass</span></div>
+<span class="sd">        &quot;&quot;&quot;</span></div>
 </pre></div>
 
              </article>

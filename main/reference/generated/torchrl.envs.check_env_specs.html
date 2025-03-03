@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>step_mdp &mdash; torchrl main documentation</title>
+  <title>check_env_specs &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="terminated_or_truncated" href="torchrl.envs.utils.terminated_or_truncated.html" />
-    <link rel="prev" title="set_exploration_type" href="torchrl.envs.utils.set_exploration_type.html" />
+    <link rel="next" title="exploration_type" href="torchrl.envs.exploration_type.html" />
+    <link rel="prev" title="RandomPolicy" href="torchrl.envs.RandomPolicy.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+8c9dc05) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
     </div>
     
 
@@ -389,13 +389,13 @@
         
           <li><a href="../envs.html">torchrl.envs package</a> &gt;</li>
         
-      <li>step_mdp</li>
+      <li>check_env_specs</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.envs.utils.step_mdp.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.envs.check_env_specs.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -427,124 +427,41 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="step-mdp">
-<h1>step_mdp<a class="headerlink" href="#step-mdp" title="Permalink to this heading">¶</a></h1>
+  <section id="check-env-specs">
+<h1>check_env_specs<a class="headerlink" href="#check-env-specs" title="Permalink to this heading">¶</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="torchrl.envs.utils.step_mdp">
-<span class="sig-prename descclassname"><span class="pre">torchrl.envs.utils.</span></span><span class="sig-name descname"><span class="pre">step_mdp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">next_tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_other</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_reward</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reward_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'reward'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">done_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'done'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'action'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="reference internal" href="../../_modules/torchrl/envs/utils.html#step_mdp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.utils.step_mdp" title="Permalink to this definition">¶</a></dt>
-<dd><p>Creates a new tensordict that reflects a step in time of the input tensordict.</p>
-<p>Given a tensordict retrieved after a step, returns the <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> indexed-tensordict.
-The arguments allow for precise control over what should be kept and what
-should be copied from the <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> entry. The default behavior is:
-move the observation entries, reward, and done states to the root, exclude
-the current action, and keep all extra keys (non-action, non-done, non-reward).</p>
+<dt class="sig sig-object py" id="torchrl.envs.check_env_specs">
+<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">check_env_specs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">torchrl.envs.EnvBase</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_contiguous</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">break_when_any_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/utils.html#check_env_specs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.check_env_specs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tests an environment specs against the results of short rollout.</p>
+<p>This test function should be used as a sanity check for an env wrapped with
+torchrl’s EnvBase subclasses: any discrepancy between the expected data and
+the data collected should raise an assertion error.</p>
+<p>A broken environment spec will likely make it impossible to use parallel
+environments.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tensordict</strong> (<em>TensorDictBase</em>) – The tensordict with keys to be renamed.</p></li>
-<li><p><strong>next_tensordict</strong> (<em>TensorDictBase</em><em>, </em><em>optional</em>) – The destination tensordict. If <cite>None</cite>, a new tensordict is created.</p></li>
-<li><p><strong>keep_other</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, all keys that do not start with <code class="xref py py-obj docutils literal notranslate"><span class="pre">'next_'</span></code> will be kept.
-Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
-<li><p><strong>exclude_reward</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;reward&quot;</span></code> key will be discarded
-from the resulting tensordict. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, it will be copied (and replaced)
-from the <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> entry (if present). Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
-<li><p><strong>exclude_done</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> key will be discarded
-from the resulting tensordict. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, it will be copied (and replaced)
-from the <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> entry (if present). Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>exclude_action</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the <code class="xref py py-obj docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code> key will
-be discarded from the resulting tensordict. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, it will
-be kept in the root tensordict (since it should not be present in
-the <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> entry). Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
-<li><p><strong>reward_keys</strong> (<em>NestedKey</em><em> or </em><em>list of NestedKey</em><em>, </em><em>optional</em>) – The keys where the reward is written. Defaults
-to “reward”.</p></li>
-<li><p><strong>done_keys</strong> (<em>NestedKey</em><em> or </em><em>list of NestedKey</em><em>, </em><em>optional</em>) – The keys where the done is written. Defaults
-to “done”.</p></li>
-<li><p><strong>action_keys</strong> (<em>NestedKey</em><em> or </em><em>list of NestedKey</em><em>, </em><em>optional</em>) – The keys where the action is written. Defaults
-to “action”.</p></li>
+<li><p><strong>env</strong> (<a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><em>EnvBase</em></a>) – the env for which the specs have to be checked against data.</p></li>
+<li><p><strong>return_contiguous</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the random rollout will be called with
+return_contiguous=True. This will fail in some cases (e.g. heterogeneous shapes
+of inputs/outputs). Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (determined by the presence of dynamic specs).</p></li>
+<li><p><strong>check_dtype</strong> (<em>bool</em><em>, </em><em>optional</em>) – if False, dtype checks will be skipped.
+Defaults to True.</p></li>
+<li><p><strong>seed</strong> (<em>int</em><em>, </em><em>optional</em>) – for reproducibility, a seed can be set.
+The seed will be set in pytorch temporarily, then the RNG state will
+be reverted to what it was before. For the env, we set the seed but since
+setting the rng state back to what is was isn’t a feature of most environment,
+we leave it to the user to accomplish that.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>tensordict</strong> (<em>TensorDict</em><em>, </em><em>optional</em>) – an optional tensordict instance to use for reset.</p></li>
+<li><p><strong>break_when_any_done</strong> (<em>bool</em><em> or </em><em>str</em><em>, </em><em>optional</em>) – value for <code class="docutils literal notranslate"><span class="pre">break_when_any_done</span></code> in <a class="reference internal" href="torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a>.
+If <code class="docutils literal notranslate"><span class="pre">&quot;both&quot;</span></code>, the test is run on both <cite>True</cite> and <cite>False</cite>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A new tensordict (or <cite>next_tensordict</cite> if provided) containing the tensors of the t+1 step.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>TensorDictBase</p>
-</dd>
 </dl>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">EnvBase.step_mdp()</span></code> is the class-based version of this free function. It will attempt to cache the
-key values to reduce the overhead of making a step in the MDP.</p>
-</div>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
-<span class="gp">... </span>    <span class="s2">&quot;done&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span>
-<span class="gp">... </span>    <span class="s2">&quot;extra&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span>
-<span class="gp">... </span>    <span class="s2">&quot;next&quot;</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">({</span>
-<span class="gp">... </span>        <span class="s2">&quot;done&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span>
-<span class="gp">... </span>        <span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span>
-<span class="gp">... </span>    <span class="p">},</span> <span class="p">[]),</span>
-<span class="gp">... </span>    <span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span>
-<span class="gp">... </span>    <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span>
-<span class="gp">... </span><span class="p">},</span> <span class="p">[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">step_mdp</span><span class="p">(</span><span class="n">td</span><span class="p">))</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">step_mdp</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">exclude_done</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>  <span class="c1"># &quot;done&quot; is dropped</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">step_mdp</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">exclude_reward</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>  <span class="c1"># &quot;reward&quot; is kept</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">step_mdp</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">exclude_action</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>  <span class="c1"># &quot;action&quot; persists at the root</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">step_mdp</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">keep_other</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>  <span class="c1"># &quot;extra&quot; is missing</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-</pre></div>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>This function will not work properly if the reward key is also part of the input key when
-the reward keys are excluded. This is why the <code class="xref py py-class docutils literal notranslate"><span class="pre">RewardSum</span></code> transform registers
-the episode reward in the observation and not the reward spec by default.
-When using the fast, cached version of this function (<code class="docutils literal notranslate"><span class="pre">_StepMDP</span></code>), this issue should not
-be observed.</p>
-</div>
+<p>Caution: this function resets the env seed. It should be used “offline” to
+check that an env is adequately constructed, but it may affect the seeding
+of an experiment and as such should be kept out of training scripts.</p>
 </dd></dl>
 
 </section>
@@ -557,10 +474,10 @@ be observed.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.envs.utils.terminated_or_truncated.html" class="btn btn-neutral float-right" title="terminated_or_truncated" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.envs.exploration_type.html" class="btn btn-neutral float-right" title="exploration_type" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.utils.set_exploration_type.html" class="btn btn-neutral" title="set_exploration_type" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.RandomPolicy.html" class="btn btn-neutral" title="RandomPolicy" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -594,7 +511,7 @@ be observed.</p>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">step_mdp</a></li>
+<li><a class="reference internal" href="#">check_env_specs</a></li>
 </ul>
 
             </div>

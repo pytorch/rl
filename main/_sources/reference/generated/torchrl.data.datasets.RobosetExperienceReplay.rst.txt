@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.datasets
-
-
-RobosetExperienceReplay
-=======================
-
-.. autoclass:: RobosetExperienceReplay
-    :members:
-    :inherited-members:

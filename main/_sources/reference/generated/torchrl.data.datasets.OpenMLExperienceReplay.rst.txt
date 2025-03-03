@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.datasets
-
-
-OpenMLExperienceReplay
-======================
-
-.. autoclass:: OpenMLExperienceReplay
-    :members:
-    :inherited-members:

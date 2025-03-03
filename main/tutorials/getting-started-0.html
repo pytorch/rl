@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+8c9dc05) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
     </div>
     
 
@@ -558,7 +558,7 @@ the ubiquitous way of representing data in the library, both dynamically like
 here, or statically with offline datasets.</p>
 <p>The last bit of information you need to run a rollout in the environment is
 how to bring that <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> entry at the root to perform the next step.
-TorchRL provides a dedicated <a class="reference internal" href="../reference/generated/torchrl.envs.utils.step_mdp.html#torchrl.envs.utils.step_mdp" title="torchrl.envs.utils.step_mdp"><code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code></a> function
+TorchRL provides a dedicated <code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code> function
 that does just that: it filters out the information you won’t need and
 delivers a data structure corresponding to your observation after a step in
 the Markov Decision Process, or MDP.</p>
@@ -639,7 +639,7 @@ truncated by looking at the truncated entry:</p>
 <ul class="simple">
 <li><p>The <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.step_and_maybe_reset" title="torchrl.envs.EnvBase.step_and_maybe_reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step_and_maybe_reset()</span></code></a> method that packs
 together <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a>,
-<a class="reference internal" href="../reference/generated/torchrl.envs.utils.step_mdp.html#torchrl.envs.utils.step_mdp" title="torchrl.envs.utils.step_mdp"><code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code></a> and
+<code class="xref py py-func docutils literal notranslate"><span class="pre">step_mdp()</span></code> and
 <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#id1" title="torchrl.envs.EnvBase.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a>.</p></li>
 <li><p>Some environments like <a class="reference internal" href="../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">GymEnv</span></code></a> support rendering
 through the <code class="docutils literal notranslate"><span class="pre">from_pixels</span></code> argument. Check the class docstrings to know

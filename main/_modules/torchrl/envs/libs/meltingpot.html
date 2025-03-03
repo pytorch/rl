@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+8c9dc05) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
     </div>
     
 
@@ -426,14 +426,12 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Categorical</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">TensorSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Categorical</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">TensorSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_EnvWrapper</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.dm_control</span><span class="w"> </span><span class="kn">import</span> <span class="n">_dmcontrol_to_torchrl_spec_transform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_classproperty</span><span class="p">,</span> <span class="n">check_marl_grouping</span><span class="p">,</span> <span class="n">MarlGroupMapType</span>
@@ -452,7 +450,7 @@
     <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">substrate_configs</span><span class="o">.</span><span class="n">SUBSTRATES</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_filter_global_state_from_dict</span><span class="p">(</span><span class="n">obs_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">world</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>  <span class="c1"># noqa</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_filter_global_state_from_dict</span><span class="p">(</span><span class="n">obs_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">world</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>  <span class="c1"># noqa</span>
     <span class="k">return</span> <span class="p">{</span>
         <span class="n">key</span><span class="p">:</span> <span class="n">value</span>
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">obs_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
@@ -461,8 +459,8 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_remove_world_observations_from_obs_spec</span><span class="p">(</span>
-    <span class="n">observation_spec</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;dm_env.specs.Array&quot;</span><span class="p">]],</span>  <span class="c1"># noqa</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;dm_env.specs.Array&quot;</span><span class="p">]]:</span>  <span class="c1"># noqa</span>
+    <span class="n">observation_spec</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">dm_env</span><span class="o">.</span><span class="n">specs</span><span class="o">.</span><span class="n">Array</span><span class="p">]],</span>  <span class="c1"># noqa</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">dm_env</span><span class="o">.</span><span class="n">specs</span><span class="o">.</span><span class="n">Array</span><span class="p">]]:</span>  <span class="c1"># noqa</span>
     <span class="k">return</span> <span class="p">[</span>
         <span class="n">_filter_global_state_from_dict</span><span class="p">(</span><span class="n">agent_obs</span><span class="p">,</span> <span class="n">world</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">agent_obs</span> <span class="ow">in</span> <span class="n">observation_spec</span>
@@ -470,8 +468,8 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_global_state_spec_from_obs_spec</span><span class="p">(</span>
-    <span class="n">observation_spec</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;dm_env.specs.Array&quot;</span><span class="p">]]</span>  <span class="c1"># noqa</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;dm_env.specs.Array&quot;</span><span class="p">]:</span>  <span class="c1"># noqa</span>
+    <span class="n">observation_spec</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">dm_env</span><span class="o">.</span><span class="n">specs</span><span class="o">.</span><span class="n">Array</span><span class="p">]]</span>  <span class="c1"># noqa</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">dm_env</span><span class="o">.</span><span class="n">specs</span><span class="o">.</span><span class="n">Array</span><span class="p">]:</span>  <span class="c1"># noqa</span>
     <span class="c1"># We only look at agent 0 since world entries are the same for all agents</span>
     <span class="n">world_entries</span> <span class="o">=</span> <span class="n">_filter_global_state_from_dict</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">world</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">world_entries</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">_WORLD_PREFIX</span> <span class="o">+</span> <span class="s2">&quot;RGB&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">world_entries</span><span class="p">:</span>
@@ -481,7 +479,7 @@
     <span class="k">return</span> <span class="n">_remove_world_prefix</span><span class="p">(</span><span class="n">world_entries</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_remove_world_prefix</span><span class="p">(</span><span class="n">world_entries</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_remove_world_prefix</span><span class="p">(</span><span class="n">world_entries</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
     <span class="k">return</span> <span class="p">{</span><span class="n">key</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">_WORLD_PREFIX</span><span class="p">)</span> <span class="p">:]:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">world_entries</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
 
 
@@ -602,10 +600,10 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">env</span><span class="p">:</span> <span class="s2">&quot;meltingpot.utils.substrates.substrate.Substrate&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">meltingpot</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">substrates</span><span class="o">.</span><span class="n">substrate</span><span class="o">.</span><span class="n">Substrate</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa</span>
         <span class="n">categorical_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">group_map</span><span class="p">:</span> <span class="n">MarlGroupMapType</span>
-        <span class="o">|</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">MarlGroupMapType</span><span class="o">.</span><span class="n">ALL_IN_ONE_GROUP</span><span class="p">,</span>
+        <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">MarlGroupMapType</span><span class="o">.</span><span class="n">ALL_IN_ONE_GROUP</span><span class="p">,</span>
         <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
@@ -619,7 +617,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_build_env</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">env</span><span class="p">:</span> <span class="s2">&quot;meltingpot.utils.substrates.substrate.Substrate&quot;</span><span class="p">,</span>  <span class="c1"># noqa</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">meltingpot</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">substrates</span><span class="o">.</span><span class="n">substrate</span><span class="o">.</span><span class="n">Substrate</span><span class="p">,</span>  <span class="c1"># noqa</span>
     <span class="p">):</span>
         <span class="k">return</span> <span class="n">env</span>
 
@@ -629,7 +627,7 @@
         <span class="n">check_marl_grouping</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">group_map</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">agent_names</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_make_specs</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="s2">&quot;meltingpot.utils.substrates.substrate.Substrate&quot;</span>  <span class="c1"># noqa</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="n">meltingpot</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">substrates</span><span class="o">.</span><span class="n">substrate</span><span class="o">.</span><span class="n">Substrate</span>  <span class="c1"># noqa</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">mp_obs_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">()</span>  <span class="c1"># List of dict of arrays</span>
         <span class="n">mp_obs_spec_no_world</span> <span class="o">=</span> <span class="n">_remove_world_observations_from_obs_spec</span><span class="p">(</span>
@@ -699,9 +697,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_make_group_specs</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">group</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">torchrl_agent_obs_specs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">],</span>
-        <span class="n">torchrl_agent_act_specs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">],</span>
-        <span class="n">torchrl_rew_spec</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">],</span>
+        <span class="n">torchrl_agent_obs_specs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">],</span>
+        <span class="n">torchrl_agent_act_specs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">],</span>
+        <span class="n">torchrl_rew_spec</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">],</span>
     <span class="p">):</span>
         <span class="c1"># Agent specs</span>
         <span class="n">action_specs</span> <span class="o">=</span> <span class="p">[]</span>
@@ -748,7 +746,7 @@
             <span class="n">group_reward_spec</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
         <span class="n">meltingpot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span>
 
         <span class="k">if</span> <span class="s2">&quot;env&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
@@ -979,12 +977,12 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">substrate</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="s2">&quot;ml_collections.config_dict.ConfigDict&quot;</span><span class="p">,</span>  <span class="c1"># noqa</span>
+        <span class="n">substrate</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">ml_collections</span><span class="o">.</span><span class="n">config_dict</span><span class="o">.</span><span class="n">ConfigDict</span><span class="p">,</span>  <span class="c1"># noqa</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">categorical_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">group_map</span><span class="p">:</span> <span class="n">MarlGroupMapType</span>
-        <span class="o">|</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">MarlGroupMapType</span><span class="o">.</span><span class="n">ALL_IN_ONE_GROUP</span><span class="p">,</span>
+        <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">MarlGroupMapType</span><span class="o">.</span><span class="n">ALL_IN_ONE_GROUP</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_meltingpot</span><span class="p">:</span>
@@ -1000,14 +998,14 @@
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
         <span class="k">if</span> <span class="s2">&quot;substrate&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Could not find environment key &#39;substrate&#39; in kwargs.&quot;</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_build_env</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">substrate</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="s2">&quot;ml_collections.config_dict.ConfigDict&quot;</span><span class="p">,</span>  <span class="c1"># noqa</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;meltingpot.utils.substrates.substrate.Substrate&quot;</span><span class="p">:</span>  <span class="c1"># noqa</span>
+        <span class="n">substrate</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">ml_collections</span><span class="o">.</span><span class="n">config_dict</span><span class="o">.</span><span class="n">ConfigDict</span><span class="p">,</span>  <span class="c1"># noqa</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">meltingpot</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">substrates</span><span class="o">.</span><span class="n">substrate</span><span class="o">.</span><span class="n">Substrate</span><span class="p">:</span>  <span class="c1"># noqa</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">meltingpot</span><span class="w"> </span><span class="kn">import</span> <span class="n">substrate</span> <span class="k">as</span> <span class="n">mp_substrate</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">substrate</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>

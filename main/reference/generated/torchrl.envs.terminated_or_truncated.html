@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>set_exploration_type &mdash; torchrl main documentation</title>
+  <title>terminated_or_truncated &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="step_mdp" href="torchrl.envs.utils.step_mdp.html" />
-    <link rel="prev" title="make_composite_from_td" href="torchrl.envs.utils.make_composite_from_td.html" />
+    <link rel="next" title="ModelBasedEnvBase" href="torchrl.envs.ModelBasedEnvBase.html" />
+    <link rel="prev" title="step_mdp" href="torchrl.envs.step_mdp.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+8c9dc05) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
     </div>
     
 
@@ -389,13 +389,13 @@
         
           <li><a href="../envs.html">torchrl.envs package</a> &gt;</li>
         
-      <li>set_exploration_type</li>
+      <li>terminated_or_truncated</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.envs.utils.set_exploration_type.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.envs.terminated_or_truncated.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -427,17 +427,67 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="set-exploration-type">
-<h1>set_exploration_type<a class="headerlink" href="#set-exploration-type" title="Permalink to this heading">¶</a></h1>
+  <section id="terminated-or-truncated">
+<h1>terminated_or_truncated<a class="headerlink" href="#terminated-or-truncated" title="Permalink to this heading">¶</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="torchrl.envs.utils.set_exploration_type">
-<span class="sig-prename descclassname"><span class="pre">torchrl.envs.utils.</span></span><span class="sig-name descname"><span class="pre">set_exploration_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">InteractionType</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">InteractionType.DETERMINISTIC</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.envs.utils.set_exploration_type" title="Permalink to this definition">¶</a></dt>
-<dd><p>Sets all ProbabilisticTDModules sampling to the desired type.</p>
+<dt class="sig sig-object py" id="torchrl.envs.terminated_or_truncated">
+<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">terminated_or_truncated</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_done_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><span class="pre">TensorSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'_reset'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">write_full_false</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="../../_modules/torchrl/envs/utils.html#terminated_or_truncated"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.terminated_or_truncated" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reads the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.</p>
+<p>The modification occurs in-place within the TensorDict instance provided.
+This function can be used to compute the <cite>“_reset”</cite> signals in batched
+or multiagent settings, hence the default name of the output key.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>type</strong> (<em>InteractionType</em><em> or </em><em>str</em>) – sampling type to use when the policy is being called.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>TensorDictBase</em>) – the input data, generally resulting from a call
+to <a class="reference internal" href="torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a>.</p></li>
+<li><p><strong>full_done_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a><em>, </em><em>optional</em>) – the done_spec from the env,
+indicating where the done leaves have to be found.
+If not provided, the default
+<code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;terminated&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code> entries will be
+searched for in the data.</p></li>
+<li><p><strong>key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – <p>where the aggregated result should be written.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, then the function will not write any key but just output
+whether any of the done values was true.
+.. note:: if a value is already present for the <code class="docutils literal notranslate"><span class="pre">key</span></code> entry,</p>
+<blockquote>
+<div><p>the previous value will prevail and no update will be achieved.</p>
+</div></blockquote>
+</p></li>
+<li><p><strong>write_full_false</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reset keys will be
+written even if the output is <code class="docutils literal notranslate"><span class="pre">False</span></code> (ie, no done is <code class="docutils literal notranslate"><span class="pre">True</span></code>
+in the provided data structure).
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
+<dl class="simple">
+<dt>Returns: a boolean value indicating whether any of the done states found in the data</dt><dd><p>contained a <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Categorical</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">done</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">truncated</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">nested</span><span class="o">=</span><span class="n">Composite</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">done</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="n">truncated</span><span class="o">=</span><span class="n">Categorical</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s2">&quot;done&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;nested&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;done&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[]</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">_terminated_or_truncated</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;_reset&quot;</span><span class="p">])</span>
+<span class="go">tensor(True)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;nested&quot;</span><span class="p">,</span> <span class="s2">&quot;_reset&quot;</span><span class="p">])</span>
+<span class="go">tensor(True)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -450,10 +500,10 @@
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.envs.utils.step_mdp.html" class="btn btn-neutral float-right" title="step_mdp" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.envs.ModelBasedEnvBase.html" class="btn btn-neutral float-right" title="ModelBasedEnvBase" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.utils.make_composite_from_td.html" class="btn btn-neutral" title="make_composite_from_td" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.step_mdp.html" class="btn btn-neutral" title="step_mdp" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -487,7 +537,7 @@
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">set_exploration_type</a></li>
+<li><a class="reference internal" href="#">terminated_or_truncated</a></li>
 </ul>
 
             </div>

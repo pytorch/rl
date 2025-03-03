@@ -440,6 +440,7 @@ TorchRL offers a series of custom built-in environments.
     ChessEnv
     PendulumEnv
     TicTacToeEnv
+    LLMEnv
     LLMHashingEnv
 
 
@@ -1033,6 +1034,7 @@ to be able to create this other composition:
     Compose
     ConditionalSkip
     Crop
+    DataLoadingPrimer
     DTypeCastTransform
     DeviceCastTransform
     DiscreteActionProjection
@@ -1218,7 +1220,7 @@ Recorders are transforms that register data as they come in, for logging purpose
 
 Helpers
 -------
-.. currentmodule:: torchrl.envs.utils
+.. currentmodule:: torchrl.envs
 
 .. autosummary::
     :toctree: generated/
