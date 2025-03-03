@@ -6,7 +6,7 @@
 from .gym_transforms import EndOfLifeTransform
 from .r3m import R3MTransform
 from .rb_transforms import MultiStepTransform
-from .rlhf import KLRewardTransform
+from .rlhf import DataLoadingPrimer, KLRewardTransform
 from .transforms import (
     ActionDiscretizer,
     ActionMask,

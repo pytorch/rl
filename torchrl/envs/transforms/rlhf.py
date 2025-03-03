@@ -4,16 +4,411 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import copy, deepcopy
+from typing import Any, Callable, Iterable, List, Literal
 
 import torch
-from tensordict import TensorDict, TensorDictBase, unravel_key
+from tensordict import (
+    maybe_dense_stack,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.nn import ProbabilisticTensorDictModule, TensorDictParams
-from tensordict.utils import is_seq_of_nested_key
+from tensordict.utils import _zip_strict, is_seq_of_nested_key
 from torch import nn
-from torchrl.data.tensor_specs import Composite, Unbounded
-from torchrl.envs.transforms.transforms import Transform
+from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
+from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
+
+
+def as_nested_tensor(list_of_tensordicts: list[TensorDictBase]) -> TensorDictBase:
+    """Stacks a list of tensordicts into a single tensordict with nested tensors.
+
+    Args:
+        list_of_tensordicts (list[TensorDictBase]): A list of tensordicts to stack.
+
+    Returns:
+        TensorDictBase: A tensordict with nested tensors.
+
+    """
+
+    def _as_nested_tensor(*list_of_tensors):
+        return torch.nested.as_nested_tensor(list_of_tensors, layout=torch.jagged)
+
+    batch_size = list(list_of_tensordicts[0].shape)
+    batch_size.insert(0, len(list_of_tensordicts))
+    return list_of_tensordicts[0].apply(
+        _as_nested_tensor, *list_of_tensordicts[1:], batch_size=batch_size
+    )
+
+
+def as_padded_tensor(
+    list_of_tensordicts: list[[TensorDictBase]], dim=0, stack_dim: int = 0
+) -> TensorDictBase:
+    """Stacks a list of tensordicts into a single tensordict with padded tensors.
+
+    Args:
+        list_of_tensordicts (list[[TensorDictBase]]): A list of tensordicts to stack.
+        dim (int, optional): The dimension along which to pad. Defaults to 0.
+        stack_dim (int, optional): The dimension along which to stack. Defaults to 0.
+
+    Returns:
+        TensorDictBase: A tensordict with padded tensors.
+    """
+
+    def _stack_tensors(*list_of_tensors):
+        if dim < 0:
+            raise ValueError("dim must be >= 0")
+        max_length = max([t.size(dim) for t in list_of_tensors])
+
+        def pad_tensor(tensor):
+            padding_length = max_length - tensor.size(dim)
+            shape = [
+                s if i != dim else padding_length for i, s in enumerate(tensor.shape)
+            ]
+            return torch.cat((tensor.new_zeros(shape), tensor), dim=dim)
+
+        return torch.stack([pad_tensor(t) for t in list_of_tensors], dim=stack_dim)
+
+    batch_size = list(list_of_tensordicts[0].shape)
+    batch_size.insert(dim, len(list_of_tensordicts))
+    result = list_of_tensordicts[0].apply(
+        _stack_tensors, *list_of_tensordicts[1:], batch_size=batch_size
+    )
+    return result
+
+
+class DataLoadingPrimer(TensorDictPrimer):
+    """A primer that loads data from a dataloader and converts it into a tensordict using ``stack_method``.
+
+    Args:
+        dataloader (Iterable[Any]): The dataloader to load data from.
+        primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None.
+        data_keys (List[NestedKey] | None, optional): The keys to use for each item in the dataloader. Defaults to None.
+        data_specs (List[TensorSpec] | None, optional): The specs to use for each item in the dataloader. Defaults to None.
+        example_data (Any, optional): Example data to use for initializing the primer. Defaults to None.
+        stack_method (Callable[[Any], Any] | Literal["as_nested_tensor", "as_padded_tensor"], optional): The method to use for stacking the data. Defaults to ``maybe_dense_stack``.
+
+    Attributes:
+        dataloader (Iterable[Any]): The dataloader to load data from.
+        endless_dataloader (Iterable[Any]): An endless iterator over the dataloader.
+        data_keys (List[NestedKey]): The keys to use for each item in the dataloader.
+        stack_method (Callable[[Any], Any]): The method to use for stacking the data.
+
+    .. seealso:: :class:`~torchrl.envs.LLMEnv` and :class:`~torchrl.envs.LLMEnv.from_dataloader`.
+
+    Example of a dataloader yielding strings:
+        >>> import random
+        >>> import string
+        >>> import tensordict as td
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import Unbounded
+        >>> from torchrl.envs import DataLoadingPrimer, LLMEnv
+        >>> td.set_capture_non_tensor_stack(False).set()
+        >>> class DummyDataLoader:
+        ...     '''A dummy dataloader that generates random strings.'''
+        ...     def __init__(self, batch_size: int = 0):
+        ...         self.batch_size = batch_size
+        ...     def generate_random_string(self, length: int = 10) -. str:
+        ...         '''Generate a random string of a given length.'''
+        ...         return ''.join(random.choice(string.ascii_lowercase) for _ in range(length))
+        ...     def __iter__(self):
+        ...         return self
+        ...     def __next__(self):
+        ...         if self.batch_size == 0:
+        ...             return self.generate_random_string()
+        ...         else:
+        ...             return [self.generate_random_string() for _ in range(self.batch_size)]
+        >>> # Create an LLM environment with string-to-string input/output.
+        >>> env = LLMEnv(str2str=True)
+        >>> # Append a DataLoadingPrimer to the environment.
+        >>> env = env.append_transform(
+        >>>     DataLoadingPrimer(
+        >>>         dataloader=DummyDataLoader(),
+        >>>         data_keys=["observation"],
+        >>>         example_data="a string!",
+        >>>     )
+        >>> )
+        >>> # Test the environment.
+        >>> print(env.rand_action(TensorDict()))
+        TensorDict(
+            fields={
+                action: NonTensorData(data=a string, batch_size=torch.Size([]), device=None)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(env.rollout(3))
+        TensorDict(
+            fields={
+                action: NonTensorStack(
+                    ['a string', 'a string', 'a string'],
+                    batch_size=torch.Size([3]),
+                    device=None),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: NonTensorStack(
+                            ['zxwvupirska string', 'zxwvupirska stringa string...,
+                            batch_size=torch.Size([3]),
+                            device=None),
+                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=None,
+                    is_shared=False),
+                observation: NonTensorStack(
+                    ['zxwvupirsk', 'zxwvupirska string', 'zxwvupirska ...,
+                    batch_size=torch.Size([3]),
+                    device=None),
+                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+        >>> # Roll out the environment with a specific initial state.
+        >>> init_state = env.reset(TensorDict(batch_size=[3]))
+        >>> print(env.rollout(3, auto_reset=False, tensordict=init_state))
+        TensorDict(
+            fields={
+                action: NonTensorStack(
+                    [['a string', 'a string', 'a string'], ['a string'...,
+                    batch_size=torch.Size([3, 3]),
+                    device=None),
+                done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: NonTensorStack(
+                            [[array(['nngcmflsana string', 'vrrbnhzpmga string...,
+                            batch_size=torch.Size([3, 3]),
+                            device=None),
+                        terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([3, 3]),
+                    device=None,
+                    is_shared=False),
+                observation: NonTensorStack(
+                    [['nngcmflsan', array(['nngcmflsana string', 'vrrb...,
+                    batch_size=torch.Size([3, 3]),
+                    device=None),
+                terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([3, 3]),
+            device=None,
+            is_shared=False)
+
+    Example of dataloader yielding tensors:
+        >>> import random
+        >>> import string
+        >>>
+        >>> import tensordict as td
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import Unbounded
+        >>> from torchrl.envs import DataLoadingPrimer, LLMEnv
+        >>>
+        >>> td.set_capture_non_tensor_stack(False).set()
+        >>>
+        >>>
+        >>> class DummyTensorDataLoader:
+        ...     '''A dummy dataloader that generates tensors of random int64 values.'''
+        ...
+        ...     def __init__(self, batch_size: int = 0, max_length: int = 10, padding: bool = False):
+        ...         '''
+        ...         Args:
+        ...             batch_size (int, optional): The batch size of the generated tensors. Defaults to 0.
+        ...             max_length (int, optional): The maximum length of the generated tensors. Defaults to 10.
+        ...             padding (bool, optional): Whether to pad the tensors to the maximum length. Defaults to False.
+        ...         '''
+        ...         self.batch_size = batch_size
+        ...         self.max_length = max_length
+        ...         self.padding = padding
+        ...
+        ...     def generate_random_tensor(self) -. torch.Tensor:
+        ...         '''Generate a tensor of random int64 values.'''
+        ...         length = random.randint(1, self.max_length)
+        ...         return torch.tensor([random.randint(0, 100) for _ in range(length)], dtype=torch.int64)
+        ...
+        ...     def pad_tensor(self, tensor: torch.Tensor) -. torch.Tensor:
+        ...         '''Pad a tensor to the maximum length.'''
+        ...         padding_length = self.max_length - len(tensor)
+        ...         return torch.cat((torch.zeros(padding_length, dtype=torch.int64), tensor))
+        ...
+        ...     def __iter__(self):
+        ...         return self
+        ...
+        ...     def __next__(self):
+        ...         if self.batch_size == 0:
+        ...             tensor = self.generate_random_tensor()
+        ...             return self.pad_tensor(tensor) if self.padding else tensor
+        ...         else:
+        ...             tensors = [self.generate_random_tensor() for _ in range(self.batch_size)]
+        ...             if self.padding:
+        ...                 tensors = [self.pad_tensor(tensor) for tensor in tensors]
+        ...                 return torch.stack(tensors)
+        ...             else:
+        ...                 return tensors
+        >>>
+        >>> # Create an LLM environment with non-string input/output and append a DataLoadingPrimer.
+        >>> env = LLMEnv(str2str=False)
+        >>> env = env.append_transform(
+        >>>     DataLoadingPrimer(
+        >>>         dataloader=DummyTensorDataLoader(),
+        >>>         data_keys=["observation"],
+        >>>         data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],
+        >>>     )
+        >>> )
+        >>> print(env.rand_action(TensorDict()))
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> print(env.rollout(3))
+        LazyStackedTensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: LazyStackedTensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, -1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    exclusive_fields={
+                    },
+                    batch_size=torch.Size([3]),
+                    device=None,
+                    is_shared=False,
+                    stack_dim=0),
+                observation: Tensor(shape=torch.Size([3, -1]), device=cpu, dtype=torch.int64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            exclusive_fields={
+            },
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False,
+            stack_dim=0)
+        >>> # Create an LLM environment with padded tensor input/output and append a DataLoadingPrimer.
+        >>> env = LLMEnv(str2str=False)
+        >>> env = env.append_transform(
+        >>>     DataLoadingPrimer(
+        >>>         dataloader=DummyTensorDataLoader(padding=True),
+        >>>         data_keys=["observation"],
+        >>>         data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],
+        >>>         stack_method="as_padded_tensor",
+        >>>     )
+        >>> )
+        >>> print(env.rollout(3, auto_reset=False, tensordict=env.reset(TensorDict(batch_size=[3]))))
+        LazyStackedTensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: LazyStackedTensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, -1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    exclusive_fields={
+                    },
+                    batch_size=torch.Size([3, 3]),
+                    device=None,
+                    is_shared=False,
+                    stack_dim=1),
+                observation: Tensor(shape=torch.Size([3, 3, -1]), device=cpu, dtype=torch.int64, is_shared=False),
+                terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            exclusive_fields={
+            },
+            batch_size=torch.Size([3, 3]),
+            device=None,
+            is_shared=False,
+            stack_dim=1)
+
+    """
+
+    def __init__(
+        self,
+        dataloader: Iterable[Any],
+        primers: Composite | None = None,
+        data_keys: List[NestedKey] | None = None,
+        data_specs: List[TensorSpec] | None = None,
+        example_data: Any = None,
+        stack_method: Callable[[Any], Any]
+        | Literal["as_nested_tensor", "as_padded_tensor"] = None,
+    ):
+        self.dataloader = dataloader
+        self.endless_dataloader = self._endless_iter(self.dataloader)
+        if primers is None:
+            if data_keys is None:
+                data_keys = ["data"]
+            if data_specs is None:
+                data_specs = [NonTensor(example_data=example_data, shape=())]
+            primers = Composite(
+                {
+                    data_key: data_spec
+                    for data_key, data_spec in _zip_strict(data_keys, data_specs)
+                }
+            )
+            self.data_keys = data_keys
+        else:
+            self.data_keys = list(primers.keys(True, True))
+
+        if stack_method is None:
+            stack_method = maybe_dense_stack
+        elif stack_method == "as_nested_tensor":
+            stack_method = as_nested_tensor
+        elif stack_method == "as_padded_tensor":
+            stack_method = as_padded_tensor
+        elif not callable(stack_method):
+            raise ValueError(f"Unknown stack_method={stack_method}")
+        self.stack_method = stack_method
+
+        super().__init__(
+            primers=primers,
+            default_value=self._load_from_dataloader,
+            reset_key=None,
+            expand_specs=None,
+            single_default_value=True,
+            call_before_env_reset=True,
+        )
+
+    @classmethod
+    def _endless_iter(self, obj):
+        while True:
+            yield from obj
+
+    def _load_from_dataloader(self, reset: torch.Tensor | None = None):
+        if reset is not None:
+            if not reset.any():
+                raise RuntimeError("reset must have at least one True value.")
+            if reset.ndim > 0:
+                return self.stack_method(
+                    [self._load_from_dataloader() for i in range(reset.sum())]
+                )
+        data = next(self.endless_dataloader)
+        # Some heuristic here:
+        # if data is a map, assume its keys match the keys in spec
+        # TODO: one could rename the keys too
+        if isinstance(data, Mapping):
+            out = TensorDict(data)
+        elif len(self.data_keys) > 1 and isinstance(data, (list, tuple)):
+            out = TensorDict({k: val for k, val in _zip_strict(self.data_keys, data)})
+        elif len(self.data_keys) == 1:
+            out = TensorDict({self.data_keys[0]: data})
+        else:
+            raise ValueError(
+                f"Unrecognized data type: {type(data)} with keys {self.data_keys}."
+            )
+        return out
 
 
 class KLRewardTransform(Transform):
