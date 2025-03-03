@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from typing import Any, Callable, Iterable, Literal
@@ -87,11 +88,21 @@ class DataLoadingPrimer(TensorDictPrimer):
 
     Args:
         dataloader (Iterable[Any]): The dataloader to load data from.
+
+    Keyword Args:
         primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None.
         data_keys (List[NestedKey] | None, optional): The keys to use for each item in the dataloader. Defaults to None.
         data_specs (List[TensorSpec] | None, optional): The specs to use for each item in the dataloader. Defaults to None.
         example_data (Any, optional): Example data to use for initializing the primer. Defaults to None.
         stack_method (Callable[[Any], Any] | Literal["as_nested_tensor", "as_padded_tensor"], optional): The method to use for stacking the data. Defaults to ``maybe_dense_stack``.
+        use_buffer (bool, optional): Whether to use a buffer to load the batches. When an environment has a batch-size
+            that differs from the dataloader's, or when partial resets are to be expected, using a buffer to store data
+            ensures that `next()` is called on the dataloader only when necessary, and that elements of the dataset
+            are loaded in order.
+            Defaults to ``True`` whenever the batch-size of the dataloader is greater than 1.
+        auto_batch_size (bool, optional): If ``True`` (default if `dataloader.batch_size > 0`), the batch size of the
+            tensordict returned by the transform will be automatically determined assuming that there is a single batch
+            dimension.
 
     Attributes:
         dataloader (Iterable[Any]): The dataloader to load data from.
@@ -339,14 +350,25 @@ class DataLoadingPrimer(TensorDictPrimer):
     def __init__(
         self,
         dataloader: Iterable[Any],
+        *,
         primers: Composite | None = None,
         data_keys: list[NestedKey] | None = None,
         data_specs: list[TensorSpec] | None = None,
         example_data: Any = None,
         stack_method: Callable[[Any], Any]
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,
+        use_buffer: bool | None = None,
+        auto_batch_size: bool = True,
     ):
         self.dataloader = dataloader
+        if getattr(dataloader, "batch_size", 1) > 1 and use_buffer is None:
+            use_buffer = True
+
+        self.use_buffer = use_buffer
+        # No auto_batch_size if we know we have a single element
+        self.auto_batch_size = auto_batch_size and (
+            getattr(dataloader, "dataloader", 1) > 0
+        )
         self.endless_dataloader = self._endless_iter(self.dataloader)
         if primers is None:
             if data_keys is None:
@@ -381,6 +403,8 @@ class DataLoadingPrimer(TensorDictPrimer):
             single_default_value=True,
             call_before_env_reset=True,
         )
+        if self.use_buffer:
+            self._queue = deque()
 
     @classmethod
     def _endless_iter(self, obj):
@@ -388,6 +412,10 @@ class DataLoadingPrimer(TensorDictPrimer):
             yield from obj
 
     def _load_from_dataloader(self, reset: torch.Tensor | None = None):
+        """Loads a single element from the dataloader, or alternatively from the buffer.
+
+        If `reset` is passed, the one element per reset will be loaded.
+        """
         if reset is not None:
             if not reset.any():
                 raise RuntimeError("reset must have at least one True value.")
@@ -395,20 +423,35 @@ class DataLoadingPrimer(TensorDictPrimer):
                 return self.stack_method(
                     [self._load_from_dataloader() for i in range(reset.sum())]
                 )
+        if self.use_buffer and len(self._queue) > 0:
+            return self._queue.popleft()
         data = next(self.endless_dataloader)
         # Some heuristic here:
         # if data is a map, assume its keys match the keys in spec
         # TODO: one could rename the keys too
         if isinstance(data, Mapping):
-            out = TensorDict(data)
+            out = TensorDict.from_dict(
+                data, auto_batch_size=self.auto_batch_size, batch_dims=1
+            )
         elif len(self.data_keys) > 1 and isinstance(data, (list, tuple)):
-            out = TensorDict({k: val for k, val in _zip_strict(self.data_keys, data)})
+            out = TensorDict.from_dict(
+                {k: val for k, val in _zip_strict(self.data_keys, data)},
+                auto_batch_size=self.auto_batch_size,
+                batch_dims=1,
+            )
         elif len(self.data_keys) == 1:
-            out = TensorDict({self.data_keys[0]: data})
+            out = TensorDict.from_dict(
+                {self.data_keys[0]: data},
+                auto_batch_size=self.auto_batch_size,
+                batch_dims=1,
+            )
         else:
             raise ValueError(
                 f"Unrecognized data type: {type(data)} with keys {self.data_keys}."
             )
+        if self.use_buffer:
+            self._queue.extend(out.unbind(0))
+            return self._queue.popleft()
         return out
 
 
