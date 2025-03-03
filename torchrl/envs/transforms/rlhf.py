@@ -103,6 +103,9 @@ class DataLoadingPrimer(TensorDictPrimer):
         auto_batch_size (bool, optional): If ``True`` (default if `dataloader.batch_size > 0`), the batch size of the
             tensordict returned by the transform will be automatically determined assuming that there is a single batch
             dimension.
+        repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
+            situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
+            samples (rather than an advantage module).
 
     Attributes:
         dataloader (Iterable[Any]): The dataloader to load data from.
@@ -359,15 +362,21 @@ class DataLoadingPrimer(TensorDictPrimer):
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,
         use_buffer: bool | None = None,
         auto_batch_size: bool = True,
+        repeats: int | None = None,
     ):
         self.dataloader = dataloader
-        if getattr(dataloader, "batch_size", 1) > 1 and use_buffer is None:
+        if repeats is None:
+            repeats = 0
+        self.repeats = repeats
+        if (
+            getattr(dataloader, "batch_size", 1) > 1 and use_buffer is None
+        ) or repeats > 0:
             use_buffer = True
 
         self.use_buffer = use_buffer
         # No auto_batch_size if we know we have a single element
         self.auto_batch_size = auto_batch_size and (
-            getattr(dataloader, "dataloader", 1) > 0
+            getattr(dataloader, "batch_size", 1) > 0
         )
         self.endless_dataloader = self._endless_iter(self.dataloader)
         if primers is None:
@@ -420,11 +429,13 @@ class DataLoadingPrimer(TensorDictPrimer):
             if not reset.any():
                 raise RuntimeError("reset must have at least one True value.")
             if reset.ndim > 0:
-                return self.stack_method(
-                    [self._load_from_dataloader() for i in range(reset.sum())]
-                )
+                loaded = [self._load_from_dataloader() for i in range(reset.sum())]
+                return self.stack_method(loaded)
+
         if self.use_buffer and len(self._queue) > 0:
-            return self._queue.popleft()
+            result = self._queue.popleft()
+            return result
+
         data = next(self.endless_dataloader)
         # Some heuristic here:
         # if data is a map, assume its keys match the keys in spec
@@ -450,7 +461,11 @@ class DataLoadingPrimer(TensorDictPrimer):
                 f"Unrecognized data type: {type(data)} with keys {self.data_keys}."
             )
         if self.use_buffer:
-            self._queue.extend(out.unbind(0))
+            if not out.ndim:
+                out = out.unsqueeze(0)
+            self._queue.extend(
+                [d for d in out.unbind(0) for _ in range(max(1, self.repeats))]
+            )
             return self._queue.popleft()
         return out
 
