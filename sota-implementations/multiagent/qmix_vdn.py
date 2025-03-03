@@ -8,7 +8,6 @@ import time
 
 import hydra
 import torch
-
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
@@ -31,7 +30,7 @@ def rendering_callback(env, td):
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="qmix_vdn")
-def train(cfg: "DictConfig"):  # noqa: F821
+def train(cfg: DictConfig):  # noqa: F821
     # Device
     cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"
     cfg.env.device = cfg.train.device

@@ -120,7 +120,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             )
 
     def loads(self, storage, path):
-        with open(path / "storage_metadata.json", "r") as file:
+        with open(path / "storage_metadata.json") as file:
             metadata = json.load(file)
         is_pytree = metadata["is_pytree"]
         _len = metadata["len"]

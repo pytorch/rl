@@ -5,12 +5,9 @@
 from __future__ import annotations
 
 import importlib
-from typing import Optional
 
 import torch
-
 from tensordict import tensorclass
-
 from torchrl.data.rlhf.dataset import TensorDictTokenizer, TokenizedDatasetLoader
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_comparisons"
@@ -24,8 +21,8 @@ class RewardData:
 
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
-    rewards: Optional[torch.Tensor] = None
-    end_scores: Optional[torch.Tensor] = None
+    rewards: torch.Tensor | None = None
+    end_scores: torch.Tensor | None = None
 
 
 @tensorclass

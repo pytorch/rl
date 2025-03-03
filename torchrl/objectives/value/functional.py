@@ -5,10 +5,8 @@
 from __future__ import annotations
 
 import math
-
 import warnings
 from functools import wraps
-from typing import Optional, Tuple, Union
 
 import torch
 
@@ -129,7 +127,7 @@ def generalized_advantage_estimate(
     terminated: torch.Tensor | None = None,
     *,
     time_dim: int = -2,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Generalized advantage estimate of a trajectory.
 
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
@@ -271,8 +269,8 @@ def _fast_vec_gae(
 
 @_transpose_time
 def vec_generalized_advantage_estimate(
-    gamma: Union[float, torch.Tensor],
-    lmbda: Union[float, torch.Tensor],
+    gamma: float | torch.Tensor,
+    lmbda: float | torch.Tensor,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
@@ -280,7 +278,7 @@ def vec_generalized_advantage_estimate(
     terminated: torch.Tensor | None = None,
     *,
     time_dim: int = -2,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Vectorized Generalized advantage estimate of a trajectory.
 
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
@@ -382,7 +380,7 @@ def td0_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """TD(0) advantage estimate of a trajectory.
 
     Also known as bootstrapped Temporal Difference or one-step return.
@@ -422,7 +420,7 @@ def td0_return_estimate(
     terminated: torch.Tensor | None = None,
     *,
     done: torch.Tensor | None = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     # noqa: D417
     """TD(0) discounted return estimate of a trajectory.
 
@@ -645,7 +643,7 @@ def vec_td1_return_estimate(
     reward,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: Optional[bool] = None,
+    rolling_gamma: bool | None = None,
     time_dim: int = -2,
 ):
     """Vectorized TD(1) return estimate.
@@ -970,7 +968,7 @@ def td_lambda_advantage_estimate(
 
 
 def _fast_td_lambda_return_estimate(
-    gamma: Union[torch.Tensor, float],
+    gamma: torch.Tensor | float,
     lmbda: float,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
@@ -1035,7 +1033,7 @@ def vec_td_lambda_return_estimate(
     reward,
     done,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: Optional[bool] = None,
+    rolling_gamma: bool | None = None,
     *,
     time_dim: int = -2,
 ):
@@ -1277,11 +1275,11 @@ def vtrace_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rho_thresh: Union[float, torch.Tensor] = 1.0,
-    c_thresh: Union[float, torch.Tensor] = 1.0,
+    rho_thresh: float | torch.Tensor = 1.0,
+    c_thresh: float | torch.Tensor = 1.0,
     # not a kwarg because used directly
     time_dim: int = -2,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Computes V-Trace off-policy actor critic targets.
 
     Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted  Actor-Learner Architectures"

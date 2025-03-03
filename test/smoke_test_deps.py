@@ -9,8 +9,6 @@ import tempfile
 
 import pytest
 
-from torchrl.envs.libs.gym import gym_backend
-
 
 def test_dm_control():
     import dm_control  # noqa: F401

@@ -939,7 +939,7 @@ class TestMultiAgent:
         else:
             return
         mlp = nn.Sequential(mlp)
-        mlp_device = mlp.to(device)
+        mlp.to(device)
         param_set = set(mlp.parameters())
         for p in mlp[0].params.values(True, True):
             assert p in param_set

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Callable, List
+from typing import Callable
 
 import torch
 from torch.nn import Module
@@ -103,7 +103,7 @@ class SipHash(Module):
         super().__init__()
         self.as_tensor = as_tensor
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor | List[bytes]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor | list[bytes]:
         hash_values = []
         if x.dtype in (torch.bfloat16,):
             x = x.to(torch.float16)

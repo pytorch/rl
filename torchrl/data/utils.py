@@ -10,9 +10,7 @@ from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
-
 from torch import Tensor
-
 from torchrl.data.tensor_specs import (
     Binary,
     Categorical,
@@ -139,7 +137,7 @@ def consolidate_spec(
     return spec
 
 
-def _empty_like_spec(specs: List[TensorSpec], shape):
+def _empty_like_spec(specs: list[TensorSpec], shape):
     for spec in specs[1:]:
         if spec.__class__ != specs[0].__class__:
             raise ValueError(
@@ -224,7 +222,7 @@ def contains_lazy_spec(spec: TensorSpec) -> bool:
     return False
 
 
-class CloudpickleWrapper(object):
+class CloudpickleWrapper:
     """A wrapper for functions that allow for serialization in multiprocessed settings."""
 
     def __init__(self, fn: Callable, **kwargs):

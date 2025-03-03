@@ -10,13 +10,12 @@ import importlib
 import warnings
 from copy import copy
 from types import ModuleType
-from typing import Dict, List, Tuple
+from typing import Dict
 from warnings import warn
 
 import numpy as np
 import torch
 from packaging import version
-
 from tensordict import TensorDict, TensorDictBase
 from torch.utils._pytree import tree_map
 
@@ -37,9 +36,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
-
 from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
-
 from torchrl.envs.utils import _classproperty
 
 try:
@@ -697,7 +694,7 @@ def _torchrl_to_gym_spec_transform(
         )
 
 
-def _get_envs(to_dict=False) -> List:
+def _get_envs(to_dict=False) -> list:
     if not _has_gym:
         raise ImportError("Gym(nasium) could not be found in your virtual environment.")
     envs = _get_gym_envs()
@@ -1052,7 +1049,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
     def _get_batch_size(self, env):  # noqa: F811
         raise ImportError(GYMNASIUM_1_ERROR)
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -1064,7 +1061,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         env,
         from_pixels: bool = False,
         pixels_only: bool = False,
-    ) -> "gym.core.Env":  # noqa: F821
+    ) -> gym.core.Env:  # noqa: F821
         self.batch_size = self._get_batch_size(env)
 
         env_from_pixels = _is_from_pixels(env)
@@ -1230,7 +1227,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             rs = env.reward_space
             return rs
 
-    def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+    def _make_specs(self, env: gym.Env, batch_size=None) -> None:  # noqa: F821
         # If batch_size is provided, we se it to tell what batch size must be used
         # instead of self.batch_size
         cur_batch_size = self.batch_size if batch_size is None else torch.Size([])
@@ -1647,7 +1644,7 @@ class GymEnv(GymWrapper):
         self,
         env_name: str,
         **kwargs,
-    ) -> "gym.core.Env":  # noqa: F821
+    ) -> gym.core.Env:  # noqa: F821
         if not _has_gym:
             raise RuntimeError(
                 f"gym not found, unable to create {env_name}. "
@@ -1716,7 +1713,7 @@ class GymEnv(GymWrapper):
     def env_name(self):
         return self._constructor_kwargs["env_name"]
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "env_name" not in kwargs:
             raise TypeError("Expected 'env_name' to be part of kwargs")
 
@@ -1930,7 +1927,7 @@ class terminal_obs_reader(default_info_dict_reader):
         self._final_validated = False
 
 
-def _flip_info_tuple(info: Tuple[Dict]) -> Dict[str, tuple]:
+def _flip_info_tuple(info: tuple[dict]) -> dict[str, tuple]:
     # In Gym < 0.24, batched envs returned tuples of dict, and not dict of tuples.
     # We patch this by flipping the tuple -> dict order.
     info_example = set(info[0])

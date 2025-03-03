@@ -433,8 +433,6 @@ class TestBinarizeReward(TransformBase):
 class TestClipTransform(TransformBase):
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, rbclass):
-        device = "cpu"
-        batch = [20]
         torch.manual_seed(0)
         rb = rbclass(storage=LazyTensorStorage(20))
 
@@ -1262,7 +1260,7 @@ class TestCatFrames(TransformBase):
         buffer = getattr(cat_frames, f"_cat_buffers_{key1}")
 
         tdc = td.clone()
-        passed_back_td = cat_frames._reset(tdc, tdc)
+        cat_frames._reset(tdc, tdc)
 
         # assert tdc is passed_back_td
         # assert (buffer == 0).all()
@@ -4722,7 +4720,7 @@ class TestFlattenObservation(TransformBase):
             )
             return env
 
-        env = SerialEnv(2, make_env)
+        SerialEnv(2, make_env).check_env_specs()
 
     def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
         def make_env():
@@ -8479,7 +8477,6 @@ class TestTimeMaxPool(TransformBase):
         keys = [key1, key2]
         dim = -2
         d = 4
-        N = 3
         batch_size = (5,)
         extra_d = (3,) * (-dim - 1)
         device = "cpu"
@@ -8505,7 +8502,6 @@ class TestTimeMaxPool(TransformBase):
         keys = [key1, key2]
         dim = -2
         d = 4
-        N = 3
         batch_size = (5,)
         extra_d = (3,) * (-dim - 1)
         device = "cpu"
@@ -8529,7 +8525,6 @@ class TestTimeMaxPool(TransformBase):
     def test_tmp_reset(self, device):
         key1 = "first key"
         key2 = "second key"
-        N = 4
         keys = [key1, key2]
         key1_tensor = torch.randn(1, 1, 3, 3, device=device)
         key2_tensor = torch.randn(1, 1, 3, 3, device=device)
@@ -8541,7 +8536,7 @@ class TestTimeMaxPool(TransformBase):
         buffer = getattr(t, f"_maxpool_buffer_{key1}")
 
         tdc = td.clone()
-        passed_back_td = t._reset(tdc, tdc.empty())
+        t._reset(tdc, tdc.empty())
 
         # assert tdc is passed_back_td
         assert (buffer != 0).any()
@@ -11686,7 +11681,7 @@ class TestDeviceCastTransformWhole(TransformBase):
 
     def test_transform_model(self):
         t = Compose(DeviceCastTransform("cpu:1", "cpu:0"))
-        m = nn.Sequential(t)
+        nn.Sequential(t)
         assert t(TensorDict(device="cpu:0")).device == torch.device("cpu:1")
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
@@ -11807,7 +11802,7 @@ class TestPermuteTransform(TransformBase):
 
         # check error
         with pytest.raises(ValueError, match="Only tailing dims with negative"):
-            t = PermuteTransform((-1, -10))
+            PermuteTransform((-1, -10))
 
     def test_transform_model(self):
         batch = [2]
@@ -12132,7 +12127,7 @@ class TestBurnInTransform(TransformBase):
             RuntimeError,
             match="BurnInTransform can only be appended to a ReplayBuffer.",
         ):
-            rollout = env.rollout(3)
+            env.rollout(3)
 
     @pytest.mark.parametrize("module", ["gru", "lstm"])
     @pytest.mark.parametrize("batch_size", [2, 4])
@@ -12460,7 +12455,7 @@ class TestRemoveEmptySpecs(TransformBase):
         with pytest.raises(
             RuntimeError, match="The environment passed to SerialEnv has empty specs"
         ):
-            env = TransformedEnv(SerialEnv(2, self.DummyEnv), RemoveEmptySpecs())
+            TransformedEnv(SerialEnv(2, self.DummyEnv), RemoveEmptySpecs())
 
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         with pytest.raises(

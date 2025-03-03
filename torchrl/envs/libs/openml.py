@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 
 from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.envs.common import EnvBase

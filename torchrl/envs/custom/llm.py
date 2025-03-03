@@ -4,17 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Callable, List, Union
+from typing import Callable
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 
-from torchrl.data import (
+from torchrl.data.map.hash import SipHash
+from torchrl.data.tensor_specs import (
     Categorical as CategoricalSpec,
     Composite,
     NonTensor,
-    SipHash,
     Unbounded,
 )
 from torchrl.envs import EnvBase
@@ -84,7 +84,7 @@ class LLMHashingEnv(EnvBase):
         hashing_module: Callable[[torch.Tensor], torch.Tensor] = None,
         observation_key: NestedKey = "observation",
         text_output: bool = True,
-        tokenizer: Callable[[Union[str, List[str]]], torch.Tensor] | None = None,
+        tokenizer: Callable[[str | list[str]], torch.Tensor] | None = None,
         text_key: NestedKey | None = "text",
     ):
         super().__init__()
@@ -117,7 +117,7 @@ class LLMHashingEnv(EnvBase):
         self.action_spec = Composite(action=CategoricalSpec(vocab_size, shape=(1,)))
         _StepMDP(self)
 
-    def make_tensordict(self, input: str | List[str]) -> TensorDict:
+    def make_tensordict(self, input: str | list[str]) -> TensorDict:
         """Converts a string or list of strings in a TensorDict with appropriate shape and device."""
         list_len = len(input) if isinstance(input, list) else 0
         tensordict = TensorDict(
@@ -210,4 +210,3 @@ class LLMHashingEnv(EnvBase):
 
         .. note:: This environment has no randomness, so this method does nothing.
         """
-        pass

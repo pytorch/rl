@@ -2,9 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from torchrl.objectives import DistributionalDQNLoss, DQNLoss, HardUpdate, SoftUpdate
 from torchrl.objectives.common import LossModule
@@ -12,8 +13,8 @@ from torchrl.objectives.utils import TargetNetUpdater
 
 
 def make_target_updater(
-    cfg: "DictConfig", loss_module: LossModule  # noqa: F821
-) -> Optional[TargetNetUpdater]:
+    cfg: DictConfig, loss_module: LossModule  # noqa: F821
+) -> TargetNetUpdater | None:
     """Builds a target network weight update object."""
     if cfg.loss == "double":
         if not cfg.hard_update:
@@ -35,7 +36,7 @@ def make_target_updater(
     return target_net_updater
 
 
-def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
+def make_dqn_loss(model, cfg) -> tuple[DQNLoss, TargetNetUpdater | None]:
     """Builds the DQN loss module."""
     loss_kwargs = {}
     if cfg.distributional:

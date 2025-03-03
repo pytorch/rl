@@ -12,3 +12,12 @@ from .collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
+
+__all__ = [
+    "RandomPolicy",
+    "aSyncDataCollector",
+    "DataCollectorBase",
+    "MultiaSyncDataCollector",
+    "MultiSyncDataCollector",
+    "SyncDataCollector",
+]

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from copy import copy
-from typing import Callable, Dict, Optional, Sequence, Tuple, Union
+from typing import Callable, Sequence
 
 import torch
 from omegaconf import OmegaConf
@@ -20,7 +20,6 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
-
 from torchrl.data import (
     LazyMemmapStorage,
     MultiStep,
@@ -105,7 +104,7 @@ OPTIMIZERS = {
 }
 
 
-def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
+def correct_for_frame_skip(cfg: DictConfig) -> DictConfig:  # noqa: F821
     """Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.
 
     This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targeting a total number of frames
@@ -172,7 +171,7 @@ def make_trainer(
     policy_exploration: TensorDictModuleWrapper | TensorDictModule | None,
     replay_buffer: ReplayBuffer | None,
     logger: Logger | None,
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 
@@ -377,7 +376,7 @@ def make_trainer(
 
 def make_redq_model(
     proof_environment: EnvBase,
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     device: DEVICE_TYPING = "cpu",
     in_keys: Sequence[str] | None = None,
     actor_net_kwargs=None,
@@ -555,7 +554,7 @@ def make_redq_model(
 
 
 def transformed_env_constructor(
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     video_tag: str = "",
     logger: Logger | None = None,
     stats: dict | None = None,
@@ -568,7 +567,7 @@ def transformed_env_constructor(
     state_dim_gsde: int | None = None,
     batch_dims: int | None = 0,
     obs_norm_state_dict: dict | None = None,
-) -> Union[Callable, EnvCreator]:
+) -> Callable | EnvCreator:
     """Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
@@ -688,7 +687,7 @@ def get_norm_state_dict(env):
 def initialize_observation_norm_transforms(
     proof_environment: EnvBase,
     num_iter: int = 1000,
-    key: Union[str, Tuple[str, ...]] = None,
+    key: str | tuple[str, ...] = None,
 ):
     """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
 
@@ -729,8 +728,8 @@ def initialize_observation_norm_transforms(
 
 
 def parallel_env_constructor(
-    cfg: "DictConfig", **kwargs  # noqa: F821
-) -> Union[ParallelEnv, EnvCreator]:
+    cfg: DictConfig, **kwargs  # noqa: F821
+) -> ParallelEnv | EnvCreator:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
@@ -916,9 +915,7 @@ def make_env_transforms(
     return env
 
 
-def make_redq_loss(
-    model, cfg
-) -> Tuple[REDQLoss_deprecated, Optional[TargetNetUpdater]]:
+def make_redq_loss(model, cfg) -> tuple[REDQLoss_deprecated, TargetNetUpdater | None]:
     """Builds the REDQ loss module."""
     loss_kwargs = {}
     loss_kwargs.update({"loss_function": cfg.loss.loss_function})
@@ -950,7 +947,7 @@ def make_redq_loss(
 
 
 def make_target_updater(
-    cfg: "DictConfig", loss_module: LossModule  # noqa: F821
+    cfg: DictConfig, loss_module: LossModule  # noqa: F821
 ) -> TargetNetUpdater | None:
     """Builds a target network weight update object."""
     if cfg.loss.type == "double":
@@ -976,8 +973,8 @@ def make_target_updater(
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
     actor_model_explore: TensorDictModuleWrapper | ProbabilisticTensorDictSequential,
-    cfg: "DictConfig",  # noqa: F821
-    make_env_kwargs: Dict | None = None,
+    cfg: DictConfig,  # noqa: F821
+    make_env_kwargs: dict | None = None,
 ) -> DataCollectorBase:
     """Returns a data collector for off-policy sota-implementations.
 
@@ -1037,7 +1034,7 @@ def make_collector_offpolicy(
 
 
 def make_replay_buffer(
-    device: DEVICE_TYPING, cfg: "DictConfig"  # noqa: F821
+    device: DEVICE_TYPING, cfg: DictConfig  # noqa: F821
 ) -> ReplayBuffer:  # noqa: F821
     """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)

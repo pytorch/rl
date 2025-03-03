@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Callable, Dict, Iterator, List, OrderedDict, Union
+from typing import Callable, Iterator, OrderedDict
 
 import torch
 import torch.nn as nn
@@ -23,7 +23,6 @@ from torchrl.collectors.collectors import (
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
-
 
 RAY_ERR = None
 try:
@@ -289,15 +288,15 @@ class RayCollector(DataCollectorBase):
 
     def __init__(
         self,
-        create_env_fn: Union[Callable, EnvBase, List[Callable], List[EnvBase]],
+        create_env_fn: Callable | EnvBase | list[Callable] | list[EnvBase],
         policy: Callable[[TensorDict], TensorDict],
         *,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | List[torch.device] = None,
-        storing_device: torch.device | List[torch.device] = None,
-        env_device: torch.device | List[torch.device] = None,
-        policy_device: torch.device | List[torch.device] = None,
+        device: torch.device | list[torch.device] = None,
+        storing_device: torch.device | list[torch.device] = None,
+        env_device: torch.device | list[torch.device] = None,
+        policy_device: torch.device | list[torch.device] = None,
         max_frames_per_traj=-1,
         init_random_frames=-1,
         reset_at_each_iter=False,
@@ -305,11 +304,11 @@ class RayCollector(DataCollectorBase):
         split_trajs=False,
         exploration_type=DEFAULT_EXPLORATION_TYPE,
         collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
-        collector_kwargs: Union[Dict, List[Dict]] = None,
+        collector_kwargs: dict | list[dict] = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
-        ray_init_config: Dict = None,
-        remote_configs: Union[Dict, List[Dict]] = None,
+        ray_init_config: dict = None,
+        remote_configs: dict | list[dict] = None,
         num_collectors: int = None,
         update_after_each_batch=False,
         max_weight_update_interval=-1,
@@ -483,19 +482,19 @@ class RayCollector(DataCollectorBase):
         return self.num_collectors
 
     @property
-    def device(self) -> List[torch.device]:
+    def device(self) -> list[torch.device]:
         return self._device
 
     @property
-    def storing_device(self) -> List[torch.device]:
+    def storing_device(self) -> list[torch.device]:
         return self._storing_device
 
     @property
-    def env_device(self) -> List[torch.device]:
+    def env_device(self) -> list[torch.device]:
         return self._env_device
 
     @property
-    def policy_device(self) -> List[torch.device]:
+    def policy_device(self) -> list[torch.device]:
         return self._policy_device
 
     @device.setter
@@ -713,13 +712,13 @@ class RayCollector(DataCollectorBase):
             )
             self._batches_since_weight_update[worker_rank - 1] = 0
 
-    def set_seed(self, seed: int, static_seed: bool = False) -> List[int]:
+    def set_seed(self, seed: int, static_seed: bool = False) -> list[int]:
         """Calls parent method for each remote collector iteratively and returns final seed."""
         for collector in self.remote_collectors():
             seed = ray.get(object_refs=collector.set_seed.remote(seed, static_seed))
         return seed
 
-    def state_dict(self) -> List[OrderedDict]:
+    def state_dict(self) -> list[OrderedDict]:
         """Calls parent method for each remote collector and returns a list of results."""
         futures = [
             collector.state_dict.remote() for collector in self.remote_collectors()
@@ -727,9 +726,7 @@ class RayCollector(DataCollectorBase):
         results = ray.get(object_refs=futures)
         return results
 
-    def load_state_dict(
-        self, state_dict: Union[OrderedDict, List[OrderedDict]]
-    ) -> None:
+    def load_state_dict(self, state_dict: OrderedDict | list[OrderedDict]) -> None:
         """Calls parent method for each remote collector."""
         if isinstance(state_dict, OrderedDict):
             state_dicts = [state_dict]

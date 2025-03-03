@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import contextlib
 import itertools
-
 import math
 import operator
 import os
@@ -93,7 +92,7 @@ def _pin_memory(output: Any) -> Any:
 
 def _reduce(
     tensor: torch.Tensor, reduction: str, dim: int | None = None
-) -> Union[float, torch.Tensor]:
+) -> float | torch.Tensor:
     """Reduces a tensor given the reduction method."""
     if reduction == "max":
         result = tensor.max(dim=dim)
@@ -977,15 +976,13 @@ def _roll_inplace(tensor, shift, out, index_dest=None, index_source=None):
 
 # Copy-paste of unravel-index for PT 2.0
 def _unravel_index(
-    indices: Tensor, shape: Union[int, typing.Sequence[int], torch.Size]
-) -> typing.Tuple[Tensor, ...]:
+    indices: Tensor, shape: int | typing.Sequence[int] | torch.Size
+) -> tuple[Tensor, ...]:
     res_tensor = _unravel_index_impl(indices, shape)
     return res_tensor.unbind(-1)
 
 
-def _unravel_index_impl(
-    indices: Tensor, shape: Union[int, typing.Sequence[int]]
-) -> Tensor:
+def _unravel_index_impl(indices: Tensor, shape: int | typing.Sequence[int]) -> Tensor:
     if isinstance(shape, (int, torch.SymInt)):
         shape = torch.Size([shape])
     else:

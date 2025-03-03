@@ -9,7 +9,6 @@ import json
 import os.path
 import shutil
 import tempfile
-
 from collections import defaultdict
 from contextlib import nullcontext
 from dataclasses import asdict
@@ -17,7 +16,6 @@ from pathlib import Path
 from typing import Callable
 
 import torch
-
 from tensordict import PersistentTensorDict, TensorDict
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
@@ -167,7 +165,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
+        transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
     ):
         self.dataset_id = dataset_id
@@ -381,7 +379,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         return TensorDict.load_memmap(self.data_path)
 
     def _load_and_proc_metadata(self):
-        with open(self.metadata_path, "r") as file:
+        with open(self.metadata_path) as file:
             self.metadata = json.load(file)
         self.metadata["observation_space"] = _proc_spec(
             self.metadata["observation_space"]

@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .actors import (
+from torchrl.modules.tensordict_module.actors import (
     Actor,
     ActorCriticOperator,
     ActorCriticWrapper,
@@ -21,8 +21,8 @@ from .actors import (
     TanhModule,
     ValueOperator,
 )
-from .common import SafeModule, VmapModule
-from .exploration import (
+from torchrl.modules.tensordict_module.common import SafeModule, VmapModule
+from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianModule,
     AdditiveGaussianWrapper,
     EGreedyModule,
@@ -30,11 +30,11 @@ from .exploration import (
     OrnsteinUhlenbeckProcessModule,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from .probabilistic import (
+from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
 )
-from .rnn import (
+from torchrl.modules.tensordict_module.rnn import (
     GRU,
     GRUCell,
     GRUModule,
@@ -44,5 +44,44 @@ from .rnn import (
     recurrent_mode,
     set_recurrent_mode,
 )
-from .sequence import SafeSequential
-from .world_models import WorldModelWrapper
+from torchrl.modules.tensordict_module.sequence import SafeSequential
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
+
+__all__ = [
+    "Actor",
+    "ActorCriticOperator",
+    "ActorCriticWrapper",
+    "ActorValueOperator",
+    "DecisionTransformerInferenceWrapper",
+    "DistributionalQValueActor",
+    "DistributionalQValueHook",
+    "DistributionalQValueModule",
+    "LMHeadActorValueOperator",
+    "MultiStepActorWrapper",
+    "ProbabilisticActor",
+    "QValueActor",
+    "QValueHook",
+    "QValueModule",
+    "TanhModule",
+    "ValueOperator",
+    "SafeModule",
+    "VmapModule",
+    "AdditiveGaussianModule",
+    "AdditiveGaussianWrapper",
+    "EGreedyModule",
+    "EGreedyWrapper",
+    "OrnsteinUhlenbeckProcessModule",
+    "OrnsteinUhlenbeckProcessWrapper",
+    "SafeProbabilisticModule",
+    "SafeProbabilisticTensorDictSequential",
+    "GRU",
+    "GRUCell",
+    "GRUModule",
+    "LSTM",
+    "LSTMCell",
+    "LSTMModule",
+    "recurrent_mode",
+    "set_recurrent_mode",
+    "SafeSequential",
+    "WorldModelWrapper",
+]

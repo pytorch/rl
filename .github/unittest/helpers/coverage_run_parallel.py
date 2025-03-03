@@ -28,8 +28,8 @@ def write_config(config_path: Path, argv: List[str]) -> None:
         argv: Arguments passed to this script, which need to be converted to config file entries
     """
     assert not config_path.exists(), "Temporary coverage config exists already"
-    cmdline = " ".join(shlex.quote(arg) for arg in argv[1:])
-    with open(str(config_path), "wt", encoding="utf-8") as fh:
+    cmdline = shlex.join(argv[1:])
+    with open(str(config_path), "w", encoding="utf-8") as fh:
         fh.write(
             f"""# .coveragerc to control coverage.py
 [run]

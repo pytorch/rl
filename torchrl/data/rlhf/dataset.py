@@ -7,13 +7,10 @@ from __future__ import annotations
 import importlib.util
 import os
 from pathlib import Path
-
-from typing import Sequence, Type
+from typing import Sequence
 
 import torch
-
 from tensordict import TensorDict, TensorDictBase
-
 from tensordict.utils import NestedKey
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import (
@@ -94,7 +91,7 @@ class TokenizedDatasetLoader:
         split,
         max_length,
         dataset_name,
-        tokenizer_fn: Type[TensorDictTokenizer],
+        tokenizer_fn: type[TensorDictTokenizer],
         pre_tokenization_hook=None,
         root_dir=None,
         from_disk=False,
@@ -227,7 +224,7 @@ class TokenizedDatasetLoader:
 
     @staticmethod
     def dataset_to_tensordict(
-        dataset: "datasets.Dataset" | TensorDict,  # noqa: F821
+        dataset: datasets.Dataset | TensorDict,  # noqa: F821
         data_dir: Path,
         prefix: NestedKey = None,
         features: Sequence[str] = None,
@@ -320,7 +317,7 @@ def create_infinite_iterator(iterator):
 def get_dataloader(
     batch_size: int,
     block_size: int,
-    tensorclass_type: Type,
+    tensorclass_type: type,
     device: torch.device,
     dataset_name: str | None = None,
     infinite: bool = True,

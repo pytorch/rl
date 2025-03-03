@@ -22,7 +22,6 @@ from tensordict import MemoryMappedTensor, TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
-
 from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
@@ -403,7 +402,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         download: bool | str = True,
         sampler=None,
         writer=None,
-        transform: "Transform" | None = None,  # noqa: F821
+        transform: Transform | None = None,  # noqa: F821
         num_procs: int = 0,
         num_slices: int | None = None,
         slice_len: int | None = None,
@@ -493,7 +492,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         if os.path.exists(self.dataset_path / "meta.json"):
             return True
         if os.path.exists(self.dataset_path / "processed.json"):
-            with open(self.dataset_path / "processed.json", "r") as jsonfile:
+            with open(self.dataset_path / "processed.json") as jsonfile:
                 return json.load(jsonfile).get("processed", False) == self._max_runs
         return False
 
@@ -514,7 +513,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                     command, shell=True, capture_output=True
                 )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 files = [
-                    file.decode("utf-8").replace("$", "\$")  # noqa: W605
+                    file.decode("utf-8").replace("$", r"\$")  # noqa: W605
                     for file in output.stdout.splitlines()
                     if file.endswith(b".gz")
                 ]
@@ -819,7 +818,7 @@ class _AtariStorage(Storage):
 
     def _proc_td(self, td, index):
         td_data = td.get("data")
-        obs_ = td_data.get(("observation"))[index + 1]
+        obs_ = td_data.get("observation")[index + 1]
         done = td_data.get(("next", "terminated"))[index].squeeze(-1).bool()
         if done.ndim and done.any():
             obs_ = torch.index_fill(obs_, 0, done.nonzero().squeeze(), 0)

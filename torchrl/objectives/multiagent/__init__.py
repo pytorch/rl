@@ -4,3 +4,5 @@
 # LICENSE file in the root directory of this source tree.
 
 from .qmixer import QMixerLoss
+
+__all__ = ["QMixerLoss"]

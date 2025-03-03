@@ -2,8 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from typing import Union
+from __future__ import annotations
 
 import torch
 
@@ -212,7 +211,7 @@ def _get_num_per_traj(done):
 
 
 def _split_and_pad_sequence(
-    tensor: Union[torch.Tensor, TensorDictBase],
+    tensor: torch.Tensor | TensorDictBase,
     splits: torch.Tensor,
     return_mask=False,
     time_dim=-1,
@@ -318,7 +317,7 @@ def _split_and_pad_sequence(
 
 
 def _inv_pad_sequence(
-    tensor: Union[torch.Tensor, TensorDictBase],
+    tensor: torch.Tensor | TensorDictBase,
     splits: torch.Tensor,
     mask: torch.Tensor = None,
 ):

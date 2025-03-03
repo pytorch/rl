@@ -2,8 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
-from typing import List, Optional, Union
 
 import torch
 from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
@@ -203,13 +204,13 @@ class VIPTransform(Compose):
     def __init__(
         self,
         model_name: str,
-        in_keys: List[str] = None,
-        out_keys: List[str] = None,
+        in_keys: list[str] = None,
+        out_keys: list[str] = None,
         size: int = 244,
         stack_images: bool = True,
-        download: Union[bool, "WeightsEnum", str] = False,  # noqa: F821
-        download_path: Optional[str] = None,
-        tensor_pixels_keys: List[str] = None,
+        download: bool | WeightsEnum | str = False,  # noqa: F821
+        download_path: str | None = None,
+        tensor_pixels_keys: list[str] = None,
     ):
         super().__init__()
         self.in_keys = in_keys if in_keys is not None else ["pixels"]
@@ -325,7 +326,7 @@ class VIPTransform(Compose):
         if self._dtype is not None:
             self.to(self._dtype)
 
-    def to(self, dest: Union[DEVICE_TYPING, torch.dtype]):
+    def to(self, dest: DEVICE_TYPING | torch.dtype):
         if isinstance(dest, torch.dtype):
             self._dtype = dest
         else:
@@ -364,7 +365,7 @@ class VIPRewardTransform(VIPTransform):
         tensordict_in = tensordict.select("goal_image").rename_key_(
             "goal_image", self.in_keys[0]
         )
-        tensordict_in = super(VIPRewardTransform, self).forward(tensordict_in)
+        tensordict_in = super().forward(tensordict_in)
         tensordict = tensordict.update(
             tensordict_in.rename_key_(self.out_keys[0], "goal_embedding")
         )

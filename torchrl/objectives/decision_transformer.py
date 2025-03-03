@@ -6,16 +6,14 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
-
 from torch import distributions as d
-from torchrl.modules import ProbabilisticActor
 
+from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _reduce, distance_loss
 
@@ -85,7 +83,7 @@ class OnlineDTLoss(LossModule):
         min_alpha: float = None,
         max_alpha: float = None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, float] = "auto",
+        target_entropy: str | float = "auto",
         samples_mc_entropy: int = 1,
         reduction: str = None,
     ) -> None:

@@ -51,3 +51,20 @@ HAS_ENTROPY = {
     torch_dist.Categorical: True,
     torch_dist.Normal: True,
 }
+
+__all__ = [
+    "NormalParamExtractor",
+    "distributions",
+    "Delta",
+    "IndependentNormal",
+    "NormalParamWrapper",
+    "TanhDelta",
+    "TanhNormal",
+    "TruncatedNormal",
+    "MaskedCategorical",
+    "MaskedOneHotCategorical",
+    "OneHotCategorical",
+    "OneHotOrdinal",
+    "Ordinal",
+    "ReparamGradientStrategy",
+]

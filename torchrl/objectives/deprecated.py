@@ -7,11 +7,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from numbers import Number
-from typing import List, Tuple, Union
 
 import numpy as np
 import torch
-
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import composite_lp_aggregate, dispatch, TensorDictModule
 from tensordict.utils import NestedKey
@@ -149,7 +147,7 @@ class REDQLoss_deprecated(LossModule):
     def __init__(
         self,
         actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
@@ -159,7 +157,7 @@ class REDQLoss_deprecated(LossModule):
         max_alpha: float = 10.0,
         action_spec=None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, Number] = "auto",
+        target_entropy: str | Number = "auto",
         delay_qvalue: bool = True,
         gSDE: bool = False,
         gamma: float = None,
@@ -362,7 +360,7 @@ class REDQLoss_deprecated(LossModule):
     def _cached_detach_qvalue_network_params(self):
         return self.qvalue_network_params.detach()
 
-    def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def _actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys, strict=False)
         with set_exploration_type(

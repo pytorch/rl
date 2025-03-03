@@ -10,20 +10,19 @@ import functools
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator
 
 import torch
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
-
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from tensordict.utils import Buffer
 from torch import nn
 from torch.nn import Parameter
+
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import set_recurrent_mode
-
-from torchrl.objectives.utils import RANDOM_MODULE_LIST, ValueEstimators
+from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
+from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 try:
@@ -125,8 +124,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
         """
-
-        pass
 
     tensor_keys: _AcceptedKeys
     _vmap_randomness = None
@@ -280,9 +277,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         self,
         module: TensorDictModule,
         module_name: str,
-        expand_dim: Optional[int] = None,
+        expand_dim: int | None = None,
         create_target_params: bool = False,
-        compare_against: Optional[List[Parameter]] = None,
+        compare_against: list[Parameter] | None = None,
         **kwargs,
     ) -> None:
         """Converts a module to functional to be used in the loss.
@@ -486,7 +483,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, Parameter]]:
+    ) -> Iterator[tuple[str, Parameter]]:
         for name, param in super().named_parameters(prefix=prefix, recurse=recurse):
             if not name.startswith("_target"):
                 yield name, param
@@ -636,6 +633,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
         """
         if self._vmap_randomness is None:
+            import torchrl.objectives.utils
+
             main_modules = list(self.__dict__.values()) + list(self.children())
             modules = (
                 module
@@ -644,7 +643,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 for module in main_module.modules()
             )
             for val in modules:
-                if isinstance(val, RANDOM_MODULE_LIST):
+                if isinstance(val, torchrl.objectives.utils.RANDOM_MODULE_LIST):
                     self._vmap_randomness = "different"
                     break
             else:
@@ -688,7 +687,10 @@ class _make_target_param:
         return x
 
 
-def add_ramdom_module(module):
+def add_random_module(module):
     """Adds a random module to the list of modules that will be detected by :meth:`~torchrl.objectives.LossModule.vmap_randomness` as random."""
-    global RANDOM_MODULE_LIST
-    RANDOM_MODULE_LIST = RANDOM_MODULE_LIST + (module,)
+    import torchrl.objectives.utils
+
+    torchrl.objectives.utils.RANDOM_MODULE_LIST = (
+        torchrl.objectives.utils.RANDOM_MODULE_LIST + (module,)
+    )

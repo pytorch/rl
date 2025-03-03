@@ -2,8 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from torchrl._utils import _make_ordinal_device
@@ -18,7 +19,7 @@ from torchrl.data.utils import DEVICE_TYPING
 
 
 def make_replay_buffer(
-    device: DEVICE_TYPING, cfg: "DictConfig"  # noqa: F821
+    device: DEVICE_TYPING, cfg: DictConfig  # noqa: F821
 ) -> ReplayBuffer:  # noqa: F821
     """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = _make_ordinal_device(torch.device(device))
@@ -52,7 +53,7 @@ class ReplayArgsConfig:
     # buffer size, in number of frames stored. Default=1e6
     prb: bool = False
     # whether a Prioritized replay buffer should be used instead of a more basic circular one.
-    buffer_scratch_dir: Optional[str] = None
+    buffer_scratch_dir: str | None = None
     # directory where the buffer data should be stored. If none is passed, they will be placed in /tmp/
     buffer_prefetch: int = 10
     # prefetching queue length for the replay buffer

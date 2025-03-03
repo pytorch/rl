@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import functools
-
 import importlib
 import json
 import os
@@ -14,21 +13,18 @@ import shutil
 import tempfile
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, List
+from typing import Callable
 
 import numpy as np
-
 import torch
 from tensordict import PersistentTensorDict, TensorDict
 from torch import multiprocessing as mp
-
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
-
 from torchrl.envs.transforms import Compose, Resize, ToTensorImage
 from torchrl.envs.utils import _classproperty
 
@@ -172,10 +168,10 @@ class VD4RLExperienceReplay(BaseDatasetExperienceReplay):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
+        transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
         totensor: bool = True,
-        image_size: int | List[int] | None = None,
+        image_size: int | list[int] | None = None,
         num_workers: int = 0,
         **env_kwargs,
     ):
@@ -388,7 +384,7 @@ class VD4RLExperienceReplay(BaseDatasetExperienceReplay):
             return [str(path)[6:] for path in sibs]
         except Exception:
             # return the default datasets
-            with open(THIS_DIR / "vd4rl.json", "r") as file:
+            with open(THIS_DIR / "vd4rl.json") as file:
                 return json.load(file)
 
     def _make_split(self):

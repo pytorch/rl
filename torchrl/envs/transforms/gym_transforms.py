@@ -4,10 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 """Gym-specific transforms."""
+
+from __future__ import annotations
+
 import warnings
 
 import torch
-import torchrl.objectives.common
 from tensordict import TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
 from torchrl.data.tensor_specs import Unbounded
@@ -186,7 +188,9 @@ class EndOfLifeTransform(Transform):
         )
         return observation_spec
 
-    def register_keys(self, loss_or_advantage: "torchrl.objectives.common.LossModule"):
+    def register_keys(
+        self, loss_or_advantage: torchrl.objectives.common.LossModule  # noqa
+    ):
         """Registers the end-of-life key at appropriate places within the loss.
 
         Args:

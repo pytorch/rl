@@ -6,9 +6,7 @@
 from __future__ import annotations
 
 import functools
-
 import gc
-
 import os
 import time
 import weakref
@@ -17,11 +15,10 @@ from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Sequence
 from warnings import warn
 
 import torch
-
 from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
@@ -31,6 +28,7 @@ from tensordict import (
 )
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
+
 from torchrl._utils import (
     _check_for_faulty_process,
     _make_ordinal_device,
@@ -48,12 +46,16 @@ from torchrl.envs.libs.envpool import (  # noqa: F401
     MultiThreadedEnv,
     MultiThreadedEnvWrapper,
 )
-
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     _sort_keys,
     _update_during_reset,
     clear_mpi_env_vars,
+)
+
+_CONSOLIDATE_ERR_CAPTURE = (
+    "TensorDict.consolidate failed. You can deactivate the tensordict consolidation via the "
+    "`consolidate` keyword argument of the ParallelEnv constructor."
 )
 
 
@@ -94,7 +96,7 @@ class _dispatch_caller_parallel:
 
 
 class _dispatch_caller_serial:
-    def __init__(self, list_callable: List[Callable, Any]):
+    def __init__(self, list_callable: list[Callable, Any]):
         self.list_callable = list_callable
 
     def __call__(self, *args, **kwargs):
@@ -290,15 +292,15 @@ class BatchedEnvBase(EnvBase):
     def __init__(
         self,
         num_workers: int,
-        create_env_fn: Union[Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]],
+        create_env_fn: Callable[[], EnvBase] | Sequence[Callable[[], EnvBase]],
         *,
-        create_env_kwargs: Union[dict, Sequence[dict]] = None,
+        create_env_kwargs: dict | Sequence[dict] = None,
         pin_memory: bool = False,
-        share_individual_td: Optional[bool] = None,
+        share_individual_td: bool | None = None,
         shared_memory: bool = True,
         memmap: bool = False,
-        policy_proof: Optional[Callable] = None,
-        device: Optional[DEVICE_TYPING] = None,
+        policy_proof: Callable | None = None,
+        device: DEVICE_TYPING | None = None,
         allow_step_when_done: bool = False,
         num_threads: int = None,
         num_sub_threads: int = 1,
@@ -484,7 +486,7 @@ class BatchedEnvBase(EnvBase):
         return not self._use_buffers
 
     def _get_metadata(
-        self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
+        self, create_env_fn: list[Callable], create_env_kwargs: list[dict]
     ):
         if self._single_task:
             # if EnvCreator, the metadata are already there
@@ -506,7 +508,7 @@ class BatchedEnvBase(EnvBase):
                 self.share_individual_td = False
         else:
             n_tasks = len(create_env_fn)
-            self.meta_data: List[EnvMetaData] = []
+            self.meta_data: list[EnvMetaData] = []
             for i in range(n_tasks):
                 self.meta_data.append(
                     get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
@@ -533,7 +535,7 @@ class BatchedEnvBase(EnvBase):
 
         self._set_properties()
 
-    def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
+    def update_kwargs(self, kwargs: dict | list[dict]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
 
         Args:
@@ -862,9 +864,8 @@ class BatchedEnvBase(EnvBase):
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         """This method is not used in batched envs."""
-        pass
 
     @lazy
     def start(self) -> None:
@@ -965,8 +966,8 @@ class SerialEnv(BatchedEnvBase):
 
     @_check_start
     def set_seed(
-        self, seed: Optional[int] = None, static_seed: bool = False
-    ) -> Optional[int]:
+        self, seed: int | None = None, static_seed: bool = False
+    ) -> int | None:
         for env in self._envs:
             new_seed = env.set_seed(seed, static_seed=static_seed)
             seed = new_seed
@@ -1499,7 +1500,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     def _step_and_maybe_reset_no_buffers(
         self, tensordict: TensorDictBase
-    ) -> Tuple[TensorDictBase, TensorDictBase]:
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         partial_steps = tensordict.get("_step", None)
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
@@ -1540,7 +1541,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     @_check_start
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
-    ) -> Tuple[TensorDictBase, TensorDictBase]:
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         if not self._use_buffers:
             # Simply dispatch the input to the workers
             # return self._step_and_maybe_reset_no_buffers(tensordict)
@@ -1702,7 +1703,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     def _step_no_buffers(
         self, tensordict: TensorDictBase
-    ) -> Tuple[TensorDictBase, TensorDictBase]:
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         partial_steps = tensordict.get("_step", None)
         tensordict_save = tensordict
         if partial_steps is not None and partial_steps.all():
@@ -1900,7 +1901,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         tensordict: TensorDictBase,
         reset_kwargs_list,
         needs_resetting,
-    ) -> Tuple[TensorDictBase, TensorDictBase]:
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         if is_tensor_collection(tensordict):
             # tensordict = tensordict.consolidate(share_memory=True, num_threads=1)
             tensordict = tensordict.consolidate(
@@ -2088,8 +2089,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @_check_start
     def set_seed(
-        self, seed: Optional[int] = None, static_seed: bool = False
-    ) -> Optional[int]:
+        self, seed: int | None = None, static_seed: bool = False
+    ) -> int | None:
         self._seeds = []
         for channel in self.parent_channels:
             channel.send(("seed", (seed, static_seed)))
@@ -2166,8 +2167,8 @@ def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> Ordered
 def _run_worker_pipe_shared_mem(
     parent_pipe: connection.Connection,
     child_pipe: connection.Connection,
-    env_fun: Union[EnvBase, Callable],
-    env_fun_kwargs: Dict[str, Any],
+    env_fun: EnvBase | Callable,
+    env_fun_kwargs: dict[str, Any],
     mp_event: mp.Event = None,
     shared_tensordict: TensorDictBase = None,
     _selected_input_keys=None,
@@ -2413,14 +2414,15 @@ def _run_worker_pipe_shared_mem(
 def _run_worker_pipe_direct(
     parent_pipe: connection.Connection,
     child_pipe: connection.Connection,
-    env_fun: Union[EnvBase, Callable],
-    env_fun_kwargs: Dict[str, Any],
+    env_fun: EnvBase | Callable,
+    env_fun_kwargs: dict[str, Any],
     mp_event: mp.Event = None,
     non_blocking: bool = False,
     has_lazy_inputs: bool = False,
     verbose: bool = False,
     num_threads: int | None = None,  # for fork start method
 ) -> None:
+    consolidate = True
     if num_threads is not None:
         torch.set_num_threads(num_threads)
 

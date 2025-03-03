@@ -154,7 +154,7 @@ class TestCSVLogger:
                 step=steps[i] if steps else None,
             )
 
-        with open(os.path.join(tmpdir, exp_name, "scalars", "foo.csv"), "r") as file:
+        with open(os.path.join(tmpdir, exp_name, "scalars", "foo.csv")) as file:
             for i, row in enumerate(file.readlines()):
                 step = steps[i] if steps else i
                 assert row == f"{step},{values[i].item()}\n"
@@ -239,7 +239,7 @@ class TestCSVLogger:
         logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name)
         logger.log_hparams(cfg=config)
 
-        with open(os.path.join(tmpdir, exp_name, "texts", "hparams0.txt"), "r") as file:
+        with open(os.path.join(tmpdir, exp_name, "texts", "hparams0.txt")) as file:
             txt = "\n".join([f"{k}: {val}" for k, val in sorted(config.items())])
             text = "".join(file.readlines())
             assert text == txt

@@ -10,9 +10,7 @@ import functools
 import gc
 import os
 import subprocess
-
 import sys
-from typing import Optional
 from unittest.mock import patch
 
 import numpy as np
@@ -32,8 +30,8 @@ from tensordict.nn import (
     TensorDictModuleBase,
     TensorDictSequential,
 )
-
 from torch import nn
+
 from torchrl._utils import (
     _make_ordinal_device,
     _replace_last,
@@ -1820,7 +1818,7 @@ class TestCollectorDevices:
         def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
             return self.full_done_specs.zeros().update(self.observation_spec.zeros())
 
-        def _set_seed(self, seed: Optional[int]):
+        def _set_seed(self, seed: int | None):
             return seed
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")

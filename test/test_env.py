@@ -95,7 +95,7 @@ if _has_gym:
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
-    with open(os.path.join(this_dir, "configs", "atari.yaml"), "r") as file:
+    with open(os.path.join(this_dir, "configs", "atari.yaml")) as file:
         atari_confs = yaml.load(file, Loader=yaml.FullLoader)
     _atari_found = True
 except FileNotFoundError:
@@ -131,6 +131,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
+        EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
         HistoryTransform,

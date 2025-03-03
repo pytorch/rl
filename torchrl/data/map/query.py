@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Callable, Dict, List, Mapping, TypeVar
+from typing import Any, Callable, List, Mapping, TypeVar
 
 import torch
 import torch.nn as nn
@@ -39,7 +39,7 @@ class HashToInt(nn.Module):
                 )
         return torch.tensor(result, device=key.device, dtype=key.dtype)
 
-    def state_dict(self) -> Dict[str, torch.Tensor]:
+    def state_dict(self) -> dict[str, torch.Tensor]:
         values = torch.tensor(self._index_to_index.values())
         keys = torch.tensor(self._index_to_index.keys())
         return {"keys": keys, "values": values}
@@ -111,11 +111,11 @@ class QueryModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        in_keys: List[NestedKey],
+        in_keys: list[NestedKey],
         index_key: NestedKey = "_index",
         hash_key: NestedKey = "_hash",
         *,
-        hash_module: Callable[[Any], int] | List[Callable[[Any], int]] | None = None,
+        hash_module: Callable[[Any], int] | list[Callable[[Any], int]] | None = None,
         hash_to_int: Callable[[int], int] | None = None,
         aggregator: Callable[[Any], int] = None,
         clone: bool = False,

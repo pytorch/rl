@@ -2,9 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable
 
 from tensordict import TensorDictBase
 
@@ -22,10 +23,10 @@ from torchrl.envs.common import EnvBase
 
 
 def sync_async_collector(
-    env_fns: Union[Callable, List[Callable]],
-    env_kwargs: Optional[Union[dict, List[dict]]],
-    num_env_per_collector: Optional[int] = None,
-    num_collectors: Optional[int] = None,
+    env_fns: Callable | list[Callable],
+    env_kwargs: dict | list[dict] | None,
+    num_env_per_collector: int | None = None,
+    num_collectors: int | None = None,
     **kwargs,
 ) -> MultiaSyncDataCollector:
     """Runs asynchronous collectors, each running synchronous environments.
@@ -82,12 +83,12 @@ def sync_async_collector(
 
 
 def sync_sync_collector(
-    env_fns: Union[Callable, List[Callable]],
-    env_kwargs: Optional[Union[dict, List[dict]]],
-    num_env_per_collector: Optional[int] = None,
-    num_collectors: Optional[int] = None,
+    env_fns: Callable | list[Callable],
+    env_kwargs: dict | list[dict] | None,
+    num_env_per_collector: int | None = None,
+    num_collectors: int | None = None,
     **kwargs,
-) -> Union[SyncDataCollector, MultiSyncDataCollector]:
+) -> SyncDataCollector | MultiSyncDataCollector:
     """Runs synchronous collectors, each running synchronous environments.
 
     E.g.
@@ -164,16 +165,16 @@ def sync_sync_collector(
 
 
 def _make_collector(
-    collector_class: Type,
-    env_fns: Union[Callable, List[Callable]],
-    env_kwargs: Optional[Union[dict, List[dict]]],
+    collector_class: type,
+    env_fns: Callable | list[Callable],
+    env_kwargs: dict | list[dict] | None,
     policy: Callable[[TensorDictBase], TensorDictBase],
     max_frames_per_traj: int = -1,
     frames_per_batch: int = 200,
-    total_frames: Optional[int] = None,
-    postproc: Optional[Callable] = None,
-    num_env_per_collector: Optional[int] = None,
-    num_collectors: Optional[int] = None,
+    total_frames: int | None = None,
+    postproc: Callable | None = None,
+    num_env_per_collector: int | None = None,
+    num_collectors: int | None = None,
     **kwargs,
 ) -> DataCollectorBase:
     if env_kwargs is None:
@@ -249,11 +250,9 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[
-        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
-    ],
-    cfg: "DictConfig",  # noqa: F821
-    make_env_kwargs: Optional[Dict] = None,
+    actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential),
+    cfg: DictConfig,  # noqa: F821
+    make_env_kwargs: dict | None = None,
 ) -> DataCollectorBase:
     """Returns a data collector for off-policy sota-implementations.
 
@@ -313,11 +312,9 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[
-        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
-    ],
-    cfg: "DictConfig",  # noqa: F821
-    make_env_kwargs: Optional[Dict] = None,
+    actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential),
+    cfg: DictConfig,  # noqa: F821
+    make_env_kwargs: dict | None = None,
 ) -> DataCollectorBase:
     """Makes a collector in on-policy settings.
 

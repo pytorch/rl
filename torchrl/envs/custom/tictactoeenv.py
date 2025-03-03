@@ -4,11 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Optional
-
 import torch
 from tensordict import TensorDict, TensorDictBase
-
 from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.envs.common import EnvBase
 
@@ -279,7 +276,7 @@ class TicTacToeEnv(EnvBase):
     def get_action_mask():
         pass
 
-    def rand_action(self, tensordict: Optional[TensorDictBase] = None):
+    def rand_action(self, tensordict: TensorDictBase | None = None):
         mask = tensordict.get("mask")
         action_spec = self.action_spec
         if tensordict.ndim:

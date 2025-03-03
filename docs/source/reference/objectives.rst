@@ -111,6 +111,7 @@ auto-completion to make their choice.
     :template: rl_template_noinherit.rst
 
     LossModule
+    add_random_module
 
 DQN
 ---
