@@ -10304,10 +10304,15 @@ class TrajCounter(Transform):
 
     """
 
-    def __init__(self, out_key: NestedKey = "traj_count"):
+    def __init__(
+        self, out_key: NestedKey = "traj_count", *, repeats: int | None = None
+    ):
         super().__init__(in_keys=[], out_keys=[out_key])
         self._make_shared_value()
         self._initialized = False
+        if repeats is None:
+            repeats = 0
+        self.repeats = repeats
 
     def _make_shared_value(self):
         self._traj_count = mp.Value("i", 0)
