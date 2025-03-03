@@ -20,7 +20,7 @@ from torch import Tensor
 from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import ProbabilisticActor, QValueActor
+from torchrl.modules.tensordict_module.actors import ProbabilisticActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (

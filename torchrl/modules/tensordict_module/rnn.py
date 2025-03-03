@@ -19,11 +19,6 @@ from torch.nn.modules.rnn import RNNCellBase
 
 from torchrl._utils import _ContextManager, _DecoratorContextManager
 from torchrl.data.tensor_specs import Unbounded
-from torchrl.objectives.value.functional import (
-    _inv_pad_sequence,
-    _split_and_pad_sequence,
-)
-from torchrl.objectives.value.utils import _get_num_per_traj_init
 
 
 class LSTMCell(RNNCellBase):
@@ -718,6 +713,11 @@ class LSTMModule(ModuleBase):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase):
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None, None]
         shape = tensordict.shape
@@ -742,6 +742,8 @@ class LSTMModule(ModuleBase):
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
         if self.recurrent_mode and is_init[..., 1:].any():
+            from torchrl.objectives.value.utils import _get_num_per_traj_init
+
             # if we have consecutive trajectories, things get a little more complicated
             # we have a tensordict of shape [B, T]
             # we will split / pad things such that we get a tensordict of shape
@@ -1533,6 +1535,11 @@ class GRUModule(ModuleBase):
     @dispatch
     @set_lazy_legacy(False)
     def forward(self, tensordict: TensorDictBase):
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None]
         shape = tensordict.shape
@@ -1557,6 +1564,8 @@ class GRUModule(ModuleBase):
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
         if self.recurrent_mode and is_init[..., 1:].any():
+            from torchrl.objectives.value.utils import _get_num_per_traj_init
+
             # if we have consecutive trajectories, things get a little more complicated
             # we have a tensordict of shape [B, T]
             # we will split / pad things such that we get a tensordict of shape
