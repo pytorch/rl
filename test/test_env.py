@@ -4700,6 +4700,180 @@ class TestLLMEnv:
                 r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[]))
                 assert r.ndim == 1
 
+    @pytest.mark.parametrize(
+        "str2str,stack_method",
+        [
+            [True, None],
+            [False, "as_padded_tensor"],
+            # TODO: a bit experimental, fails with check_env_specs
+            # [False, "as_nested_tensor"],
+            [False, None],
+        ],
+    )
+    @pytest.mark.parametrize("batched", [True, False])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("batch_size", [0, 4])
+    @pytest.mark.parametrize("repeats", [3])
+    def test_llm_from_dataloader_repeats(
+        self, str2str, batched, stack_method, device, batch_size, repeats
+    ):
+        if str2str:
+            kwargs = {
+                "dataloader": self.DummyDataLoader(batch_size=batch_size),
+                "data_keys": ["observation"],
+                "example_data": "a string!",
+                "repeats": repeats,
+            }
+        else:
+            if stack_method is None:
+                stack_method = as_padded_tensor
+            kwargs = {
+                "dataloader": self.DummyTensorDataLoader(
+                    padding=True, batch_size=batch_size
+                ),
+                "data_keys": ["observation"],
+                "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
+                "stack_method": stack_method,
+                "repeats": repeats,
+            }
+        kwargs.update({"str2str": str2str, "device": device})
+        env = LLMEnv.from_dataloader(**kwargs)
+        assert env.transform.repeats == repeats
+
+        max_steps = 3
+        env.append_transform(StepCounter(max_steps=max_steps))
+
+        def policy(td):
+            if str2str:
+                if not td.shape:
+                    td["action"] = "<nothing>"
+                else:
+                    td["action"] = NonTensorStack(
+                        *["<nothing>" for _ in range(td.shape[0])]
+                    )
+            else:
+                td["action"] = torch.ones(td.shape + (1,), dtype=torch.int64)
+            return td
+
+        if batched:
+            r = env.rollout(
+                100,
+                policy,
+                tensordict=TensorDict(batch_size=[3]),
+                break_when_any_done=False,
+            )
+        else:
+            r = env.rollout(100, policy, break_when_any_done=False)
+        # check that r at reset is always the same
+        r_reset = r[..., ::max_steps]
+        if not batched:
+            if str2str:
+                assert r_reset[..., 0]["observation"] == r_reset[..., 1]["observation"]
+                assert r_reset[..., 0]["observation"] == r_reset[..., 2]["observation"]
+                assert r_reset[..., 0]["observation"] != r_reset[..., 3]["observation"]
+            else:
+                assert (
+                    r_reset[..., 0]["observation"] == r_reset[..., 1]["observation"]
+                ).all()
+                assert (
+                    r_reset[..., 0]["observation"] == r_reset[..., 2]["observation"]
+                ).all()
+                assert (
+                    r_reset[..., 0]["observation"] != r_reset[..., 3]["observation"]
+                ).any()
+        else:
+            # When batched, each block contains the 3 reset packs
+            if str2str:
+                assert r_reset[0, 0]["observation"] == r_reset[1, 0]["observation"]
+                assert r_reset[0, 0]["observation"] == r_reset[2, 0]["observation"]
+                assert r_reset[0, 0]["observation"] != r_reset[0, 1]["observation"]
+            else:
+                assert (
+                    r_reset[0, 0]["observation"] == r_reset[1, 0]["observation"]
+                ).all()
+                assert (
+                    r_reset[0, 0]["observation"] == r_reset[2, 0]["observation"]
+                ).all()
+                assert (
+                    r_reset[0, 0]["observation"] != r_reset[0, 1]["observation"]
+                ).any()
+
+    @pytest.mark.parametrize(
+        "str2str,stack_method",
+        [
+            [True, None],
+            [False, "as_padded_tensor"],
+        ],
+    )
+    @pytest.mark.parametrize("batched", [True])
+    @pytest.mark.parametrize("device", [None])
+    @pytest.mark.parametrize("batch_size", [4])
+    @pytest.mark.parametrize("repeats", [3])
+    @pytest.mark.parametrize(
+        "assign_reward,assign_done", [[True, False], [True, True], [False, True]]
+    )
+    def test_done_and_reward(
+        self,
+        str2str,
+        batched,
+        stack_method,
+        device,
+        batch_size,
+        repeats,
+        assign_reward,
+        assign_done,
+    ):
+        with pytest.raises(
+            ValueError, match="str2str"
+        ) if str2str else contextlib.nullcontext():
+            if str2str:
+                kwargs = {
+                    "dataloader": self.DummyDataLoader(batch_size=batch_size),
+                    "data_keys": ["observation"],
+                    "example_data": "a string!",
+                    "repeats": repeats,
+                    "assign_reward": assign_reward,
+                    "assign_done": assign_done,
+                }
+            else:
+                if stack_method is None:
+                    stack_method = as_padded_tensor
+                kwargs = {
+                    "dataloader": self.DummyTensorDataLoader(
+                        padding=True, batch_size=batch_size
+                    ),
+                    "data_keys": ["observation"],
+                    "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
+                    "stack_method": stack_method,
+                    "repeats": repeats,
+                    "assign_reward": assign_reward,
+                    "assign_done": assign_done,
+                }
+            kwargs.update({"str2str": str2str, "device": device})
+            env = LLMEnv.from_dataloader(**kwargs)
+            # We want to make sure that transforms that rely on the done state work appropriately
+            env.append_transform(StepCounter(max_steps=10))
+
+            def policy(td):
+                td["action"] = torch.ones(
+                    td.shape + (torch.randint(10, (1,)).item(),), dtype=torch.int64
+                )
+                return td
+
+            if batched:
+                r = env.rollout(
+                    100,
+                    policy,
+                    tensordict=TensorDict(batch_size=[3]),
+                    break_when_any_done=False,
+                )
+            else:
+                r = env.rollout(100, policy, break_when_any_done=False)
+            if assign_done:
+                assert "terminated" in r
+                assert "done" in r
+            print(r)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
