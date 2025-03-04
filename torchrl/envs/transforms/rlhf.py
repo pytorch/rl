@@ -412,6 +412,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             single_default_value=True,
             call_before_env_reset=True,
         )
+        self._reset_key = "_reset"
         if self.use_buffer:
             self._queue = deque()
 
@@ -460,6 +461,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             raise ValueError(
                 f"Unrecognized data type: {type(data)} with keys {self.data_keys}."
             )
+        print('out', out)
         if self.use_buffer:
             if not out.ndim:
                 out = out.unsqueeze(0)

@@ -39,7 +39,7 @@ class LLMEnv(EnvBase):
 
     Prompts to the language model can be loaded when the environment is ``reset`` if the environment is created via :meth:`~from_dataloader`
 
-    Args:
+    Keyword Args:
         observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults to
             ``"observation"``.
         action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to ``"action"``.
@@ -47,6 +47,12 @@ class LLMEnv(EnvBase):
         device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.
         vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an
             unbounded vocabulary. Defaults to ``None``.
+        no_stack (bool, optional): If ``False`` (default), the environment should stack the action with the past
+            observation, each action being a new, unseen part of a conversation. Otherwise, the action is assumed
+            to be the plain output of the LLM, including the input tokens / strings.
+        assign_reward (bool, optional): TODO
+        assign_done (bool, optional): TODO
+        reward_key (NestedKey, optional): TODO
 
     .. seealso:: :class:`~torchrl.envs.DataLoadingPrimer` for examples.
 
@@ -58,39 +64,58 @@ class LLMEnv(EnvBase):
     def __init__(
         self,
         *,
-        observation_key: NestedKey = "observation",
+        token_key: NestedKey = "observation",
+        attention_key: NestedKey | None = None,
         action_key: NestedKey = "action",
         str2str: bool = False,
         device: torch.device | None = None,
         vocab_size: int | None = None,
+        no_stack: bool = False,
+        assign_reward: bool = False,
+        assign_done: bool = False,
+        reward_key: NestedKey = "reward",
+        batch_size: int | None = None,
     ) -> None:
-        super().__init__(device=device)
-        self._batch_locked = False
+        if batch_size is None:
+            self._batch_locked = False
+        else:
+            self._batch_locked = True
+        super().__init__(device=device, batch_size=() if batch_size is None else (batch_size,))
         self.str2str = str2str
         self.vocab_size = vocab_size
-        self.observation_key = unravel_key(observation_key)
+        self.observation_key = unravel_key(token_key)
+        self.attention_key = unravel_key(attention_key)
+        self.no_stack = no_stack
+        self.assign_reward = assign_reward
+        self.assign_done = assign_done
+
         # self.action_key = unravel_key(action_key)
         if str2str:
-            self.observation_spec = Composite(
+            self.full_observation_spec_unbatched = Composite(
                 {
-                    observation_key: NonTensor(
+                    token_key: NonTensor(
                         example_data="a string", batched=True, shape=()
                     )
                 }
             )
-            self.action_spec = Composite(
+            self.full_action_spec_unbatched = Composite(
                 {action_key: NonTensor(example_data="a string", batched=True, shape=())}
             )
         else:
             if vocab_size is None:
-                self.observation_spec = Composite(
-                    {
-                        observation_key: Unbounded(
+                observation_spec = {
+                        token_key: Unbounded(
                             shape=(-1,), dtype=torch.int64, device=device
                         )
                     }
+                if attention_key is not None:
+                    observation_spec[attention_key] = Unbounded(
+                            shape=(-1,), dtype=torch.int64, device=device
+                        )
+                self.full_observation_spec_unbatched = Composite(
+                    observation_spec
                 )
-                self.action_spec = Composite(
+                self.full_action_spec_unbatched = Composite(
                     {
                         action_key: Unbounded(
                             shape=(-1,), dtype=torch.int64, device=device
@@ -98,9 +123,9 @@ class LLMEnv(EnvBase):
                     }
                 )
             else:
-                self.observation_spec = Composite(
+                self.full_observation_spec_unbatched = Composite(
                     {
-                        observation_key: Bounded(
+                        token_key: Bounded(
                             shape=(-1,),
                             dtype=torch.int64,
                             low=0,
@@ -109,7 +134,7 @@ class LLMEnv(EnvBase):
                         )
                     }
                 )
-                self.action_spec = Composite(
+                self.full_action_spec_unbatched = Composite(
                     {
                         action_key: Bounded(
                             shape=(-1,),
@@ -120,22 +145,54 @@ class LLMEnv(EnvBase):
                         )
                     }
                 )
-        self.full_done_spec = Composite(
-            done=Unbounded(shape=(1,), dtype=torch.bool),
-            truncated=Unbounded(shape=(1,), dtype=torch.bool),
-            terminated=Unbounded(shape=(1,), dtype=torch.bool),
+        STR2STR_ERR = ValueError(
+            "str2str cannot be True when either of assign_reward / assign_done are True. "
+            "Tokens are required to compute the reward shape."
         )
+        if self.assign_reward:
+            if self.str2str:
+                raise STR2STR_ERR
+            self.full_reward_spec_unbatched = Composite(
+                {reward_key: Unbounded(shape=(-1,), device=device)}
+            )
+        else:
+            self.full_reward_spec_unbatched = Composite(device=device)
+
+        if not self.assign_done:
+            # Use single done
+            self.full_done_spec_unbatched = Composite(
+                done=Unbounded(shape=(-1,), dtype=torch.bool),
+                terminated=Unbounded(shape=(-1,), dtype=torch.bool),
+            )
+        elif self.str2str:
+            raise STR2STR_ERR
+        else:
+            # Use single done
+            self.full_done_spec_unbatched = Composite(
+                tokens=Composite(
+                    done=Unbounded(shape=(-1,), dtype=torch.bool),
+                    terminated=Unbounded(shape=(-1,), dtype=torch.bool),
+                ),
+                done=Unbounded(shape=(1,), dtype=torch.bool),
+                terminated=Unbounded(shape=(1,), dtype=torch.bool),
+            )
 
     @classmethod
     def from_dataloader(
         cls,
         dataloader: DataLoader,
         *,
-        observation_key: NestedKey = "observation",
+        token_key: NestedKey = "observation",
+        attention_key: NestedKey | None = None,
         action_key: NestedKey = "action",
         str2str: bool = False,
         device: torch.device | None = None,
         vocab_size: int | None = None,
+        no_stack: bool = False,
+        batch_size: int | None = None,
+        assign_reward: bool = False,
+        assign_done: bool = False,
+        reward_key: NestedKey = "reward",
         primers: Composite | None = None,
         data_keys: list[NestedKey] | None = None,
         data_specs: list[TensorSpec] | None = None,
@@ -150,13 +207,21 @@ class LLMEnv(EnvBase):
 
         Args:
             dataloader (DataLoader): The dataloader to load data from.
-            observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults
+            token_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults
                 to ``"observation"``.
+            attention_key: TODO
             action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to ``"action"``.
             str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.
             device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.
             vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an
                 unbounded vocabulary. Defaults to ``None``.
+            no_stack (bool, optional): If ``False`` (default), the environment should stack the action with the past
+                observation, each action being a new, unseen part of a conversation. Otherwise, the action is assumed
+                to be the plain output of the LLM, including the input tokens / strings.
+            assign_reward (bool, optional): TODO
+            assign_done (bool, optional): TODO
+            reward_key (NestedKey, optional): TODO
+            batch_size (int, optional): TODO
             primers (Composite | None, optional): The primers to use for each key in the dataloader.
                 Defaults to ``None``.
             data_keys (list[NestedKey] | None, optional): The keys to use for each item in the dataloader. If not passed ``observation_key`` will be populated with the data.
@@ -178,7 +243,7 @@ class LLMEnv(EnvBase):
         primer = DataLoadingPrimer(
             dataloader=dataloader,
             primers=primers,
-            data_keys=data_keys if data_keys is not None else [observation_key],
+            data_keys=data_keys if data_keys is not None else [token_key],
             data_specs=data_specs,
             example_data=example_data,
             stack_method=stack_method,
@@ -187,9 +252,15 @@ class LLMEnv(EnvBase):
         env = LLMEnv(
             str2str=str2str,
             device=device,
-            observation_key=observation_key,
+            token_key=token_key,
+            attention_key=attention_key,
             action_key=action_key,
             vocab_size=vocab_size,
+            no_stack=no_stack,
+            assign_reward=assign_reward,
+            assign_done=assign_done,
+            reward_key=reward_key,
+            batch_size=batch_size,
         )
         return env.append_transform(primer)
 
@@ -205,6 +276,59 @@ class LLMEnv(EnvBase):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
+        next_td = tensordict.empty()
+        self._make_next_obs(tensordict, next_td)
+        self._maybe_make_reward(tensordict, next_td)
+        self._maybe_make_done(tensordict, next_td)
+        return next_td
+
+    def _maybe_make_reward(
+        self, tensordict: TensorDictBase, next_td: TensorDictBase
+    ) -> TensorDictBase:
+        if self.assign_reward:
+            next_td.set(
+                self.reward_key,
+                torch.zeros_like(
+                    tensordict.get(self.action_key), dtype=self.reward_spec.dtype
+                ),
+            )
+        return next_td
+
+    def _maybe_make_done(
+        self, tensordict: TensorDictBase, next_td: TensorDictBase
+    ) -> TensorDictBase:
+        if self.assign_done:
+            action = tensordict.get(self.action_key)
+            if action is None:
+                done = torch.zeros(
+                    tensordict.shape + (1,), dtype=torch.bool, device=self.device
+                )
+            else:
+                done = torch.zeros_like(action, dtype=torch.bool)
+            next_td.set(("tokens", "terminated"), done)
+            next_td.set(("tokens", "done"), done.clone())
+            next_td.set(
+                "terminated", next_td.get(("tokens", "done")).any(-1, keepdim=True)
+            )
+            next_td.set(
+                "terminated",
+                next_td.get(("tokens", "terminated")).any(-1, keepdim=True),
+            )
+        return next_td
+
+    def _make_next_obs(
+        self, tensordict: TensorDictBase, nex_td: TensorDictBase
+    ) -> TensorDictBase:
+        if self.no_stack:
+            action = tensordict.get(self.action_key)
+            nex_td.set(self.observation_key, action)
+            if self.attention_key is not None:
+                attention_mask = tensordict.get(self.attention_key)
+                n = action.shape[-1] - attention_mask.shape[-1]
+                attention_mask = torch.cat([attention_mask, attention_mask.new_ones(attention_mask.shape[:-1] + (n,))], -1)
+                nex_td.set(self.attention_key, attention_mask)
+            return nex_td
+
         # Cat action entry with prev obs
         if self.str2str:
             obs = tensordict[self.observation_key]
@@ -256,10 +380,11 @@ class LLMEnv(EnvBase):
                     "Failed to cat action and observation tensors. Check that str2str argument is correctly "
                     f"set in {type(self).__name__}."
                 )
-        return tensordict.empty().set(self.observation_key, observation)
+        return nex_td.set(self.observation_key, observation)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         # We should have an observation by this time, if not raise an exception
+        print('tensordict', tensordict)
         if tensordict is None or self.observation_key not in tensordict.keys(
             isinstance(self.observation_key, tuple)
         ):
@@ -267,7 +392,8 @@ class LLMEnv(EnvBase):
                 f"Observation key {self.observation_key} is not defined. Make sure a TensorDictPrimer (eg, "
                 f"torchrl.envs.DataLoadingPrimer) is appended to the env transforms."
             )
-        return tensordict.copy()
+        td_reset = tensordict.copy()
+        return self._maybe_make_done(tensordict, td_reset)
 
     def _set_seed(self, seed: int | None):
         return seed
