@@ -470,8 +470,6 @@ class OpenSpielWrapper(_EnvWrapper):
                 agent_index_in_group = agents.index(agent)
                 break
 
-        assert agent_group is not None
-
         action_tensor = tensordict[agent_group, "action"][agent_index_in_group]
         action = self._get_action_from_tensor(action_tensor)
         self._env.apply_action(action)
