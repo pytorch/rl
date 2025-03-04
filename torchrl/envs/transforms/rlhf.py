@@ -461,7 +461,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             raise ValueError(
                 f"Unrecognized data type: {type(data)} with keys {self.data_keys}."
             )
-        print('out', out)
+        print("out", out)
         if self.use_buffer:
             if not out.ndim:
                 out = out.unsqueeze(0)

@@ -80,7 +80,9 @@ class LLMEnv(EnvBase):
             self._batch_locked = False
         else:
             self._batch_locked = True
-        super().__init__(device=device, batch_size=() if batch_size is None else (batch_size,))
+        super().__init__(
+            device=device, batch_size=() if batch_size is None else (batch_size,)
+        )
         self.str2str = str2str
         self.vocab_size = vocab_size
         self.observation_key = unravel_key(token_key)
@@ -92,11 +94,7 @@ class LLMEnv(EnvBase):
         # self.action_key = unravel_key(action_key)
         if str2str:
             self.full_observation_spec_unbatched = Composite(
-                {
-                    token_key: NonTensor(
-                        example_data="a string", batched=True, shape=()
-                    )
-                }
+                {token_key: NonTensor(example_data="a string", batched=True, shape=())}
             )
             self.full_action_spec_unbatched = Composite(
                 {action_key: NonTensor(example_data="a string", batched=True, shape=())}
@@ -104,17 +102,13 @@ class LLMEnv(EnvBase):
         else:
             if vocab_size is None:
                 observation_spec = {
-                        token_key: Unbounded(
-                            shape=(-1,), dtype=torch.int64, device=device
-                        )
-                    }
+                    token_key: Unbounded(shape=(-1,), dtype=torch.int64, device=device)
+                }
                 if attention_key is not None:
                     observation_spec[attention_key] = Unbounded(
-                            shape=(-1,), dtype=torch.int64, device=device
-                        )
-                self.full_observation_spec_unbatched = Composite(
-                    observation_spec
-                )
+                        shape=(-1,), dtype=torch.int64, device=device
+                    )
+                self.full_observation_spec_unbatched = Composite(observation_spec)
                 self.full_action_spec_unbatched = Composite(
                     {
                         action_key: Unbounded(
@@ -325,7 +319,13 @@ class LLMEnv(EnvBase):
             if self.attention_key is not None:
                 attention_mask = tensordict.get(self.attention_key)
                 n = action.shape[-1] - attention_mask.shape[-1]
-                attention_mask = torch.cat([attention_mask, attention_mask.new_ones(attention_mask.shape[:-1] + (n,))], -1)
+                attention_mask = torch.cat(
+                    [
+                        attention_mask,
+                        attention_mask.new_ones(attention_mask.shape[:-1] + (n,)),
+                    ],
+                    -1,
+                )
                 nex_td.set(self.attention_key, attention_mask)
             return nex_td
 
@@ -384,7 +384,7 @@ class LLMEnv(EnvBase):
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         # We should have an observation by this time, if not raise an exception
-        print('tensordict', tensordict)
+        print("tensordict", tensordict)
         if tensordict is None or self.observation_key not in tensordict.keys(
             isinstance(self.observation_key, tuple)
         ):
