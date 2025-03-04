@@ -1144,16 +1144,17 @@ Utils
     :toctree: generated/
     :template: rl_template.rst
 
-    MultiStep
-    consolidate_spec
-    check_no_exclusive_keys
-    contains_lazy_spec
-    Nested2TED
+    DensifyReward
     Flat2TED
     H5Combine
     H5Split
+    MultiStep
+    Nested2TED
     TED2Flat
     TED2Nested
+    check_no_exclusive_keys
+    consolidate_spec
+    contains_lazy_spec
 
 .. currentmodule:: torchrl.envs.transforms.rb_transforms
 
