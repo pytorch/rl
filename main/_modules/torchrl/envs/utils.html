@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+f4713f9) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+413571b) &#x25BC</span></a>
     </div>
     
 
@@ -1309,13 +1309,19 @@
     <span class="k">return</span> <span class="n">element</span>
 
 
-<div class="viewcode-block" id="make_composite_from_td"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.make_composite_from_td.html#torchrl.envs.make_composite_from_td">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_composite_from_td</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">unsqueeze_null_shapes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<div class="viewcode-block" id="make_composite_from_td"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.make_composite_from_td.html#torchrl.envs.make_composite_from_td">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_composite_from_td</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">unsqueeze_null_shapes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">dynamic_shape</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Creates a Composite instance from a tensordict, assuming all values are unbounded.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        data (tensordict.TensorDict): a tensordict to be mapped onto a Composite.</span>
+
+<span class="sd">    Keyword Args:</span>
 <span class="sd">        unsqueeze_null_shapes (bool, optional): if ``True``, every empty shape will be</span>
 <span class="sd">            unsqueezed to (1,). Defaults to ``True``.</span>
+<span class="sd">        dynamic_shape (bool, optional): if ``True``, all tensors will be assumed to have a dynamic shape</span>
+<span class="sd">            along the last dimension. Defaults to ``False``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
@@ -1340,22 +1346,33 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># custom function to convert a tensordict in a similar spec structure</span>
     <span class="c1"># of unbounded values.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_shape</span><span class="p">(</span><span class="n">shape</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">shape</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">unsqueeze_null_shapes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">dynamic_shape</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">shape</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+
     <span class="n">composite</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
         <span class="p">{</span>
-            <span class="n">key</span><span class="p">:</span> <span class="n">make_composite_from_td</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">)</span>
-            <span class="k">else</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">key</span><span class="p">:</span> <span class="n">make_composite_from_td</span><span class="p">(</span>
+                <span class="n">tensor</span><span class="p">,</span>
+                <span class="n">unsqueeze_null_shapes</span><span class="o">=</span><span class="n">unsqueeze_null_shapes</span><span class="p">,</span>
+                <span class="n">dynamic_shape</span><span class="o">=</span><span class="n">dynamic_shape</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_non_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
+            <span class="k">else</span> <span class="n">NonTensor</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">example_data</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
             <span class="k">if</span> <span class="n">is_non_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
             <span class="k">else</span> <span class="n">Unbounded</span><span class="p">(</span>
-                <span class="n">dtype</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-                <span class="n">shape</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span>
-                <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">unsqueeze_null_shapes</span>
-                <span class="k">else</span> <span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">make_shape</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">},</span>
         <span class="n">shape</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+        <span class="n">data_cls</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">composite</span></div>
 
