@@ -940,9 +940,9 @@ def make_composite_from_td(
                 unsqueeze_null_shapes=unsqueeze_null_shapes,
                 dynamic_shape=dynamic_shape,
             )
-            if isinstance(tensor, TensorDictBase)
+            if is_tensor_collection(tensor) and not is_non_tensor(tensor)
             else NonTensor(
-                shape=data.shape, example_data=data.data, device=tensor.device
+                shape=tensor.shape, example_data=tensor.data, example_data=data.data, device=tensor.device
             )
             if is_non_tensor(tensor)
             else Unbounded(
@@ -951,6 +951,7 @@ def make_composite_from_td(
             for key, tensor in data.items()
         },
         shape=data.shape,
+        data_cls=type(data),
     )
     return composite
 
