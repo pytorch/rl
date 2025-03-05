@@ -3,6 +3,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .llm import (
+    AdaptiveKLController,
+    ConstantKLController,
+    create_infinite_iterator,
+    get_dataloader,
+    PairwiseDataset,
+    PromptData,
+    PromptTensorDictTokenizer,
+    RewardData,
+    RolloutFromModel,
+    TensorDictTokenizer,
+    TokenizedDatasetLoader,
+)
 from .map import (
     BinaryToDecimal,
     HashToInt,
@@ -55,19 +68,6 @@ from .replay_buffers import (
     TensorStorageCheckpointer,
     Writer,
     WriterEnsemble,
-)
-from .rlhf import (
-    AdaptiveKLController,
-    ConstantKLController,
-    create_infinite_iterator,
-    get_dataloader,
-    PairwiseDataset,
-    PromptData,
-    PromptTensorDictTokenizer,
-    RewardData,
-    RolloutFromModel,
-    TensorDictTokenizer,
-    TokenizedDatasetLoader,
 )
 from .tensor_specs import (
     Binary,

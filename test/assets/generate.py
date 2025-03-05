@@ -14,8 +14,8 @@ from tempfile import TemporaryDirectory
 
 from datasets import Dataset, DatasetDict, load_dataset
 
-from torchrl.data.rlhf.dataset import get_dataloader
-from torchrl.data.rlhf.prompt import PromptData
+from torchrl.data.llm.dataset import get_dataloader
+from torchrl.data.llm.prompt import PromptData
 
 
 def generate_small_dataset(comparison=True):

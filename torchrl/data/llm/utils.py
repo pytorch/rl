@@ -14,7 +14,7 @@ from tensordict import TensorDict
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from torchrl.data.rlhf.prompt import PromptData
+from torchrl.data.llm.prompt import PromptData
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 
@@ -154,10 +154,10 @@ class RolloutFromModel:
 
     Examples:
         >>> from tensordict.nn import TensorDictModule
-        >>> from torchrl.modules.models.rlhf import GPT2RewardModel
-        >>> from torchrl.data.rlhf.utils import RolloutFromModel
-        >>> from torchrl.data.rlhf.dataset import get_dataloader
-        >>> from torchrl.data.rlhf.prompt import PromptData
+        >>> from torchrl.modules.models.llm import GPT2RewardModel
+        >>> from torchrl.data.llm.utils import RolloutFromModel
+        >>> from torchrl.data.llm.dataset import get_dataloader
+        >>> from torchrl.data.llm.prompt import PromptData
         >>> from transformers import GPT2LMHeadModel
         >>>
         >>> dl = get_dataloader(
