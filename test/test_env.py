@@ -16,7 +16,7 @@ import string
 from collections import defaultdict
 from functools import partial
 from sys import platform
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import pytest
@@ -33,7 +33,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.nn import TensorDictModuleBase
-from tensordict.tensorclass import NonTensorStack
+from tensordict.tensorclass import NonTensorStack, TensorClass
 from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
@@ -340,7 +340,8 @@ class TestEnvBase:
         )
         env.rollout(10, policy)
 
-    def test_make_spec_from_td(self):
+    @pytest.mark.parametrize("dynamic_shape", [True, False])
+    def test_make_spec_from_td(self, dynamic_shape):
         data = TensorDict(
             {
                 "obs": torch.randn(3),
@@ -353,10 +354,44 @@ class TestEnvBase:
             },
             [],
         )
-        spec = make_composite_from_td(data)
+        spec = make_composite_from_td(data, dynamic_shape=dynamic_shape)
         assert (spec.zero() == data.zero_()).all()
         for key, val in data.items(True, True):
             assert val.dtype is spec[key].dtype
+        if dynamic_shape:
+            assert all(s.shape[-1] == -1 for s in spec.values(True, True))
+
+    def test_make_spec_from_tc(self):
+        class Scratch(TensorClass):
+            obs: torch.Tensor
+            string: str
+            some_object: Any
+
+        class Whatever:
+            ...
+
+        td = TensorDict(
+            a=Scratch(
+                obs=torch.ones(5, 3),
+                string="another string!",
+                some_object=Whatever(),
+                batch_size=(5,),
+            ),
+            b="a string!",
+            batch_size=(5,),
+        )
+        spec = make_composite_from_td(td)
+        assert isinstance(spec, Composite)
+        assert isinstance(spec["a"], Composite)
+        assert isinstance(spec["b"], NonTensor)
+        assert spec["b"].example_data == "a string!", spec["b"].example_data
+        assert spec["a", "string"].example_data == "another string!"
+        one = spec.one()
+        assert isinstance(one["a"], Scratch)
+        assert isinstance(one["b"], str)
+        assert isinstance(one["a"].string, str)
+        assert isinstance(one["a"].some_object, Whatever)
+        assert (one == td).all()
 
     def test_env_that_does_nothing(self):
         env = EnvThatDoesNothing()
