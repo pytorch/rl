@@ -6,6 +6,7 @@
 # TODO: lazy imports
 
 import torch
+
 import transformers
 from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.nn import (
@@ -14,6 +15,7 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
     WrapModule,
 )
+from tensordict.tensorclass import NonTensorData
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 

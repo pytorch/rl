@@ -888,13 +888,19 @@ def _sort_keys(element):
     return element
 
 
-def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
+def make_composite_from_td(
+    data, *, unsqueeze_null_shapes: bool = True, dynamic_shape: bool = False
+):
     """Creates a Composite instance from a tensordict, assuming all values are unbounded.
 
     Args:
         data (tensordict.TensorDict): a tensordict to be mapped onto a Composite.
+
+    Keyword Args:
         unsqueeze_null_shapes (bool, optional): if ``True``, every empty shape will be
             unsqueezed to (1,). Defaults to ``True``.
+        dynamic_shape (bool, optional): if ``True``, all tensors will be assumed to have a dynamic shape
+            along the last dimension. Defaults to ``False``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -919,18 +925,28 @@ def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
     """
     # custom function to convert a tensordict in a similar spec structure
     # of unbounded values.
+    def make_shape(shape):
+        if shape or not unsqueeze_null_shapes:
+            if dynamic_shape:
+                return shape[:-1] + (-1,)
+            else:
+                return shape
+        return torch.Size([1])
+
     composite = Composite(
         {
-            key: make_composite_from_td(tensor)
+            key: make_composite_from_td(
+                tensor,
+                unsqueeze_null_shapes=unsqueeze_null_shapes,
+                dynamic_shape=dynamic_shape,
+            )
             if isinstance(tensor, TensorDictBase)
-            else NonTensor(shape=data.shape, device=tensor.device)
+            else NonTensor(
+                shape=data.shape, example_data=data.data, device=tensor.device
+            )
             if is_non_tensor(tensor)
             else Unbounded(
-                dtype=tensor.dtype,
-                device=tensor.device,
-                shape=tensor.shape
-                if tensor.shape or not unsqueeze_null_shapes
-                else [1],
+                dtype=tensor.dtype, device=tensor.device, shape=make_shape(tensor.shape)
             )
             for key, tensor in data.items()
         },
@@ -1390,7 +1406,6 @@ def _update_during_reset(
     if not reset_keys:
         return tensordict.update(tensordict_reset)
     roots = set()
-    print("reset_keys", reset_keys)
     for reset_key in reset_keys:
         # get the node of the reset key
         if isinstance(reset_key, tuple):
@@ -1406,7 +1421,6 @@ def _update_during_reset(
             reset_key_tuple = (reset_key,)
         # get the reset signal
         reset = tensordict.pop(reset_key, None)
-        print("reset popped", reset)
 
         # check if this reset should be ignored -- this happens whenever the
         # root node has already been updated

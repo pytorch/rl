@@ -4581,11 +4581,13 @@ class TestLLMEnv:
     @pytest.mark.parametrize("batch_size", [0, 4])
     @pytest.mark.parametrize("device", [None, "cpu"])
     def test_llm_env(self, str2str, batched, stack_method, device, batch_size):
-        env = LLMEnv(str2str=str2str, device=device)
+        env = LLMEnv(
+            str2str=str2str, device=device, has_attention=False, no_stack=False
+        )
         if str2str:
             primer = DataLoadingPrimer(
                 dataloader=self.DummyDataLoader(batch_size=batch_size),
-                data_keys=["observation"],
+                data_keys=[LLMEnv._DEFAULT_STR_KEY],
                 example_data="a string!",
             )
         else:
@@ -4595,7 +4597,7 @@ class TestLLMEnv:
                 dataloader=self.DummyTensorDataLoader(
                     batch_size=batch_size, padding=True
                 ),
-                data_keys=["observation"],
+                data_keys=[LLMEnv._DEFAULT_TOKEN_KEY],
                 data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],
                 stack_method=stack_method,
             )
@@ -4605,7 +4607,7 @@ class TestLLMEnv:
         if batched:
             td = env.reset(TensorDict(batch_size=[3]))
             env.check_env_specs(break_when_any_done="both", tensordict=td)
-            r = env.rollout(10, tensordict=TensorDict(batch_size=[3]))
+            env.rollout(10, tensordict=TensorDict(batch_size=[3]))
         else:
             env.check_env_specs(break_when_any_done="both")
 
@@ -4628,7 +4630,7 @@ class TestLLMEnv:
         if str2str:
             kwargs = {
                 "dataloader": self.DummyDataLoader(batch_size=batch_size),
-                "data_keys": ["observation"],
+                "data_keys": [LLMEnv._DEFAULT_STR_KEY],
                 "example_data": "a string!",
             }
         else:
@@ -4638,11 +4640,18 @@ class TestLLMEnv:
                 "dataloader": self.DummyTensorDataLoader(
                     padding=True, batch_size=batch_size
                 ),
-                "data_keys": ["observation"],
+                "data_keys": [LLMEnv._DEFAULT_TOKEN_KEY],
                 "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
                 "stack_method": stack_method,
             }
-        kwargs.update({"str2str": str2str, "device": device})
+        kwargs.update(
+            {
+                "str2str": str2str,
+                "device": device,
+                "has_attention": False,
+                "no_stack": False,
+            }
+        )
         env = LLMEnv.from_dataloader(**kwargs)
         assert not env.batch_locked
         if batched:
@@ -4655,13 +4664,15 @@ class TestLLMEnv:
             def policy(td):
                 if str2str:
                     if not td.shape:
-                        td["action"] = "<nothing>"
+                        td[LLMEnv._DEFAULT_ACTION_KEY] = "<nothing>"
                     else:
-                        td["action"] = NonTensorStack(
+                        td[LLMEnv._DEFAULT_ACTION_KEY] = NonTensorStack(
                             *["<nothing>" for _ in range(td.shape[0])]
                         )
                 else:
-                    td["action"] = torch.ones(td.shape + (1,), dtype=torch.int64)
+                    td[LLMEnv._DEFAULT_ACTION_KEY] = torch.ones(
+                        td.shape + (1,), dtype=torch.int64
+                    )
                 return td
 
             if batched:
@@ -4669,32 +4680,48 @@ class TestLLMEnv:
                 r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[3]))
                 assert r.ndim == 2
                 if str2str:
-                    assert isinstance(r[0, 0]["observation"], str)
-                    assert isinstance(r[0, 1]["observation"], str)
+                    assert isinstance(r[0, 0][LLMEnv._DEFAULT_STR_KEY], str)
+                    assert isinstance(r[0, 1][LLMEnv._DEFAULT_STR_KEY], str)
                     assert (
-                        r[0, 0]["observation"]
-                        == r[0, 1]["observation"][: -len(r[0, 0]["action"])]
+                        r[0, 0][LLMEnv._DEFAULT_STR_KEY]
+                        == r[0, 1][LLMEnv._DEFAULT_STR_KEY][
+                            : -len(r[0, 0][LLMEnv._DEFAULT_ACTION_KEY])
+                        ]
                     )
                     assert (
-                        r[0, 1]["observation"]
-                        == r[0, 2]["observation"][: -len(r[0, 1]["action"])]
+                        r[0, 1][LLMEnv._DEFAULT_STR_KEY]
+                        == r[0, 2][LLMEnv._DEFAULT_STR_KEY][
+                            : -len(r[0, 1][LLMEnv._DEFAULT_ACTION_KEY])
+                        ]
                     )
                     assert (
-                        r[-1, 0]["observation"]
-                        == r[-1, 1]["observation"][: -len(r[-1, 0]["action"])]
+                        r[-1, 0][LLMEnv._DEFAULT_STR_KEY]
+                        == r[-1, 1][LLMEnv._DEFAULT_STR_KEY][
+                            : -len(r[-1, 0][LLMEnv._DEFAULT_ACTION_KEY])
+                        ]
                     )
                     assert (
-                        r[-1, 1]["observation"]
-                        == r[-1, 2]["observation"][: -len(r[-1, 1]["action"])]
+                        r[-1, 1][LLMEnv._DEFAULT_STR_KEY]
+                        == r[-1, 2][LLMEnv._DEFAULT_STR_KEY][
+                            : -len(r[-1, 1][LLMEnv._DEFAULT_ACTION_KEY])
+                        ]
                     )
                 else:
-                    assert (r[0, 0]["observation"] == r[0, 1]["observation"][:-1]).all()
-                    assert (r[0, 1]["observation"] == r[0, 2]["observation"][:-1]).all()
                     assert (
-                        r[-1, 0]["observation"] == r[-1, 1]["observation"][:-1]
+                        r[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                        == r[0, 1][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
                     ).all()
                     assert (
-                        r[-1, 1]["observation"] == r[-1, 2]["observation"][:-1]
+                        r[0, 1][LLMEnv._DEFAULT_TOKEN_KEY]
+                        == r[0, 2][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
+                    ).all()
+                    assert (
+                        r[-1, 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                        == r[-1, 1][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
+                    ).all()
+                    assert (
+                        r[-1, 1][LLMEnv._DEFAULT_TOKEN_KEY]
+                        == r[-1, 2][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
                     ).all()
             else:
                 r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[]))
@@ -4720,7 +4747,7 @@ class TestLLMEnv:
         if str2str:
             kwargs = {
                 "dataloader": self.DummyDataLoader(batch_size=batch_size),
-                "data_keys": ["observation"],
+                "data_keys": [LLMEnv._DEFAULT_STR_KEY],
                 "example_data": "a string!",
                 "repeats": repeats,
             }
@@ -4731,12 +4758,19 @@ class TestLLMEnv:
                 "dataloader": self.DummyTensorDataLoader(
                     padding=True, batch_size=batch_size
                 ),
-                "data_keys": ["observation"],
+                "data_keys": [LLMEnv._DEFAULT_TOKEN_KEY],
                 "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
                 "stack_method": stack_method,
                 "repeats": repeats,
             }
-        kwargs.update({"str2str": str2str, "device": device})
+        kwargs.update(
+            {
+                "str2str": str2str,
+                "device": device,
+                "has_attention": False,
+                "no_stack": False,
+            }
+        )
         env = LLMEnv.from_dataloader(**kwargs)
         assert env.transform.repeats == repeats
 
@@ -4746,13 +4780,15 @@ class TestLLMEnv:
         def policy(td):
             if str2str:
                 if not td.shape:
-                    td["action"] = "<nothing>"
+                    td[LLMEnv._DEFAULT_ACTION_KEY] = "<nothing>"
                 else:
-                    td["action"] = NonTensorStack(
+                    td[LLMEnv._DEFAULT_ACTION_KEY] = NonTensorStack(
                         *["<nothing>" for _ in range(td.shape[0])]
                     )
             else:
-                td["action"] = torch.ones(td.shape + (1,), dtype=torch.int64)
+                td[LLMEnv._DEFAULT_ACTION_KEY] = torch.ones(
+                    td.shape + (1,), dtype=torch.int64
+                )
             return td
 
         if batched:
@@ -4768,34 +4804,58 @@ class TestLLMEnv:
         r_reset = r[..., ::max_steps]
         if not batched:
             if str2str:
-                assert r_reset[..., 0]["observation"] == r_reset[..., 1]["observation"]
-                assert r_reset[..., 0]["observation"] == r_reset[..., 2]["observation"]
-                assert r_reset[..., 0]["observation"] != r_reset[..., 3]["observation"]
+                assert (
+                    r_reset[..., 0][LLMEnv._DEFAULT_STR_KEY]
+                    == r_reset[..., 1][LLMEnv._DEFAULT_STR_KEY]
+                )
+                assert (
+                    r_reset[..., 0][LLMEnv._DEFAULT_STR_KEY]
+                    == r_reset[..., 2][LLMEnv._DEFAULT_STR_KEY]
+                )
+                assert (
+                    r_reset[..., 0][LLMEnv._DEFAULT_STR_KEY]
+                    != r_reset[..., 3][LLMEnv._DEFAULT_STR_KEY]
+                )
             else:
                 assert (
-                    r_reset[..., 0]["observation"] == r_reset[..., 1]["observation"]
+                    r_reset[..., 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                    == r_reset[..., 1][LLMEnv._DEFAULT_TOKEN_KEY]
                 ).all()
                 assert (
-                    r_reset[..., 0]["observation"] == r_reset[..., 2]["observation"]
+                    r_reset[..., 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                    == r_reset[..., 2][LLMEnv._DEFAULT_TOKEN_KEY]
                 ).all()
                 assert (
-                    r_reset[..., 0]["observation"] != r_reset[..., 3]["observation"]
+                    r_reset[..., 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                    != r_reset[..., 3][LLMEnv._DEFAULT_TOKEN_KEY]
                 ).any()
         else:
             # When batched, each block contains the 3 reset packs
             if str2str:
-                assert r_reset[0, 0]["observation"] == r_reset[1, 0]["observation"]
-                assert r_reset[0, 0]["observation"] == r_reset[2, 0]["observation"]
-                assert r_reset[0, 0]["observation"] != r_reset[0, 1]["observation"]
+                assert (
+                    r_reset[0, 0][LLMEnv._DEFAULT_STR_KEY]
+                    == r_reset[1, 0][LLMEnv._DEFAULT_STR_KEY]
+                )
+                assert (
+                    r_reset[0, 0][LLMEnv._DEFAULT_STR_KEY]
+                    == r_reset[2, 0][LLMEnv._DEFAULT_STR_KEY]
+                )
+                assert (
+                    r_reset[0, 0][LLMEnv._DEFAULT_STR_KEY]
+                    != r_reset[0, 1][LLMEnv._DEFAULT_STR_KEY]
+                )
             else:
                 assert (
-                    r_reset[0, 0]["observation"] == r_reset[1, 0]["observation"]
+                    r_reset[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                    == r_reset[1, 0][LLMEnv._DEFAULT_TOKEN_KEY]
                 ).all()
                 assert (
-                    r_reset[0, 0]["observation"] == r_reset[2, 0]["observation"]
+                    r_reset[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                    == r_reset[2, 0][LLMEnv._DEFAULT_TOKEN_KEY]
                 ).all()
                 assert (
-                    r_reset[0, 0]["observation"] != r_reset[0, 1]["observation"]
+                    r_reset[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                    != r_reset[0, 1][LLMEnv._DEFAULT_TOKEN_KEY]
                 ).any()
 
     @pytest.mark.parametrize(
@@ -4829,7 +4889,7 @@ class TestLLMEnv:
             if str2str:
                 kwargs = {
                     "dataloader": self.DummyDataLoader(batch_size=batch_size),
-                    "data_keys": ["observation"],
+                    "data_keys": [LLMEnv._DEFAULT_STR_KEY],
                     "example_data": "a string!",
                     "repeats": repeats,
                     "assign_reward": assign_reward,
@@ -4842,20 +4902,27 @@ class TestLLMEnv:
                     "dataloader": self.DummyTensorDataLoader(
                         padding=True, batch_size=batch_size
                     ),
-                    "data_keys": ["observation"],
+                    "data_keys": [LLMEnv._DEFAULT_TOKEN_KEY],
                     "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
                     "stack_method": stack_method,
                     "repeats": repeats,
                     "assign_reward": assign_reward,
                     "assign_done": assign_done,
                 }
-            kwargs.update({"str2str": str2str, "device": device})
+            kwargs.update(
+                {
+                    "str2str": str2str,
+                    "device": device,
+                    "has_attention": False,
+                    "no_stack": False,
+                }
+            )
             env = LLMEnv.from_dataloader(**kwargs)
             # We want to make sure that transforms that rely on the done state work appropriately
             env.append_transform(StepCounter(max_steps=10))
 
             def policy(td):
-                td["action"] = torch.ones(
+                td[LLMEnv._DEFAULT_ACTION_KEY] = torch.ones(
                     td.shape + (torch.randint(10, (1,)).item(),), dtype=torch.int64
                 )
                 return td

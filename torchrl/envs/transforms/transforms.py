@@ -8124,7 +8124,7 @@ class InitTracker(Transform):
             _reset = tensordict.get(reset_key, None)
             if _reset is None:
                 done_key = _replace_last(init_key, "done")
-                shape = self.parent.full_done_spec[done_key].shape
+                shape = self.parent.full_done_spec[done_key]._safe_shape
                 tensordict_reset.set(
                     init_key,
                     torch.ones(

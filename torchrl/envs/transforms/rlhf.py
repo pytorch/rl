@@ -24,6 +24,7 @@ from torch import nn
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
+from torchrl.envs.utils import make_composite_from_td
 
 
 def as_nested_tensor(list_of_tensordicts: list[TensorDictBase]) -> TensorDictBase:
@@ -374,25 +375,14 @@ class DataLoadingPrimer(TensorDictPrimer):
             use_buffer = True
 
         self.use_buffer = use_buffer
+        if self.use_buffer:
+            self._queue = deque()
+
         # No auto_batch_size if we know we have a single element
         self.auto_batch_size = auto_batch_size and (
             getattr(dataloader, "batch_size", 1) > 0
         )
         self.endless_dataloader = self._endless_iter(self.dataloader)
-        if primers is None:
-            if data_keys is None:
-                data_keys = ["data"]
-            if data_specs is None:
-                data_specs = [NonTensor(example_data=example_data, shape=())]
-            primers = Composite(
-                {
-                    data_key: data_spec
-                    for data_key, data_spec in _zip_strict(data_keys, data_specs)
-                }
-            )
-            self.data_keys = data_keys
-        else:
-            self.data_keys = list(primers.keys(True, True))
 
         if stack_method is None:
             stack_method = maybe_dense_stack
@@ -404,6 +394,31 @@ class DataLoadingPrimer(TensorDictPrimer):
             raise ValueError(f"Unknown stack_method={stack_method}")
         self.stack_method = stack_method
 
+        if primers is None and not self.use_buffer:
+            if data_keys is None:
+                data_keys = ["data"]
+            if data_specs is None:
+                data_specs = [NonTensor(example_data=example_data, shape=())]
+            primers = Composite(
+                {
+                    data_key: data_spec
+                    for data_key, data_spec in _zip_strict(data_keys, data_specs)
+                }
+            )
+            self.data_keys = data_keys
+        elif primers is None:
+            self.data_keys = data_keys
+            # We can get the primer from the dataloader itself
+            data = self._load_from_dataloader()
+            primers = make_composite_from_td(data, dynamic_shape=True)
+            self._queue.insert(0, data)
+            if data_keys is None:
+                self.data_keys = list(primers.keys(True, True))
+        else:
+            self.data_keys = list(primers.keys(True, True))
+
+        self._reset_key = "_reset"
+
         super().__init__(
             primers=primers,
             default_value=self._load_from_dataloader,
@@ -412,9 +427,6 @@ class DataLoadingPrimer(TensorDictPrimer):
             single_default_value=True,
             call_before_env_reset=True,
         )
-        self._reset_key = "_reset"
-        if self.use_buffer:
-            self._queue = deque()
 
     @classmethod
     def _endless_iter(self, obj):
@@ -445,6 +457,12 @@ class DataLoadingPrimer(TensorDictPrimer):
             out = TensorDict.from_dict(
                 data, auto_batch_size=self.auto_batch_size, batch_dims=1
             )
+        elif self.data_keys is None:
+            raise RuntimeError(
+                f"Cannot lazily instantiate the {type(self).__name__} as the data_keys was "
+                f"not passed but the data is not a Mapping, therefore the keys cannot be retrieved "
+                f"automatically. Please pass the data_keys to the constructor."
+            )
         elif len(self.data_keys) > 1 and isinstance(data, (list, tuple)):
             out = TensorDict.from_dict(
                 {k: val for k, val in _zip_strict(self.data_keys, data)},
@@ -461,7 +479,6 @@ class DataLoadingPrimer(TensorDictPrimer):
             raise ValueError(
                 f"Unrecognized data type: {type(data)} with keys {self.data_keys}."
             )
-        print("out", out)
         if self.use_buffer:
             if not out.ndim:
                 out = out.unsqueeze(0)
