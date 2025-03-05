@@ -5,6 +5,7 @@
 
 """Script used to generate the mini datasets."""
 import multiprocessing as mp
+import pathlib
 
 try:
     mp.set_start_method("spawn")
@@ -42,7 +43,7 @@ def get_minibatch():
             batch_size=16,
             block_size=33,
             tensorclass_type=PromptData,
-            dataset_name="../datasets_mini/openai_summarize_tldr",
+            dataset_name=f"{pathlib.Path(__file__).parent}/../datasets_mini/openai_summarize_tldr",
             device="cpu",
             num_workers=2,
             infinite=False,
@@ -57,4 +58,5 @@ def get_minibatch():
 
 
 if __name__ == "__main__":
+    generate_small_dataset(False)
     get_minibatch()
