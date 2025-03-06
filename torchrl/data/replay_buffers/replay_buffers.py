@@ -390,18 +390,25 @@ class ReplayBuffer:
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose
 
-        storage = textwrap.indent(f"storage={self._storage}", " " * 4)
-        writer = textwrap.indent(f"writer={self._writer}", " " * 4)
-        sampler = textwrap.indent(f"sampler={self._sampler}", " " * 4)
-        if self._transform is not None and not (
-            isinstance(self._transform, Compose) and not len(self._transform)
+        storage = textwrap.indent(f"storage={getattr(self, '_storage', None)}", " " * 4)
+        writer = textwrap.indent(f"writer={getattr(self, '_writer', None)}", " " * 4)
+        sampler = textwrap.indent(f"sampler={getattr(self, '_sampler', None)}", " " * 4)
+        if getattr(self, "_transform", None) is not None and not (
+            isinstance(self._transform, Compose)
+            and not len(getattr(self, "_transform", None))
         ):
-            transform = textwrap.indent(f"transform={self._transform}", " " * 4)
+            transform = textwrap.indent(
+                f"transform={getattr(self, '_transform', None)}", " " * 4
+            )
             transform = f"\n{self._transform}, "
         else:
             transform = ""
-        batch_size = textwrap.indent(f"batch_size={self._batch_size}", " " * 4)
-        collate_fn = textwrap.indent(f"collate_fn={self._collate_fn}", " " * 4)
+        batch_size = textwrap.indent(
+            f"batch_size={getattr(self, '_batch_size', None)}", " " * 4
+        )
+        collate_fn = textwrap.indent(
+            f"collate_fn={getattr(self, '_collate_fn', None)}", " " * 4
+        )
         return f"{self.__class__.__name__}(\n{storage}, \n{sampler}, \n{writer}, {transform}\n{batch_size}, \n{collate_fn})"
 
     @pin_memory_output
@@ -833,7 +840,7 @@ class ReplayBuffer:
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
-        if self._rng is not None:
+        if getattr(self, "_rng", None) is not None:
             rng_state = TensorDict(
                 rng_state=self._rng.get_state().clone(),
                 device=self._rng.device,
