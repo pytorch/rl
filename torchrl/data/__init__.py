@@ -30,7 +30,7 @@ from .map import (
     TensorMap,
     Tree,
 )
-from .postprocs import MultiStep
+from .postprocs import DensifyReward, MultiStep
 from .replay_buffers import (
     Flat2TED,
     FlatStorageCheckpointer,
@@ -119,6 +119,7 @@ __all__ = [
     "CompositeSpec",
     "ConstantKLController",
     "DEVICE_TYPING",
+    "DensifyReward",
     "DiscreteTensorSpec",
     "Flat2TED",
     "FlatStorageCheckpointer",
