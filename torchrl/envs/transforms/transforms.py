@@ -6134,7 +6134,7 @@ class TensorDictPrimer(Transform):
 
     @property
     def reset_key(self):
-        reset_key = self.__dict__.get("_reset_key", None)
+        reset_key = self.__dict__.get("_reset_key")
         if reset_key is None:
             if self.parent is None:
                 raise RuntimeError(
@@ -6361,10 +6361,13 @@ class TensorDictPrimer(Transform):
 
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
-        default_value = {
-            key: value if isinstance(value, float) else "Callable"
-            for key, value in self.default_value.items()
-        }
+        if callable(self.default_value):
+            default_value = self.default_value
+        else:
+            default_value = {
+                key: value if isinstance(value, float) else "Callable"
+                for key, value in self.default_value.items()
+            }
         return f"{class_name}(primers={self.primers}, default_value={default_value}, random={self.random})"
 
 

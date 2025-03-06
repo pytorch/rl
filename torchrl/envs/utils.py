@@ -200,7 +200,7 @@ class _StepMDP:
         """Represents the keys as a tree to facilitate iteration."""
         if not key_list:
             return {}
-        key_dict = {key: torch.zeros(()) for key in key_list}
+        key_dict = {key: torch.zeros((0,)) for key in key_list}
         td = TensorDict(key_dict, batch_size=torch.Size([]))
         return tree_map(lambda x: None, td.to_dict())
 
@@ -1407,6 +1407,7 @@ def _update_during_reset(
     if not reset_keys:
         return tensordict.update(tensordict_reset)
     roots = set()
+    print("reset_keys", reset_keys)
     for reset_key in reset_keys:
         # get the node of the reset key
         if isinstance(reset_key, tuple):
@@ -1417,11 +1418,12 @@ def _update_during_reset(
             node = tensordict.get(node_key)
             reset_key_tuple = reset_key
         else:
-            node_reset = tensordict_reset
+            node_reset = tensordict_reset.exclude(reset_key)
             node = tensordict
             reset_key_tuple = (reset_key,)
         # get the reset signal
         reset = tensordict.pop(reset_key, None)
+        print("reset popped", reset)
 
         # check if this reset should be ignored -- this happens whenever the
         # root node has already been updated

@@ -142,7 +142,6 @@ class UnityMLAgentsWrapper(_EnvWrapper):
                         # Sometimes in an MLAgents environment, an agent may
                         # show up in both the decision steps and the terminal
                         # steps. When that happens, just skip the duplicate.
-                        assert is_terminal
                         continue
                     agent_name_to_behavior_map[agent_name] = behavior
                     agent_name_to_group_id_map[agent_name] = group_id
