@@ -53,7 +53,9 @@ def get_minibatch():
             root_dir=tmpdir,
         )
         for data in dl:
-            data = data.clone().memmap_("test/datasets_mini/tldr_batch/")
+            data = data.clone().memmap_(
+                f"{pathlib.Path(__file__).parent}/../datasets_mini/tldr_batch/"
+            )
             break
 
 
