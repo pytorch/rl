@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import warnings
 from typing import Callable, Iterator, OrderedDict
 
@@ -21,6 +22,7 @@ from torchrl.collectors.collectors import (
     SyncDataCollector,
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
+from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
 
@@ -312,7 +314,9 @@ class RayCollector(DataCollectorBase):
         num_collectors: int = None,
         update_after_each_batch=False,
         max_weight_update_interval=-1,
+        replay_buffer: ReplayBuffer = None,
     ):
+        self.frames_per_batch = frames_per_batch
         if remote_configs is None:
             remote_configs = DEFAULT_REMOTE_CLASS_CONFIG
 
@@ -321,6 +325,14 @@ class RayCollector(DataCollectorBase):
 
         if collector_kwargs is None:
             collector_kwargs = {}
+        if replay_buffer is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("replay_buffer", replay_buffer)
+            else:
+                collector_kwargs = [
+                    ck.setdefault("replay_buffer", replay_buffer)
+                    for ck in collector_kwargs
+                ]
 
         # Make sure input parameters are consistent
         def check_consistency_with_num_collectors(param, param_name, num_collectors):
@@ -386,7 +398,8 @@ class RayCollector(DataCollectorBase):
             raise RuntimeError(
                 "ray library not found, unable to create a DistributedCollector. "
             ) from RAY_ERR
-        ray.init(**ray_init_config)
+        if not ray.is_initialized():
+            ray.init(**ray_init_config)
         if not ray.is_initialized():
             raise RuntimeError("Ray could not be initialized.")
 
@@ -400,6 +413,7 @@ class RayCollector(DataCollectorBase):
         collector_class.as_remote = as_remote
         collector_class.print_remote_collector_info = print_remote_collector_info
 
+        self.replay_buffer = replay_buffer
         self._local_policy = policy
         if isinstance(self._local_policy, nn.Module):
             policy_weights = TensorDict.from_module(self._local_policy)
@@ -557,7 +571,7 @@ class RayCollector(DataCollectorBase):
                 policy,
                 other_params,
             )
-            self._remote_collectors.extend([collector])
+            self._remote_collectors.append(collector)
 
     def local_policy(self):
         """Returns local collector."""
@@ -577,17 +591,33 @@ class RayCollector(DataCollectorBase):
             )  # This will interrupt any running tasks on the actor, causing them to fail immediately
 
     def iterator(self):
+        def proc(data):
+            if self.split_trajs:
+                data = split_trajectories(data)
+            if self.postproc is not None:
+                data = self.postproc(data)
+            return data
+
         if self._sync:
-            data = self._sync_iterator()
+            meth = self._sync_iterator
         else:
-            data = self._async_iterator()
+            meth = self._async_iterator
+        yield from (proc(data) for data in meth())
 
-        if self.split_trajs:
-            data = split_trajectories(data)
-        if self.postproc is not None:
-            data = self.postproc(data)
+    async def _asyncio_iterator(self):
+        def proc(data):
+            if self.split_trajs:
+                data = split_trajectories(data)
+            if self.postproc is not None:
+                data = self.postproc(data)
+            return data
 
-        return data
+        if self._sync:
+            for d in self._sync_iterator():
+                yield proc(d)
+        else:
+            for d in self._async_iterator():
+                yield proc(d)
 
     def _sync_iterator(self) -> Iterator[TensorDictBase]:
         """Collects one data batch per remote collector in each iteration."""
@@ -634,7 +664,30 @@ class RayCollector(DataCollectorBase):
                     ):
                         self.update_policy_weights_(rank)
 
-        self.shutdown()
+        if self._task is None:
+            self.shutdown()
+
+    _task = None
+
+    def start(self):
+        """Starts the RayCollector."""
+        if self.replay_buffer is None:
+            raise RuntimeError("Replay buffer must be defined for asyncio execution.")
+        if self._task is None or self._task.done():
+            loop = asyncio.get_event_loop()
+            self._task = loop.create_task(self._run_iterator_silently())
+
+    async def _run_iterator_silently(self):
+        async for _ in self._asyncio_iterator():
+            # Process each item silently
+            continue
+
+    async def async_shutdown(self):
+        """Finishes processes started by ray.init() during async execution."""
+        if self._task is not None:
+            await self._task
+        self.stop_remote_collectors()
+        ray.shutdown()
 
     def _async_iterator(self) -> Iterator[TensorDictBase]:
         """Collects a data batch from a single remote collector in each iteration."""
@@ -658,7 +711,7 @@ class RayCollector(DataCollectorBase):
             ray.internal.free(
                 [future]
             )  # should not be necessary, deleted automatically when ref count is down to 0
-            self.collected_frames += out_td.numel()
+            self.collected_frames += self.frames_per_batch
 
             yield out_td
 
@@ -689,8 +742,8 @@ class RayCollector(DataCollectorBase):
         #         object_ref=ref,
         #         force=False,
         #     )
-
-        self.shutdown()
+        if self._task is None:
+            self.shutdown()
 
     def update_policy_weights_(self, worker_rank=None) -> None:
         """Updates the weights of the worker nodes.

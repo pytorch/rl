@@ -344,7 +344,10 @@ class ListStorage(Storage):
         return state
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(items=[{self._storage[0]}, ...])"
+        storage = getattr(self, "_storage", [None])
+        if not storage:
+            return f"{self.__class__.__name__}()"
+        return f"{self.__class__.__name__}(items=[{storage[0]}, ...])"
 
     def contains(self, item):
         if isinstance(item, int):
