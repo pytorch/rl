@@ -6134,7 +6134,7 @@ class TensorDictPrimer(Transform):
 
     @property
     def reset_key(self):
-        reset_key = self.__dict__.get("_reset_key", None)
+        reset_key = self.__dict__.get("_reset_key")
         if reset_key is None:
             if self.parent is None:
                 raise RuntimeError(

@@ -11,7 +11,6 @@ from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right
 from torch import nn
 
-from torchrl.objectives.value.functional import reward2go
 
 
 def _get_reward(
@@ -367,6 +366,7 @@ class DensifyReward(TensorDictModuleBase):
         time_dim: int = 2,
         discount: float = 1.0,
     ):
+        from torchrl.objectives.value.functional import reward2go
         super().__init__()
         self.in_keys = [unravel_key(reward_key), unravel_key(done_key)]
         if reward_key_out is None:
@@ -374,6 +374,7 @@ class DensifyReward(TensorDictModuleBase):
         self.out_keys = [unravel_key(reward_key_out)]
         self.time_dim = time_dim
         self.discount = discount
+        self.reward2go = reward2go
 
     def forward(self, tensordict):
         # Get done
@@ -385,6 +386,6 @@ class DensifyReward(TensorDictModuleBase):
                 f"reward and done state are expected to have the same shape. Got reard.shape={reward.shape} "
                 f"and done.shape={done.shape}."
             )
-        reward = reward2go(reward, done, time_dim=-2, gamma=self.discount)
+        reward = self.reward2go(reward, done, time_dim=-2, gamma=self.discount)
         tensordict.set(("next", self.out_keys[0]), reward)
         return tensordict
