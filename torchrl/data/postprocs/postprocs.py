@@ -6,9 +6,12 @@
 from __future__ import annotations
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import NestedKey, TensorDictBase, unravel_key
+from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right
 from torch import nn
+
+from torchrl.objectives.value.functional import reward2go
 
 
 def _get_reward(
@@ -291,3 +294,97 @@ def _multi_step_func(
         )
         tensordict.batch_size = tensordict.batch_size[:ndim]
     return tensordict
+
+
+class DensifyReward(TensorDictModuleBase):
+    """A util to reassign the reward at done state to the rest of the trajectory.
+
+    This transform is to be used with sparse rewards to assign a reward to each step of a trajectory when only the
+    reward at `done` is non-null.
+
+    .. note:: The class calls the :func:`~torchrl.objectives.value.functional.reward2go` function, which will
+        also sum intermediate rewards. Make sure you understand what the `reward2go` function returns before using
+        this module.
+
+    Args:
+        reward_key (NestedKey, optional): The key in the input TensorDict where the reward is stored.
+            Defaults to `"reward"`.
+        done_key (NestedKey, optional): The key in the input TensorDict where the done flag is stored.
+            Defaults to `"done"`.
+        reward_key_out (NestedKey | None, optional): The key in the output TensorDict where the reassigned reward
+            will be stored. If None, it defaults to the value of `reward_key`.
+            Defaults to `None`.
+        time_dim (int, optional): The dimension in the input TensorDict where the time is unrolled.
+            Defaults to `2`.
+        discount (float, optional): The discount factor to use for computing the discounted cumulative sum of rewards.
+            Defaults to `1.0` (no discounting).
+
+    Returns:
+        TensorDict: The input TensorDict with the reassigned reward stored under the key specified by `reward_key_out`.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>>
+        >>> from torchrl.data import DensifyReward
+        >>>
+        >>> # Create a sample TensorDict
+        >>> tensordict = TensorDict({
+        ...     "next": {
+        ...         "reward": torch.zeros(10, 1),
+        ...         "done": torch.zeros(10, 1, dtype=torch.bool)
+        ...     }
+        ... }, batch_size=[10])
+        >>> # Set some done flags and rewards
+        >>> tensordict["next", "done"][[3, 7]] = True
+        >>> tensordict["next", "reward"][3] = 3
+        >>> tensordict["next", "reward"][7] = 7
+        >>> # Create an instance of LastRewardToTraj
+        >>> last_reward_to_traj = DensifyReward()
+        >>> # Apply the transform
+        >>> new_tensordict = last_reward_to_traj(tensordict)
+        >>> # Print the reassigned rewards
+        >>> print(new_tensordict["next", "reward"])
+        tensor([[3.],
+                [3.],
+                [3.],
+                [3.],
+                [7.],
+                [7.],
+                [7.],
+                [7.],
+                [0.],
+                [0.]])
+
+    """
+
+    def __init__(
+        self,
+        *,
+        reward_key: NestedKey = "reward",
+        done_key: NestedKey = "done",
+        reward_key_out: NestedKey | None = None,
+        time_dim: int = 2,
+        discount: float = 1.0,
+    ):
+        super().__init__()
+        self.in_keys = [unravel_key(reward_key), unravel_key(done_key)]
+        if reward_key_out is None:
+            reward_key_out = reward_key
+        self.out_keys = [unravel_key(reward_key_out)]
+        self.time_dim = time_dim
+        self.discount = discount
+
+    def forward(self, tensordict):
+        # Get done
+        done = tensordict.get(("next", self.in_keys[1]))
+        # Get reward
+        reward = tensordict.get(("next", self.in_keys[0]))
+        if reward.shape != done.shape:
+            raise RuntimeError(
+                f"reward and done state are expected to have the same shape. Got reard.shape={reward.shape} "
+                f"and done.shape={done.shape}."
+            )
+        reward = reward2go(reward, done, time_dim=-2, gamma=self.discount)
+        tensordict.set(("next", self.out_keys[0]), reward)
+        return tensordict
