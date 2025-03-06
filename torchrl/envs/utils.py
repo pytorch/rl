@@ -888,13 +888,19 @@ def _sort_keys(element):
     return element
 
 
-def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
+def make_composite_from_td(
+    data, *, unsqueeze_null_shapes: bool = True, dynamic_shape: bool = False
+):
     """Creates a Composite instance from a tensordict, assuming all values are unbounded.
 
     Args:
         data (tensordict.TensorDict): a tensordict to be mapped onto a Composite.
+
+    Keyword Args:
         unsqueeze_null_shapes (bool, optional): if ``True``, every empty shape will be
             unsqueezed to (1,). Defaults to ``True``.
+        dynamic_shape (bool, optional): if ``True``, all tensors will be assumed to have a dynamic shape
+            along the last dimension. Defaults to ``False``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -919,22 +925,33 @@ def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
     """
     # custom function to convert a tensordict in a similar spec structure
     # of unbounded values.
+    def make_shape(shape):
+        if shape or not unsqueeze_null_shapes:
+            if dynamic_shape:
+                return shape[:-1] + (-1,)
+            else:
+                return shape
+        return torch.Size([1])
+
     composite = Composite(
         {
-            key: make_composite_from_td(tensor)
-            if isinstance(tensor, TensorDictBase)
-            else NonTensor(shape=data.shape, device=tensor.device)
+            key: make_composite_from_td(
+                tensor,
+                unsqueeze_null_shapes=unsqueeze_null_shapes,
+                dynamic_shape=dynamic_shape,
+            )
+            if is_tensor_collection(tensor) and not is_non_tensor(tensor)
+            else NonTensor(
+                shape=tensor.shape, example_data=tensor.data, device=tensor.device
+            )
             if is_non_tensor(tensor)
             else Unbounded(
-                dtype=tensor.dtype,
-                device=tensor.device,
-                shape=tensor.shape
-                if tensor.shape or not unsqueeze_null_shapes
-                else [1],
+                dtype=tensor.dtype, device=tensor.device, shape=make_shape(tensor.shape)
             )
             for key, tensor in data.items()
         },
         shape=data.shape,
+        data_cls=type(data),
     )
     return composite
 
