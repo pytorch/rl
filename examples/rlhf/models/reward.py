@@ -8,7 +8,7 @@ import torch
 from tensordict.nn import TensorDictModule
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.modules.models.rlhf import GPT2RewardModel
+from torchrl.modules.models.llm import GPT2RewardModel
 
 
 def init_reward_model(
