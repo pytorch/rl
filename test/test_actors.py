@@ -14,7 +14,7 @@ from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import distributions as dist, nn
 from torchrl.data import Binary, Bounded, Categorical, Composite, MultiOneHot, OneHot
-from torchrl.data.rlhf.dataset import _has_transformers
+from torchrl.data.llm.dataset import _has_transformers
 from torchrl.modules import MLP, SafeModule, TanhDelta, TanhNormal
 from torchrl.modules.tensordict_module.actors import (
     _process_action_space_spec,
