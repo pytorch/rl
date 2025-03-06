@@ -325,7 +325,15 @@ class LLMEnv(EnvBase):
             if self.attention_key is not None:
                 attention_mask = tensordict.get(self.attention_key)
                 n = action.shape[-1] - attention_mask.shape[-1]
-                attention_mask = torch.cat([attention_mask, attention_mask.new_ones(attention_mask.shape[:-1] + (n,))], -1)
+                if n > 0:
+                    # It can happen that there's only one action (eg rand_action)
+                    attention_mask = torch.cat(
+                        [
+                            attention_mask,
+                            attention_mask.new_ones(attention_mask.shape[:-1] + (n,)),
+                        ],
+                        -1,
+                    )
                 nex_td.set(self.attention_key, attention_mask)
             return nex_td
 
