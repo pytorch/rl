@@ -117,8 +117,8 @@ from torchrl.envs.libs.dm_control import _has_dm_control
 from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
 from torchrl.envs.libs.unity_mlagents import _has_unity_mlagents
 from torchrl.envs.transforms import VecNorm
+from torchrl.envs.transforms.llm import KLRewardTransform
 from torchrl.envs.transforms.r3m import _R3MNet
-from torchrl.envs.transforms.rlhf import KLRewardTransform
 from torchrl.envs.transforms.transforms import (
     _has_tv,
     ActionDiscretizer,
