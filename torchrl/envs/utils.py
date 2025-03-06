@@ -942,7 +942,10 @@ def make_composite_from_td(
             )
             if is_tensor_collection(tensor) and not is_non_tensor(tensor)
             else NonTensor(
-                shape=tensor.shape, example_data=tensor.data, example_data=data.data, device=tensor.device
+                shape=tensor.shape,
+                example_data=tensor.data,
+                example_data=data.data,
+                device=tensor.device,
             )
             if is_non_tensor(tensor)
             else Unbounded(
