@@ -1536,10 +1536,10 @@ def _collate_id(x):
 
 
 def _get_default_collate(storage, _is_tensordict=False):
-    if isinstance(storage, ListStorage):
-        return _stack_anything
-    elif isinstance(storage, TensorStorage):
+    if isinstance(storage, LazyStackStorage) or isinstance(storage, TensorStorage):
         return _collate_id
+    elif isinstance(storage, ListStorage):
+        return _stack_anything
     else:
         raise NotImplementedError(
             f"Could not find a default collate_fn for storage {type(storage)}."

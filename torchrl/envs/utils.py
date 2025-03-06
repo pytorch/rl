@@ -1407,7 +1407,6 @@ def _update_during_reset(
     if not reset_keys:
         return tensordict.update(tensordict_reset)
     roots = set()
-    print("reset_keys", reset_keys)
     for reset_key in reset_keys:
         # get the node of the reset key
         if isinstance(reset_key, tuple):
@@ -1423,7 +1422,6 @@ def _update_during_reset(
             reset_key_tuple = (reset_key,)
         # get the reset signal
         reset = tensordict.pop(reset_key, None)
-        print("reset popped", reset)
 
         # check if this reset should be ignored -- this happens whenever the
         # root node has already been updated

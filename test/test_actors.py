@@ -8,14 +8,14 @@ import os
 import pytest
 import torch
 
-from tensordict import TensorDict
+from tensordict import NonTensorStack, TensorDict
 from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import distributions as dist, nn
 from torchrl.data import Binary, Bounded, Categorical, Composite, MultiOneHot, OneHot
 from torchrl.data.llm.dataset import _has_transformers
-from torchrl.modules import MLP, SafeModule, TanhDelta, TanhNormal
+from torchrl.modules import from_hf_transformers, MLP, SafeModule, TanhDelta, TanhNormal
 from torchrl.modules.tensordict_module.actors import (
     _process_action_space_spec,
     ActorValueOperator,
@@ -905,6 +905,55 @@ def test_lmhead_actorvalueoperator(device):
     assert len(policy_params.difference(policy_params2)) == 0 and len(
         policy_params.intersection(policy_params2)
     ) == len(policy_params)
+
+
+@pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
+class TestTransformerActor:
+    @pytest.mark.parametrize(
+        "from_text, generate, tokens, attention_mask",
+        [
+            (True, True, None, None),
+            (True, False, None, None),
+            (
+                False,
+                True,
+                torch.randint(1024, (1, 10)),
+                torch.ones(1, 10, dtype=torch.int64),
+            ),
+            (False, True, torch.randint(1024, (1, 10)), None),
+        ],
+    )
+    def test_from_hf_transformers(self, from_text, generate, tokens, attention_mask):
+        from torchrl.data.llm import LLMData
+        from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
+
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        model = GPT2LMHeadModel(GPT2Config())
+        tokenizer.padding_side = "left"
+        m = from_hf_transformers(
+            model, tokenizer=tokenizer, from_text=from_text, generate=generate
+        )
+        if from_text:
+            tdin = LLMData(text=NonTensorStack("a text"), batch_size=1)
+        else:
+            tdin = LLMData(tokens=tokens, attention_mask=attention_mask, batch_size=1)
+        td = m(tdin)
+        assert td is tdin
+        assert isinstance(td, LLMData)
+        if from_text and generate:
+            assert td.text_response is not None
+        else:
+            assert td.text_response is None
+        if attention_mask is not None or from_text:
+            assert td.attention_mask is not None
+        else:
+            assert td.attention_mask is None
+        if not generate:
+            assert td.text_response is None
+            assert td.tokens_response is None
+            assert td.log_probs is not None
+            assert td.logits is not None
 
 
 if __name__ == "__main__":
