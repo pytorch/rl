@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 from torchrl.data.replay_buffers import ReplayBuffer
 
 RAY_ERR = None
@@ -108,6 +107,8 @@ class RayReplayBuffer(ReplayBuffer):
             ) from RAY_ERR
         if not ray.is_initialized():
             if ray_init_kwargs is None:
+                from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
+
                 ray_init_kwargs = DEFAULT_RAY_INIT_CONFIG
             ray.init(**ray_init_kwargs)
         self._rb = remote_cls(*args, **kwargs)
