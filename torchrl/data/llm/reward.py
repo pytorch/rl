@@ -8,7 +8,7 @@ import importlib
 
 import torch
 from tensordict import tensorclass
-from torchrl.data.rlhf.dataset import TensorDictTokenizer, TokenizedDatasetLoader
+from torchrl.data.llm.dataset import TensorDictTokenizer, TokenizedDatasetLoader
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_comparisons"
 _has_datasets = importlib.util.find_spec("datasets") is not None

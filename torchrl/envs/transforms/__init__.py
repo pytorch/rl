@@ -4,14 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 
 from .gym_transforms import EndOfLifeTransform
-from .r3m import R3MTransform
-from .rb_transforms import MultiStepTransform
-from .rlhf import (
+from .llm import (
     as_nested_tensor,
     as_padded_tensor,
     DataLoadingPrimer,
     KLRewardTransform,
 )
+from .r3m import R3MTransform
+from .rb_transforms import MultiStepTransform
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
