@@ -7,7 +7,7 @@ from __future__ import annotations
 import torch
 from tensordict import tensorclass, TensorDict
 
-from torchrl.data.rlhf.dataset import TensorDictTokenizer, TokenizedDatasetLoader
+from torchrl.data.llm.dataset import TensorDictTokenizer, TokenizedDatasetLoader
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_tldr"
 
