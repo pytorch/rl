@@ -1133,6 +1133,9 @@ efficient sampling.
     get_dataloader
     ConstantKLController
     AdaptiveKLController
+    LLMData
+    LLMInput
+    LLMOutput
 
 
 Utils
