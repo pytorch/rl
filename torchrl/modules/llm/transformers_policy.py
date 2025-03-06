@@ -8,15 +8,16 @@
 import torch
 
 import transformers
-from tensordict import NestedKey, TensorDict, TensorDictBase
+from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictModuleBase,
     TensorDictSequential as Seq,
     WrapModule,
 )
-from tensordict.tensorclass import NonTensorData
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from tensordict.tensorclass import NonTensorData, NonTensorStack
+from torchrl.data.llm import LLMData
+from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
 
 
 def _maybe_clear_device(td):
@@ -35,6 +36,26 @@ def _maybe_set_device(td):
 
 
 def log_probs_from_scores(td: TensorDictBase) -> TensorDictBase:
+    """Computes the log_probs from a Transformer formatted TensorDict.
+
+    Required keys in tensordict:
+
+    - "tokens_out": containing
+
+        - "scores": logits of shape (B, seq-len, vocab_size)
+        - "sequences": token sequences of shape (B, seq-len)
+
+    Written keys in tensordict:
+
+    - "logits": normalized scores of shape (B, seq-len, vocab_size)
+    - "log_probs": log probabilities of shape (B, seq-len, 1)
+
+    Note: The following keys will be deleted from the tensordict:
+
+    - "tokens_out", "past_key_values"
+    - "tokens_out", "scores"
+
+    """
     # TODO: how do we avoid getting these?
     del td["tokens_out", "past_key_values"]
     scores = dict(td["tokens_out", "scores"].items())
@@ -52,6 +73,24 @@ def log_probs_from_scores(td: TensorDictBase) -> TensorDictBase:
 
 
 def log_probs_from_logits(td: TensorDictBase) -> TensorDictBase:
+    """Computes the log_probs from a Transformer formatted TensorDict.
+
+    Required keys in tensordict:
+
+    - "forward": containing
+        - "logits": logits of shape (B, seq-len, vocab_size)
+    - "tokens_in": containing
+        - "input_ids": token sequences of shape (B, seq-len)
+
+    Written keys in tensordict:
+
+    - "logits": normalized scores of shape (B, seq-len, vocab_size)
+    - "log_probs": log probabilities of shape (B, seq-len, 1)
+
+    Note: The following keys will be deleted from the tensordict:
+    - "forward", "past_key_values"
+    - "forward"
+    """
     # TODO: how do we avoid getting these?
     del td["forward", "past_key_values"]
     scores = td["forward", "logits"]
@@ -73,13 +112,15 @@ def from_hf_transformers(
     tokenizer: transformers.tokenization_utils.PreTrainedTokenizer | None = None,
     from_text: bool = False,
     device: torch.device | None = None,
+    # Keys:
     text_key: NestedKey = "text",
-    input_key: NestedKey = "input_ids",
+    token_key: NestedKey = "tokens",
+    attention_mask_key: NestedKey = "attention_mask",
     kwargs: dict | None = None,
     tokenizer_kwargs: dict | None = None,
 ) -> TensorDictModuleBase:
-
     # TODO: Seq should have a return_log_prob and be of ProbabilisticTDSequential type for instance checks
+
 
     module_dict = {}
     if device:
@@ -103,7 +144,19 @@ def from_hf_transformers(
             out_keys=["tokens_in"],
             method_kwargs=tokenizer_kwargs,
             strict=True,
+            # We don't need the text after this
+            inplace=False,
         )
+    else:
+        module_dict["format"] = Mod(
+            lambda *x: x,
+            in_keys=[token_key, attention_mask_key],
+            out_keys=[("tokens_in", "input_ids"), ("tokens_in", "attention_mask")],
+            strict=False,
+            # We don't need the text after this
+            inplace=False,
+        )
+
     if device:
         module_dict["to_dest_device"] = Mod(
             lambda tensor: tensor.to(device),
@@ -148,10 +201,41 @@ def from_hf_transformers(
             module_dict["decode"] = Mod(
                 tokenizer.batch_decode,
                 in_keys=[("tokens_out", "sequences")],
-                out_keys=["action"],
+                out_keys=["text_out"],
                 strict=True,
             )
-
+            if device:
+                module_dict["to_source_device"] = _maybe_set_device
+            module_dict["rebuild"] = Mod(
+                lambda *x: x,
+                in_keys=[
+                    ("tokens_out", "sequences"),
+                    ("tokens_in", "input_ids"),
+                    ("tokens_in", "attention_mask"),
+                    "text_out",
+                    "log_probs",
+                    "logits",
+                ],
+                out_keys=[
+                    "tokens_response",
+                    "tokens",
+                    "attention_mask",
+                    "text_response",
+                    "log_probs",
+                    "logits",
+                ],
+                strict=True,
+                inplace=False,
+            )
+        else:
+            if device:
+                module_dict["to_source_device"] = _maybe_set_device
+            module_dict["rebuild"] = Mod(
+                lambda *x: x,
+                in_keys=[("tokens_out", "sequences"), "log_probs", "logits"],
+                out_keys=["tokens_response", "log_probs", "logits"],
+                inplace=False,
+            )
     else:
         if not kwargs:
             kwargs = {}
@@ -175,28 +259,49 @@ def from_hf_transformers(
             in_keys=[("tokens_in", "input_ids"), ("forward", "logits")],
             out_keys=["logits", "log_probs"],
         )
-    if device:
-        module_dict["to_source_device"] = _maybe_set_device
-    return Seq(module_dict)
+        if device:
+            module_dict["to_source_device"] = _maybe_set_device
+        if from_text:
+            module_dict["rebuild"] = Mod(
+                lambda *x: x,
+                in_keys=["log_probs", "logits", ("tokens_in", "attention_mask")],
+                out_keys=["log_probs", "logits", "attention_mask"],
+                inplace=False,
+            )
+        else:
+            module_dict["rebuild"] = Mod(
+                lambda *x: x,
+                in_keys=["log_probs", "logits"],
+                out_keys=["log_probs", "logits"],
+                inplace=False,
+            )
+
+    return Seq(module_dict, inplace=True)
 
 
 if __name__ == "__main__":
     max_seq_length = 50000
-    model_name = "Qwen/Qwen2.5-7B-Instruct"
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name, torch_dtype="auto", device_map="auto"
-    )
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer.pad_token = tokenizer.eos_token
+    model = GPT2LMHeadModel(GPT2Config())
 
     tokenizer.padding_side = "left"
 
-    m = from_hf_transformers(
-        model, tokenizer=tokenizer, from_text=True, device="cuda:0", generate=True
-    )
-    td = m(TensorDict(text="a text"))
+    m = from_hf_transformers(model, tokenizer=tokenizer, from_text=True, generate=True)
+    td = m(LLMData(text=NonTensorStack("a text"), batch_size=1))
 
-    m = from_hf_transformers(
-        model, tokenizer=tokenizer, from_text=True, device="cuda:0", generate=False
+    m = from_hf_transformers(model, tokenizer=tokenizer, from_text=True, generate=False)
+    td = m(LLMData(text=NonTensorStack("a text"), batch_size=1))
+
+    m = from_hf_transformers(model, tokenizer=tokenizer, from_text=False, generate=True)
+    td = m(
+        LLMData(
+            tokens=torch.randint(1024, (1, 10)),
+            attention_mask=torch.ones(1, 10, dtype=torch.int64),
+            batch_size=1,
+        )
     )
-    td = m(TensorDict(text="a text"))
+
+    m = from_hf_transformers(model, tokenizer=tokenizer, from_text=False, generate=True)
+    td = m(LLMData(tokens=torch.randint(1024, (1, 10)), batch_size=1))
