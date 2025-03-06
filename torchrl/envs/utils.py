@@ -944,7 +944,6 @@ def make_composite_from_td(
             else NonTensor(
                 shape=tensor.shape,
                 example_data=tensor.data,
-                example_data=data.data,
                 device=tensor.device,
             )
             if is_non_tensor(tensor)

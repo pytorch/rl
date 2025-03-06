@@ -6,7 +6,7 @@
 
 import torch
 import transformers
-import vllm.outputs
+import vllm_policy.outputs
 from tensordict import (
     from_dataclass,
     maybe_dense_stack,
@@ -23,7 +23,7 @@ from tensordict.nn import (
 )
 from transformers import AutoTokenizer
 
-from vllm import LLM, SamplingParams
+from vllm_policy import LLM, SamplingParams
 
 CompletionOutput_tc = from_dataclass(vllm.outputs.CompletionOutput)
 

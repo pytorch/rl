@@ -417,8 +417,6 @@ class DataLoadingPrimer(TensorDictPrimer):
         else:
             self.data_keys = list(primers.keys(True, True))
 
-        self._reset_key = "_reset"
-
         super().__init__(
             primers=primers,
             default_value=self._load_from_dataloader,
@@ -427,6 +425,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             single_default_value=True,
             call_before_env_reset=True,
         )
+        self._reset_key = "_reset"
 
     @classmethod
     def _endless_iter(self, obj):

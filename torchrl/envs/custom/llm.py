@@ -42,13 +42,13 @@ class LLMEnv(EnvBase):
 
     Keyword Args:
         token_key (NestedKey, optional): The key in the tensordict where the tokens are stored (when `str2str=False`).
-            Defaults to ``("tokens_in", "input_ids")``.
+            Defaults to ``"tokens"``.
         str_key (NestedKey, optional): The key in the tensordict where the string input is stored (when `str2str=True`).
-            Defaults to ``"test"``.
+            Defaults to ``"text"``.
         attention_key (NestedKey, optional): The key in the tensordict where the attention mask is stored.
-            Defaults to ``("tokens_in", "input_ids")``
+            Defaults to ``"attention_mask"``.
         action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to
-            ``("tokens_out", "sequences")``.
+            ``tokens_response`` or ``"text_response"``.
         reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.
             Defaults to  ``"reward"``.
         str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.
@@ -71,6 +71,8 @@ class LLMEnv(EnvBase):
         batch_size (int or torch.Size, optional): Batch size of the environment. If left empty, the environment
             is batchless (or batch-unlocked), meaning that it can accept tensordicts of any batch size.
             Defaults to ``None`` (batch-unlocked).
+        as_llm_data (bool, optional): If ``True``, the data will be of type :class:`~torchrl.data.LLMData`.
+            Defaults to ``False``.
 
     .. seealso:: :class:`~torchrl.envs.DataLoadingPrimer` for examples.
 
@@ -79,10 +81,11 @@ class LLMEnv(EnvBase):
 
     """
 
-    _DEFAULT_TOKEN_KEY = ("tokens_in", "input_ids")
+    _DEFAULT_TOKEN_KEY = "tokens"
     _DEFAULT_STR_KEY = "text"
-    _DEFAULT_ATTENTION_KEY = ("tokens_in", "attention_mask")
-    _DEFAULT_ACTION_KEY = ("tokens_out", "sequences")
+    _DEFAULT_ATTENTION_KEY = "attention_mask"
+    _DEFAULT_ACTION_TOKENS_KEY = "tokens_response"
+    _DEFAULT_ACTION_STR_KEY = "text_response"
 
     def __init__(
         self,
@@ -100,7 +103,9 @@ class LLMEnv(EnvBase):
         assign_done: bool = False,
         batch_size: int | torch.Size | None = None,
         has_attention: bool = True,
+        as_llm_data: bool = False,
     ) -> None:
+        self.as_llm_data = as_llm_data
         if token_key is None:
             token_key = self._DEFAULT_TOKEN_KEY
         if str_key is None:
@@ -108,7 +113,10 @@ class LLMEnv(EnvBase):
         if attention_key is None:
             attention_key = self._DEFAULT_ATTENTION_KEY
         if action_key is None:
-            action_key = self._DEFAULT_ACTION_KEY
+            if str2str:
+                action_key = self._DEFAULT_ACTION_STR_KEY
+            else:
+                action_key = self._DEFAULT_ACTION_TOKENS_KEY
         if batch_size is None:
             self._batch_locked = False
             batch_size = ()
@@ -206,7 +214,7 @@ class LLMEnv(EnvBase):
         else:
             # Use single done
             self.full_done_spec_unbatched = Composite(
-                tokens=Composite(
+                tokens_data=Composite(
                     done=Unbounded(shape=(-1,), dtype=torch.bool),
                     terminated=Unbounded(shape=(-1,), dtype=torch.bool),
                 ),
@@ -228,6 +236,7 @@ class LLMEnv(EnvBase):
         device: torch.device | None = None,
         vocab_size: int | None = None,
         no_stack: bool = False,
+        as_llm_data: bool = False,
         batch_size: int | torch.Size | None = None,
         has_attention: bool = True,
         assign_reward: bool = False,
@@ -288,6 +297,8 @@ class LLMEnv(EnvBase):
             repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
                 situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
                 samples (rather than an advantage module).
+            as_llm_data (bool, optional): If ``True``, the data will be of type :class:`~torchrl.data.LLMData`.
+                Defaults to ``False``.
 
         Returns:
             LLMEnv: The created LLMEnv instance.
@@ -334,6 +345,7 @@ class LLMEnv(EnvBase):
             assign_done=assign_done,
             batch_size=batch_size,
             has_attention=has_attention,
+            as_llm_data=as_llm_data,
         )
         return env.append_transform(primer)
 
@@ -353,6 +365,8 @@ class LLMEnv(EnvBase):
         self._make_next_obs(tensordict, next_td)
         self._maybe_make_reward(tensordict, next_td)
         self._maybe_make_done(tensordict, next_td)
+        if self.as_llm_data:
+            raise NotImplementedError()
         return next_td
 
     def _maybe_make_reward(
@@ -378,14 +392,14 @@ class LLMEnv(EnvBase):
                 )
             else:
                 done = torch.zeros_like(action, dtype=torch.bool)
-            next_td.set(("tokens", "terminated"), done)
-            next_td.set(("tokens", "done"), done.clone())
+            next_td.set(("tokens_data", "terminated"), done)
+            next_td.set(("tokens_data", "done"), done.clone())
             next_td.set(
-                "terminated", next_td.get(("tokens", "done")).any(-1, keepdim=True)
+                "terminated", next_td.get(("tokens_data", "done")).any(-1, keepdim=True)
             )
             next_td.set(
                 "terminated",
-                next_td.get(("tokens", "terminated")).any(-1, keepdim=True),
+                next_td.get(("tokens_data", "terminated")).any(-1, keepdim=True),
             )
         return next_td
 
@@ -400,7 +414,8 @@ class LLMEnv(EnvBase):
             if self.has_attention:
                 attention_mask = tensordict.get(self.attention_key)
                 n = action.shape[-1] - attention_mask.shape[-1]
-                if n:
+                if n > 0:
+                    # It can happen that there's only one action (eg rand_action)
                     attention_mask = torch.cat(
                         [
                             attention_mask,
@@ -471,7 +486,10 @@ class LLMEnv(EnvBase):
                 f"torchrl.envs.DataLoadingPrimer) is appended to the env transforms."
             )
         td_reset = tensordict.copy()
-        return self._maybe_make_done(tensordict, td_reset)
+        tensordict = self._maybe_make_done(tensordict, td_reset)
+        if self.as_llm_data:
+            raise NotImplementedError()
+        return tensordict
 
     def _set_seed(self, seed: int | None):
         return seed
