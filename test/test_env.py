@@ -61,7 +61,7 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
-from torchrl.envs.transforms.rlhf import as_padded_tensor
+from torchrl.envs.transforms.llm import as_padded_tensor
 from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
     AutoResetTransform,
