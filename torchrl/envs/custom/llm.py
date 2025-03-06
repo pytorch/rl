@@ -142,6 +142,7 @@ class LLMEnv(EnvBase):
         example_data: Any = None,
         stack_method: Callable[[Any], Any]
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,
+        repeats: int | None = None,
     ) -> LLMEnv:
         """Creates an LLMEnv instance from a dataloader.
 
@@ -165,6 +166,9 @@ class LLMEnv(EnvBase):
             example_data (Any, optional): Example data to use for initializing the primer. Defaults to ``None``.
             stack_method (Callable[[Any], Any] | Literal["as_nested_tensor", "as_padded_tensor"], optional): The
                 method to use for stacking the data. Defaults to ``None``.
+            repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
+                situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
+                samples (rather than an advantage module).
 
         Returns:
             LLMEnv: The created LLMEnv instance.
@@ -178,6 +182,7 @@ class LLMEnv(EnvBase):
             data_specs=data_specs,
             example_data=example_data,
             stack_method=stack_method,
+            repeats=repeats,
         )
         env = LLMEnv(
             str2str=str2str,
