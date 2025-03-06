@@ -167,12 +167,18 @@ def main(cfg: DictConfig):  # noqa: F821
         num_network_updates = num_network_updates + 1
         # Get a data batch
         batch = batch.to(device, non_blocking=True)
+        def forward(batch, num_network_updates):
 
-        # Forward pass PPO loss
-        loss = loss_module(batch)
-        loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+            # Forward pass PPO loss
+            loss = loss_module(batch)
+            loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+            return loss, loss_sum
+
+        loss, loss_sum = torch.compile(forward, backend="inductor", mode="reduce-overhead")(batch, num_network_updates)
+
         # Backward pass
         loss_sum.backward()
+
         torch.nn.utils.clip_grad_norm_(
             loss_module.parameters(), max_norm=cfg_optim_max_grad_norm
         )
