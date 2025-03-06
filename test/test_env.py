@@ -4699,13 +4699,13 @@ class TestLLMEnv:
             def policy(td):
                 if str2str:
                     if not td.shape:
-                        td[LLMEnv._DEFAULT_ACTION_KEY] = "<nothing>"
+                        td[LLMEnv._DEFAULT_ACTION_STR_KEY] = "<nothing>"
                     else:
-                        td[LLMEnv._DEFAULT_ACTION_KEY] = NonTensorStack(
+                        td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorStack(
                             *["<nothing>" for _ in range(td.shape[0])]
                         )
                 else:
-                    td[LLMEnv._DEFAULT_ACTION_KEY] = torch.ones(
+                    td[LLMEnv._DEFAULT_ACTION_TOKENS_KEY] = torch.ones(
                         td.shape + (1,), dtype=torch.int64
                     )
                 return td
@@ -4720,25 +4720,25 @@ class TestLLMEnv:
                     assert (
                         r[0, 0][LLMEnv._DEFAULT_STR_KEY]
                         == r[0, 1][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[0, 0][LLMEnv._DEFAULT_ACTION_KEY])
+                            : -len(r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
                         ]
                     )
                     assert (
                         r[0, 1][LLMEnv._DEFAULT_STR_KEY]
                         == r[0, 2][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[0, 1][LLMEnv._DEFAULT_ACTION_KEY])
+                            : -len(r[0, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
                         ]
                     )
                     assert (
                         r[-1, 0][LLMEnv._DEFAULT_STR_KEY]
                         == r[-1, 1][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[-1, 0][LLMEnv._DEFAULT_ACTION_KEY])
+                            : -len(r[-1, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
                         ]
                     )
                     assert (
                         r[-1, 1][LLMEnv._DEFAULT_STR_KEY]
                         == r[-1, 2][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[-1, 1][LLMEnv._DEFAULT_ACTION_KEY])
+                            : -len(r[-1, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
                         ]
                     )
                 else:
@@ -4815,13 +4815,13 @@ class TestLLMEnv:
         def policy(td):
             if str2str:
                 if not td.shape:
-                    td[LLMEnv._DEFAULT_ACTION_KEY] = "<nothing>"
+                    td[LLMEnv._DEFAULT_ACTION_STR_KEY] = "<nothing>"
                 else:
-                    td[LLMEnv._DEFAULT_ACTION_KEY] = NonTensorStack(
+                    td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorStack(
                         *["<nothing>" for _ in range(td.shape[0])]
                     )
             else:
-                td[LLMEnv._DEFAULT_ACTION_KEY] = torch.ones(
+                td[LLMEnv._DEFAULT_ACTION_TOKENS_KEY] = torch.ones(
                     td.shape + (1,), dtype=torch.int64
                 )
             return td
@@ -4957,7 +4957,7 @@ class TestLLMEnv:
             env.append_transform(StepCounter(max_steps=10))
 
             def policy(td):
-                td[LLMEnv._DEFAULT_ACTION_KEY] = torch.ones(
+                td[LLMEnv._DEFAULT_ACTION_TOKENS_KEY] = torch.ones(
                     td.shape + (torch.randint(10, (1,)).item(),), dtype=torch.int64
                 )
                 return td
@@ -4974,7 +4974,6 @@ class TestLLMEnv:
             if assign_done:
                 assert "terminated" in r
                 assert "done" in r
-            print(r)
 
 
 if __name__ == "__main__":
