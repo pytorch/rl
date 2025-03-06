@@ -84,7 +84,7 @@
   writers.py
 </text>
 <text x="171.0" y="650.85" font-family="sans-serif" font-size="21.0" fill="#000000" >
-  rlhf
+  llm
 </text>
 <text x="255.0" y="671.85" font-family="sans-serif" font-size="21.0" fill="#000000" >
   dataset.py
@@ -174,7 +174,7 @@
   r3m.py
 </text>
 <text x="255.0" y="1280.8500000000001" font-family="sans-serif" font-size="21.0" fill="#000000" >
-  rlhf.py
+  llm.py
 </text>
 <text x="255.0" y="1301.8500000000001" font-family="sans-serif" font-size="21.0" fill="#000000" >
   vc1.py
@@ -219,7 +219,7 @@
   multiagent.py
 </text>
 <text x="255.0" y="1595.85" font-family="sans-serif" font-size="21.0" fill="#000000" >
-  rlhf.py
+  llm.py
 </text>
 <text x="171.0" y="1616.85" font-family="sans-serif" font-size="21.0" fill="#000000" >
   planners

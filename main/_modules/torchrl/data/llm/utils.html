@@ -9,7 +9,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrl.data.rlhf.utils &mdash; torchrl main documentation</title>
+  <title>torchrl.data.llm.utils &mdash; torchrl main documentation</title>
   
 
   
@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+413571b) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+73c7b0a) &#x25BC</span></a>
     </div>
     
 
@@ -384,7 +384,7 @@
         
           <li><a href="../../../index.html">Module code</a> &gt;</li>
         
-      <li>torchrl.data.rlhf.utils</li>
+      <li>torchrl.data.llm.utils</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -418,7 +418,7 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torchrl.data.rlhf.utils</h1><div class="highlight"><pre>
+  <h1>Source code for torchrl.data.llm.utils</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
@@ -428,14 +428,15 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TypeVar</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span><span class="p">,</span> <span class="n">TensorDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span><span class="p">,</span> <span class="n">Tensor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.rlhf.prompt</span><span class="w"> </span><span class="kn">import</span> <span class="n">PromptData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.prompt</span><span class="w"> </span><span class="kn">import</span> <span class="n">PromptData</span>
 
 <span class="n">_has_transformers</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;transformers&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
@@ -575,10 +576,10 @@
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from tensordict.nn import TensorDictModule</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.modules.models.rlhf import GPT2RewardModel</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.data.rlhf.utils import RolloutFromModel</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.data.rlhf.dataset import get_dataloader</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.data.rlhf.prompt import PromptData</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.models.llm import GPT2RewardModel</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm.utils import RolloutFromModel</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm.dataset import get_dataloader</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm.prompt import PromptData</span>
 <span class="sd">        &gt;&gt;&gt; from transformers import GPT2LMHeadModel</span>
 <span class="sd">        &gt;&gt;&gt;</span>
 <span class="sd">        &gt;&gt;&gt; dl = get_dataloader(</span>
@@ -962,6 +963,91 @@
             <span class="c1"># remove all values</span>
             <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_kl_queue</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_kl_queue</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_kl_queue</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
+
+<span class="n">LLMInpOut</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;LLMInpOut&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="LLMInput"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.LLMInput.html#torchrl.data.LLMInput">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMInput</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Represents the input to a Large Language Model (LLM).</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        tokens (torch.Tensor): The input tokens as a tensor.</span>
+<span class="sd">        attention_mask (torch.Tensor, optional): The attention mask for the input tokens. Default to `None`.</span>
+<span class="sd">        token_list (list[int] | list[list[int]], optional): The input tokens as a list of integers or a list of lists of integers. Default to `None`.</span>
+<span class="sd">        text (str | list[str], optional): The input text as a string or a list of strings. Default to `None`.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.data.LLMOutput` and :class:`~torchrl.data.LLMData`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tokens</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">attention_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">token_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="LLMOutput"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.LLMOutput.html#torchrl.data.LLMOutput">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMOutput</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Represents the output from a Large Language Model (LLM).</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        tokens (torch.Tensor): The output tokens as a tensor.</span>
+<span class="sd">        tokens_response (torch.Tensor, optional): The response tokens generated by the model. Default to `None`.</span>
+
+<span class="sd">            .. note:: the reponse is the sequence of tokens output by a model, excluding the input</span>
+<span class="sd">                tokens.</span>
+
+<span class="sd">        token_list (list[int] | list[list[int]], optional): The output tokens as a list of integers or a list of lists of integers. Default to `None`.</span>
+<span class="sd">        tokens_response_list (list[list[int]], optional): The response tokens generated by the model as a list of lists of integers. Default to `None`.</span>
+<span class="sd">        logits (torch.Tensor, optional): The logits of the output tokens. Default to `None`.</span>
+<span class="sd">        log_probs (torch.Tensor, optional): The log probabilities of the output tokens. Default to `None`.</span>
+<span class="sd">        text (str | list[str], optional): The output text as a string or a list of strings. Default to `None`.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.data.LLMInput` and :class:`~torchrl.data.LLMData`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tokens</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">tokens_response</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">token_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">tokens_response_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">logits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">log_probs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_vllm_output</span><span class="p">(</span><span class="bp">cls</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">LLMInpOut</span><span class="p">],</span> <span class="n">vllm_output</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMInpOut</span><span class="p">:</span>
+        <span class="c1"># placeholder</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+<div class="viewcode-block" id="LLMData"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.LLMData.html#torchrl.data.LLMData">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMData</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Represents the input or output of a Large Language Model (LLM).</span>
+
+<span class="sd">    Other algorithm-specific attributes such as `reward`, `advantages` or done states are handled automatically by the</span>
+<span class="sd">    envs and, therefore, are not included in this class.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        tokens (torch.Tensor): The input/output tokens as a tensor.</span>
+<span class="sd">        attention_mask (torch.Tensor, optional): The attention mask for the input tokens. Default to `None`.</span>
+<span class="sd">        tokens_response (torch.Tensor, optional): The response tokens generated by the model. Default to `None`.</span>
+
+<span class="sd">            .. note:: the reponse is the sequence of tokens output by a model, excluding the input</span>
+<span class="sd">                tokens.</span>
+
+<span class="sd">        token_list (list[int] | list[list[int]], optional): The output tokens as a list of integers or a list of lists</span>
+<span class="sd">            of integers. Default to `None`.</span>
+<span class="sd">        tokens_response_list (list[list[int]], optional): The response tokens generated by the model as a list of</span>
+<span class="sd">            lists of integers. Default to `None`.</span>
+<span class="sd">        logits (torch.Tensor, optional): The logits of the output tokens. Default to `None`.</span>
+<span class="sd">        log_probs (torch.Tensor, optional): The log probabilities of the output tokens. Default to `None`.</span>
+<span class="sd">        text (str | list[str], optional): The output text as a string or a list of strings. Default to `None`.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.data.LLMInput` and :class:`~torchrl.data.LLMOutput`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tokens</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">tokens_response</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">attention_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">token_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">tokens_response_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">logits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">log_probs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 </pre></div>
 
              </article>

@@ -9,7 +9,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrl.data.rlhf.prompt &mdash; torchrl main documentation</title>
+  <title>torchrl.data.llm.reward &mdash; torchrl main documentation</title>
   
 
   
@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+413571b) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+73c7b0a) &#x25BC</span></a>
     </div>
     
 
@@ -384,7 +384,7 @@
         
           <li><a href="../../../index.html">Module code</a> &gt;</li>
         
-      <li>torchrl.data.rlhf.prompt</li>
+      <li>torchrl.data.llm.reward</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -418,58 +418,82 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torchrl.data.rlhf.prompt</h1><div class="highlight"><pre>
+  <h1>Source code for torchrl.data.llm.reward</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">tensorclass</span><span class="p">,</span> <span class="n">TensorDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">tensorclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictTokenizer</span><span class="p">,</span> <span class="n">TokenizedDatasetLoader</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.rlhf.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictTokenizer</span><span class="p">,</span> <span class="n">TokenizedDatasetLoader</span>
+<span class="n">DEFAULT_DATASET</span> <span class="o">=</span> <span class="s2">&quot;CarperAI/openai_summarize_comparisons&quot;</span>
+<span class="n">_has_datasets</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;datasets&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="n">_has_tqdm</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;tqdm&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
-<span class="n">DEFAULT_DATASET</span> <span class="o">=</span> <span class="s2">&quot;CarperAI/openai_summarize_tldr&quot;</span>
 
-
-<div class="viewcode-block" id="PromptData"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.PromptData.html#torchrl.data.PromptData">[docs]</a><span class="nd">@tensorclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">PromptData</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A prompt dataset.&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="RewardData"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RewardData.html#torchrl.data.RewardData">[docs]</a><span class="nd">@tensorclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RewardData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dataclass for reward model training.&quot;&quot;&quot;</span>
 
     <span class="n">input_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
     <span class="n">attention_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-    <span class="n">prompt_rindex</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-    <span class="n">labels</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">logits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">loss</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">rewards</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">end_scores</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">mask_label</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pad_token_id</span><span class="o">=</span><span class="mi">50256</span><span class="p">):</span>
-        <span class="n">_</span><span class="p">,</span> <span class="n">block_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_ids</span><span class="o">.</span><span class="n">shape</span>
-        <span class="n">attention_mask</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">block_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">prompt_rindex</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-            <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">prompt_rindex</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-        <span class="n">input_ids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">attention_mask</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_ids</span><span class="p">,</span> <span class="n">pad_token_id</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
-            <span class="n">input_ids</span><span class="o">=</span><span class="n">input_ids</span><span class="p">,</span>
-            <span class="n">attention_mask</span><span class="o">=</span><span class="n">attention_mask</span><span class="p">,</span>
-            <span class="n">prompt_rindex</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">prompt_rindex</span><span class="p">,</span>
-            <span class="n">loss</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span>
-            <span class="n">batch_size</span><span class="o">=</span><span class="p">[],</span>
-        <span class="p">)</span>
 
-<div class="viewcode-block" id="PromptData.from_dataset"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.PromptData.html#torchrl.data.PromptData.from_dataset">[docs]</a>    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="PairwiseDataset"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset">[docs]</a><span class="nd">@tensorclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PairwiseDataset</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Represents a dataset in a pairwise manner (chosen vs rejected).</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        chosen_data: data to be chosen.</span>
+<span class="sd">        rejected_data: corresponding data to be rejected.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; data = PairwiseDataset.from_dataset(&quot;train&quot;, max_length=550)</span>
+<span class="sd">        &gt;&gt;&gt; print(data)</span>
+<span class="sd">        PairwiseDataset(</span>
+<span class="sd">            chosen_data=RewardData(</span>
+<span class="sd">                attention_mask=MemoryMappedTensor(shape=torch.Size([92534, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                input_ids=MemoryMappedTensor(shape=torch.Size([92534, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                rewards=None,</span>
+<span class="sd">                end_scores=None,</span>
+<span class="sd">                batch_size=torch.Size([92534]),</span>
+<span class="sd">                device=None,</span>
+<span class="sd">                is_shared=False),</span>
+<span class="sd">            rejected_data=RewardData(</span>
+<span class="sd">                attention_mask=MemoryMappedTensor(shape=torch.Size([92534, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                input_ids=MemoryMappedTensor(shape=torch.Size([92534, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                rewards=None,</span>
+<span class="sd">                end_scores=None,</span>
+<span class="sd">                batch_size=torch.Size([92534]),</span>
+<span class="sd">                device=None,</span>
+<span class="sd">                is_shared=False),</span>
+<span class="sd">            batch_size=torch.Size([92534]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">chosen_data</span><span class="p">:</span> <span class="n">RewardData</span>
+    <span class="n">rejected_data</span><span class="p">:</span> <span class="n">RewardData</span>
+
+<div class="viewcode-block" id="PairwiseDataset.from_dataset"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.from_dataset">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_dataset</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">split</span><span class="p">,</span>
-        <span class="n">dataset_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">max_length</span><span class="o">=</span><span class="mi">550</span><span class="p">,</span>
-        <span class="n">root_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">from_disk</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">dataset_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_length</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">550</span><span class="p">,</span>
+        <span class="n">root_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">from_disk</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a :class:`PromptData` from a dataset name.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a :class:`PairwiseDataset` from a dataset name.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            split (str): ``&quot;train&quot;`` or ``&quot;valid&quot;`` depending on the data split needed.</span>
@@ -482,141 +506,144 @@
 <span class="sd">            from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`</span>
 <span class="sd">                will be used. Otherwise, :func:`datasets.load_dataset` will be used.</span>
 <span class="sd">                Defaults to ``False``.</span>
-<span class="sd">            num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`</span>
-<span class="sd">                which is called during tokenization.</span>
-<span class="sd">                Defaults to ``max(os.cpu_count() // 2, 1)``.</span>
 
-<span class="sd">        Returns: a :class:`PromptData` instance containing a memory-mapped</span>
+<span class="sd">        Returns: a :class:`PairwiseDataset` instance containing a memory-mapped</span>
 <span class="sd">            version of the required dataset.</span>
 
 <span class="sd">        Examples:</span>
-<span class="sd">            &gt;&gt;&gt; data = PromptData.from_dataset(&quot;train&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; data = PairwiseDataset.from_dataset(&quot;train&quot;)</span>
 <span class="sd">            &gt;&gt;&gt; print(data)</span>
-<span class="sd">            PromptDataTLDR(</span>
-<span class="sd">                attention_mask=MemoryMappedTensor(shape=torch.Size([116722, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                input_ids=MemoryMappedTensor(shape=torch.Size([116722, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                prompt_rindex=MemoryMappedTensor(shape=torch.Size([116722]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                labels=MemoryMappedTensor(shape=torch.Size([116722, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                logits=None,</span>
-<span class="sd">                loss=None,</span>
-<span class="sd">                batch_size=torch.Size([116722]),</span>
+<span class="sd">            PairwiseDataset(</span>
+<span class="sd">                chosen_data=RewardData(</span>
+<span class="sd">                    attention_mask=MemoryMappedTensor(shape=torch.Size([92534, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                    input_ids=MemoryMappedTensor(shape=torch.Size([92534, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                    rewards=None,</span>
+<span class="sd">                    end_scores=None,</span>
+<span class="sd">                    batch_size=torch.Size([92534]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                rejected_data=RewardData(</span>
+<span class="sd">                    attention_mask=MemoryMappedTensor(shape=torch.Size([92534, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                    input_ids=MemoryMappedTensor(shape=torch.Size([92534, 550]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                    rewards=None,</span>
+<span class="sd">                    end_scores=None,</span>
+<span class="sd">                    batch_size=torch.Size([92534]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                batch_size=torch.Size([92534]),</span>
 <span class="sd">                device=None,</span>
 <span class="sd">                is_shared=False)</span>
 <span class="sd">            &gt;&gt;&gt; # data can be sampled from using regular indexing</span>
 <span class="sd">            &gt;&gt;&gt; sub_data = data[:3]</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">dataset_name</span> <span class="o">=</span> <span class="n">dataset_name</span> <span class="k">if</span> <span class="n">dataset_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">DEFAULT_DATASET</span>
+        <span class="k">if</span> <span class="n">dataset_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dataset_name</span> <span class="o">=</span> <span class="n">DEFAULT_DATASET</span>
         <span class="n">loader</span> <span class="o">=</span> <span class="n">TokenizedDatasetLoader</span><span class="p">(</span>
             <span class="n">split</span><span class="p">,</span>
             <span class="n">max_length</span><span class="p">,</span>
             <span class="n">dataset_name</span><span class="p">,</span>
-            <span class="n">PromptTensorDictTokenizer</span><span class="p">,</span>
+            <span class="n">TensorDictTokenizer</span><span class="p">,</span>
+            <span class="n">pre_tokenization_hook</span><span class="p">,</span>
             <span class="n">root_dir</span><span class="o">=</span><span class="n">root_dir</span><span class="p">,</span>
             <span class="n">from_disk</span><span class="o">=</span><span class="n">from_disk</span><span class="p">,</span>
             <span class="n">num_workers</span><span class="o">=</span><span class="n">num_workers</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="o">**</span><span class="n">data</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;input_ids&quot;</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span></div></div>
+        <span class="n">maxidx</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="p">[</span><span class="n">maxidx</span><span class="p">]</span>
+        <span class="c1"># this is a zero-copy creation, as we index memmap-arrays without</span>
+        <span class="c1"># creating new storage.</span>
+        <span class="n">chosen_data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:</span><span class="n">maxidx</span><span class="p">]</span>
+        <span class="n">rejected_data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">maxidx</span><span class="p">:]</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">chosen_data</span><span class="o">=</span><span class="n">RewardData</span><span class="p">(</span>
+                <span class="o">**</span><span class="n">chosen_data</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">rejected_data</span><span class="o">=</span><span class="n">RewardData</span><span class="p">(</span>
+                <span class="o">**</span><span class="n">rejected_data</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+        <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="PromptTensorDictTokenizer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.PromptTensorDictTokenizer.html#torchrl.data.PromptTensorDictTokenizer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">PromptTensorDictTokenizer</span><span class="p">(</span><span class="n">TensorDictTokenizer</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Tokenization recipe for prompt datasets.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">pre_tokenization_hook</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">min_length</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Pre-tokenizer for the reward model (comparison) dataset.</span>
 
-<span class="sd">    Returns a tokenizer function, which reads an example containing a prompt</span>
-<span class="sd">    and a label and tokenizes them.</span>
+<span class="sd">    This function selects all samples where the length of the prompt is</span>
+<span class="sd">    sufficient and where the ``&quot;chosen&quot;`` and ``&quot;rejected&quot;`` entries differ.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        tokenizer (tokenizer from transformers library): the tokenizer to use.</span>
-<span class="sd">        max_length (int): maximum length of the sequence.</span>
-<span class="sd">        key (str, optional): the key where to find the text. Defaults to ``&quot;prompt&quot;``.</span>
-<span class="sd">        padding (str, optional): type of padding. Defaults to ``&quot;max_length&quot;``.</span>
-<span class="sd">        truncation (bool, optional): whether the sequences should be truncated to max_length.</span>
-<span class="sd">        return_tensordict (bool, optional): if ``True``, a TensoDict is returned.</span>
-<span class="sd">            Otherwise, a the original data will be returned.</span>
-<span class="sd">        device (torch.device, optional): the device where to store the data.</span>
-<span class="sd">            This option is ignored if ``return_tensordict=False``.</span>
+<span class="sd">        dataset (datasets.Dataset): the dataset to process. Should have entries</span>
+<span class="sd">            ``&quot;prompt&quot;``, ``&quot;chosen&quot;`` and ``&quot;rejected&quot;``.</span>
+<span class="sd">        min_length (int, optional): minimum length of a prompt (in word count).</span>
 
-<span class="sd">    The :meth:`__call__` method of this class will execute the following operations:</span>
-
-<span class="sd">        - Read the ``prompt`` string contacted with the ``label`` string and tokenize</span>
-<span class="sd">          them. The results will be stored in the ``&quot;input_ids&quot;`` TensorDict entry.</span>
-<span class="sd">        - Write a ``&quot;prompt_rindex&quot;`` entry with the index of the last valid</span>
-<span class="sd">          token from the prompt.</span>
-<span class="sd">        - Write a ``&quot;valid_sample&quot;`` which identifies which entry in the</span>
-<span class="sd">          tensordict has eough toknens to meet the ``max_length`` criterion.</span>
-<span class="sd">        - Return a :class:`tensordict.TensorDict` instance with tokenized inputs.</span>
-
-<span class="sd">    The tensordict batch-size will match the batch-size of the input.</span>
+<span class="sd">    Returns: a new ``datasets.Dataset`` with selected prompts under ``&quot;text&quot;``.</span>
+<span class="sd">        The first half are the chosen strings and the second the rejected ones,</span>
+<span class="sd">        always preceded by the original prompt.</span>
 
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; from transformers import AutoTokenizer</span>
-<span class="sd">        &gt;&gt;&gt; tokenizer = AutoTokenizer.from_pretrained(&quot;gpt2&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; tokenizer.pad_token = tokenizer.eos_token</span>
-<span class="sd">        &gt;&gt;&gt; example = {</span>
-<span class="sd">        ...     &quot;prompt&quot;: [&quot;This prompt is long enough to be tokenized.&quot;, &quot;this one too!&quot;],</span>
-<span class="sd">        ...     &quot;label&quot;: [&quot;Indeed it is.&quot;, &#39;It might as well be.&#39;],</span>
-<span class="sd">        ... }</span>
-<span class="sd">        &gt;&gt;&gt; fn = PromptTensorDictTokenizer(tokenizer, 50)</span>
-<span class="sd">        &gt;&gt;&gt; print(fn(example))</span>
-<span class="sd">        TensorDict(</span>
-<span class="sd">            fields={</span>
-<span class="sd">                attention_mask: Tensor(shape=torch.Size([2, 50]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                input_ids: Tensor(shape=torch.Size([2, 50]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                prompt_rindex: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                valid_sample: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="sd">            batch_size=torch.Size([2]),</span>
-<span class="sd">            device=None,</span>
-<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; from datasets import Dataset</span>
+<span class="sd">        &gt;&gt;&gt; data = Dataset.from_dict({</span>
+<span class="sd">        ...     &quot;prompt&quot;: [&quot;I&#39;m the king&quot;],</span>
+<span class="sd">        ...     &quot;chosen&quot;: [&quot;It is true, you are the king&quot;],</span>
+<span class="sd">        ...     &quot;rejected&quot;: [&quot;No, I am the king, you are not&quot;]})</span>
+<span class="sd">        &gt;&gt;&gt; print(pre_tokenization_hook(data))</span>
+<span class="sd">        Dataset({</span>
+<span class="sd">            features: [&#39;text&#39;],</span>
+<span class="sd">            num_rows: 2</span>
+<span class="sd">        })</span>
+<span class="sd">        &gt;&gt;&gt; data = Dataset.from_dict({</span>
+<span class="sd">        ...     &quot;prompt&quot;: [&quot;I&#39;m the king&quot;],</span>
+<span class="sd">        ...     &quot;chosen&quot;: [&quot;It is true, you are the king&quot;],</span>
+<span class="sd">        ...     &quot;rejected&quot;: [&quot;It is true, you are the king&quot;]}) # chosen and rejected match</span>
+<span class="sd">        &gt;&gt;&gt; print(pre_tokenization_hook(data))</span>
+<span class="sd">        Dataset({</span>
+<span class="sd">            features: [],</span>
+<span class="sd">            num_rows: 0</span>
+<span class="sd">        })</span>
+<span class="sd">        &gt;&gt;&gt; data = Dataset.from_dict({</span>
+<span class="sd">        ...     &quot;prompt&quot;: [&quot;I&#39;m the king&quot;],</span>
+<span class="sd">        ...     &quot;chosen&quot;: [&quot;Yes&quot;],</span>
+<span class="sd">        ...     &quot;rejected&quot;: [&quot;No&quot;]}) # chosen and rejected are too short</span>
+<span class="sd">        &gt;&gt;&gt; print(pre_tokenization_hook(data))</span>
+<span class="sd">        Dataset({</span>
+<span class="sd">            features: [],</span>
+<span class="sd">            num_rows: 0</span>
+<span class="sd">        })</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">tokenizer</span><span class="p">,</span>
-        <span class="n">max_length</span><span class="p">,</span>
-        <span class="n">key</span><span class="o">=</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span>
-        <span class="n">padding</span><span class="o">=</span><span class="s2">&quot;max_length&quot;</span><span class="p">,</span>
-        <span class="n">truncation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">return_tensordict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="o">=</span> <span class="n">max_length</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">padding</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">truncation</span> <span class="o">=</span> <span class="n">truncation</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">return_tensordict</span> <span class="o">=</span> <span class="n">return_tensordict</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample</span><span class="p">):</span>
-        <span class="n">tokenizer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span>
-        <span class="n">max_length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span>
-
-        <span class="n">tokenized_prompts</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="p">(</span>
-            <span class="n">sample</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">],</span> <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">,</span> <span class="n">truncation</span><span class="o">=</span><span class="kc">True</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_datasets</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;datasets module couldn&#39;t be found. Make sure it is installed in your environment.&quot;</span>
         <span class="p">)</span>
-        <span class="n">prompt_rindex</span> <span class="o">=</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">prompt</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">prompt</span> <span class="ow">in</span> <span class="n">tokenized_prompts</span><span class="p">[</span><span class="s2">&quot;input_ids&quot;</span><span class="p">]]</span>
-        <span class="n">tokenized_example</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="n">prompt</span> <span class="o">+</span> <span class="n">label</span>
-                <span class="k">for</span> <span class="n">prompt</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">],</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">])</span>
-            <span class="p">],</span>
-            <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">,</span>
-            <span class="n">padding</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span>
-            <span class="n">truncation</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">truncation</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">tokenized_example</span><span class="p">[</span><span class="s2">&quot;prompt_rindex&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">prompt_rindex</span>
-        <span class="c1"># drop any examples whose total length when tokenized exceeds block size</span>
-        <span class="c1"># with recommended block size of 550, this is only ~0.1% of available examples.</span>
-        <span class="c1"># NOTE: to mark as discarded we just save the mask as we cannot change the shape here</span>
-        <span class="n">tokenized_example</span><span class="p">[</span><span class="s2">&quot;valid_sample&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">True</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">tokenized_example</span><span class="p">[</span><span class="s2">&quot;input_ids&quot;</span><span class="p">])</span>
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">input_ids</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">tokenized_example</span><span class="p">[</span><span class="s2">&quot;input_ids&quot;</span><span class="p">]):</span>
-            <span class="k">if</span> <span class="n">input_ids</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">eos_token_id</span><span class="p">:</span>
-                <span class="n">tokenized_example</span><span class="p">[</span><span class="s2">&quot;valid_sample&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_tensordict</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">tokenized_example</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">tokenized_example</span></div>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span> <span class="k">as</span> <span class="n">HFDataset</span>
+
+    <span class="n">chosen</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">rejected</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">_has_tqdm</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">tqdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
+
+        <span class="n">pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">pbar</span> <span class="o">=</span> <span class="n">dataset</span>
+    <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">pbar</span><span class="p">:</span>
+        <span class="n">prompt</span> <span class="o">=</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">]</span>
+        <span class="n">chosen_summary</span> <span class="o">=</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;chosen&quot;</span><span class="p">]</span>
+        <span class="n">rejected_summary</span> <span class="o">=</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;rejected&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">chosen_summary</span> <span class="o">==</span> <span class="n">rejected_summary</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">chosen_summary</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="o">&lt;</span> <span class="n">min_length</span>
+            <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">rejected_summary</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="o">&lt;</span> <span class="n">min_length</span>
+        <span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">chosen</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">prompt</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">chosen_summary</span><span class="p">})</span>
+        <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">prompt</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">rejected_summary</span><span class="p">})</span>
+
+    <span class="k">return</span> <span class="n">HFDataset</span><span class="o">.</span><span class="n">from_list</span><span class="p">(</span><span class="n">chosen</span> <span class="o">+</span> <span class="n">rejected</span><span class="p">)</span>
 </pre></div>
 
              </article>

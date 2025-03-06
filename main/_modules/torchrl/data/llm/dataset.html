@@ -9,7 +9,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrl.data.rlhf.dataset &mdash; torchrl main documentation</title>
+  <title>torchrl.data.llm.dataset &mdash; torchrl main documentation</title>
   
 
   
@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+413571b) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+73c7b0a) &#x25BC</span></a>
     </div>
     
 
@@ -384,7 +384,7 @@
         
           <li><a href="../../../index.html">Module code</a> &gt;</li>
         
-      <li>torchrl.data.rlhf.dataset</li>
+      <li>torchrl.data.llm.dataset</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -418,7 +418,7 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torchrl.data.rlhf.dataset</h1><div class="highlight"><pre>
+  <h1>Source code for torchrl.data.llm.dataset</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
@@ -452,7 +452,7 @@
 <span class="sd">        max_length (int): the maximum sequence length.</span>
 <span class="sd">        dataset_name (str): the name of the dataset.</span>
 <span class="sd">        tokenizer_fn (callable): the tokeinizing method constructor, such as</span>
-<span class="sd">            :class:`torchrl.data.rlhf.TensorDictTokenizer`. When called,</span>
+<span class="sd">            :class:`torchrl.data.llm.TensorDictTokenizer`. When called,</span>
 <span class="sd">            it should return a :class:`tensordict.TensorDict` instance</span>
 <span class="sd">            or a dictionary-like structure with the tokenized data.</span>
 <span class="sd">        pre_tokenization_hook (callable, optional): called on</span>
@@ -483,8 +483,8 @@
 <span class="sd">    The dataset will be stored in ``&lt;root_dir&gt;/&lt;split&gt;/&lt;max_length&gt;/``.</span>
 
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.data.rlhf import TensorDictTokenizer</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.data.rlhf.reward import  pre_tokenization_hook</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm import TensorDictTokenizer</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm.reward import  pre_tokenization_hook</span>
 <span class="sd">        &gt;&gt;&gt; split = &quot;train&quot;</span>
 <span class="sd">        &gt;&gt;&gt; max_length = 550</span>
 <span class="sd">        &gt;&gt;&gt; dataset_name = &quot;CarperAI/openai_summarize_comparisons&quot;</span>
@@ -780,7 +780,7 @@
 <span class="sd">            Defaults to ``max(os.cpu_count() // 2, 1)``.</span>
 
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.data.rlhf.reward import PairwiseDataset</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm.reward import PairwiseDataset</span>
 <span class="sd">        &gt;&gt;&gt; dataloader = get_dataloader(</span>
 <span class="sd">        ...     batch_size=256, block_size=550, tensorclass_type=PairwiseDataset, device=&quot;cpu&quot;)</span>
 <span class="sd">        &gt;&gt;&gt; for d in dataloader:</span>
