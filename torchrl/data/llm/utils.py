@@ -7,7 +7,7 @@ from __future__ import annotations
 import abc
 import collections
 import importlib
-from typing import Type, TypeVar
+from typing import TypeVar
 
 import numpy as np
 import torch
@@ -590,7 +590,7 @@ class LLMOutput(TensorClass["nocast"]):
     text: str | list[str] | None = None
 
     @classmethod
-    def from_vllm_output(cls: Type[LLMInpOut], vllm_output) -> LLMInpOut:
+    def from_vllm_output(cls: type[LLMInpOut], vllm_output) -> LLMInpOut:
         # placeholder
         raise NotImplementedError
 
