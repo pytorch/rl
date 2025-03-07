@@ -379,6 +379,14 @@ class BatchedEnvBase(EnvBase):
 
     is_spec_locked = EnvBase.is_spec_locked
 
+    def select_and_clone(self, name, tensor, selected_keys=None):
+        if selected_keys is None:
+            selected_keys = self._selected_step_keys
+        if name in selected_keys:
+            if self.device is not None and tensor.device != self.device:
+                return tensor.to(self.device, non_blocking=self.non_blocking)
+            return tensor.clone()
+
     @property
     def non_blocking(self):
         nb = self._non_blocking
@@ -1072,12 +1080,10 @@ class SerialEnv(BatchedEnvBase):
         selected_output_keys = self._selected_reset_keys_filt
 
         # select + clone creates 2 tds, but we can create one only
-        def select_and_clone(name, tensor):
-            if name in selected_output_keys:
-                return tensor.clone()
-
         out = self.shared_tensordict_parent.named_apply(
-            select_and_clone,
+            lambda *args: self.select_and_clone(
+                *args, selected_keys=_selected_reset_keys_filt
+            ),
             nested_keys=True,
             filter_empty=True,
         )
@@ -1150,14 +1156,10 @@ class SerialEnv(BatchedEnvBase):
             # will be modified in-place at further steps
             device = self.device
 
-            def select_and_clone(name, tensor):
-                if name in self._selected_step_keys:
-                    return tensor.clone()
-
             if partial_steps is not None:
                 next_td = TensorDict.lazy_stack([next_td[i] for i in workers_range])
             out = next_td.named_apply(
-                select_and_clone, nested_keys=True, filter_empty=True
+                self.select_and_clone, nested_keys=True, filter_empty=True
             )
             if out_tds is not None:
                 out.update(
@@ -2010,20 +2012,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         next_td = shared_tensordict_parent.get("next")
         device = self.device
 
-        if next_td.device != device and device is not None:
-
-            def select_and_clone(name, tensor):
-                if name in self._selected_step_keys:
-                    return tensor.to(device, non_blocking=self.non_blocking)
-
-        else:
-
-            def select_and_clone(name, tensor):
-                if name in self._selected_step_keys:
-                    return tensor.clone()
-
         out = next_td.named_apply(
-            select_and_clone,
+            self.select_and_clone,
             nested_keys=True,
             filter_empty=True,
             device=device,
@@ -2203,17 +2193,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         selected_output_keys = self._selected_reset_keys_filt
         device = self.device
 
-        if self.shared_tensordict_parent.device != device and device is not None:
-
-            def select_and_clone(name, tensor):
-                if name in selected_output_keys:
-                    return tensor.to(device, non_blocking=self.non_blocking)
-
-        else:
-
-            def select_and_clone(name, tensor):
-                if name in selected_output_keys:
+        def select_and_clone(name, tensor):
+            if name in selected_output_keys:
+                if tensor.device != device and device is not None:
                     return tensor.clone()
+                return tensor.to(device, non_blocking=self.non_blocking)
 
         out = self.shared_tensordict_parent.named_apply(
             select_and_clone,

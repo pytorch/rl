@@ -1693,6 +1693,34 @@ class TestParallel:
             env0.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("env_device", [None, "cpu"])
+    def test_parallel_env_device_vs_no_device(self, maybe_fork_ParallelEnv, env_device):
+        def make_env() -> GymEnv:
+            env = GymEnv(PENDULUM_VERSIONED(), device=env_device)
+            return env.append_transform(DoubleToFloat())
+
+        # Rollouts work with a regular env
+        parallel_env = maybe_fork_ParallelEnv(
+            num_workers=1, create_env_fn=make_env, device=None
+        )
+        parallel_env.reset()
+        parallel_env.set_seed(0)
+        torch.manual_seed(0)
+
+        parallel_rollout = parallel_env.rollout(max_steps=10)
+
+        # Rollout doesn't work with Parallelnv
+        parallel_env = maybe_fork_ParallelEnv(
+            num_workers=1, create_env_fn=make_env, device="cpu"
+        )
+        parallel_env.reset()
+        parallel_env.set_seed(0)
+        torch.manual_seed(0)
+
+        parallel_rollout_cpu = parallel_env.rollout(max_steps=10)
+        assert_allclose_td(parallel_rollout, parallel_rollout_cpu)
+
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.flaky(reruns=3, reruns_delay=1)
     @pytest.mark.parametrize(
         "env_name", [PENDULUM_VERSIONED]
