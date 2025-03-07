@@ -350,6 +350,17 @@ class TestTree:
         edges_check = {(0, 1), (0, 2), (1, 3), (1, 4), (2, 5), (2, 6)}
         assert edges == edges_check
 
+    def test_make_node(self):
+        td = TensorDict({"obs": torch.tensor([0])})
+        tree = Tree(node_data=td)
+        assert tree.node_data is not None
+
+        tree = Tree.make_node(data=td)
+        assert tree.node_data is not None
+
+        tree = Tree.make_node(td)
+        assert tree.node_data is not None
+
 
 class TestMCTSForest:
     def dummy_rollouts(self) -> Tuple[TensorDict, ...]:
