@@ -1284,8 +1284,18 @@ class GAE(ValueEstimatorBase):
             skip_existing=skip_existing,
             device=device,
         )
-        self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
-        self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))
+        self.register_buffer(
+            "gamma",
+            gamma.to(self._device)
+            if isinstance(gamma, Tensor)
+            else torch.tensor(gamma, device=self._device),
+        )
+        self.register_buffer(
+            "lmbda",
+            lmbda.to(self._device)
+            if isinstance(lmbda, Tensor)
+            else torch.tensor(lmbda, device=self._device),
+        )
         self.average_gae = average_gae
         self.vectorized = vectorized
         self.time_dim = time_dim
