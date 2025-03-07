@@ -543,7 +543,9 @@ class RolloutFromModel:
             while len(self._kl_queue):
                 self._kl_queue.remove(self._kl_queue[0])
 
+
 LLMInpOut = TypeVar("LLMInpOut")
+
 
 class LLMInput(TensorClass["nocast"]):
     """Represents the input to a Large Language Model (LLM).
@@ -557,10 +559,12 @@ class LLMInput(TensorClass["nocast"]):
     .. seealso:: :class:`~torchrl.data.LLMOutput` and :class:`~torchrl.data.LLMData`.
 
     """
+
     tokens: torch.Tensor
     attention_mask: torch.Tensor | None = None
     token_list: list[int] | list[list[int]] | None = None
     text: str | list[str] | None = None
+
 
 class LLMOutput(TensorClass["nocast"]):
     """Represents the output from a Large Language Model (LLM).
@@ -581,6 +585,7 @@ class LLMOutput(TensorClass["nocast"]):
     .. seealso:: :class:`~torchrl.data.LLMInput` and :class:`~torchrl.data.LLMData`.
 
     """
+
     tokens: torch.Tensor
     tokens_response: torch.Tensor | None = None
     token_list: list[int] | list[list[int]] | None = None
@@ -593,6 +598,7 @@ class LLMOutput(TensorClass["nocast"]):
     def from_vllm_output(cls: type[LLMInpOut], vllm_output) -> LLMInpOut:
         # placeholder
         raise NotImplementedError
+
 
 class LLMData(TensorClass["nocast"]):
     """Represents the input or output of a Large Language Model (LLM).
@@ -619,6 +625,7 @@ class LLMData(TensorClass["nocast"]):
     .. seealso:: :class:`~torchrl.data.LLMInput` and :class:`~torchrl.data.LLMOutput`.
 
     """
+
     tokens: torch.Tensor
     tokens_response: torch.Tensor | None = None
     attention_mask: torch.Tensor | None = None
