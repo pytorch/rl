@@ -350,6 +350,21 @@ class TestTree:
         edges_check = {(0, 1), (0, 2), (1, 3), (1, 4), (2, 5), (2, 6)}
         assert edges == edges_check
 
+    def test_tree_constructor(self):
+        td = TensorDict({"obs": torch.tensor([0])})
+        tree = Tree(node_data=td)
+        assert tree.node_data is not None
+
+    def test_make_node_with_kwarg(self):
+        td = TensorDict({"obs": torch.tensor([0])})
+        tree = Tree.make_node(data=td)
+        assert tree.node_data is not None
+
+    def test_make_node_with_no_kwarg(self):
+        td = TensorDict({"obs": torch.tensor([0])})
+        tree = Tree.make_node(td)
+        assert tree.node_data is not None
+
 
 class TestMCTSForest:
     def dummy_rollouts(self) -> Tuple[TensorDict, ...]:
