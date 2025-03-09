@@ -17,7 +17,7 @@ _has_sklearn = importlib.util.find_spec("sklearn", None) is not None
 
 
 def _make_composite_from_td(td):
-    # custom funtion to convert a tensordict in a similar spec structure
+    # custom function to convert a tensordict in a similar spec structure
     # of unbounded values.
     composite = Composite(
         {

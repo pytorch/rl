@@ -71,7 +71,7 @@ class BraxWrapper(_EnvWrapper):
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> import brax.envs
@@ -455,7 +455,7 @@ class BraxEnv(BraxWrapper):
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> from torchrl.envs import BraxEnv

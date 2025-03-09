@@ -663,7 +663,7 @@ class SyncDataCollector(DataCollectorBase):
         self.closed = False
 
         if not reset_when_done:
-            raise ValueError("reset_when_done is deprectated.")
+            raise ValueError("reset_when_done is deprecated.")
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
@@ -1057,7 +1057,7 @@ class SyncDataCollector(DataCollectorBase):
                 # This may be a bit dangerous as `torch.device("cuda")` may not have a precise
                 # device associated, whereas `tensor.device` always has
                 for spec in self.env.specs.values(True, True):
-                    if spec.device.type == "cuda":
+                    if spec.device is not None and spec.device.type == "cuda":
                         if ":" not in str(spec.device):
                             raise RuntimeError(
                                 "A cuda spec did not have a device associated. Make sure to "
@@ -2541,7 +2541,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     Environment types can be identical or different.
 
-    The collection keeps on occuring on all processes even between the time
+    The collection keeps on occurring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL sota-implementations.
 
@@ -3130,7 +3130,7 @@ def _main_async_collector(
                         "the shared device (aka storing_device) is set to CPU."
                     )
                     if collected_tensordict.device is not None:
-                        # placehoder in case we need different behaviors
+                        # placeholder in case we need different behaviors
                         if collected_tensordict.device.type in ("cpu",):
                             collected_tensordict.share_memory_()
                         elif collected_tensordict.device.type in ("mps",):

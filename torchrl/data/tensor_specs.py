@@ -2133,11 +2133,11 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         if dtype is not None and high.dtype is not dtype:
             high = high.to(dtype)
         err_msg = (
-            "Bounded requires the shape to be explicitely (via "
-            "the shape argument) or implicitely defined (via either the "
+            "Bounded requires the shape to be explicitly (via "
+            "the shape argument) or implicitly defined (via either the "
             "minimum or the maximum or both). If the maximum and/or the "
             "minimum have a non-singleton shape, they must match the "
-            "provided shape if this one is set explicitely."
+            "provided shape if this one is set explicitly."
         )
         if shape is not None and not isinstance(shape, torch.Size):
             if isinstance(shape, int):
@@ -2525,7 +2525,6 @@ class NonTensor(TensorSpec):
         if isinstance(shape, int):
             shape = _size([shape])
 
-        _, device = _default_dtype_and_device(None, device)
         domain = None
         super().__init__(
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
@@ -3410,7 +3409,7 @@ class Categorical(TensorSpec):
     """A discrete tensor spec.
 
     An alternative to :class:`OneHot` for categorical variables in TorchRL.
-    Categorical variables perform indexing insted of masking, which can speed-up
+    Categorical variables perform indexing instead of masking, which can speed-up
     computation and reduce memory cost for large categorical variables.
 
     The spec will have the shape defined by the ``shape`` argument: if a singleton dimension is
@@ -4001,7 +4000,7 @@ class Binary(Categorical):
             If not provided, ``shape`` must be passed.
 
             .. warning:: the ``n`` argument from ``Binary`` must not be confused with the ``n`` argument from :class:`Categorical`
-                or :class:`OneHot` which denotes the maximum nmber of elements that can be sampled.
+                or :class:`OneHot` which denotes the maximum number of elements that can be sampled.
                 For clarity, use ``shape`` instead.
 
         shape (torch.Size, optional): total shape of the sampled tensors.
@@ -4869,7 +4868,7 @@ class Composite(TensorSpec):
         if self.locked:
             raise RuntimeError("Cannot modify a locked Composite.")
         if spec is not None and self.device is not None and spec.device != self.device:
-            if isinstance(spec, Composite) and spec.device is None:
+            if spec.device is None:
                 # We make a clone not to mess up the spec that was provided.
                 # in set() we do the same for shape - these two ops should be grouped.
                 # we don't care about the overhead of cloning twice though because in theory
@@ -4877,7 +4876,7 @@ class Composite(TensorSpec):
                 spec = spec.clone().to(self._device)
             else:
                 raise RuntimeError(
-                    f"Setting a new attribute ({name}) on another device ({spec.device} against {self.device}). "
+                    f"Setting a new attribute ({name}) with spec type {type(spec).__name__} on another device ({spec.device} against {self.device}). "
                     f"All devices of Composite must match."
                 )
         if spec is not None:

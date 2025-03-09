@@ -108,7 +108,7 @@ OPTIMIZERS = {
 def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
     """Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.
 
-    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames
+    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targeting a total number of frames
     of 1M but actually collecting frame_skip * 1M frames.
 
     Args:
@@ -578,7 +578,7 @@ def transformed_env_constructor(
         stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
-        use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
+        use_env_creator (bool, optional): whether the `EnvCreator` class should be used. By using `EnvCreator`,
             one can make sure that running statistics will be put in shared memory and accessible for all workers
             when using a `VecNorm` transform. Default is `True`.
         custom_env_maker (callable, optional): if your env maker is not part
@@ -644,7 +644,7 @@ def transformed_env_constructor(
         elif custom_env_maker is None and custom_env is not None:
             env = custom_env
         else:
-            raise RuntimeError("cannot provive both custom_env and custom_env_maker")
+            raise RuntimeError("cannot provide both custom_env and custom_env_maker")
 
         if cfg.env.noops and custom_env is None:
             # this is a bit hacky: if custom_env is not None, it is probably a ParallelEnv
@@ -699,7 +699,7 @@ def initialize_observation_norm_transforms(
 
     Args:
         proof_environment (EnvBase instance, optional): if provided, this env will
-            be used ot execute the rollouts. If not, it will be created using
+            be used to execute the rollouts. If not, it will be created using
             the cfg object.
         num_iter (int): Number of iterations used for initializing the :obj:`ObservationNorms`
         key (str, optional): if provided, the stats of this key will be gathered.

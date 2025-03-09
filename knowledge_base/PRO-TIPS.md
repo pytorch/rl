@@ -76,7 +76,7 @@ Errors to look for that may be related to this misconception are the following:
   than the number of environments you're working with (twice as much for instance). This
   is also and especially true for environments that are rendered (even if they are rendered on GPU). 
 - The speed of training depends upon several factors and there is not a one-fits-all
-  solution to every problem. The common bottlnecks are:
+  solution to every problem. The common bottlenecks are:
   - **data collection**: the simulator speed may affect performance, as can the data
     transformation that follows. Speeding up environment interactions is usually
     done via vectorization (if the simulators enables it, e.g. Brax and other Jax-based
@@ -93,7 +93,7 @@ Errors to look for that may be related to this misconception are the following:
     a computational bottleneck as these are usually coded using plain for loops.
     If profiling indicates that this operation is taking a considerable amount
     of time, consider using our fully vectorized solutions instead.
-  - **Loss compuation**: The loss computation and the optimization
+  - **Loss computation**: The loss computation and the optimization
     steps are frequently responsible of a significant share of the compute time.
     Some techniques can speed things up. For instance, if multiple target networks
     are being used, using vectorized maps and functional programming (through 

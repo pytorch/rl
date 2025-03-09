@@ -234,13 +234,13 @@ class TokenizedDatasetLoader:
         batch_dims=1,
         valid_mask_key=None,
     ):
-        """Convers a dataset to a memory-mapped TensorDict.
+        """Converts a dataset to a memory-mapped TensorDict.
 
         If the dataset is already a :class:`TensorDict` instance, it is simply converted
         to a memory-mapped TensorDict.
         Otherwise, the dataset is expected to have a ``features`` attribute
         which is a sequence of strings indicating the features that can be found
-        in the dataset. If it does not, the ``features`` must be passed explicitely
+        in the dataset. If it does not, the ``features`` must be passed explicitly
         to this function.
 
         Args:
@@ -419,7 +419,7 @@ class TensorDictTokenizer:
         padding (str, optional): type of padding. Defaults to ``"max_length"``.
         truncation (bool, optional): whether the sequences should be truncated to max_length.
         return_tensordict (bool, optional): if ``True``, a TensoDict is returned.
-            Otherwise, a the orignal data will be returned.
+            Otherwise, a the original data will be returned.
         device (torch.device, optional): the device where to store the data.
             This option is ignored if ``return_tensordict=False``.
 
