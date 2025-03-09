@@ -167,7 +167,7 @@ class set_gym_backend(_DecoratorContextManager):
 
     def __enter__(self):
         # we save a complete list of setters as well as whether they should be set.
-        # we want the full list becasue we want to be able to nest the calls to set_gym_backend.
+        # we want the full list because we want to be able to nest the calls to set_gym_backend.
         # we also want to keep track of which ones are set to reproduce what was set before.
         self._setters_saved = copy(implement_for._implementations)
         self._call()
@@ -825,7 +825,7 @@ class _GymAsyncMeta(_EnvPostInit):
 class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
     """OpenAI Gym environment wrapper.
 
-    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
+    Works across `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
 
     Args:
         env (gym.Env): the environment to wrap. Batched environments (:class:`~stable_baselines3.common.vec_env.base_vec_env.VecEnv`
@@ -1486,7 +1486,7 @@ ACCEPTED_TYPE_ERRORS = {
 class GymEnv(GymWrapper):
     """OpenAI Gym environment wrapper constructed by environment ID directly.
 
-    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
+    Works across `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
 
     Args:
         env_name (str): the environment id registered in `gym.registry`.

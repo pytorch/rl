@@ -162,14 +162,20 @@ class timeit:
 def _check_for_faulty_process(processes):
     terminate = False
     for p in processes:
-        if not p.is_alive():
+        if not p._closed and not p.is_alive():
             terminate = True
             for _p in processes:
-                if _p.is_alive():
-                    _p.terminate()
-                    _p.close()
-        if terminate:
-            break
+                _p: mp.Process
+                if not _p._closed and _p.is_alive():
+                    try:
+                        _p.terminate()
+                    except Exception:
+                        _p.kill()
+                    finally:
+                        time.sleep(0.1)
+                        _p.close()
+            if terminate:
+                break
     if terminate:
         raise RuntimeError(
             "At least one process failed. Check for more infos in the log."
@@ -375,7 +381,7 @@ class implement_for:
         elif fn_str[0].startswith("<function "):
             first = fn_str[0][len("<function ") :]
         else:
-            raise RuntimeError(f"Unkown func representation {fn}")
+            raise RuntimeError(f"Unknown func representation {fn}")
         last = fn_str[1:]
         if last:
             first = [first]

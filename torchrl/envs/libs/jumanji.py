@@ -175,7 +175,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> import jumanji
@@ -780,7 +780,7 @@ class JumanjiEnv(JumanjiWrapper):
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> from torchrl.envs import JumanjiEnv

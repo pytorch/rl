@@ -905,6 +905,10 @@ class TensorSpec(metaclass=abc.ABCMeta):
         """
         ...
 
+    @abc.abstractmethod
+    def has_mask(self) -> bool:
+        ...
+
     def project(
         self, val: torch.Tensor | TensorDictBase
     ) -> torch.Tensor | TensorDictBase:
@@ -1371,6 +1375,9 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
         return torch.stack(
             [spec.enumerate(use_mask) for spec in self._specs], dim=self.stack_dim + 1
         )
+
+    def has_mask(self) -> bool:
+        return all(spec.has_mask() for spec in self._specs)
 
     def __len__(self):
         return self.shape[0]
@@ -1871,6 +1878,9 @@ class OneHot(TensorSpec):
             .permute(-2, *range(self.ndimension() - 1), -1)
         )
 
+    def has_mask(self) -> bool:
+        return self.mask is not None
+
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
             raise ValueError(
@@ -2133,11 +2143,11 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         if dtype is not None and high.dtype is not dtype:
             high = high.to(dtype)
         err_msg = (
-            "Bounded requires the shape to be explicitely (via "
-            "the shape argument) or implicitely defined (via either the "
+            "Bounded requires the shape to be explicitly (via "
+            "the shape argument) or implicitly defined (via either the "
             "minimum or the maximum or both). If the maximum and/or the "
             "minimum have a non-singleton shape, they must match the "
-            "provided shape if this one is set explicitely."
+            "provided shape if this one is set explicitly."
         )
         if shape is not None and not isinstance(shape, torch.Size):
             if isinstance(shape, int):
@@ -2205,6 +2215,9 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         raise NotImplementedError(
             f"enumerate is not implemented for spec of class {type(self).__name__}."
         )
+
+    def has_mask(self) -> bool:
+        return False
 
     def cardinality(self) -> int:
         return float("inf")
@@ -2525,7 +2538,6 @@ class NonTensor(TensorSpec):
         if isinstance(shape, int):
             shape = _size([shape])
 
-        _, device = _default_dtype_and_device(None, device)
         domain = None
         super().__init__(
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
@@ -2550,6 +2562,9 @@ class NonTensor(TensorSpec):
 
     def enumerate(self, use_mask: bool = False) -> Any:
         raise NotImplementedError("Cannot enumerate a NonTensor spec.")
+
+    def has_mask(self) -> bool:
+        return False
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> NonTensor:
         if isinstance(dest, torch.dtype):
@@ -2859,6 +2874,9 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
     def enumerate(self, use_mask: bool = False) -> Any:
         raise NotImplementedError("enumerate cannot be called with continuous specs.")
 
+    def has_mask(self) -> bool:
+        return False
+
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
@@ -3039,6 +3057,9 @@ class MultiOneHot(OneHot):
             -1,
         )
         return enums
+
+    def has_mask(self) -> bool:
+        return self.mask is not None
 
     def update_mask(self, mask):
         """Sets a mask to prevent some of the possible outcomes when a sample is taken.
@@ -3410,7 +3431,7 @@ class Categorical(TensorSpec):
     """A discrete tensor spec.
 
     An alternative to :class:`OneHot` for categorical variables in TorchRL.
-    Categorical variables perform indexing insted of masking, which can speed-up
+    Categorical variables perform indexing instead of masking, which can speed-up
     computation and reduce memory cost for large categorical variables.
 
     The spec will have the shape defined by the ``shape`` argument: if a singleton dimension is
@@ -3506,6 +3527,9 @@ class Categorical(TensorSpec):
         if self.ndim:
             arange = arange.view(-1, *(1,) * self.ndim)
         return arange.expand(n, *self.shape)
+
+    def has_mask(self) -> bool:
+        return self.mask is not None
 
     @property
     def n(self):
@@ -3945,6 +3969,9 @@ class Choice(TensorSpec):
     def enumerate(self, use_mask: bool = False) -> List[Any]:
         return [s for choice in self._choices for s in choice.enumerate()]
 
+    def has_mask(self) -> bool:
+        return False
+
     def _project(
         self, val: torch.Tensor | TensorDictBase
     ) -> torch.Tensor | TensorDictBase:
@@ -4001,7 +4028,7 @@ class Binary(Categorical):
             If not provided, ``shape`` must be passed.
 
             .. warning:: the ``n`` argument from ``Binary`` must not be confused with the ``n`` argument from :class:`Categorical`
-                or :class:`OneHot` which denotes the maximum nmber of elements that can be sampled.
+                or :class:`OneHot` which denotes the maximum number of elements that can be sampled.
                 For clarity, use ``shape`` instead.
 
         shape (torch.Size, optional): total shape of the sampled tensors.
@@ -4242,6 +4269,9 @@ class MultiCategorical(Categorical):
         arange = arange.view(arange.shape[0], *(1,) * (self.ndim - 1), self.shape[-1])
         arange = arange.expand(arange.shape[0], *self.shape)
         return arange
+
+    def has_mask(self) -> bool:
+        return self.mask is not None
 
     def cardinality(self) -> int:
         return self.nvec._base.prod()
@@ -4869,7 +4899,7 @@ class Composite(TensorSpec):
         if self.locked:
             raise RuntimeError("Cannot modify a locked Composite.")
         if spec is not None and self.device is not None and spec.device != self.device:
-            if isinstance(spec, Composite) and spec.device is None:
+            if spec.device is None:
                 # We make a clone not to mess up the spec that was provided.
                 # in set() we do the same for shape - these two ops should be grouped.
                 # we don't care about the overhead of cloning twice though because in theory
@@ -4877,7 +4907,7 @@ class Composite(TensorSpec):
                 spec = spec.clone().to(self._device)
             else:
                 raise RuntimeError(
-                    f"Setting a new attribute ({name}) on another device ({spec.device} against {self.device}). "
+                    f"Setting a new attribute ({name}) with spec type {type(spec).__name__} on another device ({spec.device} against {self.device}). "
                     f"All devices of Composite must match."
                 )
         if spec is not None:
@@ -5319,6 +5349,9 @@ class Composite(TensorSpec):
             samples = cls.from_dict({}, batch_size=self.shape, device=self.device)
         return samples
 
+    def has_mask(self) -> bool:
+        return all(spec.has_mask() for _, spec in self.items())
+
     def empty(self):
         """Create a spec like self, but with no entries."""
         try:
@@ -5748,6 +5781,9 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         return LazyStackedTensorDict.maybe_dense_stack(
             [spec.enumerate(use_mask) for spec in self._specs], dim + 1
         )
+
+    def has_mask(self) -> bool:
+        return all(spec.has_mask() for spec in self._specs)
 
     def __eq__(self, other):
         if not isinstance(other, StackedComposite):

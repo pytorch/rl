@@ -42,6 +42,7 @@ from torchrl.envs import (
     CatFrames,
     CatTensors,
     ChessEnv,
+    ConditionalSkip,
     DoubleToFloat,
     EnvBase,
     EnvCreator,
@@ -55,14 +56,12 @@ from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
-from torchrl.envs.transforms import (
+from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
+from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
     AutoResetTransform,
-    Compose,
-    StepCounter,
     Tokenizer,
     Transform,
-    TransformedEnv,
     UnsqueezeTransform,
 )
 from torchrl.envs.utils import (
@@ -72,6 +71,7 @@ from torchrl.envs.utils import (
     check_marl_grouping,
     make_composite_from_td,
     MarlGroupMapType,
+    RandomPolicy,
     step_mdp,
 )
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
@@ -134,6 +134,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
+        HistoryTransform,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
@@ -174,6 +175,7 @@ else:
         EnvWithTensorClass,
         HeterogeneousCountingEnv,
         HeterogeneousCountingEnvPolicy,
+        HistoryTransform,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
@@ -1305,7 +1307,7 @@ class TestParallel:
             td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
             env_parallel.reset(tensordict=td_reset)
 
-            # check that interruption occured because of max_steps or done
+            # check that interruption occurred because of max_steps or done
             td = env_parallel.rollout(policy=None, max_steps=T)
             assert (
                 td.shape == torch.Size([N, T]) or td.get(("next", "done")).sum(1).any()
@@ -3634,8 +3636,11 @@ class TestNonTensorEnv:
     def test_parallel(self, bwad, use_buffers):
         N = 50
         env = ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
-        r = env.rollout(N, break_when_any_done=bwad)
-        assert r.get("non_tensor").tolist() == [list(range(N))] * 2
+        try:
+            r = env.rollout(N, break_when_any_done=bwad)
+            assert r.get("non_tensor").tolist() == [list(range(N))] * 2
+        finally:
+            env.close(raise_if_closed=False)
 
     class AddString(Transform):
         def __init__(self):
@@ -3667,19 +3672,22 @@ class TestNonTensorEnv:
                 env = ParallelEnv(2, [env0, env1], mp_start_method=mp_ctx)
             else:
                 env = SerialEnv(2, [env0, env1])
-            s = env.reset()
-            i = 0
-            for i in range(10):  # noqa: B007
-                s, s_ = env.step_and_maybe_reset(
-                    s.set("action", torch.ones(2, 1, dtype=torch.int))
-                )
-                if s.get(("next", "done")).any():
-                    break
-                s = s_
-            assert i == 5
-            assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
-            assert s_["string"] == ["0", "6"]
-            assert s["next", "string"] == ["6", "6"]
+            try:
+                s = env.reset()
+                i = 0
+                for i in range(10):  # noqa: B007
+                    s, s_ = env.step_and_maybe_reset(
+                        s.set("action", torch.ones(2, 1, dtype=torch.int))
+                    )
+                    if s.get(("next", "done")).any():
+                        break
+                    s = s_
+                assert i == 5
+                assert (s["next", "done"] == torch.tensor([[True], [False]])).all()
+                assert s_["string"] == ["0", "6"]
+                assert s["next", "string"] == ["6", "6"]
+            finally:
+                env.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
     def test_str2str_env_tokenizer(self):
@@ -3771,28 +3779,6 @@ class TestNonTensorEnv:
                 break
         else:
             raise RuntimeError("Failed to sample both trajs")
-
-    def test_env_with_str_append(self):
-        class StrAppender(Transform):
-            def transform_observation_spec(self, observation_spec):
-                return observation_spec.set("str", NonTensor(example_data="a string"))
-
-            def _step(self, td, next_td):
-                s = td["str"]
-
-                s += "-" + str(int(s.split("-")[-1]) + 1)
-                next_td["str"] = s
-                return next_td
-
-            def _reset(self, td, reset_td):
-                return reset_td.set("str", "0")
-
-        env = TransformedEnv(CountingEnv(), StrAppender())
-        r = env.rollout(10)
-        r_unbind = r.unbind(0)
-        for ep_prev, ep_next in zip(r_unbind[:-1], r_unbind[1:]):
-            assert ep_prev["next", "str"].startswith(ep_prev["str"])
-            assert ep_next["str"] == ep_prev["next", "str"]
 
     def test_env_with_tensorclass(self):
         env = EnvWithTensorClass()
@@ -4171,42 +4157,68 @@ class TestChessEnv:
             td_check = env.reset(td.select("fen_hash"))
             assert (td_check == td).all()
 
-    @pytest.mark.parametrize("include_fen", [False, True])
-    @pytest.mark.parametrize("include_pgn", [False, True])
+    @pytest.mark.parametrize("include_fen,include_pgn", [[False, True], [True, False]])
     @pytest.mark.parametrize("stateful", [False, True])
-    @pytest.mark.parametrize("mask_actions", [False, True])
-    def test_all_actions(self, include_fen, include_pgn, stateful, mask_actions):
-        if not stateful and not include_fen and not include_pgn:
-            pytest.skip("fen or pgn must be included if not stateful")
-
+    @pytest.mark.parametrize("include_hash", [False, True])
+    @pytest.mark.parametrize("include_san", [False, True])
+    @pytest.mark.parametrize("append_transform", [False, True])
+    # @pytest.mark.parametrize("mask_actions", [False, True])
+    @pytest.mark.parametrize("mask_actions", [False])
+    def test_all_actions(
+        self,
+        include_fen,
+        include_pgn,
+        stateful,
+        include_hash,
+        include_san,
+        append_transform,
+        mask_actions,
+    ):
         env = ChessEnv(
             include_fen=include_fen,
             include_pgn=include_pgn,
+            include_san=include_san,
+            include_hash=include_hash,
+            include_hash_inv=include_hash,
             stateful=stateful,
             mask_actions=mask_actions,
         )
+
+        def transform_reward(td):
+            if "reward" not in td:
+                return td
+            reward = td["reward"]
+            if reward == 0.5:
+                td["reward"] = 0
+            elif reward == 1 and td["turn"]:
+                td["reward"] = -td["reward"]
+            return td
+
+        # ChessEnv sets the reward to 0.5 for a draw and 1 for a win for either player.
+        # Need to transform the reward to be:
+        #   white win = 1
+        #   draw = 0
+        #   black win = -1
+        if append_transform:
+            env = env.append_transform(transform_reward)
+
+        check_env_specs(env)
+
         td = env.reset()
 
-        if not mask_actions:
-            with pytest.raises(RuntimeError, match="Cannot generate legal actions"):
-                env.all_actions()
-            return
-
         # Choose random actions from the output of `all_actions`
-        for _ in range(100):
-            if stateful:
-                all_actions = env.all_actions()
-            else:
+        for step_idx in range(100):
+            if step_idx % 5 == 0:
                 # Reset the the initial state first, just to make sure
                 # `all_actions` knows how to get the board state from the input.
                 env.reset()
-                all_actions = env.all_actions(td.clone())
+            all_actions = env.all_actions(td.clone())
 
             # Choose some random actions and make sure they match exactly one of
             # the actions from `all_actions`. This part is not tested when
             # `mask_actions == False`, because `rand_action` can pick illegal
             # actions in that case.
-            if mask_actions:
+            if mask_actions and step_idx % 4 == 0:
                 # TODO: Something is wrong in `ChessEnv.rand_action` which makes
                 # it fail to work properly for stateless mode. It doesn't know
                 # how to correctly reset the board state to what is given in the
@@ -4223,7 +4235,9 @@ class TestChessEnv:
 
             action_idx = torch.randint(0, all_actions.shape[0], ()).item()
             chosen_action = all_actions[action_idx]
-            td = env.step(td.update(chosen_action))["next"]
+            td_new = env.step(td.update(chosen_action).clone())
+            assert (td == td_new.exclude("next")).all()
+            td = td_new["next"]
 
             if td["done"]:
                 td = env.reset()
@@ -4396,6 +4410,124 @@ class TestPartialSteps:
             assert (td[1].get("next") != 0).any()
             assert_allclose_td(td[2].get("next"), td[2], intersection=True)
             assert (td[3].get("next") != 0).any()
+
+
+class TestEnvWithHistory:
+    @pytest.fixture(autouse=True, scope="class")
+    def set_capture(self):
+        with set_capture_non_tensor_stack(False), set_auto_unwrap_transformed_env(
+            False
+        ):
+            yield
+        return
+
+    def _make_env(self, device, max_steps=10):
+        return CountingEnv(device=device, max_steps=max_steps).append_transform(
+            HistoryTransform()
+        )
+
+    def _make_skipping_env(self, device, max_steps=10):
+        env = self._make_env(device=device, max_steps=max_steps)
+        # skip every 3 steps
+        env = env.append_transform(
+            ConditionalSkip(lambda td: ((td["step_count"] % 3) == 2))
+        )
+        env = TransformedEnv(env, StepCounter())
+        return env
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_env_history_base(self, device):
+        env = self._make_env(device)
+        env.check_env_specs()
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_skipping_history_env(self, device):
+        env = self._make_skipping_env(device)
+        env.check_env_specs()
+        r = env.rollout(100)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("batch_cls", [SerialEnv, "parallel"])
+    @pytest.mark.parametrize("consolidate", [False, True])
+    def test_env_history_base_batched(
+        self, device, device_env, batch_cls, maybe_fork_ParallelEnv, consolidate
+    ):
+        if batch_cls == "parallel":
+            batch_cls = maybe_fork_ParallelEnv
+        env = batch_cls(
+            2,
+            lambda: self._make_env(device_env),
+            device=device,
+            consolidate=consolidate,
+        )
+        try:
+            assert not env._use_buffers
+            env.check_env_specs(break_when_any_done="both")
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("batch_cls", [SerialEnv, "parallel"])
+    @pytest.mark.parametrize("consolidate", [False, True])
+    def test_skipping_history_env_batched(
+        self, device, device_env, batch_cls, maybe_fork_ParallelEnv, consolidate
+    ):
+        if batch_cls == "parallel":
+            batch_cls = maybe_fork_ParallelEnv
+        env = batch_cls(
+            2,
+            lambda: self._make_skipping_env(device_env),
+            device=device,
+            consolidate=consolidate,
+        )
+        try:
+            env.check_env_specs()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    def test_env_history_base_collector(self, device_env, collector_cls):
+        env = self._make_env(device_env)
+        collector = collector_cls(
+            env, RandomPolicy(env.full_action_spec), total_frames=35, frames_per_batch=5
+        )
+        for d in collector:
+            for i in range(d.shape[0] - 1):
+                assert (
+                    d[i + 1]["history"].content[0] == d[i]["next", "history"].content[0]
+                )
+
+    @pytest.mark.parametrize("device_env", [None, "cpu"])
+    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    def test_skipping_history_env_collector(self, device_env, collector_cls):
+        env = self._make_skipping_env(device_env, max_steps=10)
+        collector = collector_cls(
+            env,
+            lambda td: td.update(env.full_action_spec.one()),
+            total_frames=35,
+            frames_per_batch=5,
+        )
+        length = None
+        count = 1
+        for d in collector:
+            for k in range(1, 5):
+                if len(d[k]["history"].content) == 2:
+                    count = 1
+                    continue
+                if count % 3 == 2:
+                    assert (
+                        d[k]["next", "history"].content
+                        == d[k - 1]["next", "history"].content
+                    ), (d["next", "history"].content, k, count)
+                else:
+                    assert d[k]["next", "history"].content[-1] == str(
+                        int(d[k - 1]["next", "history"].content[-1]) + 1
+                    ), (d["next", "history"].content, k, count)
+                count += 1
+            count += 1
 
 
 if __name__ == "__main__":

@@ -725,7 +725,7 @@ class DistributionalQValueModule(QValueModule):
         >>> value[0, 0] = 0
         >>> # the second bin (0) of the second action is high: there's a high chance that it has an intermediate value
         >>> value[1, 1] = 0
-        >>> # the third bin (0) of the thid action is high: there's a high chance that it has an high value
+        >>> # the third bin (0) of the this action is high: there's a high chance that it has an high value
         >>> value[2, 2] = 0
         >>> actor(my_action_value=value)
         (tensor(2), tensor([[   0, -100, -100, -100],
