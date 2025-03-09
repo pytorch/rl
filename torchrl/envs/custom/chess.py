@@ -220,12 +220,15 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         return chess
 
     _san_moves = []
+    _san_move_to_index_map = {}
 
     @_classproperty
     def san_moves(cls):
         if not cls._san_moves:
             with open(pathlib.Path(__file__).parent / "san_moves.txt", "r+") as f:
                 cls._san_moves.extend(f.read().split("\n"))
+            for idx, san_move in enumerate(cls._san_moves):
+                cls._san_move_to_index_map[san_move] = idx
         return cls._san_moves
 
     def _legal_moves_to_index(
@@ -253,7 +256,8 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             board = self.board
 
         indices = torch.tensor(
-            [self._san_moves.index(board.san(m)) for m in board.legal_moves],
+            # [self._san_moves.index(board.san(m)) for m in board.legal_moves],
+            [self._san_move_to_index_map[board.san(m)] for m in board.legal_moves],
             dtype=torch.int64,
         )
         mask = None
@@ -295,6 +299,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         self.include_fen = include_fen
         self.include_pgn = include_pgn
         self.mask_actions = mask_actions
+        self._overrides_action_generator_funcs = not mask_actions
         self.include_legal_moves = include_legal_moves
         if include_legal_moves:
             # 218 max possible legal moves per chess board position
@@ -361,14 +366,29 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         self, tensordict: Optional[TensorDictBase] = None
     ) -> TensorDictBase:
         if not self.mask_actions:
-            raise RuntimeError(
-                (
-                    "Cannot generate legal actions since 'mask_actions=False' was "
-                    "set. If you really want to generate all actions, not just "
-                    "legal ones, call 'env.full_action_spec.enumerate()'."
+            if tensordict is not None:
+                self.reset(tensordict)
+            move_idx = (
+                self._legal_moves_to_index(
+                    board=self.board, pad=False, return_mask=False
                 )
+                .sort()
+                .values
             )
+            actions = TensorDict({"action": move_idx}, batch_size=move_idx.shape)
+            return actions
+
         return super().all_actions(tensordict)
+
+    def _rand_action(self, shape: torch.Size):
+        possible_moves = (
+            self._legal_moves_to_index(board=self.board, pad=False, return_mask=False)
+            .sort()
+            .values
+        )
+        rand_indices = torch.randint(0, len(possible_moves), shape)
+        rand_actions = possible_moves[rand_indices]
+        return TensorDict({"action": rand_actions}, batch_size=shape)
 
     def _reset(self, tensordict=None):
         fen = None
@@ -411,7 +431,9 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             if move is None:
                 dest.set("san", "<start>")
             else:
-                dest.set("san", self.board.san(move))
+                prev_board = self.board.copy()
+                prev_board.pop()
+                dest.set("san", prev_board.san(move))
         if self.include_fen:
             dest.set("fen", fen)
         if self.include_pgn:

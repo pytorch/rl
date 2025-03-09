@@ -905,6 +905,10 @@ class TensorSpec(metaclass=abc.ABCMeta):
         """
         ...
 
+    @abc.abstractmethod
+    def has_mask(self) -> bool:
+        ...
+
     def project(
         self, val: torch.Tensor | TensorDictBase
     ) -> torch.Tensor | TensorDictBase:
@@ -1371,6 +1375,9 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
         return torch.stack(
             [spec.enumerate(use_mask) for spec in self._specs], dim=self.stack_dim + 1
         )
+
+    def has_mask(self) -> bool:
+        return all(spec.has_mask() for spec in self._specs)
 
     def __len__(self):
         return self.shape[0]
@@ -1871,6 +1878,9 @@ class OneHot(TensorSpec):
             .permute(-2, *range(self.ndimension() - 1), -1)
         )
 
+    def has_mask(self) -> bool:
+        return self.mask is not None
+
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
             raise ValueError(
@@ -2205,6 +2215,9 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         raise NotImplementedError(
             f"enumerate is not implemented for spec of class {type(self).__name__}."
         )
+
+    def has_mask(self) -> bool:
+        return False
 
     def cardinality(self) -> int:
         return float("inf")
@@ -2550,6 +2563,9 @@ class NonTensor(TensorSpec):
     def enumerate(self, use_mask: bool = False) -> Any:
         raise NotImplementedError("Cannot enumerate a NonTensor spec.")
 
+    def has_mask(self) -> bool:
+        return False
+
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> NonTensor:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
@@ -2858,6 +2874,9 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
     def enumerate(self, use_mask: bool = False) -> Any:
         raise NotImplementedError("enumerate cannot be called with continuous specs.")
 
+    def has_mask(self) -> bool:
+        return False
+
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
@@ -3038,6 +3057,9 @@ class MultiOneHot(OneHot):
             -1,
         )
         return enums
+
+    def has_mask(self) -> bool:
+        return self.mask is not None
 
     def update_mask(self, mask):
         """Sets a mask to prevent some of the possible outcomes when a sample is taken.
@@ -3506,6 +3528,9 @@ class Categorical(TensorSpec):
             arange = arange.view(-1, *(1,) * self.ndim)
         return arange.expand(n, *self.shape)
 
+    def has_mask(self) -> bool:
+        return self.mask is not None
+
     @property
     def n(self):
         n = self.space.n
@@ -3944,6 +3969,9 @@ class Choice(TensorSpec):
     def enumerate(self, use_mask: bool = False) -> List[Any]:
         return [s for choice in self._choices for s in choice.enumerate()]
 
+    def has_mask(self) -> bool:
+        return False
+
     def _project(
         self, val: torch.Tensor | TensorDictBase
     ) -> torch.Tensor | TensorDictBase:
@@ -4241,6 +4269,9 @@ class MultiCategorical(Categorical):
         arange = arange.view(arange.shape[0], *(1,) * (self.ndim - 1), self.shape[-1])
         arange = arange.expand(arange.shape[0], *self.shape)
         return arange
+
+    def has_mask(self) -> bool:
+        return self.mask is not None
 
     def cardinality(self) -> int:
         return self.nvec._base.prod()
@@ -5318,6 +5349,9 @@ class Composite(TensorSpec):
             samples = cls.from_dict({}, batch_size=self.shape, device=self.device)
         return samples
 
+    def has_mask(self) -> bool:
+        return all(spec.has_mask() for _, spec in self.items())
+
     def empty(self):
         """Create a spec like self, but with no entries."""
         try:
@@ -5747,6 +5781,9 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         return LazyStackedTensorDict.maybe_dense_stack(
             [spec.enumerate(use_mask) for spec in self._specs], dim + 1
         )
+
+    def has_mask(self) -> bool:
+        return all(spec.has_mask() for spec in self._specs)
 
     def __eq__(self, other):
         if not isinstance(other, StackedComposite):

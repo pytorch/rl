@@ -1094,6 +1094,30 @@ but got an object of type {type(transform)}."""
             return self.base_env.rand_action(tensordict)
         return super().rand_action(tensordict)
 
+    def _rand_action(self, shape):
+        action = self.base_env._rand_action(shape)
+        with _set_missing_tolerance(self.transform, True):
+            action = self.transform(action)
+        return action
+
+    @property
+    def _overrides_action_generator_funcs(self):
+        return self.base_env._overrides_action_generator_funcs
+
+    def all_actions(
+        self, tensordict: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
+        if not self._overrides_action_generator_funcs:
+            return super().all_actions(tensordict)
+
+        if tensordict is not None:
+            tensordict = self.transform._reset_env_preprocess(tensordict)
+
+        actions = self.base_env.all_actions(tensordict)
+        with _set_missing_tolerance(self.transform, True):
+            actions = self.transform(actions)
+        return actions
+
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # No need to clone here because inv does it already
         # tensordict = tensordict.clone(False)

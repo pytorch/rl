@@ -471,6 +471,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     _batch_size: torch.Size | None
     _device: torch.device | None
     _is_spec_locked: bool = False
+    _overrides_action_generator_funcs: bool = False
 
     def __init__(
         self,
@@ -2877,6 +2878,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         return self.full_action_spec.enumerate(use_mask=True)
 
+    def _rand_action(self, shape: torch.Shape):
+        raise NotImplementedError
+
     def rand_action(self, tensordict: Optional[TensorDictBase] = None):
         """Performs a random action given the action_spec attribute.
 
@@ -2904,8 +2908,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     f"Non batch-locked environment require the env batch-size to be either empty or to"
                     f" match the tensordict one."
                 )
-        # We generate the action from the full_action_spec
-        r = self.input_spec["full_action_spec"].rand(shape)
+        if self._overrides_action_generator_funcs:
+            r = self._rand_action(shape)
+
+        else:
+            # We generate the action from the full_action_spec
+            r = self.input_spec["full_action_spec"].rand(shape)
+
         if tensordict is None:
             return r
         tensordict.update(r)
