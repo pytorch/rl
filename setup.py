@@ -176,7 +176,7 @@ def _main(argv):
     if is_nightly:
         tensordict_dep = "tensordict-nightly"
     else:
-        tensordict_dep = "tensordict>=0.7.0"
+        tensordict_dep = "tensordict>=0.8.0"
 
     if is_nightly:
         version = get_nightly_version()
