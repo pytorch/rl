@@ -1614,6 +1614,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         shared: bool = False,
         compilable: bool = False,
     ) -> None:
+        storage = self._maybe_make_storage(storage, compilable=compilable)
         sampler = PrioritizedSampler(
             storage.max_size, alpha, beta, eps, reduction=reduction
         )
