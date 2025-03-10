@@ -2,11 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import collections
 
 import torch
 import transformers
-import vllm_policy.outputs
+import vllm
 from tensordict import (
     from_dataclass,
     maybe_dense_stack,
@@ -14,16 +14,15 @@ from tensordict import (
     NonTensorData,
     NonTensorStack,
     TensorClass,
-    TensorDict,
 )
 from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictModuleBase,
     TensorDictSequential as Seq,
 )
-from transformers import AutoTokenizer
 
-from vllm_policy import LLM, SamplingParams
+from torchrl.data import LLMData
+from vllm import LLM, SamplingParams
 
 CompletionOutput_tc = from_dataclass(vllm.outputs.CompletionOutput)
 
@@ -45,15 +44,22 @@ def _maybe_set_device(td):
 
 def from_vllm(
     model: LLM,
+    *,
     return_log_probs: bool = False,
     tokenizer: transformers.tokenization_utils.PreTrainedTokenizer | None = None,
     from_text: bool = False,
     device: torch.device | None = None,
+    generate: bool = True,
+    # Keys
     text_key: NestedKey = "text",
+    token_key: NestedKey = "tokens",
+    attention_mask_key: NestedKey = "attention_mask",
     generate_kwargs: dict | None = None,
     tokenizer_kwargs: dict | None = None,
 ) -> TensorDictModuleBase:
     # TODO: Seq should have a return_log_prob and be of ProbabilisticTDSequential type for instance checks
+    if tokenizer is None:
+        tokenizer = model.get_tokenizer()
     module_dict = {}
     if device:
         module_dict["clear_device"] = _maybe_clear_device
@@ -68,28 +74,106 @@ def from_vllm(
             raise RuntimeError
         if tokenizer_kwargs.setdefault("padding_side", "left") != "left":
             raise RuntimeError
-        module_dict["encode"] = Mod(
-            tokenizer,
-            in_keys=[text_key],
-            out_keys=["tokens_in"],
-            # method_kwargs=tokenizer_kwargs,
-            strict=True,
+
+        if generate:
+            module_dict["encode"] = Mod(
+                tokenizer,
+                in_keys=[text_key],
+                out_keys=["tokens_in"],
+                method_kwargs=tokenizer_kwargs,
+                strict=True,
+                inplace=False,
+            )
+        else:
+            module_dict["encode"] = Mod(
+                # TODO: make this work with many strings
+                # Tokenize both strings, and only the first
+                lambda x, y: (
+                    tokenizer([_x + _y for _x, _y in zip(x, y)], **tokenizer_kwargs),
+                    tokenizer(x, **tokenizer_kwargs),
+                ),
+                in_keys=[text_key, "text_response"],
+                out_keys=["tokens_in", "tokens_response"],
+                strict=True,
+                inplace=False,
+            )
+
+            def select(x, y):
+                return x.apply(lambda _x, _y: _x[..., _y.shape[-1] :], y)
+
+            module_dict["stack_response"] = Mod(
+                # Remove the init from the total tokens to get only the response tokens
+                select,
+                in_keys=["tokens_in", "tokens_response"],
+                out_keys=["tokens_response"],
+                strict=True,
+            )
+    elif not generate:
+
+        def stack_for_logprobs(tokens, tokens_response, attention_mask=None):
+            tokens = torch.cat([tokens, tokens_response], -1)
+            if attention_mask is not None:
+                attention_mask = torch.cat(
+                    [attention_mask, attention_mask.new_ones(tokens_response.shape)], -1
+                )
+            return tokens, tokens_response, attention_mask
+
+        module_dict["stack_response"] = Mod(
+            stack_for_logprobs,
+            in_keys=["tokens", "tokens_response", "attention_mask"],
+            out_keys=[
+                ("tokens_in", "input_ids"),
+                ("tokens_response", "input_ids"),
+                ("tokens_in", "attention_mask"),
+            ],
+            strict=False,
+            inplace=False,
+        )
+    else:
+        module_dict["move_inputs"] = Mod(
+            lambda *x: x,
+            in_keys=["tokens", "attention_mask"],
+            out_keys=[("tokens_in", "input_ids"), ("tokens_in", "attention_mask")],
+            # It's ok if there's no mask
+            strict=False,
+            inplace=False,
         )
 
-    def to_list(tokens):
+    def to_list(tokens, attention_mask):
+        """Converts a tensor of integer in a masked list (of lists) of integers."""
         if isinstance(tokens, torch.Tensor):
-            tokens = tokens.tolist()
-        print("tokens", tokens)
+            # TODO: make this an ND NonTensorStack
+            parent = []
+            queue = collections.deque()
+            if attention_mask is None:
+                attention_mask = torch.ones_like(tokens)
+            queue.append((tokens, attention_mask.bool(), parent))
+            while queue:
+                token, amask, _parent = queue.popleft()
+                if token.ndim == 1:
+                    _parent.extend(token[amask].tolist())
+                else:
+                    _parent.extend([[] for _ in range(token.shape[0])])
+                    queue.extend(
+                        [
+                            (t, m, local_parent)
+                            for t, m, local_parent in zip(token, amask, _parent)
+                        ]
+                    )
+            tokens = parent
         return NonTensorStack(*tokens)
 
     module_dict["to_list"] = Mod(
         to_list,
-        in_keys=[("tokens_in", "input_ids")],
+        in_keys=[("tokens_in", "input_ids"), ("tokens_in", "attention_mask")],
         out_keys=[("tokens_in", "input_ids_list")],
+        strict=False,
     )
 
     if generate_kwargs is None:
         generate_kwargs = {"detokenize": False, "prompt_logprobs": 1, "logprobs": 1}
+    if not generate:
+        generate_kwargs["max_tokens"] = 1
     sampling_params = SamplingParams(**generate_kwargs)
 
     module_dict["generate"] = Mod(
@@ -98,7 +182,6 @@ def from_vllm(
         method_kwargs={"sampling_params": sampling_params},
         in_keys={
             "prompt_token_ids": ("tokens_in", "input_ids_list"),
-            # "attention_mask": ("tokens_in", "attention_mask"),
         },
         out_keys=["tokens_out"],
         out_to_in_map=True,
@@ -107,26 +190,67 @@ def from_vllm(
 
     def get_output_tokens_and_log_probs(td):
         td["tokens_out"] = RequestOutput_tc.from_request_output(td["tokens_out"])
-        td["output_tokens"] = td["tokens_out"].outputs.token_ids
-        td["log_probs"] = td["tokens_out"].outputs.token_ids
+        if generate:
+            # When not generate, we don't want to overwrite this
+            td["tokens_response"] = td["tokens_out"].outputs.token_ids
+            td["log_probs"] = td["tokens_out"].outputs.logprobs
+        else:
+            td["prompt_logprobs"] = td["tokens_out"].prompt_logprobs
         return td
 
     module_dict["get_output_tokens_and_log_probs"] = get_output_tokens_and_log_probs
 
-    if from_text:
-        module_dict["to_list_decode"] = Mod(
-            to_list, in_keys=[("output_tokens")], out_keys=[("output_tokens_list")]
+    if not generate:
+
+        def translate_lps(tokens_response, x):
+            # we disregard the tokens from the prompt to focus on those of the response
+            return x[..., -tokens_response.shape[-1] :]
+
+        module_dict["translate_lps"] = Mod(
+            translate_lps,
+            in_keys=[("tokens_response", "input_ids"), "prompt_logprobs"],
+            out_keys=["log_probs"],
         )
+    elif from_text:
         module_dict["decode"] = Mod(
             tokenizer.batch_decode,
-            in_keys=["output_tokens_list"],
-            out_keys=["action"],
+            in_keys=["tokens_response"],
+            out_keys=["text_response"],
         )
 
     if device:
         module_dict["to_source_device"] = _maybe_set_device
 
-    return Seq(module_dict)
+    if generate:
+        module_dict["format"] = Mod(
+            lambda *x: x,
+            in_keys=[
+                "log_probs",
+                "tokens_response",
+                ("tokens_in", "input_ids"),
+                ("tokens_in", "attention_mask"),
+                "text_response",
+            ],
+            out_keys=[
+                "log_probs",
+                "tokens_response",
+                token_key,
+                attention_mask_key,
+                "text_response",
+            ],
+            strict=False,
+            inplace=False,
+        )
+    else:
+        module_dict["format"] = Mod(
+            lambda *x: x,
+            in_keys=["log_probs", "tokens_response"],
+            out_keys=["log_probs", "tokens_response"],
+            strict=False,
+            inplace=False,
+        )
+
+    return Seq(module_dict, inplace=True)
 
 
 class RequestOutput_tc(TensorClass["nocast"]):
@@ -144,8 +268,6 @@ class RequestOutput_tc(TensorClass["nocast"]):
 
     def __post_init__(self):
         def postproc(output):
-            print("local", output)
-
             def get_logprob(output):
                 t = []
                 for v, tid in zip(output.logprobs, output.token_ids):
@@ -155,7 +277,6 @@ class RequestOutput_tc(TensorClass["nocast"]):
                 return torch.tensor(t)
 
             output.logprobs = get_logprob(output)
-            print("token ids before transform", output.token_ids)
             output.token_ids = torch.tensor(output.token_ids)
             return output
 
@@ -172,7 +293,9 @@ class RequestOutput_tc(TensorClass["nocast"]):
             self.prompt_logprobs = torch.tensor(
                 [
                     v[tid].logprob if v is not None else 0.0
-                    for v, tid in zip(self.prompt_logprobs, self.prompt_token_ids)
+                    for v, tid in zip(
+                        self.prompt_logprobs, self.prompt_token_ids, strict=True
+                    )
                 ]
             )
             self.prompt_token_ids = torch.tensor(self.prompt_token_ids)
@@ -198,18 +321,40 @@ class RequestOutput_tc(TensorClass["nocast"]):
                 for request in requests
             ]
         )
-        print("result of from_request_output", out)
         return out
 
 
 if __name__ == "__main__":
-    max_seq_length = 50000
-    model_name = "Qwen/Qwen2.5-7B-Instruct"
-    model = LLM(model_name, skip_tokenizer_init=True, device="cuda:0")
-    model.llm_engine.model_executor.driver_worker.worker.model_runner.model.sampler.include_gpu_probs_tensor = (
-        True
+    prompts = [
+        "Hello, my name is",
+        "The president of the United States is",
+        "The capital of France is",
+        "The future of AI is",
+    ]
+    sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
+    llm = LLM(model="facebook/opt-125m")
+    outputs = llm.generate(prompts, sampling_params)
+    m = from_vllm(llm, from_text=True)
+
+    td = m(LLMData(text=NonTensorStack("a text"), batch_size=1))
+    print("result", td)
+
+    td = m(LLMData(text=NonTensorData("a text"), batch_size=()))
+    print("result", td)
+
+    td = m(LLMData(text=NonTensorStack("a text"), batch_size=1))
+    m = from_vllm(llm, from_text=True, generate=False)
+    assert td.copy().text == ["a text"]
+    td_lp = LLMData(
+        text=NonTensorStack("a text"),
+        text_response=NonTensorStack(*td.text_response),
+        batch_size=(1,),
     )
-    tokenizer = AutoTokenizer.from_pretrained(model_name, device="cuda:0")
-    # tokenizer.padding_side = "left"
-    m = from_vllm(model, tokenizer=tokenizer, from_text=True, device="cuda:0")
-    print(m(TensorDict(text=NonTensorStack("a text is a text", "another text"))))
+    td_lp = m(td_lp)
+    print("td_lp", td_lp)
+    print(td.log_probs / td_lp.log_probs)
+    # torch.testing.assert_close(td.log_probs, td_lp.log_probs)
+
+    m = from_vllm(llm, from_text=True, generate=True)
+    td = m(LLMData(text=NonTensorStack("a text", "another text here"), batch_size=2))
+    print(td)
