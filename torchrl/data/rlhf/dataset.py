@@ -148,9 +148,10 @@ class TokenizedDatasetLoader:
         dataset = self._load_dataset()
         dataset = self._tokenize(dataset)
         prefix = (split, str(max_length))
-        return self.dataset_to_tensordict(
+        result = self.dataset_to_tensordict(
             dataset, data_dir=data_dir, prefix=prefix, valid_mask_key="valid_sample"
-        )[prefix]
+        )
+        return result[prefix]
 
     def _load_dataset(self):
         """Loads a text dataset from ``datasets``.
@@ -213,7 +214,9 @@ class TokenizedDatasetLoader:
                     for key, value in dataset_dict.items()
                     if key not in excluded_features
                 }
-            dataset = TensorDict.from_dict(dataset_dict)
+            dataset = TensorDict.from_dict(
+                dataset_dict, auto_batch_size=True, batch_dims=1
+            )
         elif excluded_features:
             dataset = dataset.exclude(*excluded_features)
         # keep non empty rows (i.e. where at least one token is not eos)
@@ -294,14 +297,16 @@ class TokenizedDatasetLoader:
             if prefix is None:
                 prefix = ()
             data_dict = {key: torch.as_tensor(dataset[key]) for key in features}
-            out = TensorDict.from_dict(data_dict, batch_dims=batch_dims)
+            out = TensorDict.from_dict(
+                data_dict, batch_dims=batch_dims, auto_batch_size=True
+            )
         else:
             out = dataset
         if valid_mask_key is not None and valid_mask_key in out.keys(
             include_nested=True
         ):
             out = out[out.get(valid_mask_key)]
-        out = TensorDict({prefix: out}, [])
+        out = TensorDict({prefix: out})
         out.memmap_(prefix=data_dir)
         return out
 
@@ -481,6 +486,9 @@ class TensorDictTokenizer:
         batch_size = [] if isinstance(input, str) else [len(input)]
         if self.return_tensordict:
             return TensorDict.from_dict(
-                dict(tokenized_sample), batch_size=batch_size, device=self.device
+                dict(tokenized_sample),
+                batch_size=batch_size,
+                device=self.device,
+                auto_batch_size=True,
             )
         return tokenized_sample
