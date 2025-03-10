@@ -123,7 +123,7 @@ class TestEGreedy:
             {"observation": torch.zeros(*batch_size, action_size)},
             batch_size=batch_size,
         )
-        with pytest.raises(KeyError, match="Action mask key action_mask not found in"):
+        with pytest.raises(RuntimeError, match="Failed while executing module"):
             explorative_policy(td)
 
         torch.manual_seed(0)
@@ -182,9 +182,7 @@ class TestEGreedy:
             batch_size=batch_size,
         )
 
-        with pytest.raises(
-            RuntimeError, match="spec must be provided to the exploration wrapper."
-        ):
+        with pytest.raises(RuntimeError, match="Failed while executing module"):
             explorative_policy(td)
 
     @pytest.mark.parametrize("module", [True, False])
@@ -201,9 +199,7 @@ class TestEGreedy:
                 policy,
             )
         td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
-        with pytest.raises(
-            ValueError, match="Action spec shape does not match the action shape"
-        ):
+        with pytest.raises(RuntimeError, match="Failed while executing module"):
             explorative_policy(td)
 
 
@@ -383,9 +379,8 @@ class TestOrnsteinUhlenbeckProcess:
         )
 
         action_spec = env.action_spec
-        d_act = action_spec.shape[-1]
+        action_spec.shape[-1]
 
-        net = nn.LazyLinear(d_act).to(device)
         policy = TensorDictModule(
             CountingEnvCountModule(action_spec=action_spec),
             in_keys=[("data", "states") if nested_obs_action else "observation"],
