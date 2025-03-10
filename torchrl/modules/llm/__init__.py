@@ -4,5 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from .transformers_policy import from_hf_transformers
+from .vllm_policy import from_vllm
 
-__all__ = ["from_hf_transformers"]
+__all__ = ["from_hf_transformers", "from_vllm"]
