@@ -19,3 +19,5 @@ dependencies:
     - hydra-core
     - huggingface_hub
     - tqdm
+    - pybind11
+    - cmake

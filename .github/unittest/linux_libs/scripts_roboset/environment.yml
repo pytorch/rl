@@ -20,3 +20,5 @@ dependencies:
     - huggingface_hub
     - tqdm
     - h5py
+    - pybind11
+    - cmake

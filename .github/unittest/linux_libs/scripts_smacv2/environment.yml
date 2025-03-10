@@ -18,3 +18,5 @@ dependencies:
     - pyyaml
     - numpy==1.23.0
     - git+https://github.com/oxwhirl/smacv2.git
+    - pybind11
+    - cmake

@@ -18,3 +18,5 @@ dependencies:
     - scipy
     - hydra-core
     - open_spiel
+    - pybind11
+    - cmake

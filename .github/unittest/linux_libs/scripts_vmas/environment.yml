@@ -22,3 +22,5 @@ dependencies:
     - expecttest
     - pyyaml
     - scipy
+    - pybind11
+    - cmake

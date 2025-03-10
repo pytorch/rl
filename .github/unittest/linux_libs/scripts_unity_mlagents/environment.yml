@@ -19,3 +19,5 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
+    - pybind11
+    - cmake

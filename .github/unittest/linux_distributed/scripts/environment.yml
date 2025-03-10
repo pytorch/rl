@@ -30,3 +30,5 @@ dependencies:
     - coverage
     - ray
     - virtualenv
+    - pybind11
+    - cmake

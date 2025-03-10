@@ -30,3 +30,5 @@ dependencies:
     - transformers
     - gym[atari]
     - gym[accept-rom-license]
+    - pybind11
+    - cmake

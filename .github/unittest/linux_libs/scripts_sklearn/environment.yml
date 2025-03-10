@@ -19,3 +19,5 @@ dependencies:
     - hydra-core
     - scikit-learn
     - pandas
+    - pybind11
+    - cmake

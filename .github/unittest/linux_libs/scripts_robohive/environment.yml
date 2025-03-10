@@ -27,3 +27,5 @@ dependencies:
     - mujoco==2.3.3
     - dm_control==1.0.11
     - numpy<2.0.0
+    - pybind11
+    - cmake
