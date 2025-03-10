@@ -117,6 +117,11 @@ class RPCDataCollector(DataCollectorBase):
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :meth:`~.from_policy_factory` method should be used to subclass the collector
+                and create a version that instantiates a specific version of the policy on demand.
+                The new collector subclass should then be passed as :attr:`collector_class` keyword argument.
+
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
