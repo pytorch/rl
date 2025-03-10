@@ -569,9 +569,10 @@
         <span class="n">dataset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_dataset</span><span class="p">()</span>
         <span class="n">dataset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tokenize</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
         <span class="n">prefix</span> <span class="o">=</span> <span class="p">(</span><span class="n">split</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">max_length</span><span class="p">))</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_to_tensordict</span><span class="p">(</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_to_tensordict</span><span class="p">(</span>
             <span class="n">dataset</span><span class="p">,</span> <span class="n">data_dir</span><span class="o">=</span><span class="n">data_dir</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="n">prefix</span><span class="p">,</span> <span class="n">valid_mask_key</span><span class="o">=</span><span class="s2">&quot;valid_sample&quot;</span>
-        <span class="p">)[</span><span class="n">prefix</span><span class="p">]</span></div>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span><span class="p">[</span><span class="n">prefix</span><span class="p">]</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_load_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads a text dataset from ``datasets``.</span>
@@ -634,7 +635,9 @@
                     <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">dataset_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
                     <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">excluded_features</span>
                 <span class="p">}</span>
-            <span class="n">dataset</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">dataset_dict</span><span class="p">)</span>
+            <span class="n">dataset</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
+                <span class="n">dataset_dict</span><span class="p">,</span> <span class="n">auto_batch_size</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span>
+            <span class="p">)</span>
         <span class="k">elif</span> <span class="n">excluded_features</span><span class="p">:</span>
             <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="n">excluded_features</span><span class="p">)</span>
         <span class="c1"># keep non empty rows (i.e. where at least one token is not eos)</span>
@@ -715,14 +718,16 @@
             <span class="k">if</span> <span class="n">prefix</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">prefix</span> <span class="o">=</span> <span class="p">()</span>
             <span class="n">data_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">dataset</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">features</span><span class="p">}</span>
-            <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">data_dict</span><span class="p">,</span> <span class="n">batch_dims</span><span class="o">=</span><span class="n">batch_dims</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
+                <span class="n">data_dict</span><span class="p">,</span> <span class="n">batch_dims</span><span class="o">=</span><span class="n">batch_dims</span><span class="p">,</span> <span class="n">auto_batch_size</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">dataset</span>
         <span class="k">if</span> <span class="n">valid_mask_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">valid_mask_key</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span>
             <span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span>
         <span class="p">):</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">valid_mask_key</span><span class="p">)]</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="n">prefix</span><span class="p">:</span> <span class="n">out</span><span class="p">},</span> <span class="p">[])</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="n">prefix</span><span class="p">:</span> <span class="n">out</span><span class="p">})</span>
         <span class="n">out</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="n">data_dir</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">out</span></div></div>
 
@@ -902,7 +907,10 @@
         <span class="n">batch_size</span> <span class="o">=</span> <span class="p">[]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="nb">input</span><span class="p">)]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_tensordict</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
-                <span class="nb">dict</span><span class="p">(</span><span class="n">tokenized_sample</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="nb">dict</span><span class="p">(</span><span class="n">tokenized_sample</span><span class="p">),</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">auto_batch_size</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">tokenized_sample</span></div>
 </pre></div>
