@@ -132,7 +132,6 @@ class UnityMLAgentsWrapper(_EnvWrapper):
         for steps_idx in [0, 1]:
             for behavior in env.behavior_specs.keys():
                 steps = env.get_steps(behavior)[steps_idx]
-                is_terminal = steps_idx == 1
                 agent_ids = steps.agent_id
                 group_ids = steps.group_id
 
